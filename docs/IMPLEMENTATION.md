@@ -57,6 +57,20 @@ It currently defines source configuration CRUD operations under `/api/v1/sources
 
 The OpenAPI contract exists before the controller implementation so the external boundary can be reviewed independently.
 
+## Collection module
+
+`modules:collection` now contains the first concrete external-source transport implementation.
+
+Implemented types:
+
+- `ExternalSourceClient` — transport boundary for loading raw source content;
+- `FetchedSourceContent` — immutable transport result with source provenance and fetch metadata;
+- `SourceFetchException` — transport-level failure preserving source identity and URI;
+- `JdkHttpExternalSourceClient` — JDK HTTP implementation with explicit request timeout and response-size limit;
+- `VirtualThreadSourceFetchCoordinator` — bounded concurrent batch fetches on Java Virtual Threads while preserving deterministic result order.
+
+The implementation currently performs raw HTTP retrieval only. Source parsing/extraction, collection-run orchestration, scheduling, and Kafka publication are intentionally still absent.
+
 ## Kafka/Protobuf contracts
 
 `contracts:event-contracts` contains the first concrete versioned Protobuf schemas:
@@ -90,7 +104,7 @@ Current concrete tests:
 
 - no PostgreSQL schema, Flyway migration, or persistence adapter;
 - no Kafka producer/consumer wiring;
-- no source collector implementation;
+- no source parsing/extraction or collection-run orchestration;
 - no analysis/results implementation;
 - no REST controller implementation;
 - no SSE implementation;

@@ -11,8 +11,11 @@ java {
 dependencies {
     implementation(project(":common"))
     implementation(project(":contracts:event-contracts"))
+    implementation(project(":modules:configuration"))
+
+    testImplementation(libs.junit.jupiter)
 }
 
-dependencies {
-    implementation(project(":modules:configuration"))
+tasks.test {
+    useJUnitPlatform()
 }

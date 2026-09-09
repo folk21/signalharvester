@@ -11,7 +11,7 @@ java {
 
 protobuf {
     protoc {
-        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
+        artifact = libs.protoc.get().toString()
     }
 }
 

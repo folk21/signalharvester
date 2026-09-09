@@ -9,8 +9,7 @@ java {
 }
 
 micronaut {
-    version.set(libs.versions.micronaut.get())
-    runtime.set("netty")
+    runtime("netty")
 
     processing {
         incremental.set(true)

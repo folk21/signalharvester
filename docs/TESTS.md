@@ -25,6 +25,7 @@ Use the repository Gradle Wrapper.
 
 ```bash
 ./gradlew :modules:configuration:test
+./gradlew :modules:collection:test
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
 ./gradlew test
@@ -56,7 +57,9 @@ The first implementation foundation contains:
 
 - `ApplicationContextTest` for Micronaut context bootstrap;
 - `ConfiguredSourceTest` for configuration-boundary invariants;
-- `RawItemDiscoveredSerializationTest` for Protobuf round-trip and unknown additive fields.
+- `RawItemDiscoveredSerializationTest` for Protobuf round-trip and unknown additive fields;
+- `JdkHttpExternalSourceClientTest` for successful, non-successful, and oversized deterministic HTTP responses;
+- `VirtualThreadSourceFetchCoordinatorTest` for Virtual Thread execution and deterministic result ordering.
 
 No Docker/Testcontainers test is implemented yet because persistence and Kafka adapters do not exist.
 

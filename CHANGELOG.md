@@ -17,4 +17,6 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-08 — Added the first source-configuration Java/OpenAPI contracts and versioned Protobuf event envelope/raw-item schemas with initial contract tests.
 
+2026-09-09 — Added the first collection external-source transport boundary with bounded JDK HTTP fetching, deterministic loopback tests, and Virtual Thread batch coordination.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

@@ -13,6 +13,10 @@ allprojects {
 
 subprojects {
     plugins.withType<JavaPlugin> {
+        dependencies {
+            add("testRuntimeOnly", libs.junit.platform.launcher)
+        }
+
         tasks.withType<Test>().configureEach {
             useJUnitPlatform()
         }

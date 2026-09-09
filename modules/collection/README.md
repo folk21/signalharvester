@@ -15,7 +15,16 @@ External I/O must remain testable with deterministic fake sources. Use bounded c
 
 ## Current state
 
-The Gradle/source skeleton exists; concrete implementation is not yet established.
+The first external-source transport boundary is implemented:
+
+- `ExternalSourceClient` defines raw external-source fetching;
+- `JdkHttpExternalSourceClient` performs bounded HTTP GET requests using the JDK HTTP client;
+- `FetchedSourceContent` preserves source provenance, response metadata, raw bytes, and fetch time;
+- `VirtualThreadSourceFetchCoordinator` fetches independent sources concurrently using Virtual Threads with an explicit concurrency bound while preserving input order.
+
+The current implementation intentionally stops at transport retrieval. Parsing/extraction, collection-run orchestration, scheduling, and Kafka publication are not implemented yet.
+
+Module tests use a deterministic loopback HTTP server and do not require public network access.
 
 ## Read next
 
