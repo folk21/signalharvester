@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package io.signalharvester.events.common.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "io.signalharvester.events.common.v1";
+
+// Carries cross-cutting metadata required to identify, correlate, trace, and diagnose an event.
+message EventEnvelope {
+  // Globally unique event identifier.
+  string event_id = 1;
+
+  // Stable logical event type used for diagnostics and observation.
+  string event_type = 2;
+
+  // Time at which the event occurred.
+  google.protobuf.Timestamp occurred_at = 3;
+
+  // Identifier shared by events that belong to the same logical processing flow.
+  string correlation_id = 4;
+
+  // W3C traceparent value when distributed tracing context is available.
+  string traceparent = 5;
+
+  // Logical producer name, normally the owning module.
+  string producer = 6;
+
+  // Contract version of the payload represented by this event.
+  string schema_version = 7;
+}

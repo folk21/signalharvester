@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package io.signalharvester.events.collection.v1;
+
+import "google/protobuf/timestamp.proto";
+import "io/signalharvester/events/common/v1/event-envelope.proto";
+
+option java_multiple_files = true;
+option java_package = "io.signalharvester.events.collection.v1";
+
+// Describes a raw external item discovered by the collection module before analysis.
+message RawItemDiscovered {
+  // Cross-cutting event metadata.
+  io.signalharvester.events.common.v1.EventEnvelope envelope = 1;
+
+  // Stable identifier assigned to this raw collected item.
+  string raw_item_id = 2;
+
+  // Identifier of the configured source that produced the item.
+  string source_id = 3;
+
+  // Monitoring profile that caused the item to be collected.
+  string monitoring_profile_id = 4;
+
+  // Product-level information category, for example JOB or TOPIC.
+  string information_category = 5;
+
+  // Source-provided identifier when one exists.
+  optional string external_id = 6;
+
+  // Source-provided title when one exists.
+  optional string title = 7;
+
+  // Canonical or source URL associated with the item.
+  string url = 8;
+
+  // Raw textual content forwarded for normalization and analysis.
+  string content = 9;
+
+  // Media type or equivalent content classification for the raw content.
+  string content_type = 10;
+
+  // Source publication time when it is known.
+  optional google.protobuf.Timestamp published_at = 11;
+}

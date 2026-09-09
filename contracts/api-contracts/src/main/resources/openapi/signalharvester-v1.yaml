@@ -1,0 +1,157 @@
+openapi: 3.1.0
+info:
+  title: SignalHarvester Backend API
+  version: 0.1.0
+  description: Initial public HTTP contract for SignalHarvester configuration APIs.
+tags:
+  - name: Sources
+    description: External source configuration.
+paths:
+  /api/v1/sources:
+    get:
+      tags: [Sources]
+      operationId: listSources
+      summary: List configured external sources
+      responses:
+        '200':
+          description: Configured sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Source'
+    post:
+      tags: [Sources]
+      operationId: createSource
+      summary: Create an external source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceUpsertRequest'
+      responses:
+        '201':
+          description: Source created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Source'
+        '400':
+          description: Invalid source configuration
+  /api/v1/sources/{sourceId}:
+    parameters:
+      - $ref: '#/components/parameters/SourceId'
+    get:
+      tags: [Sources]
+      operationId: getSource
+      summary: Get a configured external source
+      responses:
+        '200':
+          description: Configured source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Source'
+        '404':
+          description: Source not found
+    put:
+      tags: [Sources]
+      operationId: updateSource
+      summary: Replace an external source configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceUpsertRequest'
+      responses:
+        '200':
+          description: Source updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Source'
+        '400':
+          description: Invalid source configuration
+        '404':
+          description: Source not found
+    delete:
+      tags: [Sources]
+      operationId: deleteSource
+      summary: Delete an external source
+      responses:
+        '204':
+          description: Source deleted
+        '404':
+          description: Source not found
+components:
+  parameters:
+    SourceId:
+      name: sourceId
+      in: path
+      required: true
+      description: Stable source identifier.
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    SourceType:
+      type: string
+      enum:
+        - REST
+        - RSS
+        - HTML
+    Source:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - location
+        - enabled
+        - settings
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        type:
+          $ref: '#/components/schemas/SourceType'
+        location:
+          type: string
+          format: uri
+        enabled:
+          type: boolean
+        settings:
+          type: object
+          description: Source-type-specific string configuration interpreted by the owning collector.
+          additionalProperties:
+            type: string
+    SourceUpsertRequest:
+      type: object
+      required:
+        - name
+        - type
+        - location
+        - enabled
+      properties:
+        name:
+          type: string
+          minLength: 1
+        type:
+          $ref: '#/components/schemas/SourceType'
+        location:
+          type: string
+          format: uri
+        enabled:
+          type: boolean
+        settings:
+          type: object
+          default: {}
+          description: Source-type-specific string configuration interpreted by the owning collector.
+          additionalProperties:
+            type: string
