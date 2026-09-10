@@ -28,6 +28,7 @@ Use the repository Gradle Wrapper.
 ./gradlew :modules:collection:test
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
+./gradlew :testing:integration-tests:test
 ./gradlew test
 ```
 
@@ -35,7 +36,7 @@ On systems where executable permission is not preserved after extracting an arch
 
 ## Integration infrastructure
 
-`modules:configuration` uses PostgreSQL Testcontainers for its persistence/server boundary. `modules:collection` uses Kafka Testcontainers for its producer/consumer transport boundary. `testing:integration-tests` still declares shared PostgreSQL/Kafka Testcontainers dependencies for future cross-module flows. Container-backed tests require a supported Docker-compatible runtime.
+`modules:configuration` uses PostgreSQL Testcontainers for its persistence/server boundary. `modules:collection` uses Kafka Testcontainers for its producer/consumer transport boundary. `testing:integration-tests` now uses PostgreSQL + Kafka Testcontainers together for the first cross-module collection-run flow. Container-backed tests require a supported Docker-compatible runtime.
 
 External HTTP sources must be deterministic local/fake servers controlled by tests. Blocking HTTP/controller tests must also verify that work is offloaded from Netty event-loop threads when that execution boundary is implemented.
 
@@ -60,7 +61,9 @@ The first implementation foundation contains:
 - `RawItemDiscoveredSerializationTest` for Protobuf round-trip and unknown additive fields;
 - `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, bounded redirects, and response-size enforcement against deterministic loopback servers;
 - `MicronautExternalSourceClientTest` for successful/empty responses, transport failure normalization, status mapping, and `Retry-After` preservation with a deterministic clock;
-- `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, deterministic result ordering, empty batches, failure propagation, and cancellation of in-flight peers after a worker failure;
+- `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, deterministic result ordering, empty batches, and best-effort continuation of queued/in-flight work after a source-level failure;
+- `CollectionRunServiceTest` for explicit run identity/correlation, success/partial/failed/empty outcomes, and continued Kafka publication after one publication failure;
+- `RawItemIdentityFactoryTest` for stable raw-item identity across fetch timestamps and changed payload identity;
 - `MicronautBlockingExecutorTest` for verification that Micronaut's blocking executor is Virtual-Thread backed on the Java 21 baseline and that the collection bean graph resolves with its qualified UTC clock;
 - `CollectionConfigurationTest` for Jakarta Validation of invalid concurrency configuration;
 - `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping and response charset handling;
@@ -70,7 +73,7 @@ The first implementation foundation contains:
 - `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
 - `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`.
 
-PostgreSQL Testcontainers tests are implemented in `modules:configuration`, and Kafka producer round-trip coverage is implemented in `modules:collection`. Cross-module consumer-chain tests remain pending until analysis is implemented.
+PostgreSQL Testcontainers tests are implemented in `modules:configuration`, Kafka producer round-trip coverage is implemented in `modules:collection`, and `CollectionRunIntegrationTest` under `testing:integration-tests` verifies persisted enabled-source selection, deterministic local HTTP fetch, partial source failure, run correlation, disabled-source exclusion, and successful Kafka publication. Cross-module consumer-chain tests remain pending until analysis is implemented.
 
 ## Python
 

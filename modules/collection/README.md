@@ -1,7 +1,7 @@
 ---
 type: Module Overview
 title: SignalHarvester collection module
-description: Collection orchestration and configurable external-source access ownership.
+description: Explicit collection-run orchestration, configurable external-source access, and raw-item event publication ownership.
 ---
 # SignalHarvester collection module
 
@@ -24,26 +24,36 @@ The first external-source transport boundary is implemented:
 - `FetchedSourceContent` preserves source provenance, response metadata, raw bytes, and fetch time;
 - `CollectionConfiguration` validates the configurable concurrency limit through Jakarta Validation;
 - `CollectionClockFactory` provides the qualified UTC clock used by collection transport timestamps;
-- `SourceFetchCoordinator` runs a bounded number of workers on Micronaut's blocking executor and preserves input order.
+- `SourceFetchCoordinator` runs a bounded number of workers on Micronaut's blocking executor, preserves input order, and records source-level failures without cancelling unrelated work.
 
 The module now also owns the first Kafka publication boundary:
 
-- `RawItemEventPublisher` is the collection-owned API used by later orchestration;
+- `RawItemEventPublisher` is the collection-owned API used by run orchestration;
 - `RawItemPublicationContext` supplies caller-owned raw-item identity plus correlation/profile/category/trace metadata without making the Kafka adapter own run or idempotency semantics;
 - `RawItemDiscoveredMapper` keeps generated Protobuf types inside the Kafka adapter boundary;
 - `KafkaRawItemEventPublisher` performs acknowledged publication of explicit Protobuf bytes;
 - `CollectionKafkaConfiguration` owns the configurable versioned raw-item topic;
 - the Kafka record key is the caller-owned `rawItemId`, while each publication gets a new `eventId`; producer idempotence plus `acks=all` are enabled at the transport layer.
 
-Parsing/extraction, enabled-source collection-run orchestration, scheduling, application-level replay/idempotency semantics, and Kafka consumers are not implemented yet.
+The first collection-run application use case is also implemented:
 
-Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, resolve the collection wiring, validate bounded coordination, verify Protobuf event mapping/serialization, and include a Kafka Testcontainers producer/consumer round-trip.
+- `CollectionRunService` obtains globally enabled sources only through `SourceConfigurationProvider`;
+- every execution receives an explicit `collectionRunId`, reused as Kafka correlation id;
+- `CollectionRunRequest` temporarily supplies monitoring-profile/category context until persisted profiles exist;
+- source fetch and Kafka publication are best-effort per source, producing deterministic `PUBLISHED`, `FETCH_FAILED`, or `PUBLICATION_FAILED` outcomes;
+- aggregate run status is `SUCCEEDED`, `PARTIALLY_SUCCEEDED`, or `FAILED`;
+- `RawItemIdentityFactory` derives a stable SHA-256 raw-item identity from source id, requested URI, and raw bytes so identical rediscovery keeps item identity across runs;
+- `CollectionRunResult` exposes run timing and ordered terminal source outcomes but run history is not persisted yet.
+
+Parsing/extraction into multiple source items, persisted monitoring profiles/run history, scheduling, normalized deduplication, analysis, retry/DLQ policy, and Kafka consumers are not implemented yet.
+
+Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, validate bounded best-effort coordination and collection-run status/correlation semantics, verify deterministic raw-item identity, verify Protobuf event mapping/serialization, and include a Kafka Testcontainers producer/consumer round-trip. `testing:integration-tests` adds the first persisted enabled-source -> deterministic HTTP -> Kafka collection-run scenario.
 
 ## Read next
 
 - [`../AGENTS.md`](../AGENTS.md)
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-collection-kafka-transport.md`](../../docs/specs/active/subspecs/backend-collection-kafka-transport.md)
+- [`../../docs/specs/active/subspecs/backend-collection-run-orchestration.md`](../../docs/specs/active/subspecs/backend-collection-run-orchestration.md)
 - [`../../docs/specs/active/subspecs/backend-event-contracts.md`](../../docs/specs/active/subspecs/backend-event-contracts.md)
 
 ## Security note

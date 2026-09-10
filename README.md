@@ -89,9 +89,10 @@ The first implementation foundation is present:
 - versioned Protobuf `EventEnvelope` and `RawItemDiscovered` Kafka schemas;
 - JUnit contract tests plus PostgreSQL and Kafka Testcontainers coverage for the implemented persistence/event boundaries;
 - the first collection HTTP transport using Micronaut-managed HTTP infrastructure with bounded Virtual Thread orchestration and deterministic loopback tests;
-- the first acknowledged collection Kafka publisher, mapping fetched content to versioned `RawItemDiscovered` Protobuf bytes with explicit correlation and event identity.
+- the first acknowledged collection Kafka publisher, mapping fetched content to versioned `RawItemDiscovered` Protobuf bytes with explicit correlation and event identity;
+- the first explicit collection-run use case over persisted enabled sources, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results.
 
-Collection-run orchestration, Kafka consumers, monitoring profiles/scheduling, SSE, source-specific parsing/adapters beyond the generic HTTP transport, normalization/deduplication, analysis/results persistence, and deployment infrastructure are still planned work.
+Kafka consumers, monitoring profiles/scheduling and persisted run history, SSE, source-specific parsing/adapters beyond the generic HTTP transport, normalization/deduplication, analysis/results persistence, and deployment infrastructure are still planned work.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

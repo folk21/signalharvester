@@ -3,14 +3,14 @@ type: Specification
 title: SignalHarvester collection to Kafka transport
 description: Current implementation sub-specification for RawItemDiscovered mapping, Protobuf byte serialization, Kafka publication, topic conventions, and round-trip verification.
 document_role: subspec
-parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+parent: ../../active/spec-signal-harvester-platform.md
+spec_status: completed
 ---
 # SignalHarvester collection to Kafka transport
 
 ## Status
 
-Implementation complete — Gradle and Kafka/Testcontainers verification pending before archival.
+Completed and verified — archived after the collection, event-contract, and application test suites passed in the developer environment.
 
 This slice introduces the first real Kafka producer boundary without yet implementing collection-run orchestration. It deliberately separates event transport mechanics from the later use case that selects enabled sources, owns `collectionRunId`, defines partial-failure semantics, and publishes multiple fetched results.
 

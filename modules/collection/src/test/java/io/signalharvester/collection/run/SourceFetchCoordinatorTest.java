@@ -1,6 +1,7 @@
 package io.signalharvester.collection.run;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,7 +37,7 @@ class SourceFetchCoordinatorTest {
             SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, virtualThreads);
             List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
 
-            CompletableFuture<List<FetchedSourceContent>> result = CompletableFuture.supplyAsync(
+            CompletableFuture<List<SourceFetchOutcome>> result = CompletableFuture.supplyAsync(
                     () -> coordinator.fetchAll(sources));
 
             assertTrue(client.awaitStarted(2));
@@ -51,6 +52,8 @@ class SourceFetchCoordinatorTest {
             client.release("one");
 
             assertEquals(List.of("one", "two", "three"), result.get(2, TimeUnit.SECONDS).stream()
+                    .map(SourceFetchOutcome.Success.class::cast)
+                    .map(SourceFetchOutcome.Success::content)
                     .map(content -> new String(content.body(), StandardCharsets.UTF_8))
                     .toList());
             assertTrue(client.onlyVirtualThreadsUsed());
@@ -58,27 +61,34 @@ class SourceFetchCoordinatorTest {
     }
 
     @Test
-    void shouldStopAssigningNewWorkAfterFirstFailure() {
+    void shouldContinueQueuedWorkAfterSourceFailure() {
         AtomicInteger started = new AtomicInteger();
         ExternalSourceClient client = source -> {
             started.incrementAndGet();
-            throw new SourceFetchException(source.id(), source.location(), "synthetic failure");
+            if ("two".equals(source.name())) {
+                throw new SourceFetchException(source.id(), source.location(), "synthetic failure");
+            }
+            return content(source);
         };
 
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
             SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 1, virtualThreads);
+            List<SourceFetchOutcome> outcomes = coordinator.fetchAll(List.of(
+                    source("one"), source("two"), source("three")));
 
-            assertThrows(SourceFetchException.class, () -> coordinator.fetchAll(List.of(
-                    source("one"), source("two"), source("three"))));
-
-            assertEquals(1, started.get());
+            assertEquals(3, started.get());
+            assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.get(0));
+            SourceFetchOutcome.Failure failure = assertInstanceOf(SourceFetchOutcome.Failure.class, outcomes.get(1));
+            assertEquals("two", failure.source().name());
+            assertInstanceOf(SourceFetchException.class, failure.cause());
+            assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.get(2));
         }
     }
 
     @Test
-    void shouldCancelInFlightPeerAfterWorkerFailure() throws Exception {
+    void shouldNotCancelInFlightPeerWhenAnotherSourceFails() throws Exception {
         CountDownLatch blockingStarted = new CountDownLatch(1);
-        CountDownLatch blockingInterrupted = new CountDownLatch(1);
+        CountDownLatch releaseBlocking = new CountDownLatch(1);
         Set<String> started = ConcurrentHashMap.newKeySet();
 
         ExternalSourceClient client = source -> {
@@ -86,38 +96,62 @@ class SourceFetchCoordinatorTest {
             if ("blocking".equals(source.name())) {
                 blockingStarted.countDown();
                 try {
-                    new CountDownLatch(1).await();
-                    throw new AssertionError("blocking source should be cancelled");
+                    releaseBlocking.await();
+                    return content(source);
                 } catch (InterruptedException interrupted) {
-                    blockingInterrupted.countDown();
                     Thread.currentThread().interrupt();
-                    throw new IllegalStateException("synthetic source fetch interrupted", interrupted);
+                    throw new IllegalStateException("blocking source must not be cancelled", interrupted);
                 }
             }
-
             if ("failing".equals(source.name())) {
                 try {
-                    if (!blockingStarted.await(2, TimeUnit.SECONDS)) {
-                        throw new AssertionError("blocking source did not start");
-                    }
+                    assertTrue(blockingStarted.await(2, TimeUnit.SECONDS));
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("synthetic failing source interrupted", interrupted);
                 }
                 throw new SourceFetchException(source.id(), source.location(), "synthetic failure");
             }
-
-            throw new AssertionError("queued source must not start after the first failure");
+            return content(source);
         };
 
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
             SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, virtualThreads);
+            CompletableFuture<List<SourceFetchOutcome>> result = CompletableFuture.supplyAsync(
+                    () -> coordinator.fetchAll(List.of(source("blocking"), source("failing"), source("queued"))));
 
-            assertThrows(SourceFetchException.class, () -> coordinator.fetchAll(List.of(
-                    source("blocking"), source("failing"), source("queued"))));
+            assertTrue(blockingStarted.await(2, TimeUnit.SECONDS));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (!started.contains("queued") && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+            }
+            assertTrue(started.contains("queued"));
+            releaseBlocking.countDown();
 
-            assertTrue(blockingInterrupted.await(2, TimeUnit.SECONDS));
-            assertEquals(Set.of("blocking", "failing"), started);
+            List<SourceFetchOutcome> outcomes = result.get(2, TimeUnit.SECONDS);
+            assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.get(0));
+            assertInstanceOf(SourceFetchOutcome.Failure.class, outcomes.get(1));
+            assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.get(2));
+        }
+    }
+
+    @Test
+    void shouldAbortOnUnexpectedWorkerFailure() {
+        AtomicInteger started = new AtomicInteger();
+        ExternalSourceClient client = source -> {
+            started.incrementAndGet();
+            throw new IllegalStateException("programming failure");
+        };
+
+        try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 1, virtualThreads);
+
+            IllegalStateException failure = assertThrows(
+                    IllegalStateException.class,
+                    () -> coordinator.fetchAll(List.of(source("one"), source("two"))));
+
+            assertEquals("programming failure", failure.getMessage());
+            assertEquals(1, started.get());
         }
     }
 
@@ -147,6 +181,16 @@ class SourceFetchCoordinatorTest {
                 Map.of());
     }
 
+    private static FetchedSourceContent content(ConfiguredSource source) {
+        return new FetchedSourceContent(
+                source.id(),
+                source.location(),
+                200,
+                Optional.of("text/plain"),
+                source.name().getBytes(StandardCharsets.UTF_8),
+                Instant.parse("2026-09-10T10:00:00Z"));
+    }
+
     /** Test double that blocks individual source calls so concurrency can be observed deterministically. */
     private static final class ControlledSourceClient implements ExternalSourceClient {
         private final Map<String, CountDownLatch> releases = new ConcurrentHashMap<>();
@@ -165,13 +209,7 @@ class SourceFetchCoordinatorTest {
 
             try {
                 release.await();
-                return new FetchedSourceContent(
-                        source.id(),
-                        source.location(),
-                        200,
-                        Optional.of("text/plain"),
-                        source.name().getBytes(StandardCharsets.UTF_8),
-                        Instant.parse("2026-09-09T10:00:00Z"));
+                return content(source);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException("synthetic source fetch interrupted", interrupted);

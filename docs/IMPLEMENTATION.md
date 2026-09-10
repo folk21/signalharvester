@@ -73,8 +73,11 @@ Implemented types:
 - `ExternalSourceHttpFilter` — collection-specific technical request headers and sanitized transport diagnostics;
 - `MicronautExternalSourceClient` — adapter that maps Micronaut responses/failures to collection-owned types without leaking Micronaut exceptions;
 - `CollectionConfiguration` — Jakarta-validated runtime collection settings;
-- `CollectionClockFactory` — module-owned qualified UTC clock used for deterministic transport timestamps;
-- `SourceFetchCoordinator` — bounded worker coordination on Micronaut's blocking executor, preserving deterministic result order while using Virtual Threads on Java 21.
+- `CollectionClockFactory` — module-owned qualified UTC clock used for deterministic transport and collection-run timestamps;
+- `SourceFetchCoordinator` — bounded best-effort worker coordination on Micronaut's blocking executor, preserving deterministic result order while using Virtual Threads on Java 21;
+- `CollectionRunService` — explicit collection execution over globally enabled sources through `SourceConfigurationProvider`;
+- `CollectionRunRequest` / `CollectionRunResult` — temporary caller-supplied profile/category context plus run id, timing, aggregate status, and per-source terminal outcomes;
+- `RawItemIdentityFactory` — deterministic SHA-256 raw-item identity over source id, requested URI, and raw payload.
 
 The module also implements the first asynchronous publication boundary. `RawItemEventPublisher` accepts `FetchedSourceContent` plus explicit caller-owned publication metadata, including the stable raw-item identity; `KafkaRawItemEventPublisher` maps it to `RawItemDiscovered`, assigns a new event identity, serializes the generated Protobuf message to bytes, and sends an acknowledged Kafka record through a Micronaut `@KafkaClient`. The default topic is `signalharvester.collection.raw-item-discovered.v1`, the caller-owned `rawItemId` is the record key, and producer configuration uses String/byte-array serializers, `acks=all`, and Kafka producer idempotence. Generated Protobuf classes remain confined to the Kafka adapter/mapping boundary.
 
@@ -107,7 +110,9 @@ Current concrete tests include:
 - Micronaut blocking-executor Virtual Thread verification;
 - deterministic loopback managed-client HTTP tests for headers, error statuses, query preservation, redirects, and response-size enforcement;
 - collection adapter tests for success, empty bodies, transport failures, HTTP status mapping, and `Retry-After`;
-- bounded Virtual Thread source-coordination tests with deterministic ordering, failure propagation, and in-flight peer cancellation.
+- bounded Virtual Thread source-coordination tests with deterministic ordering and continuation after source-level failure;
+- collection-run behavior tests for success/partial/failure outcomes, Kafka correlation, publication failure continuation, and deterministic raw-item identity;
+- a cross-module PostgreSQL + deterministic HTTP + Kafka Testcontainers collection-run scenario.
 
 `modules:configuration` contains PostgreSQL Testcontainers coverage for Flyway bootstrap, CRUD/settings/provider behavior, REST validation/status mapping, and a server-level assertion that JDBC entry executes on a blocking Virtual Thread. `modules:collection` now contains a Kafka Testcontainers producer/consumer round-trip for the real `RawItemEventPublisher`, including Protobuf decoding and correlation/provenance assertions.
 
@@ -118,7 +123,8 @@ Current concrete tests include:
 ## Known limitations
 
 - no Kafka consumer wiring;
-- no source parsing/extraction or collection-run orchestration;
+- no source parsing/extraction into multiple external items;
+- collection-run history is not persisted and profile/source membership is not implemented yet;
 - no analysis/results implementation;
 - no SSE implementation;
 - no outbound SSRF/network-destination policy yet; persisted source management must remain trusted until such a policy is defined;

@@ -29,4 +29,6 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-10 — Added the first acknowledged collection-to-Kafka publisher with explicit RawItemDiscovered Protobuf byte serialization, configurable topic/key conventions, correlation metadata, and Kafka Testcontainers round-trip coverage.
 
+2026-09-10 — Added explicit best-effort collection-run orchestration over enabled persisted sources with run correlation, deterministic raw-item identity, per-source terminal outcomes, and cross-module PostgreSQL/HTTP/Kafka integration coverage.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

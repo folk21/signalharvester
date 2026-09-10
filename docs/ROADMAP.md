@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Verify and accept the first collection-to-Kafka publication slice, then move the implementation focus to collection-run orchestration over enabled sources. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-collection-kafka-transport.md`](specs/active/subspecs/backend-collection-kafka-transport.md).
+Verify and accept the first collection-run orchestration slice over enabled sources. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-collection-run-orchestration.md`](specs/active/subspecs/backend-collection-run-orchestration.md). After acceptance, move directly to normalization/deduplication plus minimal deterministic analysis.
 
 ## P0 — repository and contract foundation
 

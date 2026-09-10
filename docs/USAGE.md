@@ -45,6 +45,8 @@ curl http://localhost:8080/api/v1/sources
 
 Source URLs stored through this API are configuration data only. Do not expose source management to untrusted users as an unrestricted collection authorization mechanism until an outbound destination/SSRF policy is implemented.
 
+The collection module now contains an executable `CollectionRunService` use case that reads enabled sources, performs bounded best-effort fetches, and publishes successful payloads to Kafka. It is not exposed through a public REST trigger or scheduler yet, so normal backend operation still starts collection only through internal/test invocation until a later slice adds an owning trigger.
+
 ## Run tests
 
 See [`TESTS.md`](TESTS.md) for the authoritative test command matrix.

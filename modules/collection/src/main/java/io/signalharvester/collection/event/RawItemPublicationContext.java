@@ -6,8 +6,8 @@ import java.util.Optional;
 /**
  * Supplies flow metadata required to publish one fetched source payload as a raw-item event.
  *
- * <p>The transport slice does not own collection-run or monitoring-profile orchestration. Callers
- * provide those identifiers explicitly so correlation semantics stay outside the Kafka adapter.</p>
+ * <p>The Kafka transport does not own collection-run or monitoring-profile orchestration. The collection
+ * run caller provides those identifiers explicitly so correlation semantics stay outside the Kafka adapter.</p>
  *
  * @param rawItemId caller-owned stable identity for the discovered raw item
  * @param correlationId identifier shared by events in the same logical processing flow

@@ -91,7 +91,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-collection-kafka-transport.md`](active/subspecs/backend-collection-kafka-transport.md) — first acknowledged `RawItemDiscovered` Protobuf publication boundary and Kafka round-trip.
+- [`active/subspecs/backend-collection-run-orchestration.md`](active/subspecs/backend-collection-run-orchestration.md) — explicit collection-run identity, enabled-source execution, best-effort failure semantics, and raw-item publication orchestration.
 
 Active supporting tracks:
 
@@ -99,11 +99,15 @@ Active supporting tracks:
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith repository structure and module boundaries;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
 
+## Recently completed sub-specifications
+
+- [`archive/subspecs/backend-collection-kafka-transport.md`](archive/subspecs/backend-collection-kafka-transport.md) — acknowledged `RawItemDiscovered` Protobuf publication boundary and Kafka round-trip, verified in the developer environment.
+
 ## Planned backend sub-specifications
 
 Likely future bounded specs include:
 
-- first collection-run orchestration and partial-failure slice;
+- normalization/deduplication and minimal analysis;
 - first collection-to-results vertical slice;
 - result REST/SSE and event observation;
 - Kubernetes deployment and observability;

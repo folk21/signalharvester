@@ -6,7 +6,7 @@ import jakarta.inject.Singleton;
 import java.time.Clock;
 
 /**
- * Provides the UTC clock used to timestamp collection transport activity.
+ * Provides the UTC clock used to timestamp collection transport and run activity.
  *
  * <p>The clock is qualified for collection ownership so another module can introduce its own time
  * source without creating an ambiguous application-wide {@link Clock} bean.</p>
@@ -20,7 +20,7 @@ public final class CollectionClockFactory {
     /**
      * Creates the production collection clock.
      *
-     * @return system UTC clock used by collection adapters
+     * @return system UTC clock used by collection adapters and run orchestration
      */
     @Singleton
     @Named(COLLECTION_CLOCK)

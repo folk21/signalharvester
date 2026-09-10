@@ -61,7 +61,7 @@ Override `SIGNALHARVESTER_DB_URL`, `SIGNALHARVESTER_DB_USERNAME`, and `SIGNALHAR
 
 The collection publisher defaults to Kafka at `localhost:9092`. Until repository-owned Docker Compose is introduced, use any Kafka 3-compatible development broker and override `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` when it is not reachable at the default address.
 
-The current runtime does not yet trigger collection runs automatically, so Kafka is exercised directly by the collection integration test rather than through a public collection-run endpoint.
+The collection-run use case is implemented, but no public REST trigger or scheduler owns invocation yet. Kafka is exercised by the collection publisher test and the cross-module collection-run integration test until an operational trigger is introduced.
 
 ## UI setup
 
