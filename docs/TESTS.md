@@ -37,7 +37,7 @@ On systems where executable permission is not preserved after extracting an arch
 
 `testing:integration-tests` already declares Testcontainers support for PostgreSQL and Kafka. Add container-backed tests only when the scenario exercises real persistence or Kafka behavior.
 
-External HTTP sources must be deterministic local/fake servers controlled by tests.
+External HTTP sources must be deterministic local/fake servers controlled by tests. Blocking HTTP/controller tests must also verify that work is offloaded from Netty event-loop threads when that execution boundary is implemented.
 
 The target end-to-end scenario remains:
 
@@ -58,8 +58,11 @@ The first implementation foundation contains:
 - `ApplicationContextTest` for Micronaut context bootstrap;
 - `ConfiguredSourceTest` for configuration-boundary invariants;
 - `RawItemDiscoveredSerializationTest` for Protobuf round-trip and unknown additive fields;
-- `JdkHttpExternalSourceClientTest` for successful, non-successful, and oversized deterministic HTTP responses;
-- `VirtualThreadSourceFetchCoordinatorTest` for Virtual Thread execution and deterministic result ordering.
+- `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, bounded redirects, and response-size enforcement against deterministic loopback servers;
+- `MicronautExternalSourceClientTest` for successful/empty responses, transport failure normalization, status mapping, and `Retry-After` preservation with a deterministic clock;
+- `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, deterministic result ordering, empty batches, and failure propagation;
+- `MicronautBlockingExecutorTest` for verification that Micronaut's blocking executor is Virtual-Thread backed on the Java 21 baseline and that the collection bean graph resolves with its qualified UTC clock;
+- `CollectionConfigurationTest` for Jakarta Validation of invalid concurrency configuration.
 
 No Docker/Testcontainers test is implemented yet because persistence and Kafka adapters do not exist.
 

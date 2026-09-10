@@ -36,9 +36,9 @@ Create a backend structure that:
 
 The backend repository root is `signalharvester/` and the Gradle root project name is `signalharvester`.
 
-The initial repository contains structure and specifications only. Source directories are intentionally empty.
+The repository now contains the runnable Micronaut composition root, initial configuration/event contracts, and the first collection HTTP transport boundary. Persistence, Kafka adapters, scheduling, parsing, and analysis/result implementations remain pending.
 
-Java 21 is the initial toolchain target because Virtual Threads are stable and directly useful for blocking external I/O. Micronaut is the preferred backend framework. Framework dependencies are intentionally deferred until the first executable vertical slice is implemented.
+Java 21 is the initial toolchain target. Micronaut is the backend framework. Generic external-source access uses Micronaut's managed low-level HTTP client for configuration-driven absolute URLs, behind synchronous module-facing APIs executed on Micronaut's blocking executor, which uses Virtual Threads on the Java 21 baseline. Streaming boundaries remain reactive where appropriate.
 
 ## Repository structure
 
@@ -260,7 +260,10 @@ Its expected responsibilities include:
 - source fetching;
 - source parsing/extraction;
 - HTTP/RSS/HTML/API adapters;
-- Virtual Thread based concurrency for suitable blocking I/O;
+- Micronaut-managed low-level HTTP client behind a synchronous collection-owned transport contract for dynamic absolute source URLs;
+- bounded source fetching on `TaskExecutors.BLOCKING`, which uses Virtual Threads on the Java 21 baseline;
+- explicit connect/read/request timeouts, response-size limits, redirect limits, connection-pool limits, and collection-owned HTTP error mapping;
+- an explicit outbound destination/SSRF policy before configured source URLs are accepted from untrusted users; automatic redirects must be considered part of that policy;
 - source-specific retry/timeout behavior;
 - raw-item discovery;
 - collection status events;
@@ -318,6 +321,16 @@ Its expected responsibilities include:
 - reconstructing event-flow data required by the frontend visualization.
 
 It must not become a substitute for OpenTelemetry, Prometheus, Loki, Tempo, or Grafana.
+
+### R7a — HTTP server execution model
+
+Micronaut Netty event-loop threads must not execute blocking application work.
+
+REST controller methods or classes that invoke JDBC, blocking source access, or other imperative blocking workflows must use `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking execution boundary. On the Java 21 baseline the blocking executor is Virtual-Thread backed.
+
+Controllers that expose true streaming/reactive responses, especially SSE, must keep their reactive execution model instead of being moved to blocking execution mechanically.
+
+Micronaut client/server filters should remain lightweight and non-blocking. A filter that performs blocking work must explicitly offload that work and must not block a Netty event loop. Expected application/domain failures should be mapped through centralized Micronaut `ExceptionHandler` implementations at the HTTP boundary rather than duplicated controller `try/catch` logic.
 
 ### R8 — common contains only genuinely cross-cutting primitives
 

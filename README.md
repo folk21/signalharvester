@@ -83,13 +83,14 @@ Read [`modules/README.md`](modules/README.md) for functional-module ownership an
 The first implementation foundation is present:
 
 - a runnable Micronaut composition root in `app`;
-- centralized dependency/plugin versions through `gradle/libs.versions.toml`;
+- centralized dependency/plugin versions through `gradle/libs.versions.toml`, with the Micronaut Platform version exposed as the Gradle plugin-compatible `micronautVersion` property;
 - the first configuration-module Java API for external sources;
 - the initial REST/OpenAPI source-configuration contract;
 - versioned Protobuf `EventEnvelope` and `RawItemDiscovered` Kafka schemas;
-- JUnit contract tests and Testcontainers dependencies for upcoming Kafka/PostgreSQL integration scenarios.
+- JUnit contract tests and Testcontainers dependencies for upcoming Kafka/PostgreSQL integration scenarios;
+- the first collection HTTP transport using Micronaut-managed HTTP infrastructure with bounded Virtual Thread orchestration and deterministic loopback tests.
 
-Kafka producers/consumers, PostgreSQL persistence, REST controllers, SSE, collection adapters, analysis, and infrastructure deployment are still planned work.
+Kafka producers/consumers, PostgreSQL persistence, REST controllers, SSE, source-specific parsing/adapters beyond the generic HTTP transport, analysis, and infrastructure deployment are still planned work.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

@@ -1,5 +1,5 @@
 plugins {
-    `java-library`
+    alias(libs.plugins.micronaut.library)
 }
 
 java {
@@ -8,14 +8,26 @@ java {
     }
 }
 
+micronaut {
+    processing {
+        incremental.set(true)
+        annotations.add("io.signalharvester.collection.*")
+    }
+}
+
 dependencies {
     implementation(project(":common"))
     implementation(project(":contracts:event-contracts"))
     implementation(project(":modules:configuration"))
 
-    testImplementation(libs.junit.jupiter)
-}
+    implementation("io.micronaut:micronaut-context")
+    implementation("io.micronaut:micronaut-http-client")
 
-tasks.test {
-    useJUnitPlatform()
+    // The Micronaut-managed Netty client registry requires a JSON mapper in the application context.
+    implementation("io.micronaut.serde:micronaut-serde-jackson")
+
+    implementation("io.micronaut.validation:micronaut-validation")
+    annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
+
+    testImplementation(libs.junit.jupiter)
 }

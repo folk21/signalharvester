@@ -15,6 +15,6 @@ OpenAPI sources belong under `src/main/resources/openapi/`.
 
 The initial OpenAPI 3.1 contract is [`src/main/resources/openapi/signalharvester-v1.yaml`](src/main/resources/openapi/signalharvester-v1.yaml).
 
-It currently defines CRUD operations and schemas for configurable external sources. REST controllers are not implemented yet.
+It currently defines CRUD operations and schemas for configurable external sources. Source locations are constrained to absolute HTTP(S) URLs without embedded credentials or fragments so the external contract matches the configuration-module invariant. REST controllers are not implemented yet.
 
 REST contracts remain independent from generated Kafka/Protobuf transport classes.

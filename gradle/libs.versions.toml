@@ -1,6 +1,5 @@
 [versions]
 micronaut-gradle-plugin = "4.6.2"
-micronaut = "4.10.15"
 protobuf-gradle-plugin = "0.10.0"
 protobuf = "4.36.1"
 junit = "5.14.4"
@@ -18,4 +17,5 @@ protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 
 [plugins]
 micronaut-application = { id = "io.micronaut.application", version.ref = "micronaut-gradle-plugin" }
+micronaut-library = { id = "io.micronaut.library", version.ref = "micronaut-gradle-plugin" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-gradle-plugin" }

@@ -42,7 +42,13 @@ Transactional outbox and idempotent-consumer patterns are introduced where event
 
 ## External collection boundary
 
-Collection is configuration-driven where practical. External I/O remains behind testable boundaries and is a primary use case for straightforward blocking Java code running on Virtual Threads with bounded concurrency and explicit timeouts/retries.
+Collection is configuration-driven where practical. External I/O remains behind testable boundaries. The generic HTTP transport uses Micronaut's managed low-level HTTP client with absolute request URIs and a synchronous module-facing contract executed on Micronaut's blocking executor. On the Java 21 baseline that executor uses Virtual Threads, which keeps collection workflows imperative without blocking Netty event-loop threads.
+
+Collection concurrency remains explicitly bounded independently of thread cost. HTTP connect/read/request timeouts, response-size limits, redirect limits, connection-pool limits, and error-status handling remain explicit runtime configuration. Client filters own only cross-cutting transport concerns; collection adapters own status/error interpretation. Configured targets currently assume trusted application configuration; before source-management APIs are exposed to untrusted users, outbound network destination policy must address SSRF-sensitive loopback, link-local, private-network, and redirect targets without breaking deterministic local development sources.
+
+## HTTP server execution boundary
+
+Micronaut Netty event-loop threads must not run blocking application work. REST controller methods or classes that invoke JDBC, blocking HTTP, or other imperative blocking workflows use `@ExecuteOn(TaskExecutors.BLOCKING)`. On the Java 21 baseline this means Virtual Threads. True streaming endpoints such as SSE keep their `Publisher`/reactive execution model and are not moved to blocking execution mechanically. Expected API/domain failures should be translated at the HTTP boundary through Micronaut `ExceptionHandler` implementations rather than repeated controller `try/catch` blocks; handlers and filters remain non-blocking unless explicitly offloaded.
 
 ## UI boundary
 

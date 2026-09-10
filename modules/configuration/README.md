@@ -22,7 +22,7 @@ The first public Java boundary is implemented under `io.signalharvester.configur
 - `ConfiguredSource`;
 - `SourceConfigurationProvider`.
 
-`ConfiguredSource` validates basic boundary invariants and defensively copies source-specific settings. Persistence, monitoring profiles, REST implementation, and concrete provider wiring are not implemented yet.
+`ConfiguredSource` validates source identity and URL invariants (absolute HTTP(S), host present, no embedded credentials or fragment) and defensively copies source-specific settings. Persistence, monitoring profiles, REST implementation, and concrete provider wiring are not implemented yet. Source configuration is currently assumed to be trusted; an outbound destination policy is required before accepting untrusted source URLs.
 
 ## Read next
 

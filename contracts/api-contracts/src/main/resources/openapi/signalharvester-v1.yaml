@@ -124,6 +124,8 @@ components:
         location:
           type: string
           format: uri
+          pattern: '^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)[^#\s]+$'
+          description: Absolute HTTP(S) source URL without embedded credentials or a fragment.
         enabled:
           type: boolean
         settings:
@@ -147,6 +149,8 @@ components:
         location:
           type: string
           format: uri
+          pattern: '^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)[^#\s]+$'
+          description: Absolute HTTP(S) source URL without embedded credentials or a fragment.
         enabled:
           type: boolean
         settings:

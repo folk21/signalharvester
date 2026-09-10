@@ -81,7 +81,7 @@ No production implementation is assumed by this specification.
 The intended initial technology direction is:
 
 - Java with Micronaut for backend services;
-- Java Virtual Threads for suitable blocking I/O workloads, especially external source collection;
+- Micronaut-managed HTTP client for generic source access, using low-level absolute requests for configuration-driven dynamic hosts, with blocking collection workflows executed on bounded Virtual Threads and `Publisher` reserved for true streaming boundaries;
 - Apache Kafka for asynchronous event transport;
 - Protocol Buffers for Kafka integration-event wire contracts;
 - PostgreSQL for application persistence;
@@ -411,11 +411,13 @@ The first minimal vertical slice may defer full outbox implementation only if th
 
 ### R23 — concurrency model suitable for external I/O
 
-External collection is expected to be dominated by blocking network I/O.
+External collection is expected to be dominated by network I/O.
 
-The Java backend should use a concurrency model that permits many concurrent source requests without requiring reactive programming merely for scalability.
+The Java backend must keep concurrency models explicit and simple. Generic external-source retrieval uses Micronaut's managed low-level HTTP client for dynamic absolute URLs through a synchronous module-facing contract executed on Micronaut's blocking executor. On the Java 21 baseline that executor uses Virtual Threads, allowing imperative collection workflows without blocking Netty event-loop threads.
 
-Java Virtual Threads are the preferred initial mechanism for suitable blocking collection workloads. Concurrency limits, timeouts, and protection against overwhelming external services must remain explicit.
+Concurrency limits, connect/read/request timeouts, response-size limits, redirect limits, connection-pool limits, and protection against overwhelming external services must remain explicit. Before source configuration is accepted from untrusted users, outbound destination policy must also cover SSRF-sensitive addresses and redirect targets. The low cost of Virtual Threads must not be treated as permission for unbounded external concurrency. `Publisher`/reactive types remain appropriate for genuine streaming boundaries such as SSE.
+
+REST controller operations that invoke JDBC, blocking HTTP, or other blocking application workflows must be offloaded with `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking executor boundary. Streaming/reactive controller methods must not be moved to blocking execution mechanically. Client/server filters must remain non-blocking unless they explicitly offload blocking work. Expected API/domain failures should be translated through Micronaut HTTP exception handlers rather than repeated controller-local error mapping.
 
 ### R24 — Kubernetes deployment
 
@@ -605,8 +607,8 @@ The initial product does not require:
 - Treat Kafka as asynchronous transport and durable event infrastructure, not as a replacement for all application persistence.
 - Keep the browser isolated from infrastructure protocols.
 - Prefer SSE over WebSocket for initial unidirectional live streams; introduce WebSocket only for a demonstrated bidirectional requirement.
-- Prefer blocking, readable Java code with Virtual Threads for suitable network-I/O concurrency rather than introducing a reactive programming model by default.
-- Preserve backpressure through bounded concurrency, Kafka consumer flow control, and explicit resource limits even when Virtual Threads make thread creation inexpensive.
+- Keep blocking application workflows imperative and run them on Micronaut's blocking executor, which is Virtual-Thread backed on the Java 21 baseline; never block Netty event-loop threads.
+- Preserve backpressure through bounded source concurrency, HTTP connection/resource limits, Kafka consumer flow control, and explicit downstream capacity limits. Use `Publisher` for genuinely streaming boundaries such as SSE rather than forcing all workflows into one concurrency model.
 - Keep collection adapters isolated from normalized domain processing.
 - Prefer configuration-driven integration when sources share a common protocol/extraction model.
 - Keep analysis replaceable and allow deterministic non-AI operation.

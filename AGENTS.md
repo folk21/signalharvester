@@ -111,6 +111,8 @@ When changing an HTTP contract, update the contract source, implementation, and 
 
 Do not expose module persistence entities or internal implementation types over REST/SSE. Use explicit DTOs/records at external boundaries.
 
+Map expected application/domain failures through Micronaut `ExceptionHandler` implementations at the HTTP boundary instead of duplicating controller-local `try/catch` translation. Keep handlers non-blocking unless they explicitly offload blocking work.
+
 The browser must not connect directly to Kafka or PostgreSQL.
 
 ## Persistence Rules
@@ -160,7 +162,15 @@ Do not hardcode secrets, external URLs, schedules, environment-specific paths, p
 
 Collection code must remain testable without the public network.
 
-For blocking external I/O, prefer straightforward Java code using Virtual Threads when concurrency is required. Do not introduce reactive programming only for style.
+Prefer a simple imperative model for blocking application workflows. On the Java 21 baseline, run blocking HTTP/JDBC/application work on Micronaut's `TaskExecutors.BLOCKING`, which uses Virtual Threads when available. Never perform blocking work on a Netty event-loop thread.
+
+For REST controllers that invoke blocking application logic, use `@ExecuteOn(TaskExecutors.BLOCKING)` at the method or class level as appropriate. Do not apply blocking execution mechanically to streaming/reactive endpoints such as SSE; keep true streams on `Publisher`/reactive boundaries.
+
+Micronaut HTTP clients may expose a synchronous module-facing boundary when calls execute only from a blocking/Virtual-Thread context. Use declarative `@Client` for stable service/base-URI integrations; use the Micronaut-managed low-level client for configuration-driven absolute URLs that may span arbitrary hosts. Client filters should stay lightweight and non-blocking; a filter that performs blocking work must explicitly offload it rather than block the event loop.
+
+Do not hold `synchronized` monitors or other contended locks across blocking HTTP/JDBC calls. This is especially important on the Java 21 Virtual Thread baseline, where pinned carrier threads can reduce scalability.
+
+Use Jakarta Validation for configuration and external/input boundaries where Micronaut owns validation. Keep intrinsic domain/value-object invariants enforced by the owning Java type so they remain valid outside the Micronaut container.
 
 External calls must have explicit timeout and concurrency behavior. Add retries only when their semantics are understood and bounded.
 
@@ -186,7 +196,7 @@ Use the smallest useful layer first:
 - cross-module/end-to-end tests under `testing/integration-tests`;
 - ArchUnit tests for important module-boundary rules.
 
-Use JUnit 5, Micronaut test support, and deterministic fake HTTP sources.
+Use JUnit 5, Micronaut test support, and deterministic fake HTTP sources. When blocking REST controllers are introduced, include a server-level test that verifies their blocking work is offloaded from the Netty event loop.
 
 Tests must not depend on:
 
