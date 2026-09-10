@@ -67,7 +67,7 @@ Implemented types:
 - `ExternalSourceClient` — synchronous module-owned transport boundary intended for blocking/Virtual-Thread execution;
 - `FetchedSourceContent` — immutable transport result with source provenance and fetch metadata;
 - `SourceFetchException` — transport-level failure preserving source identity, URI, optional HTTP status, and raw `Retry-After`;
-- `ExternalSourceHttpClient` — internal synchronous collection HTTP boundary; `MicronautManagedExternalSourceHttpClient` implements it using Micronaut's managed default client and absolute request URIs;
+- `ExternalSourceHttpClient` — internal synchronous collection HTTP boundary; `MicronautManagedExternalSourceHttpClient` implements it using Micronaut's managed default client and validated absolute `URI` values without String round-tripping;
 - `ExternalSourceHttpFilter` — collection-specific technical request headers and sanitized transport diagnostics;
 - `MicronautExternalSourceClient` — adapter that maps Micronaut responses/failures to collection-owned types without leaking Micronaut exceptions;
 - `CollectionConfiguration` — Jakarta-validated runtime collection settings;
@@ -76,7 +76,7 @@ Implemented types:
 
 The implementation currently performs raw HTTP retrieval and bounded multi-source coordination only. Source parsing/extraction, due-work scheduling, collection-run persistence, and Kafka publication are intentionally still absent.
 
-Configured source locations are constrained to absolute HTTP/HTTPS URLs without embedded credentials or fragments. The generic client follows a bounded number of redirects, preserves HTTP error responses through Micronaut response exceptions for collection-owned mapping, enforces content/time limits, and prevents blocking calls on Netty event-loop threads.
+Configured source locations are constrained to absolute HTTP/HTTPS URLs without embedded credentials or fragments. The generic client follows a bounded number of redirects, normalizes Micronaut HTTP response exceptions into collection-owned failures while retaining status and retry metadata, enforces content/time limits, and prevents blocking calls on Netty event-loop threads.
 
 ## Kafka/Protobuf contracts
 
@@ -101,9 +101,9 @@ Current concrete tests include:
 - configuration API invariant/defensive-copy and source-URL safety tests;
 - Protobuf serialization and unknown-field tests;
 - Micronaut blocking-executor Virtual Thread verification;
-- deterministic loopback declarative-HTTP tests for headers, error statuses, query preservation, redirects, and response-size enforcement;
+- deterministic loopback managed-client HTTP tests for headers, error statuses, query preservation, redirects, and response-size enforcement;
 - collection adapter tests for success, empty bodies, transport failures, HTTP status mapping, and `Retry-After`;
-- bounded Virtual Thread source-coordination tests with deterministic ordering and failure propagation.
+- bounded Virtual Thread source-coordination tests with deterministic ordering, failure propagation, and in-flight peer cancellation.
 
 `testing:integration-tests` is prepared with Testcontainers dependencies for PostgreSQL and Kafka, but no container-backed scenario exists yet.
 

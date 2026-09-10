@@ -1,6 +1,7 @@
 package io.signalharvester.collection.source.http;
 
 import io.micronaut.http.HttpResponse;
+import java.net.URI;
 
 /**
  * Internal HTTP transport boundary used by the collection adapter to fetch one configured source.
@@ -18,5 +19,5 @@ public interface ExternalSourceHttpClient {
      * @param uri absolute source URL
      * @return complete HTTP response
      */
-    HttpResponse<byte[]> fetch(String uri);
+    HttpResponse<byte[]> fetch(URI uri);
 }

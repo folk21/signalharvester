@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-project-structure.md
+current_focus: subspecs/backend-configuration-persistence-rest.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -18,11 +18,11 @@ Backend, infrastructure, observability, persistence, and source-connector implem
 
 ## Active implementation focus
 
-The current technical focus is the backend modular-monolith structure defined in `subspecs/backend-project-structure.md` and the Kafka/Protocol Buffers contract model defined in `subspecs/backend-event-contracts.md`.
+The current technical focus is persisted source configuration and its REST implementation, defined in `subspecs/backend-configuration-persistence-rest.md`. The modular-monolith boundary rules in `subspecs/backend-project-structure.md` and the Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md` remain active supporting specifications.
 
 SignalHarvester starts with one deployable backend application composed from cohesive Gradle modules. Each functional module owns its behavior and infrastructure details, exposes narrow contracts where collaboration is required, and owns its persistence logically. Kafka remains an explicit asynchronous boundary between selected modules so event flow, replay, retries, lag, and future service extraction remain first-class concerns.
 
-Backend infrastructure specifications will refine this umbrella specification later. Frontend-specific technical specifications will live in the companion `signalharvester-ui` repository.
+The current backend already contains the runnable Micronaut composition root, the configuration public Java API and source OpenAPI contract, initial Protobuf schemas, and the generic collection HTTP transport with bounded Virtual Thread orchestration. PostgreSQL persistence, source REST controllers, Kafka adapters, analysis/results, SSE, and deployable infrastructure remain pending. Frontend-specific technical specifications live in the companion `signalharvester-ui` repository.
 
 ## Goal
 
@@ -76,7 +76,7 @@ The browser communicates with application APIs over HTTP-based application proto
 
 ## Current state
 
-No production implementation is assumed by this specification.
+The repository has an implemented backend foundation, but the end-to-end product described by this umbrella is not complete. Current-state details remain owned by `docs/IMPLEMENTATION.md`; this section records only the technology direction that constrains active work.
 
 The intended initial technology direction is:
 

@@ -10,7 +10,7 @@ spec_status: active
 
 ## Status
 
-Active technical sub-specification — initial backend repository structure.
+Active supporting technical sub-specification — the initial repository structure is established and these requirements remain boundary guardrails while later vertical slices exercise them.
 
 The backend starts as a modular monolith. There is one deployable backend application, while the codebase is split into independently owned functional Gradle modules.
 

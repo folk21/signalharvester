@@ -32,7 +32,7 @@ The current backend runtime supports these collection-related environment variab
 
 `micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. Blocking collection workflows and future blocking controller methods use this executor rather than a Netty event loop.
 
-The maximum concurrency value is validated through Micronaut/Jakarta Validation and must be positive. External HTTP error statuses are returned to the collection adapter rather than automatically raised by the client, which lets the module preserve status and `Retry-After` metadata. Redirect following is enabled but bounded. Automatic decompression is enabled, connection pooling is explicit, and `allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
+The maximum concurrency value is validated through Micronaut/Jakarta Validation and must be positive. Micronaut may surface non-success HTTP statuses as `HttpClientResponseException`; the collection adapter normalizes that transport behavior into `SourceFetchException` while preserving status and raw `Retry-After` metadata. Redirect following is enabled but bounded. Automatic decompression is enabled, connection pooling is explicit, and `allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
 
 Configured source URLs are domain values: they must be absolute HTTP/HTTPS locations with a host, without embedded user-info credentials and without URI fragments. Secrets should be modeled separately rather than embedded into URLs.
 

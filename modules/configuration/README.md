@@ -28,4 +28,4 @@ The first public Java boundary is implemented under `io.signalharvester.configur
 
 - [`../AGENTS.md`](../AGENTS.md)
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md)
+- [`../../docs/specs/active/subspecs/backend-configuration-persistence-rest.md`](../../docs/specs/active/subspecs/backend-configuration-persistence-rest.md)

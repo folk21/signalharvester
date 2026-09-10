@@ -23,4 +23,6 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-10 — Replaced the fixed-base declarative source client with the Micronaut-managed low-level client so configuration-driven absolute URLs can span arbitrary hosts while retaining Virtual Threads, filters, pooling, timeouts, redirects, and error mapping.
 
+2026-09-10 — Reconciled collection transport, OpenAPI validation, module dependencies, active specifications, tests, and archive tooling with the implemented low-level Micronaut HTTP design.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

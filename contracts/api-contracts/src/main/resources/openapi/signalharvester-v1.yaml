@@ -119,12 +119,13 @@ components:
         name:
           type: string
           minLength: 1
+          pattern: '.*\S.*'
         type:
           $ref: '#/components/schemas/SourceType'
         location:
           type: string
           format: uri
-          pattern: '^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)[^#\s]+$'
+          pattern: '^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)(?:\[[0-9A-Fa-f:.]+\]|[^/?#:\s]+)(?::\d+)?(?:[/?][^#\s]*)?$'
           description: Absolute HTTP(S) source URL without embedded credentials or a fragment.
         enabled:
           type: boolean
@@ -144,12 +145,13 @@ components:
         name:
           type: string
           minLength: 1
+          pattern: '.*\S.*'
         type:
           $ref: '#/components/schemas/SourceType'
         location:
           type: string
           format: uri
-          pattern: '^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)[^#\s]+$'
+          pattern: '^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)(?:\[[0-9A-Fa-f:.]+\]|[^/?#:\s]+)(?::\d+)?(?:[/?][^#\s]*)?$'
           description: Absolute HTTP(S) source URL without embedded credentials or a fragment.
         enabled:
           type: boolean

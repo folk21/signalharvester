@@ -60,7 +60,7 @@ The first implementation foundation contains:
 - `RawItemDiscoveredSerializationTest` for Protobuf round-trip and unknown additive fields;
 - `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, bounded redirects, and response-size enforcement against deterministic loopback servers;
 - `MicronautExternalSourceClientTest` for successful/empty responses, transport failure normalization, status mapping, and `Retry-After` preservation with a deterministic clock;
-- `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, deterministic result ordering, empty batches, and failure propagation;
+- `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, deterministic result ordering, empty batches, failure propagation, and cancellation of in-flight peers after a worker failure;
 - `MicronautBlockingExecutorTest` for verification that Micronaut's blocking executor is Virtual-Thread backed on the Java 21 baseline and that the collection bean graph resolves with its qualified UTC clock;
 - `CollectionConfigurationTest` for Jakarta Validation of invalid concurrency configuration.
 

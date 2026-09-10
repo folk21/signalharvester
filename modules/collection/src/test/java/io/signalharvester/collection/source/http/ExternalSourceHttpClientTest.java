@@ -15,6 +15,7 @@ import io.micronaut.http.client.HttpClientRegistry;
 import io.micronaut.http.client.exceptions.HttpClientException;
 import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,7 +42,7 @@ class ExternalSourceHttpClientTest {
 
         try (ApplicationContext context = applicationContext()) {
             ExternalSourceHttpClient client = context.getBean(ExternalSourceHttpClient.class);
-            String uri = loopbackUri(server, "/source?topic=java&level=senior");
+            URI uri = loopbackUri(server, "/source?topic=java&level=senior");
 
             HttpResponse<byte[]> response = client.fetch(uri);
 
@@ -180,8 +181,8 @@ class ExternalSourceHttpClientTest {
         return server;
     }
 
-    private static String loopbackUri(HttpServer server, String path) {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + path;
+    private static URI loopbackUri(HttpServer server, String path) {
+        return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + path);
     }
 
     private static ApplicationContext applicationContext() {
@@ -190,7 +191,6 @@ class ExternalSourceHttpClientTest {
 
     private static ApplicationContext applicationContext(Map<String, Object> overrides) {
         HashMap<String, Object> properties = new HashMap<>();
-        properties.put("micronaut.http.client.exception-on-error-status", false);
         properties.put("micronaut.http.client.follow-redirects", true);
         properties.put("micronaut.http.client.max-redirects", 5);
         properties.put("micronaut.http.client.allow-block-event-loop", false);

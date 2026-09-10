@@ -10,7 +10,7 @@ spec_status: active
 
 ## Status
 
-Active technical sub-specification — initial asynchronous event-contract model.
+Active supporting technical sub-specification — the initial schemas and generation workflow exist, while Kafka adapters, round-trip integration tests, and later event families remain pending.
 
 This specification refines the umbrella event-driven requirements and the backend modular-monolith structure. It defines how Kafka integration events are represented without turning Protocol Buffers into a universal internal application model.
 

@@ -34,9 +34,8 @@ public final class MicronautManagedExternalSourceHttpClient implements ExternalS
      * @return complete HTTP response with a byte-array body
      */
     @Override
-    public HttpResponse<byte[]> fetch(String uri) {
-        URI requestUri = URI.create(Objects.requireNonNull(uri, "uri"));
-        MutableHttpRequest<Object> request = HttpRequest.GET(requestUri);
+    public HttpResponse<byte[]> fetch(URI uri) {
+        MutableHttpRequest<Object> request = HttpRequest.GET(Objects.requireNonNull(uri, "uri"));
         request.setAttribute(ExternalSourceHttpFilter.SOURCE_REQUEST_ATTRIBUTE, true);
         return blockingHttpClient.exchange(request, byte[].class);
     }

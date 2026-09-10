@@ -48,7 +48,7 @@ public final class MicronautExternalSourceClient implements ExternalSourceClient
         Objects.requireNonNull(source, "source");
 
         try {
-            HttpResponse<byte[]> response = httpClient.fetch(source.location().toASCIIString());
+            HttpResponse<byte[]> response = httpClient.fetch(source.location());
             if (response == null) {
                 throw new SourceFetchException(
                         source.id(), source.location(), "External source client returned no response");

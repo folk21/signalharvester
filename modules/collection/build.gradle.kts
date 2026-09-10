@@ -16,8 +16,6 @@ micronaut {
 }
 
 dependencies {
-    implementation(project(":common"))
-    implementation(project(":contracts:event-contracts"))
     implementation(project(":modules:configuration"))
 
     implementation("io.micronaut:micronaut-context")

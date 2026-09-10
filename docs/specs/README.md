@@ -91,19 +91,20 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith repository structure and module boundaries.
+- [`active/subspecs/backend-configuration-persistence-rest.md`](active/subspecs/backend-configuration-persistence-rest.md) — PostgreSQL/Flyway source persistence and REST CRUD implementation.
 
-Active supporting contract track:
+Active supporting tracks:
 
+- [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith repository structure and module boundaries;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
 
 ## Planned backend sub-specifications
 
 Likely future bounded specs include:
 
-- PostgreSQL persistence/migrations and transactional outbox;
-- REST/OpenAPI and SSE API;
+- first collection-to-Kafka publication slice;
 - first collection-to-results vertical slice;
+- result REST/SSE and event observation;
 - Kubernetes deployment and observability;
 - integration/system testing hardening.
 

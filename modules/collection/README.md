@@ -18,7 +18,7 @@ External I/O must remain testable with deterministic fake sources. The generic H
 The first external-source transport boundary is implemented:
 
 - `ExternalSourceClient` defines synchronous raw external-source fetching behind a module-owned interface;
-- `ExternalSourceHttpClient` is the internal blocking HTTP boundary; `MicronautManagedExternalSourceHttpClient` executes absolute requests through Micronaut's managed default client;
+- `ExternalSourceHttpClient` is the internal blocking HTTP boundary and accepts validated `URI` values; `MicronautManagedExternalSourceHttpClient` executes those absolute requests through Micronaut's managed default client;
 - `ExternalSourceHttpFilter` owns common technical request headers and sanitized response diagnostics;
 - `MicronautExternalSourceClient` maps Micronaut transport responses/exceptions to collection-owned results/failures and preserves status/`Retry-After` metadata;
 - `FetchedSourceContent` preserves source provenance, response metadata, raw bytes, and fetch time;

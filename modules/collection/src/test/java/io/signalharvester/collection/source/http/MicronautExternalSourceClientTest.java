@@ -69,7 +69,7 @@ class MicronautExternalSourceClientTest {
     }
 
     @Test
-    void shouldNormalizeResponseExceptionIfErrorStatusExceptionsAreEnabledAccidentally() {
+    void shouldNormalizeResponseExceptionForErrorStatus() {
         ExternalSourceHttpClient httpClient = uri -> {
             throw new HttpClientResponseException(
                     "service unavailable", HttpResponse.<byte[]>status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "5"));

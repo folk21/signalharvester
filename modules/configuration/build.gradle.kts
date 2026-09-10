@@ -9,8 +9,5 @@ java {
 }
 
 dependencies {
-    implementation(project(":common"))
-    implementation(project(":contracts:event-contracts"))
-
     testImplementation(libs.junit.jupiter)
 }
