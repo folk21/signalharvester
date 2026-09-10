@@ -26,16 +26,26 @@ The first external-source transport boundary is implemented:
 - `CollectionClockFactory` provides the qualified UTC clock used by collection transport timestamps;
 - `SourceFetchCoordinator` runs a bounded number of workers on Micronaut's blocking executor and preserves input order.
 
-The current implementation intentionally stops at transport retrieval. Parsing/extraction, collection-run orchestration, scheduling, and Kafka publication are not implemented yet.
+The module now also owns the first Kafka publication boundary:
 
-Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, resolve the complete collection wiring, and validate bounded coordination without public network access.
+- `RawItemEventPublisher` is the collection-owned API used by later orchestration;
+- `RawItemPublicationContext` supplies caller-owned raw-item identity plus correlation/profile/category/trace metadata without making the Kafka adapter own run or idempotency semantics;
+- `RawItemDiscoveredMapper` keeps generated Protobuf types inside the Kafka adapter boundary;
+- `KafkaRawItemEventPublisher` performs acknowledged publication of explicit Protobuf bytes;
+- `CollectionKafkaConfiguration` owns the configurable versioned raw-item topic;
+- the Kafka record key is the caller-owned `rawItemId`, while each publication gets a new `eventId`; producer idempotence plus `acks=all` are enabled at the transport layer.
+
+Parsing/extraction, enabled-source collection-run orchestration, scheduling, application-level replay/idempotency semantics, and Kafka consumers are not implemented yet.
+
+Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, resolve the collection wiring, validate bounded coordination, verify Protobuf event mapping/serialization, and include a Kafka Testcontainers producer/consumer round-trip.
 
 ## Read next
 
 - [`../AGENTS.md`](../AGENTS.md)
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md)
+- [`../../docs/specs/active/subspecs/backend-collection-kafka-transport.md`](../../docs/specs/active/subspecs/backend-collection-kafka-transport.md)
+- [`../../docs/specs/active/subspecs/backend-event-contracts.md`](../../docs/specs/active/subspecs/backend-event-contracts.md)
 
 ## Security note
 
-Configured source URLs are currently treated as trusted application configuration. Before source-management endpoints are exposed to untrusted users, add an explicit outbound destination policy for SSRF-sensitive addresses and redirects; local loopback access must remain configurable for deterministic development and tests.
+Source-management REST endpoints now persist configured URLs, but persistence is not outbound authorization. Until an explicit configurable outbound destination policy exists, expose source management only to trusted users/environments; the future policy must cover SSRF-sensitive addresses and redirects while preserving configurable loopback access for deterministic development and tests.

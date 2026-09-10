@@ -15,14 +15,13 @@ Other modules consume effective configuration through a public Java API or event
 
 ## Current state
 
-The first public Java boundary is implemented under `io.signalharvester.configuration.api`:
+The public Java boundary under `io.signalharvester.configuration.api` exposes `SourceId`, `SourceType`, `ConfiguredSource`, and `SourceConfigurationProvider`.
 
-- `SourceId`;
-- `SourceType`;
-- `ConfiguredSource`;
-- `SourceConfigurationProvider`.
+Source configuration is persisted in the configuration-owned PostgreSQL schema through an explicit JDBC repository. `SourceConfigurationManager` owns write transaction boundaries; the repository owns SQL and JDBC resources. Flyway migration `db/migration/configuration/V1__create_source_configuration.sql` creates `configuration.sources` and `configuration.source_settings`. `SourceConfigurationManager` owns CRUD behavior and is the concrete `SourceConfigurationProvider` consumed by collection.
 
-`ConfiguredSource` validates source identity and URL invariants (absolute HTTP(S), host present, no embedded credentials or fragment) and defensively copies source-specific settings. Persistence, monitoring profiles, REST implementation, and concrete provider wiring are not implemented yet. Source configuration is currently assumed to be trusted; an outbound destination policy is required before accepting untrusted source URLs.
+The existing OpenAPI CRUD contract is implemented under `/api/v1/sources`. HTTP request records are separate from persistence types, Jakarta Validation enforces the input boundary, expected not-found/invalid-configuration failures use centralized Micronaut `ExceptionHandler` beans, and the controller runs on `TaskExecutors.BLOCKING` for JDBC work.
+
+Persisting a URL is not outbound authorization. Source management remains trusted until a configurable outbound destination/SSRF policy exists; loopback/private destinations are intentionally not rejected by the source domain because deterministic tests and legitimate internal sources may require them.
 
 ## Read next
 

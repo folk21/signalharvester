@@ -16,7 +16,8 @@ class MicronautBlockingExecutorTest {
     @Test
     void shouldUseVirtualThreadsForBlockingExecutorOnJava21() throws Exception {
         try (ApplicationContext context = ApplicationContext.run(Map.of(
-                "micronaut.executors.blocking.virtual", true))) {
+                "micronaut.executors.blocking.virtual", true,
+                "kafka.enabled", false))) {
             ExecutorService executor = context.getBean(
                     ExecutorService.class, Qualifiers.byName(TaskExecutors.BLOCKING));
 
@@ -30,7 +31,8 @@ class MicronautBlockingExecutorTest {
     @Test
     void shouldResolveCollectionCoordinatorWithModuleOwnedClock() {
         try (ApplicationContext context = ApplicationContext.run(Map.of(
-                "micronaut.executors.blocking.virtual", true))) {
+                "micronaut.executors.blocking.virtual", true,
+                "kafka.enabled", false))) {
             assertNotNull(context.getBean(SourceFetchCoordinator.class));
         }
     }

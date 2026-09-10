@@ -12,7 +12,18 @@ class CollectionConfigurationTest {
     void shouldRejectNonPositiveConcurrencyAtContextStartup() {
         assertThrows(RuntimeException.class, () -> {
             try (ApplicationContext ignored = ApplicationContext.run(Map.of(
-                    "signalharvester.collection.max-concurrency", 0))) {
+                    "signalharvester.collection.max-concurrency", 0,
+                    "kafka.enabled", false))) {
+            }
+        });
+    }
+
+    @Test
+    void shouldRejectBlankRawItemTopicAtContextStartup() {
+        assertThrows(RuntimeException.class, () -> {
+            try (ApplicationContext ignored = ApplicationContext.run(Map.of(
+                    "signalharvester.kafka.raw-item-discovered-topic", "   ",
+                    "kafka.enabled", false))) {
             }
         });
     }

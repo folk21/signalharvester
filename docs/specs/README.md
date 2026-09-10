@@ -91,10 +91,11 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-configuration-persistence-rest.md`](active/subspecs/backend-configuration-persistence-rest.md) — PostgreSQL/Flyway source persistence and REST CRUD implementation.
+- [`active/subspecs/backend-collection-kafka-transport.md`](active/subspecs/backend-collection-kafka-transport.md) — first acknowledged `RawItemDiscovered` Protobuf publication boundary and Kafka round-trip.
 
 Active supporting tracks:
 
+- [`active/subspecs/backend-configuration-persistence-rest.md`](active/subspecs/backend-configuration-persistence-rest.md) — implementation complete; Gradle/Testcontainers verification pending before archival;
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith repository structure and module boundaries;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
 
@@ -102,7 +103,7 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
-- first collection-to-Kafka publication slice;
+- first collection-run orchestration and partial-failure slice;
 - first collection-to-results vertical slice;
 - result REST/SSE and event observation;
 - Kubernetes deployment and observability;

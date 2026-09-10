@@ -35,7 +35,7 @@ Application configuration currently defines:
 - HTTP port from `SIGNALHARVESTER_HTTP_PORT`, defaulting to `8080`;
 - Micronaut's blocking executor as Virtual-Thread backed on the Java 21 baseline.
 
-No REST controllers are implemented yet. Blocking controller operations added later must use `@ExecuteOn(TaskExecutors.BLOCKING)` rather than execute JDBC or blocking HTTP work on a Netty event-loop thread. SSE/streaming endpoints remain reactive.
+The first blocking REST controller is implemented by the configuration module. `SourceController` uses `@ExecuteOn(TaskExecutors.BLOCKING)` so PostgreSQL access is offloaded from Netty event-loop threads; SSE/streaming endpoints added later remain reactive.
 
 ## Configuration module
 
@@ -48,7 +48,9 @@ Implemented types:
 - `ConfiguredSource`;
 - `SourceConfigurationProvider`.
 
-The API represents effective external-source configuration for cross-module use. No persistence implementation or provider bean exists yet.
+The API represents effective external-source configuration for cross-module use. `SourceConfigurationManager` implements the persisted CRUD use cases and is the concrete `SourceConfigurationProvider` bean.
+
+Persistence uses an explicit JDBC adapter over Micronaut's managed Hikari `DataSource`. The configuration module owns PostgreSQL schema `configuration` and Flyway location `classpath:db/migration/configuration`; the initial migration creates `sources` and `source_settings`. `SourceConfigurationManager` owns write transaction boundaries through Micronaut JDBC transaction operations, while the JDBC adapter owns SQL/resource handling. Multi-statement source/settings writes therefore commit or roll back as one use case. Source names are intentionally not unique because `SourceId` is the stable identity.
 
 ## REST/OpenAPI contract
 
@@ -56,7 +58,7 @@ The API represents effective external-source configuration for cross-module use.
 
 It currently defines source configuration CRUD operations under `/api/v1/sources` and source schemas for REST, RSS, and HTML source types.
 
-The OpenAPI contract exists before the controller implementation so the external boundary can be reviewed independently.
+The OpenAPI contract is implemented by configuration-owned HTTP records/controller mapping; persistence types are not exposed through REST. Request validation aligns with `ConfiguredSource` name and HTTP(S) URI invariants, and expected missing/invalid configuration failures are mapped centrally.
 
 ## Collection module
 
@@ -74,7 +76,9 @@ Implemented types:
 - `CollectionClockFactory` — module-owned qualified UTC clock used for deterministic transport timestamps;
 - `SourceFetchCoordinator` — bounded worker coordination on Micronaut's blocking executor, preserving deterministic result order while using Virtual Threads on Java 21.
 
-The implementation currently performs raw HTTP retrieval and bounded multi-source coordination only. Source parsing/extraction, due-work scheduling, collection-run persistence, and Kafka publication are intentionally still absent.
+The module also implements the first asynchronous publication boundary. `RawItemEventPublisher` accepts `FetchedSourceContent` plus explicit caller-owned publication metadata, including the stable raw-item identity; `KafkaRawItemEventPublisher` maps it to `RawItemDiscovered`, assigns a new event identity, serializes the generated Protobuf message to bytes, and sends an acknowledged Kafka record through a Micronaut `@KafkaClient`. The default topic is `signalharvester.collection.raw-item-discovered.v1`, the caller-owned `rawItemId` is the record key, and producer configuration uses String/byte-array serializers, `acks=all`, and Kafka producer idempotence. Generated Protobuf classes remain confined to the Kafka adapter/mapping boundary.
+
+Source parsing/extraction, due-work scheduling, collection-run persistence/orchestration, partial-failure semantics, and Kafka consumers are intentionally still absent.
 
 Configured source locations are constrained to absolute HTTP/HTTPS URLs without embedded credentials or fragments. The generic client follows a bounded number of redirects, normalizes Micronaut HTTP response exceptions into collection-owned failures while retaining status and retry metadata, enforces content/time limits, and prevents blocking calls on Netty event-loop threads.
 
@@ -89,7 +93,7 @@ collection/v1/raw-item-discovered.proto
 
 Generated Java transport classes are Gradle build output.
 
-The first contract test verifies a representative `RawItemDiscovered` round trip and unknown-field tolerance. Kafka adapters do not yet exist.
+The contract test verifies a representative `RawItemDiscovered` round trip and unknown-field tolerance. Collection now publishes this contract as explicit Protobuf bytes; analysis and event-observation consumers remain pending.
 
 ## Testing implementation
 
@@ -105,7 +109,7 @@ Current concrete tests include:
 - collection adapter tests for success, empty bodies, transport failures, HTTP status mapping, and `Retry-After`;
 - bounded Virtual Thread source-coordination tests with deterministic ordering, failure propagation, and in-flight peer cancellation.
 
-`testing:integration-tests` is prepared with Testcontainers dependencies for PostgreSQL and Kafka, but no container-backed scenario exists yet.
+`modules:configuration` contains PostgreSQL Testcontainers coverage for Flyway bootstrap, CRUD/settings/provider behavior, REST validation/status mapping, and a server-level assertion that JDBC entry executes on a blocking Virtual Thread. `modules:collection` now contains a Kafka Testcontainers producer/consumer round-trip for the real `RawItemEventPublisher`, including Protobuf decoding and correlation/provenance assertions.
 
 ## Infrastructure implementation
 
@@ -113,13 +117,11 @@ Current concrete tests include:
 
 ## Known limitations
 
-- no PostgreSQL schema, Flyway migration, or persistence adapter;
-- no Kafka producer/consumer wiring;
+- no Kafka consumer wiring;
 - no source parsing/extraction or collection-run orchestration;
 - no analysis/results implementation;
-- no REST controller implementation;
 - no SSE implementation;
-- no outbound SSRF/network-destination policy yet; configured source management must remain trusted until such a policy is defined;
+- no outbound SSRF/network-destination policy yet; persisted source management must remain trusted until such a policy is defined;
 - no event-observation persistence/API;
 - no OpenTelemetry instrumentation;
 - no Docker Compose or Kubernetes deployment.

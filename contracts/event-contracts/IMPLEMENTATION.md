@@ -53,11 +53,11 @@ The module uses the Gradle Protobuf plugin and a pinned `protoc` version from th
 - representative Protobuf serialization/deserialization;
 - preservation/tolerance of an unknown additive field.
 
-A real Kafka producer/consumer Testcontainers round trip remains pending until the first Kafka adapters are implemented.
+The collection module now provides the first real producer adapter and a Kafka Testcontainers round trip that publishes byte-serialized `RawItemDiscovered` and decodes it with the generated contract on the consumer side.
 
 ## Current limitations
 
-- no Kafka producer/consumer adapter exists yet;
+- collection publishes `RawItemDiscovered`; analysis/event-observation consumers are not implemented yet;
 - no Schema Registry is configured;
 - no analysis/results event schemas exist yet;
 - no Event Explorer decoder is implemented yet.

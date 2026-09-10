@@ -17,6 +17,9 @@ micronaut {
 
 dependencies {
     implementation(project(":modules:configuration"))
+    implementation(project(":contracts:event-contracts"))
+
+    implementation("io.micronaut.kafka:micronaut-kafka")
 
     implementation("io.micronaut:micronaut-context")
     implementation("io.micronaut:micronaut-http-client")
@@ -28,4 +31,6 @@ dependencies {
     annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
 
     testImplementation(libs.junit.jupiter)
+    testImplementation(libs.testcontainers.junit.jupiter)
+    testImplementation(libs.testcontainers.kafka)
 }

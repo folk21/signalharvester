@@ -1,0 +1,39 @@
+package io.signalharvester.collection.event;
+
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * Supplies flow metadata required to publish one fetched source payload as a raw-item event.
+ *
+ * <p>The transport slice does not own collection-run or monitoring-profile orchestration. Callers
+ * provide those identifiers explicitly so correlation semantics stay outside the Kafka adapter.</p>
+ *
+ * @param rawItemId caller-owned stable identity for the discovered raw item
+ * @param correlationId identifier shared by events in the same logical processing flow
+ * @param monitoringProfileId monitoring profile that initiated collection
+ * @param informationCategory product-level information category such as JOB or TOPIC
+ * @param traceparent W3C traceparent value when a tracing boundary supplies one
+ */
+public record RawItemPublicationContext(
+        String rawItemId,
+        String correlationId,
+        String monitoringProfileId,
+        String informationCategory,
+        Optional<String> traceparent) {
+
+    public RawItemPublicationContext {
+        requireNonBlank(rawItemId, "rawItemId");
+        requireNonBlank(correlationId, "correlationId");
+        requireNonBlank(monitoringProfileId, "monitoringProfileId");
+        requireNonBlank(informationCategory, "informationCategory");
+        Objects.requireNonNull(traceparent, "traceparent");
+        traceparent.ifPresent(value -> requireNonBlank(value, "traceparent"));
+    }
+
+    private static void requireNonBlank(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+    }
+}

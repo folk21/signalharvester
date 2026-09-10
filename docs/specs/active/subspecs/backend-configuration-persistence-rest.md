@@ -4,13 +4,13 @@ title: SignalHarvester source configuration persistence and REST
 description: Current implementation sub-specification for PostgreSQL-backed source CRUD, Flyway ownership, blocking REST execution, validation, and provider wiring.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: active
+spec_status: verification-pending
 ---
 # SignalHarvester source configuration persistence and REST
 
 ## Status
 
-Active technical sub-specification — current implementation focus.
+Implementation complete — verification pending before archival.
 
 The configuration public Java API and source OpenAPI contract already exist. This slice turns those contracts into a persisted, runnable capability without expanding into monitoring profiles, scheduling, or collection-to-Kafka publication.
 
@@ -35,23 +35,25 @@ Source testing itself is not part of this slice; it depends on the collection bo
 
 ## Current state
 
-Implemented today:
+Baseline available before this slice:
 
 - `SourceId`, `SourceType`, `ConfiguredSource`, and `SourceConfigurationProvider` public Java contracts;
 - `/api/v1/sources` CRUD operations and source schemas in OpenAPI;
 - `ConfiguredSource` invariants for non-blank names and absolute HTTP(S) locations with a host, without embedded credentials or fragments;
 - collection depends on the configuration public API only;
-- Testcontainers PostgreSQL dependency is available in the integration-test project, but no database-backed test exists yet.
+- Testcontainers PostgreSQL dependencies are available for database-backed verification.
 
-Not implemented today:
+Implemented in this slice:
 
-- configuration PostgreSQL schema or Flyway migrations;
-- source repository/persistence adapter;
-- concrete `SourceConfigurationProvider` bean;
-- source application use cases;
-- REST controller and HTTP exception mapping;
-- database/runtime configuration for PostgreSQL;
-- server-level tests for source CRUD and blocking execution.
+- configuration-owned PostgreSQL schema and module-specific Flyway migration location;
+- explicit JDBC source repository with atomic source/settings writes;
+- `SourceConfigurationManager` CRUD use cases and concrete `SourceConfigurationProvider` wiring;
+- `/api/v1/sources` controller with separate HTTP records and centralized expected-failure handlers;
+- Jakarta Validation for source input aligned with `ConfiguredSource` invariants;
+- runtime PostgreSQL/Hikari/Flyway configuration;
+- PostgreSQL Testcontainers coverage for migration, CRUD/settings/provider behavior, REST status/validation, and blocking Virtual Thread execution.
+
+The specification remains active only until the Gradle/Testcontainers validation matrix is confirmed green in an environment with dependency resolution and Docker support. After that confirmation, stable knowledge already captured in owning docs permits this sub-spec to move to `docs/specs/archive/subspecs/`.
 
 ## Requirements
 

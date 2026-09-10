@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Persist source configuration in PostgreSQL and implement the existing `/api/v1/sources` OpenAPI CRUD contract. Detailed acceptance criteria live in [`specs/active/subspecs/backend-configuration-persistence-rest.md`](specs/active/subspecs/backend-configuration-persistence-rest.md).
+Verify and accept the first collection-to-Kafka publication slice, then move the implementation focus to collection-run orchestration over enabled sources. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-collection-kafka-transport.md`](specs/active/subspecs/backend-collection-kafka-transport.md).
 
 ## P0 — repository and contract foundation
 

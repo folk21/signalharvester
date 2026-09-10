@@ -195,6 +195,7 @@ class ExternalSourceHttpClientTest {
         properties.put("micronaut.http.client.max-redirects", 5);
         properties.put("micronaut.http.client.allow-block-event-loop", false);
         properties.put("signalharvester.collection.max-concurrency", 2);
+        properties.put("kafka.enabled", false);
         properties.putAll(overrides);
         return ApplicationContext.run(properties);
     }

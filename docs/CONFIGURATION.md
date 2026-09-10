@@ -16,10 +16,16 @@ Do not mix these categories or hardcode values that belong to either one.
 
 ## Runtime configuration
 
-The current backend runtime supports these collection-related environment variables:
+The current backend runtime supports PostgreSQL, collection HTTP, and Kafka publication environment variables:
 
 | Variable | Default | Purpose |
 |---|---:|---|
+| `SIGNALHARVESTER_DB_URL` | `jdbc:postgresql://localhost:5432/signalharvester` | JDBC URL for the application PostgreSQL database. |
+| `SIGNALHARVESTER_DB_USERNAME` | `signalharvester` | Local-development PostgreSQL username. |
+| `SIGNALHARVESTER_DB_PASSWORD` | `signalharvester` | Local-development PostgreSQL password; override outside local development. |
+| `SIGNALHARVESTER_DB_MAX_POOL_SIZE` | `10` | Maximum Hikari connections for the default datasource. |
+| `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka bootstrap servers used by Micronaut Kafka clients. |
+| `SIGNALHARVESTER_KAFKA_RAW_ITEM_DISCOVERED_TOPIC` | `signalharvester.collection.raw-item-discovered.v1` | Versioned topic for collection raw-item events. |
 | `SIGNALHARVESTER_COLLECTION_MAX_CONCURRENCY` | `8` | Maximum concurrently active source-fetch workers. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_CONNECT_TIMEOUT` | `3s` | External HTTP connection timeout. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_READ_TIMEOUT` | `10s` | Maximum wait for response reads. |
@@ -36,11 +42,17 @@ The maximum concurrency value is validated through Micronaut/Jakarta Validation 
 
 Configured source URLs are domain values: they must be absolute HTTP/HTTPS locations with a host, without embedded user-info credentials and without URI fragments. Secrets should be modeled separately rather than embedded into URLs.
 
+The collection raw-item producer uses `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. It waits for acknowledgements with `acks=all` and enables Kafka producer idempotence. These settings protect producer transport retries; they do not replace application-level replay/idempotency rules.
+
 Secrets must not be committed.
 
 ## Persisted application configuration
 
-The configuration module will own application-level configuration and its PostgreSQL migrations. Other modules must consume it through an explicit module API or event flow rather than reading configuration tables directly.
+The configuration module owns source configuration persistence in PostgreSQL. Its first Flyway migration lives under `db/migration/configuration` and creates module-owned `configuration.sources` and `configuration.source_settings` objects. Other modules consume effective configuration through `SourceConfigurationProvider`; they must not read these tables directly.
+
+Source names are not globally unique. The stable `SourceId` is the identity boundary, so two sources may intentionally share a display name while retaining different identifiers, locations, and settings.
+
+Persisting a source URL does not authorize collection from that destination. A configurable outbound destination/SSRF policy is still required before source management can be treated as safe for untrusted users.
 
 ## Compatibility
 

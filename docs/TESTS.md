@@ -35,7 +35,7 @@ On systems where executable permission is not preserved after extracting an arch
 
 ## Integration infrastructure
 
-`testing:integration-tests` already declares Testcontainers support for PostgreSQL and Kafka. Add container-backed tests only when the scenario exercises real persistence or Kafka behavior.
+`modules:configuration` uses PostgreSQL Testcontainers for its persistence/server boundary. `modules:collection` uses Kafka Testcontainers for its producer/consumer transport boundary. `testing:integration-tests` still declares shared PostgreSQL/Kafka Testcontainers dependencies for future cross-module flows. Container-backed tests require a supported Docker-compatible runtime.
 
 External HTTP sources must be deterministic local/fake servers controlled by tests. Blocking HTTP/controller tests must also verify that work is offloaded from Netty event-loop threads when that execution boundary is implemented.
 
@@ -62,9 +62,15 @@ The first implementation foundation contains:
 - `MicronautExternalSourceClientTest` for successful/empty responses, transport failure normalization, status mapping, and `Retry-After` preservation with a deterministic clock;
 - `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, deterministic result ordering, empty batches, failure propagation, and cancellation of in-flight peers after a worker failure;
 - `MicronautBlockingExecutorTest` for verification that Micronaut's blocking executor is Virtual-Thread backed on the Java 21 baseline and that the collection bean graph resolves with its qualified UTC clock;
-- `CollectionConfigurationTest` for Jakarta Validation of invalid concurrency configuration.
+- `CollectionConfigurationTest` for Jakarta Validation of invalid concurrency configuration;
+- `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping and response charset handling;
+- `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
+- `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
+- `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, duplicate-name semantics, and transactional rollback;
+- `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
+- `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`.
 
-No Docker/Testcontainers test is implemented yet because persistence and Kafka adapters do not exist.
+PostgreSQL Testcontainers tests are implemented in `modules:configuration`, and Kafka producer round-trip coverage is implemented in `modules:collection`. Cross-module consumer-chain tests remain pending until analysis is implemented.
 
 ## Python
 

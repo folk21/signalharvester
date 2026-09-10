@@ -25,4 +25,8 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-10 — Reconciled collection transport, OpenAPI validation, module dependencies, active specifications, tests, and archive tooling with the implemented low-level Micronaut HTTP design.
 
+2026-09-10 — Implemented PostgreSQL/Flyway-backed source configuration CRUD, concrete `SourceConfigurationProvider`, validated blocking REST endpoints, centralized HTTP error mapping, and PostgreSQL Testcontainers coverage.
+
+2026-09-10 — Added the first acknowledged collection-to-Kafka publisher with explicit RawItemDiscovered Protobuf byte serialization, configurable topic/key conventions, correlation metadata, and Kafka Testcontainers round-trip coverage.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.
