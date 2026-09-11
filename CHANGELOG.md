@@ -33,4 +33,6 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-10 — Added the first analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual Kafka offset commit, and `ItemAnalyzed`/`ItemRejected` event publication.
 
+2026-09-11 — Added operational admin REST APIs for manual collection runs, durable run history, and read-only analysis item inspection.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

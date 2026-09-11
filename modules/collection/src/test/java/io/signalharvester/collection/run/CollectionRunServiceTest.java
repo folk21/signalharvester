@@ -169,6 +169,7 @@ class CollectionRunServiceTest {
                 publisher,
                 new RawItemIdentityFactory(),
                 new CollectionRunIdFactory(() -> UUID.fromString(RUN_ID)),
+                new InMemoryHistoryStore(),
                 Clock.fixed(RUN_TIME, ZoneOffset.UTC));
     }
 
@@ -194,6 +195,25 @@ class CollectionRunServiceTest {
                 Optional.of("text/plain; charset=UTF-8"),
                 ("payload-" + source.name()).getBytes(StandardCharsets.UTF_8),
                 RUN_TIME);
+    }
+
+    private static final class InMemoryHistoryStore implements CollectionRunHistoryStore {
+        private CollectionRunResult result;
+
+        @Override
+        public void save(CollectionRunResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public List<CollectionRunResult> findRecent(int limit) {
+            return result == null ? List.of() : List.of(result);
+        }
+
+        @Override
+        public Optional<CollectionRunResult> findById(String collectionRunId) {
+            return Optional.ofNullable(result).filter(value -> value.collectionRunId().equals(collectionRunId));
+        }
     }
 
     private static final class RecordingPublisher implements RawItemEventPublisher {

@@ -7,7 +7,7 @@ import java.util.Objects;
 /**
  * Captures one explicit collection-run identity, timing, aggregate status, and source outcomes.
  *
- * <p>The first run slice returns this state to the caller but does not persist run history yet.</p>
+ * <p>This state is returned to callers and persisted as collection-owned operational history.</p>
  *
  * @param collectionRunId stable identity for this execution and its Kafka correlation id
  * @param monitoringProfileId logical profile that initiated the run

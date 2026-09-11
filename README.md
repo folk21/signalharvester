@@ -91,7 +91,8 @@ The first implementation foundation is present:
 - the first collection HTTP transport using Micronaut-managed HTTP infrastructure with bounded Virtual Thread orchestration and deterministic loopback tests;
 - the first acknowledged collection Kafka publisher, mapping fetched content to versioned `RawItemDiscovered` Protobuf bytes with explicit correlation and event identity;
 - the first explicit collection-run use case over persisted enabled sources, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results;
-- the first analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual Kafka offset commit, and `ItemAnalyzed`/`ItemRejected` publication.
+- the first analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual Kafka offset commit, and `ItemAnalyzed`/`ItemRejected` publication;
+- a first operational admin API for manual collection runs, durable run/source outcome history, and read-only normalized-item inspection.
 
 Monitoring profiles/scheduling and persisted run history, results persistence/read APIs, SSE/event observation, source-specific parsing/adapters beyond the generic HTTP transport, stronger cross-DB/Kafka consistency, and deployment infrastructure are still planned work.
 

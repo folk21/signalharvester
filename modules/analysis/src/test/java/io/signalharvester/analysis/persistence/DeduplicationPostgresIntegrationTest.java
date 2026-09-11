@@ -67,6 +67,14 @@ class DeduplicationPostgresIntegrationTest {
         repository.recordDuplicate(duplicate, firstSeen.plusSeconds(10));
         assertTrue(repository.tryClaim(otherProfile, firstSeen.plusSeconds(20)));
 
+        AnalysisItemInspectionRepository inspection = context.getBean(AnalysisItemInspectionRepository.class);
+        assertEquals(2, inspection.findRecent(10, Optional.empty(), Optional.empty()).size());
+        AnalysisItemInspection inspected = inspection.find(
+                "profile-a",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").orElseThrow();
+        assertEquals(2, inspected.discoveryCount());
+        assertEquals("raw-02", inspected.lastRawItemId());
+
         try (Connection connection = DriverManager.getConnection(
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 Statement statement = connection.createStatement();

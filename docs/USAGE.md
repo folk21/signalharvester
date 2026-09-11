@@ -27,7 +27,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies the configuration and analysis migrations at startup. The backend currently exposes source configuration CRUD under `/api/v1/sources`; the analysis Kafka listener starts by default and waits for `RawItemDiscovered` events.
+Flyway applies the configuration, analysis, and collection operational-history migrations at startup. The backend exposes source configuration CRUD under `/api/v1/sources`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events.
 
 Example source creation:
 
@@ -47,7 +47,27 @@ Source URLs stored through this API are configuration data only. Do not expose s
 
 The collection module contains an executable `CollectionRunService` use case that reads enabled sources, performs bounded best-effort fetches, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results are not persisted or exposed yet.
 
-`CollectionRunService` is not exposed through a public REST trigger or scheduler, so normal backend operation still starts collection only through internal/test invocation until a later slice adds an owning trigger.
+Start a manual collection run:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/admin/collection-runs \
+  -H 'Content-Type: application/json' \
+  -d '{"monitoringProfileId":"manual-admin","informationCategory":"JOB"}'
+```
+
+Inspect recent runs:
+
+```bash
+curl 'http://localhost:8080/api/v1/admin/collection-runs?limit=20'
+```
+
+Inspect recent normalized analysis claims:
+
+```bash
+curl 'http://localhost:8080/api/v1/admin/analysis/items?limit=20'
+```
+
+The analysis inspection API exposes durable normalization/deduplication provenance only. Classification, score, and user-facing results are not yet persisted and therefore are intentionally absent from this API.
 
 ## Run tests
 

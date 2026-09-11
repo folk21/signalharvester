@@ -16,10 +16,14 @@ micronaut {
 }
 
 dependencies {
+    annotationProcessor("io.micronaut:micronaut-inject-java")
+    annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
+    annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
     implementation(project(":modules:configuration"))
     implementation(project(":contracts:event-contracts"))
 
     implementation("io.micronaut.kafka:micronaut-kafka")
+    implementation("io.micronaut:micronaut-http-server")
 
     implementation("io.micronaut:micronaut-context")
     implementation("io.micronaut:micronaut-http-client")
@@ -28,9 +32,9 @@ dependencies {
     implementation("io.micronaut.serde:micronaut-serde-jackson")
 
     implementation("io.micronaut.validation:micronaut-validation")
-    annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.kafka)
+    testImplementation(libs.testcontainers.postgresql)
 }

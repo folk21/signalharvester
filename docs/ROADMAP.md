@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Verify and accept the normalization/deduplication plus minimal deterministic analysis slice. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-analysis-normalization-deduplication.md`](specs/active/subspecs/backend-analysis-normalization-deduplication.md). After acceptance, move directly to results persistence and the first result read API.
+Verify and accept the operational admin API slice. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-operational-admin-api.md`](specs/active/subspecs/backend-operational-admin-api.md). After acceptance, move directly to results persistence and the first result read API.
 
 ## P0 — repository and contract foundation
 
@@ -43,3 +43,6 @@ Verify and accept the normalization/deduplication plus minimal deterministic ana
 - gRPC service boundaries;
 - Schema Registry;
 - LLM/embedding analysis as a required core dependency.
+
+
+The first operational admin API now provides manual collection execution, durable completed-run inspection, and read-only analysis deduplication inspection. Result persistence and Event Explorer/SSE remain subsequent vertical slices.

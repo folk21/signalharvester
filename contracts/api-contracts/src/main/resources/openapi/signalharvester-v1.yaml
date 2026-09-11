@@ -2,14 +2,20 @@ openapi: 3.1.0
 info:
   title: SignalHarvester Backend API
   version: 0.1.0
-  description: Initial public HTTP contract for SignalHarvester configuration APIs.
+  description: Public HTTP contract for SignalHarvester configuration and operational
+    APIs.
 tags:
-  - name: Sources
-    description: External source configuration.
+- name: Sources
+  description: External source configuration.
+- name: Collection Runs
+  description: Manual collection execution and operational run history.
+- name: Analysis Inspection
+  description: Read-only operational inspection of analysis deduplication state.
 paths:
   /api/v1/sources:
     get:
-      tags: [Sources]
+      tags:
+      - Sources
       operationId: listSources
       summary: List configured external sources
       responses:
@@ -22,7 +28,8 @@ paths:
                 items:
                   $ref: '#/components/schemas/Source'
     post:
-      tags: [Sources]
+      tags:
+      - Sources
       operationId: createSource
       summary: Create an external source
       requestBody:
@@ -42,9 +49,10 @@ paths:
           description: Invalid source configuration
   /api/v1/sources/{sourceId}:
     parameters:
-      - $ref: '#/components/parameters/SourceId'
+    - $ref: '#/components/parameters/SourceId'
     get:
-      tags: [Sources]
+      tags:
+      - Sources
       operationId: getSource
       summary: Get a configured external source
       responses:
@@ -57,7 +65,8 @@ paths:
         '404':
           description: Source not found
     put:
-      tags: [Sources]
+      tags:
+      - Sources
       operationId: updateSource
       summary: Replace an external source configuration
       requestBody:
@@ -78,7 +87,8 @@ paths:
         '404':
           description: Source not found
     delete:
-      tags: [Sources]
+      tags:
+      - Sources
       operationId: deleteSource
       summary: Delete an external source
       responses:
@@ -86,6 +96,130 @@ paths:
           description: Source deleted
         '404':
           description: Source not found
+  /api/v1/admin/collection-runs:
+    get:
+      tags:
+      - Collection Runs
+      operationId: listCollectionRuns
+      summary: List recent completed collection runs
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      responses:
+        '200':
+          description: Recent collection runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionRun'
+    post:
+      tags:
+      - Collection Runs
+      operationId: startCollectionRun
+      summary: Start a manual collection run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionRunRequest'
+      responses:
+        '201':
+          description: Completed collection run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionRun'
+        '400':
+          description: Invalid run request
+  /api/v1/admin/collection-runs/{collectionRunId}:
+    parameters:
+    - name: collectionRunId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+      - Collection Runs
+      operationId: getCollectionRun
+      summary: Get one completed collection run
+      responses:
+        '200':
+          description: Collection run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionRun'
+        '404':
+          description: Collection run not found
+  /api/v1/admin/analysis/items:
+    get:
+      tags:
+      - Analysis Inspection
+      operationId: listAnalysisItems
+      summary: List recent normalized analysis items
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: monitoringProfileId
+        in: query
+        schema:
+          type: string
+      - name: sourceId
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Analysis item inspection state
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AnalysisItemInspection'
+  /api/v1/admin/analysis/items/{normalizedItemId}:
+    parameters:
+    - name: normalizedItemId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[0-9a-f]{64}$
+    - name: monitoringProfileId
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    get:
+      tags:
+      - Analysis Inspection
+      operationId: getAnalysisItem
+      summary: Get one profile-scoped normalized analysis item
+      responses:
+        '200':
+          description: Analysis item inspection state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisItemInspection'
+        '404':
+          description: Analysis item not found
 components:
   parameters:
     SourceId:
@@ -100,18 +234,18 @@ components:
     SourceType:
       type: string
       enum:
-        - REST
-        - RSS
-        - HTML
+      - REST
+      - RSS
+      - HTML
     Source:
       type: object
       required:
-        - id
-        - name
-        - type
-        - location
-        - enabled
-        - settings
+      - id
+      - name
+      - type
+      - location
+      - enabled
+      - settings
       properties:
         id:
           type: string
@@ -119,45 +253,185 @@ components:
         name:
           type: string
           minLength: 1
-          pattern: '.*\S.*'
+          pattern: .*\S.*
         type:
           $ref: '#/components/schemas/SourceType'
         location:
           type: string
           format: uri
-          pattern: '^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)(?:\[[0-9A-Fa-f:.]+\]|[^/?#:\s]+)(?::\d+)?(?:[/?][^#\s]*)?$'
-          description: Absolute HTTP(S) source URL without embedded credentials or a fragment.
+          pattern: ^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)(?:\[[0-9A-Fa-f:.]+\]|[^/?#:\s]+)(?::\d+)?(?:[/?][^#\s]*)?$
+          description: Absolute HTTP(S) source URL without embedded credentials or
+            a fragment.
         enabled:
           type: boolean
         settings:
           type: object
-          description: Source-type-specific string configuration interpreted by the owning collector.
+          description: Source-type-specific string configuration interpreted by the
+            owning collector.
           additionalProperties:
             type: string
     SourceUpsertRequest:
       type: object
       required:
-        - name
-        - type
-        - location
-        - enabled
+      - name
+      - type
+      - location
+      - enabled
       properties:
         name:
           type: string
           minLength: 1
-          pattern: '.*\S.*'
+          pattern: .*\S.*
         type:
           $ref: '#/components/schemas/SourceType'
         location:
           type: string
           format: uri
-          pattern: '^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)(?:\[[0-9A-Fa-f:.]+\]|[^/?#:\s]+)(?::\d+)?(?:[/?][^#\s]*)?$'
-          description: Absolute HTTP(S) source URL without embedded credentials or a fragment.
+          pattern: ^[Hh][Tt][Tt][Pp][Ss]?://(?![^/?#]*@)(?:\[[0-9A-Fa-f:.]+\]|[^/?#:\s]+)(?::\d+)?(?:[/?][^#\s]*)?$
+          description: Absolute HTTP(S) source URL without embedded credentials or
+            a fragment.
         enabled:
           type: boolean
         settings:
           type: object
           default: {}
-          description: Source-type-specific string configuration interpreted by the owning collector.
+          description: Source-type-specific string configuration interpreted by the
+            owning collector.
           additionalProperties:
             type: string
+    CollectionRunRequest:
+      type: object
+      required:
+      - monitoringProfileId
+      - informationCategory
+      properties:
+        monitoringProfileId:
+          type: string
+          minLength: 1
+          pattern: .*\S.*
+        informationCategory:
+          type: string
+          minLength: 1
+          pattern: .*\S.*
+    CollectionSourceRun:
+      type: object
+      required:
+      - sourceId
+      - status
+      - rawItemId
+      - eventId
+      - failureMessage
+      properties:
+        sourceId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - PUBLISHED
+          - FETCH_FAILED
+          - PUBLICATION_FAILED
+        rawItemId:
+          type:
+          - string
+          - 'null'
+        eventId:
+          type:
+          - string
+          - 'null'
+        failureMessage:
+          type:
+          - string
+          - 'null'
+    CollectionRun:
+      type: object
+      required:
+      - collectionRunId
+      - monitoringProfileId
+      - informationCategory
+      - startedAt
+      - finishedAt
+      - status
+      - publishedCount
+      - failedCount
+      - sources
+      properties:
+        collectionRunId:
+          type: string
+          format: uuid
+        monitoringProfileId:
+          type: string
+        informationCategory:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - SUCCEEDED
+          - PARTIALLY_SUCCEEDED
+          - FAILED
+        publishedCount:
+          type: integer
+          format: int64
+          minimum: 0
+        failedCount:
+          type: integer
+          format: int64
+          minimum: 0
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionSourceRun'
+    AnalysisItemInspection:
+      type: object
+      required:
+      - monitoringProfileId
+      - normalizedItemId
+      - sourceId
+      - externalId
+      - sourceUrl
+      - firstRawItemId
+      - firstSourceEventId
+      - firstSeenAt
+      - lastRawItemId
+      - lastSourceEventId
+      - lastSeenAt
+      - discoveryCount
+      properties:
+        monitoringProfileId:
+          type: string
+        normalizedItemId:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        sourceId:
+          type: string
+        externalId:
+          type:
+          - string
+          - 'null'
+        sourceUrl:
+          type: string
+          format: uri
+        firstRawItemId:
+          type: string
+        firstSourceEventId:
+          type: string
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastRawItemId:
+          type: string
+        lastSourceEventId:
+          type: string
+        lastSeenAt:
+          type: string
+          format: date-time
+        discoveryCount:
+          type: integer
+          format: int64
+          minimum: 1

@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-analysis-normalization-deduplication.md
+current_focus: subspecs/backend-operational-admin-api.md
 ---
 # SignalHarvester initial functional product specification
 

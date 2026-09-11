@@ -84,3 +84,14 @@ PostgreSQL Testcontainers tests are implemented in `modules:configuration` and `
 ## Python
 
 Python may be used later for independent black-box/load/data tooling. It is not the primary backend integration-test framework.
+
+
+## Operational admin API
+
+Focused validation for the manual-run/history and analysis-inspection slice:
+
+```bash
+./gradlew :modules:collection:test :modules:analysis:test :testing:integration-tests:test :app:test --no-watch-fs
+```
+
+Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP validation should continue to verify blocking controller execution on Virtual Threads.

@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The run id is also used as the Kafka correlation id. Source-level fetch or publication failures
  * are retained as terminal outcomes while unrelated sources continue. Monitoring-profile source
- * membership and persisted run history are intentionally deferred to later slices. Because Kafka
+ * membership remains deferred; completed operational run history is persisted by the collection module. Because Kafka
  * publication is acknowledged/blocking, callers must invoke this use case from a blocking/Virtual-Thread
  * workflow rather than a Netty event-loop thread.</p>
  */
@@ -37,6 +37,7 @@ public final class CollectionRunService {
     private final RawItemEventPublisher eventPublisher;
     private final RawItemIdentityFactory rawItemIdentityFactory;
     private final CollectionRunIdFactory runIdFactory;
+    private final CollectionRunHistoryStore historyStore;
     private final Clock clock;
 
     public CollectionRunService(
@@ -45,6 +46,7 @@ public final class CollectionRunService {
             RawItemEventPublisher eventPublisher,
             RawItemIdentityFactory rawItemIdentityFactory,
             CollectionRunIdFactory runIdFactory,
+            CollectionRunHistoryStore historyStore,
             @Named(CollectionClockFactory.COLLECTION_CLOCK) Clock clock) {
         this.sourceConfigurationProvider = Objects.requireNonNull(
                 sourceConfigurationProvider, "sourceConfigurationProvider");
@@ -52,6 +54,7 @@ public final class CollectionRunService {
         this.eventPublisher = Objects.requireNonNull(eventPublisher, "eventPublisher");
         this.rawItemIdentityFactory = Objects.requireNonNull(rawItemIdentityFactory, "rawItemIdentityFactory");
         this.runIdFactory = Objects.requireNonNull(runIdFactory, "runIdFactory");
+        this.historyStore = Objects.requireNonNull(historyStore, "historyStore");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -83,7 +86,7 @@ public final class CollectionRunService {
                 .count();
         LOG.info("Completed collection run {} status={} published={} failed={}",
                 runId, status, published, sourceResults.size() - published);
-        return new CollectionRunResult(
+        CollectionRunResult result = new CollectionRunResult(
                 runId,
                 request.monitoringProfileId(),
                 request.informationCategory(),
@@ -91,6 +94,8 @@ public final class CollectionRunService {
                 finishedAt,
                 status,
                 sourceResults);
+        historyStore.save(result);
+        return result;
     }
 
     private CollectionSourceResult toSourceResult(

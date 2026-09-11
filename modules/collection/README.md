@@ -43,9 +43,9 @@ The first collection-run application use case is also implemented:
 - source fetch and Kafka publication are best-effort per source, producing deterministic `PUBLISHED`, `FETCH_FAILED`, or `PUBLICATION_FAILED` outcomes;
 - aggregate run status is `SUCCEEDED`, `PARTIALLY_SUCCEEDED`, or `FAILED`;
 - `RawItemIdentityFactory` derives a stable SHA-256 raw-item identity from source id, requested URI, and raw bytes so identical rediscovery keeps item identity across runs;
-- `CollectionRunResult` exposes run timing and ordered terminal source outcomes but run history is not persisted yet.
+- `CollectionRunResult` exposes run timing and ordered terminal source outcomes; completed snapshots are persisted for operational inspection.
 
-Parsing/extraction into multiple source items, persisted monitoring profiles/run history, scheduling, collection retry/DLQ policy, and public collection triggers are not implemented yet. Downstream normalization/deduplication and minimal deterministic analysis are now implemented by `modules:analysis`.
+Parsing/extraction into multiple source items, persisted monitoring profiles, scheduling, and collection retry/DLQ policy are not implemented yet. Manual collection triggering and completed-run inspection are available through the operational API. Downstream normalization/deduplication and minimal deterministic analysis are now implemented by `modules:analysis`.
 
 Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, validate bounded best-effort coordination and collection-run status/correlation semantics, verify deterministic raw-item identity, verify Protobuf event mapping/serialization, and include a Kafka Testcontainers producer/consumer round-trip. `testing:integration-tests` covers both persisted enabled-source -> deterministic HTTP -> Kafka collection runs and the downstream raw Kafka -> analysis terminal-event chain.
 
@@ -59,3 +59,8 @@ Module tests exercise the Micronaut-managed HTTP transport against deterministic
 ## Security note
 
 Source-management REST endpoints now persist configured URLs, but persistence is not outbound authorization. Until an explicit configurable outbound destination policy exists, expose source management only to trusted users/environments; the future policy must cover SSRF-sensitive addresses and redirects while preserving configurable loopback access for deterministic development and tests.
+
+
+## Operational API
+
+The module owns `/api/v1/admin/collection-runs` for manual blocking execution and bounded inspection of completed runs. Terminal run snapshots and ordered per-source outcomes are stored in the collection-owned PostgreSQL schema. This history is diagnostic/operational state and is not an atomic substitute for Kafka delivery guarantees.

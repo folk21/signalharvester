@@ -91,7 +91,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-analysis-normalization-deduplication.md`](active/subspecs/backend-analysis-normalization-deduplication.md) — raw-event consumption, deterministic normalization, durable profile-scoped deduplication, and minimal deterministic analysis.
+- [`active/subspecs/backend-operational-admin-api.md`](active/subspecs/backend-operational-admin-api.md) — manual collection execution, durable run inspection, and read-only analysis inspection.
 
 Active supporting tracks:
 
@@ -101,6 +101,7 @@ Active supporting tracks:
 
 ## Recently completed sub-specifications
 
+- [`archive/subspecs/backend-analysis-normalization-deduplication.md`](archive/subspecs/backend-analysis-normalization-deduplication.md) — normalization, profile-scoped deduplication, deterministic analysis, and terminal analysis events, verified in the developer environment;
 - [`archive/subspecs/backend-collection-kafka-transport.md`](archive/subspecs/backend-collection-kafka-transport.md) — acknowledged `RawItemDiscovered` Protobuf publication boundary and Kafka round-trip, verified in the developer environment;
 - [`archive/subspecs/backend-collection-run-orchestration.md`](archive/subspecs/backend-collection-run-orchestration.md) — enabled-source collection execution, run correlation, deterministic raw identity, and best-effort partial-failure behavior, verified in the developer environment.
 

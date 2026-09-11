@@ -34,4 +34,9 @@ Monitoring-profile-owned analysis settings, richer category-specific normalizati
 
 - [`../AGENTS.md`](../AGENTS.md)
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-analysis-normalization-deduplication.md`](../../docs/specs/active/subspecs/backend-analysis-normalization-deduplication.md)
+- [`../../docs/specs/archive/subspecs/backend-analysis-normalization-deduplication.md`](../../docs/specs/archive/subspecs/backend-analysis-normalization-deduplication.md)
+
+
+## Operational inspection
+
+The module owns read-only `/api/v1/admin/analysis/items` endpoints over `analysis.normalized_item_claims`. The API intentionally exposes only durable normalization/deduplication provenance; classification, score, tags, and user-facing results remain event-only until results persistence is implemented.

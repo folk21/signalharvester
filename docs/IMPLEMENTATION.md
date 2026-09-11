@@ -147,3 +147,8 @@ Current concrete tests include:
 - no event-observation persistence/API;
 - no OpenTelemetry instrumentation;
 - no Docker Compose or Kubernetes deployment.
+
+
+## Operational administration API
+
+The collection module exposes blocking manual-run and durable history endpoints under `/api/v1/admin/collection-runs`. Completed run snapshots are stored in the collection-owned PostgreSQL schema through Flyway V3. The analysis module exposes read-only `/api/v1/admin/analysis/items` inspection over its existing normalized-item claims. This is an operational projection only; analyzed classification/score remains event-only until the results slice persists authoritative results.
