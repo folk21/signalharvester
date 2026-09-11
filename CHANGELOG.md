@@ -35,4 +35,10 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-11 — Added operational admin REST APIs for manual collection runs, durable run history, and read-only analysis item inspection.
 
+2026-09-11 — Added repository-owned Docker Compose for local PostgreSQL and single-node KRaft Kafka, including health checks and local topic provisioning behavior.
+
+2026-09-11 — Fixed native Kafka local startup by initializing persisted-volume ownership, upgrading the development broker to Kafka 4.2.1, and removing JVM CLI assumptions from native-image health/topic setup.
+
+2026-09-11 — Replaced the broken native-Kafka local Compose setup with a complete PostgreSQL + single-node Redpanda stack while preserving the Kafka protocol contract.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

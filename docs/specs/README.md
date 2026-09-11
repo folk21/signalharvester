@@ -9,7 +9,7 @@ description: SignalHarvester specification hierarchy, lifecycle, and minimal met
 
 Current implementation truth belongs in [`../ARCHITECTURE.md`](../ARCHITECTURE.md), [`../IMPLEMENTATION.md`](../IMPLEMENTATION.md), [`../CONFIGURATION.md`](../CONFIGURATION.md), [`../USAGE.md`](../USAGE.md), and owning module/contract documentation.
 
-Frontend implementation specifications belong in the separate `signalharvester-ui/docs/specs/` tree. This backend umbrella may state cross-project product/API requirements, but it must not become the owner of React/UI implementation detail.
+Frontend implementation specifications belong in the separate `signalharvester-web/docs/specs/` tree. This backend umbrella may state cross-project product/API requirements, but it must not become the owner of React/UI implementation detail.
 
 ## Specification hierarchy
 
@@ -115,4 +115,4 @@ Likely future bounded specs include:
 - Kubernetes deployment and observability;
 - integration/system testing hardening.
 
-Frontend architecture/live-UI specs belong to `signalharvester-ui`, not this backend repository.
+Frontend architecture/live-UI specs belong to `signalharvester-web`, not this backend repository.

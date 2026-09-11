@@ -49,7 +49,7 @@ public final class SourceConfigurationManager implements SourceConfigurationProv
      * @return configured sources
      */
     public List<ConfiguredSource> list() {
-        return repository.findAll();
+        return transactions.executeRead(status -> repository.findAll());
     }
 
     /**
@@ -59,7 +59,8 @@ public final class SourceConfigurationManager implements SourceConfigurationProv
      * @return configured source
      */
     public ConfiguredSource get(SourceId sourceId) {
-        return repository.findById(sourceId).orElseThrow(() -> new SourceNotFoundException(sourceId));
+        return transactions.executeRead(status ->
+                repository.findById(sourceId).orElseThrow(() -> new SourceNotFoundException(sourceId)));
     }
 
     /**
@@ -95,12 +96,12 @@ public final class SourceConfigurationManager implements SourceConfigurationProv
 
     @Override
     public Optional<ConfiguredSource> findSource(SourceId sourceId) {
-        return repository.findById(sourceId);
+        return transactions.executeRead(status -> repository.findById(sourceId));
     }
 
     @Override
     public List<ConfiguredSource> findEnabledSources() {
-        return repository.findEnabled();
+        return transactions.executeRead(status -> repository.findEnabled());
     }
 
     private static ConfiguredSource materialize(SourceId sourceId, SourceConfigurationCommand command) {

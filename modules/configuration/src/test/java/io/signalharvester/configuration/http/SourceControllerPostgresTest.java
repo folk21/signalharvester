@@ -147,6 +147,58 @@ class SourceControllerPostgresTest {
                 null).statusCode());
     }
 
+
+    @Test
+    void shouldRejectMissingAndMalformedSourceFields() throws Exception {
+        HttpResponse<String> missingLocation = send("POST", "/api/v1/sources", """
+                {
+                  "name": "Missing Location",
+                  "type": "REST"
+                }
+                """);
+        assertEquals(400, missingLocation.statusCode());
+
+        HttpResponse<String> invalidScheme = send("POST", "/api/v1/sources", """
+                {
+                  "name": "Invalid Scheme",
+                  "type": "REST",
+                  "location": "ftp://example.test/file",
+                  "enabled": true
+                }
+                """);
+        assertEquals(400, invalidScheme.statusCode());
+
+        HttpResponse<String> invalidType = send("POST", "/api/v1/sources", """
+                {
+                  "name": "Invalid Type",
+                  "type": "HTTP",
+                  "location": "https://example.test/api"
+                }
+                """);
+        assertEquals(400, invalidType.statusCode());
+    }
+
+    @Test
+    void shouldPersistAllSupportedSourceTypes() throws Exception {
+        for (String type : List.of("REST", "RSS", "HTML")) {
+            HttpResponse<String> created = send("POST", "/api/v1/sources", """
+                    {
+                      "name": "%s Source",
+                      "type": "%s",
+                      "location": "https://example.test/%s"
+                    }
+                    """.formatted(type, type, type.toLowerCase()));
+
+            assertEquals(201, created.statusCode());
+        }
+
+        HttpResponse<String> listed = send("GET", "/api/v1/sources", null);
+        assertEquals(200, listed.statusCode());
+        assertTrue(listed.body().contains("REST"));
+        assertTrue(listed.body().contains("RSS"));
+        assertTrue(listed.body().contains("HTML"));
+    }
+
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
         HttpRequest.Builder builder = HttpRequest.newBuilder(server.getURI().resolve(path));
         if (body == null) {

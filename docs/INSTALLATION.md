@@ -7,7 +7,7 @@ description: Developer-machine prerequisites and setup for the current SignalHar
 
 ## Scope
 
-This document owns backend and backend-infrastructure setup. Frontend installation belongs to the separate `signalharvester-ui` repository README.
+This document owns backend and backend-infrastructure setup. Frontend installation belongs to the separate `signalharvester-web` repository README.
 
 ## Current prerequisites
 
@@ -16,7 +16,7 @@ The current implementation requires:
 - JDK 21;
 - the repository Gradle Wrapper;
 - PostgreSQL 16-compatible infrastructure for persisted source configuration;
-- a Kafka 3-compatible broker for the current collection -> analysis event flow;
+- a Kafka-compatible broker for the current collection -> analysis event flow;
 - network access to Maven/Gradle repositories on the first dependency resolution.
 
 A Docker-compatible runtime is required for the PostgreSQL and Kafka Testcontainers integration tests. Docker is also a convenient way to run local development infrastructure, but the backend uses configured PostgreSQL and Kafka endpoints rather than depending on Docker itself.
@@ -43,26 +43,35 @@ bash ./gradlew --version
 
 Do not depend on a globally installed Gradle.
 
-## Local PostgreSQL
+## Local development infrastructure
 
-The default runtime configuration expects `jdbc:postgresql://localhost:5432/signalharvester` with the local-development credentials `signalharvester` / `signalharvester`. A disposable local database can be started with:
+The repository owns a Docker Compose stack for PostgreSQL and a single-node Redpanda broker exposing the Kafka API required by the current backend. From the repository root:
 
 ```bash
-docker run --rm --name signalharvester-postgres \
-  -e POSTGRES_DB=signalharvester \
-  -e POSTGRES_USER=signalharvester \
-  -e POSTGRES_PASSWORD=signalharvester \
-  -p 5432:5432 postgres:16-alpine
+docker compose -f infra/docker-compose/compose.yaml up -d
 ```
 
-Override `SIGNALHARVESTER_DB_URL`, `SIGNALHARVESTER_DB_USERNAME`, and `SIGNALHARVESTER_DB_PASSWORD` for other environments. The local defaults are not production credentials.
+Verify that PostgreSQL and Redpanda are healthy:
 
-## Local Kafka
+```bash
+docker compose -f infra/docker-compose/compose.yaml ps
+```
 
-The collection and analysis Kafka clients default to Kafka at `localhost:9092`. Until repository-owned Docker Compose is introduced, use any Kafka 3-compatible development broker and override `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` when it is not reachable at the default address. The runtime topic defaults are `signalharvester.collection.raw-item-discovered.v1`, `signalharvester.analysis.item-analyzed.v1`, and `signalharvester.analysis.item-rejected.v1`; broker-side topic auto-creation behavior is environment-specific, so development infrastructure should create these explicitly when auto-creation is disabled.
+Redpanda runs in `dev-container` mode for local development. That mode enables Kafka topic auto-creation, so the current versioned topics are created on first use. Production environments must provision topics explicitly. Redpanda is a local-development implementation detail; the application contract remains Kafka + Protobuf.
 
-The collection-run use case and analysis listener are implemented, but no public REST trigger or scheduler owns collection invocation yet. Integration tests exercise the complete collection -> raw Kafka -> analysis -> terminal Kafka path until an operational trigger is introduced.
+The defaults match the backend runtime configuration:
+
+- PostgreSQL: `jdbc:postgresql://localhost:5432/signalharvester`;
+- database username/password: `signalharvester` / `signalharvester`;
+- Kafka bootstrap server: `localhost:9092`;
+- raw discovery topic: `signalharvester.collection.raw-item-discovered.v1`;
+- analyzed topic: `signalharvester.analysis.item-analyzed.v1`;
+- rejected topic: `signalharvester.analysis.item-rejected.v1`.
+
+These credentials are safe local-development defaults only. Override `SIGNALHARVESTER_DB_URL`, `SIGNALHARVESTER_DB_USERNAME`, `SIGNALHARVESTER_DB_PASSWORD`, and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` for other environments.
+
+See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for local port/topic overrides, shutdown, and volume reset commands.
 
 ## UI setup
 
-The companion UI is not installed from this repository. Use the `signalharvester-ui` root README for frontend prerequisites and development-server configuration.
+The companion UI is not installed from this repository. Use the `signalharvester-web` root README for frontend prerequisites and development-server configuration.

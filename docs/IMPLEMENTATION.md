@@ -135,18 +135,18 @@ Current concrete tests include:
 
 ## Infrastructure implementation
 
-`infra/docker-compose`, `infra/kubernetes`, and `infra/observability` remain ownership placeholders. Deployable infrastructure configuration is not yet implemented.
+`infra/docker-compose/compose.yaml` provides repository-owned local PostgreSQL and single-node KRaft Kafka with health checks and explicit topic initialization. `infra/kubernetes` and `infra/observability` remain ownership placeholders; target deployment and production observability configuration are not yet implemented.
 
 ## Known limitations
 
 - no source parsing/extraction into multiple external items;
-- collection-run history is not persisted and profile/source membership is not implemented yet;
+- monitoring-profile/source membership and scheduling are not implemented yet;
 - no results persistence/read API implementation;
 - no SSE implementation;
 - no outbound SSRF/network-destination policy yet; persisted source management must remain trusted until such a policy is defined;
 - no event-observation persistence/API;
 - no OpenTelemetry instrumentation;
-- no Docker Compose or Kubernetes deployment.
+- no Kubernetes deployment or production observability stack.
 
 
 ## Operational administration API

@@ -28,7 +28,7 @@ Kafka events are defined by versioned `.proto` files. In-process synchronous mod
 
 ## Companion UI project
 
-The web frontend is a separate repository. The recommended repository slug is **`signalharvester-ui`**, with the product/display name **SignalHarvester UI**.
+The web frontend is a separate repository. The frontend repository is **`signalharvester-web`** and owns the complete SignalHarvester Web application. The current operational/admin screens are its first implemented product slice, not a separate admin-only frontend.
 
 This backend repository owns the public REST/OpenAPI and SSE contracts consumed by the UI, but it does not own frontend implementation details.
 
@@ -94,9 +94,15 @@ The first implementation foundation is present:
 - the first analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual Kafka offset commit, and `ItemAnalyzed`/`ItemRejected` publication;
 - a first operational admin API for manual collection runs, durable run/source outcome history, and read-only normalized-item inspection.
 
-Monitoring profiles/scheduling and persisted run history, results persistence/read APIs, SSE/event observation, source-specific parsing/adapters beyond the generic HTTP transport, stronger cross-DB/Kafka consistency, and deployment infrastructure are still planned work.
+Monitoring profiles/scheduling, results persistence/read APIs, SSE/event observation, source-specific parsing/adapters beyond the generic HTTP transport, stronger cross-DB/Kafka consistency, Kubernetes deployment, and the production observability stack are still planned work. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
+
+For local development infrastructure:
+
+```bash
+docker compose -f infra/docker-compose/compose.yaml up -d
+```
 
 ## Documentation model
 

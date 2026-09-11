@@ -32,7 +32,6 @@ Verify and accept the operational admin API slice. Detailed acceptance criteria 
 
 ## P2 — deployment and observability
 
-- Docker Compose development stack;
 - Kubernetes deployment;
 - OpenTelemetry, Prometheus, Loki, Tempo, Grafana;
 - failure/retry/DLQ/idempotency demonstrations.

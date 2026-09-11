@@ -36,7 +36,7 @@ Create a backend structure that:
 
 The backend repository root is `signalharvester/` and the Gradle root project name is `signalharvester`.
 
-The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration, and the first analysis Kafka/persistence path. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, deployment infrastructure, and broader architecture enforcement remain pending.
+The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration, and the first analysis Kafka/persistence path. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, Kubernetes/observability deployment infrastructure, and broader architecture enforcement remain pending. Local PostgreSQL/Kafka Docker Compose is implemented.
 
 Java 21 is the initial toolchain target. Micronaut is the backend framework. Generic external-source access uses Micronaut's managed low-level HTTP client for configuration-driven absolute URLs, behind synchronous module-facing APIs executed on Micronaut's blocking executor, which uses Virtual Threads on the Java 21 baseline. Streaming boundaries remain reactive where appropriate.
 
@@ -721,5 +721,5 @@ The structure is valid when all of the following are true:
 13. Add ArchUnit rules once packages and public APIs exist.
 14. Add module-local Flyway migrations.
 15. Add OpenTelemetry instrumentation.
-16. Add Docker Compose for local dependencies.
+16. Docker Compose for local PostgreSQL/Kafka dependencies is implemented; keep it aligned with runtime defaults.
 17. Add Kubernetes deployment after the local vertical slice is stable.

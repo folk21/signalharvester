@@ -7,18 +7,32 @@ description: Current backend run and developer workflows for SignalHarvester.
 
 ## Scope
 
-This document owns backend operational workflows and commands. UI-specific workflows belong to the separate `signalharvester-ui` project.
+This document owns backend operational workflows and commands. UI-specific workflows belong to the separate `signalharvester-web` project.
+
+## Start local infrastructure
+
+From the repository root:
+
+```bash
+docker compose -f infra/docker-compose/compose.yaml up -d
+```
+
+Wait until PostgreSQL and Redpanda report healthy before starting the backend:
+
+```bash
+docker compose -f infra/docker-compose/compose.yaml ps
+```
 
 ## Run the backend
 
 ```bash
-./gradlew :app:run
+./gradlew :app:run --no-watch-fs
 ```
 
 If archive extraction did not preserve executable permission:
 
 ```bash
-bash ./gradlew :app:run
+bash ./gradlew :app:run --no-watch-fs
 ```
 
 The current server port defaults to `8080` and can be overridden:
@@ -77,8 +91,7 @@ See [`TESTS.md`](TESTS.md) for the authoritative test command matrix.
 
 As the first vertical slice grows, this document will add commands for:
 
-- repository-owned local Kafka infrastructure;
-- a collection trigger/scheduler;
+- monitoring-profile scheduling;
 - result REST/SSE streams;
 - event-flow inspection.
 

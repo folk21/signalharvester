@@ -60,7 +60,7 @@ Micronaut Netty event-loop threads must not run blocking application work. REST 
 
 ## UI boundary
 
-The web UI lives in the separate `signalharvester-ui` repository. This repository owns backend REST/OpenAPI and SSE contracts; the UI repository owns React/TypeScript implementation and UI-specific specifications.
+The web UI lives in the separate `signalharvester-web` repository. This repository owns backend REST/OpenAPI and SSE contracts; the UI repository owns React/TypeScript implementation and UI-specific specifications.
 
 ## Observability and deployment
 
