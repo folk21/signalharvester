@@ -31,4 +31,6 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-10 — Added explicit best-effort collection-run orchestration over enabled persisted sources with run correlation, deterministic raw-item identity, per-source terminal outcomes, and cross-module PostgreSQL/HTTP/Kafka integration coverage.
 
+2026-09-10 — Added the first analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual Kafka offset commit, and `ItemAnalyzed`/`ItemRejected` event publication.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

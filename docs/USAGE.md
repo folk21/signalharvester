@@ -27,7 +27,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies the configuration-module migration at startup. The backend currently exposes source configuration CRUD under `/api/v1/sources`.
+Flyway applies the configuration and analysis migrations at startup. The backend currently exposes source configuration CRUD under `/api/v1/sources`; the analysis Kafka listener starts by default and waits for `RawItemDiscovered` events.
 
 Example source creation:
 
@@ -45,7 +45,9 @@ curl http://localhost:8080/api/v1/sources
 
 Source URLs stored through this API are configuration data only. Do not expose source management to untrusted users as an unrestricted collection authorization mechanism until an outbound destination/SSRF policy is implemented.
 
-The collection module now contains an executable `CollectionRunService` use case that reads enabled sources, performs bounded best-effort fetches, and publishes successful payloads to Kafka. It is not exposed through a public REST trigger or scheduler yet, so normal backend operation still starts collection only through internal/test invocation until a later slice adds an owning trigger.
+The collection module contains an executable `CollectionRunService` use case that reads enabled sources, performs bounded best-effort fetches, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results are not persisted or exposed yet.
+
+`CollectionRunService` is not exposed through a public REST trigger or scheduler, so normal backend operation still starts collection only through internal/test invocation until a later slice adds an owning trigger.
 
 ## Run tests
 
@@ -55,9 +57,9 @@ See [`TESTS.md`](TESTS.md) for the authoritative test command matrix.
 
 As the first vertical slice grows, this document will add commands for:
 
-- local Kafka infrastructure;
-- SSE streams;
-- deterministic collection scenarios;
+- repository-owned local Kafka infrastructure;
+- a collection trigger/scheduler;
+- result REST/SSE streams;
 - event-flow inspection.
 
 Do not duplicate UI installation or user-interface instructions here.

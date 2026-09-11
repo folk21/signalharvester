@@ -36,7 +36,7 @@ Create a backend structure that:
 
 The backend repository root is `signalharvester/` and the Gradle root project name is `signalharvester`.
 
-The repository now contains the runnable Micronaut composition root, initial configuration/event contracts, and the first collection HTTP transport boundary. Persistence, Kafka adapters, scheduling, parsing, and analysis/result implementations remain pending.
+The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration, and the first analysis Kafka/persistence path. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, deployment infrastructure, and broader architecture enforcement remain pending.
 
 Java 21 is the initial toolchain target. Micronaut is the backend framework. Generic external-source access uses Micronaut's managed low-level HTTP client for configuration-driven absolute URLs, behind synchronous module-facing APIs executed on Micronaut's blocking executor, which uses Virtual Threads on the Java 21 baseline. Streaming boundaries remain reactive where appropriate.
 

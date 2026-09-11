@@ -81,7 +81,7 @@ Implemented types:
 
 The module also implements the first asynchronous publication boundary. `RawItemEventPublisher` accepts `FetchedSourceContent` plus explicit caller-owned publication metadata, including the stable raw-item identity; `KafkaRawItemEventPublisher` maps it to `RawItemDiscovered`, assigns a new event identity, serializes the generated Protobuf message to bytes, and sends an acknowledged Kafka record through a Micronaut `@KafkaClient`. The default topic is `signalharvester.collection.raw-item-discovered.v1`, the caller-owned `rawItemId` is the record key, and producer configuration uses String/byte-array serializers, `acks=all`, and Kafka producer idempotence. Generated Protobuf classes remain confined to the Kafka adapter/mapping boundary.
 
-Source parsing/extraction, due-work scheduling, collection-run persistence/orchestration, partial-failure semantics, and Kafka consumers are intentionally still absent.
+Source parsing/extraction, due-work scheduling, persisted monitoring-profile membership, and collection-run persistence remain intentionally absent. Collection-run orchestration and source-level partial-failure semantics are implemented; raw-item consumption is now owned by the analysis module.
 
 Configured source locations are constrained to absolute HTTP/HTTPS URLs without embedded credentials or fragments. The generic client follows a bounded number of redirects, normalizes Micronaut HTTP response exceptions into collection-owned failures while retaining status and retry metadata, enforces content/time limits, and prevents blocking calls on Netty event-loop threads.
 
@@ -92,11 +92,25 @@ Configured source locations are constrained to absolute HTTP/HTTPS URLs without 
 ```text
 common/v1/event-envelope.proto
 collection/v1/raw-item-discovered.proto
+analysis/v1/item-analyzed.proto
+analysis/v1/item-rejected.proto
 ```
 
 Generated Java transport classes are Gradle build output.
 
-The contract test verifies a representative `RawItemDiscovered` round trip and unknown-field tolerance. Collection now publishes this contract as explicit Protobuf bytes; analysis and event-observation consumers remain pending.
+Contract tests verify representative raw and analysis event round trips plus unknown additive-field tolerance. Collection publishes `RawItemDiscovered` as explicit Protobuf bytes; analysis consumes that contract and publishes explicit `ItemAnalyzed` or `ItemRejected` bytes. Event-observation decoding remains pending.
+
+## Analysis module
+
+`modules:analysis` now owns the first deterministic asynchronous processing path after raw discovery. `RawItemKafkaListener` consumes `RawItemDiscovered` bytes with automatic offset commit disabled, maps generated Protobuf at the Kafka adapter boundary, invokes the analysis application model, and commits the consumed offset only after processing returns successfully.
+
+Core analysis uses module-owned `DiscoveredRawItem` and `NormalizedContentItem` models. `DefaultContentNormalizer` collapses Unicode whitespace, normalizes HTTP/HTTPS URLs, and computes a stable logical `normalizedItemId`: source-provided external identity is preferred when available, otherwise SHA-256 covers source id + normalized URL + normalized content. Monitoring profile id is deliberately excluded from the logical identity; durable duplicate claims are instead scoped by `(monitoringProfileId, normalizedItemId)`.
+
+The analysis module owns PostgreSQL schema `analysis` and Flyway location `classpath:db/migration/analysis`. The current `V2` migration creates `normalized_item_claims`, retaining first/last discovery provenance and a discovery counter. Because configuration and analysis share one datasource/Flyway schema history, module-local migration locations still use a globally unique version sequence.
+
+`ContentAnalyzer` is the replaceable analysis boundary. The initial `KeywordContentAnalyzer` is deterministic and configured from runtime keyword rules; it emits relevance, classification, score, tags, explanation, and a stable analyzer id without an external AI dependency. New accepted items publish `ItemAnalyzed`; rediscoveries in the same monitoring profile update durable deduplication state and publish `ItemRejected` with reason `DUPLICATE`.
+
+Deduplication state changes and acknowledged terminal Kafka publication execute inside the caller-owned JDBC write transaction. Publication failure rolls the database state back and leaves the raw Kafka offset uncommitted. This is not distributed exactly-once behavior: an output acknowledgement followed by a database commit failure can still lead to duplicate terminal publication on redelivery. Results persistence must therefore be idempotent by stable item identity until an outbox or stronger cross-resource consistency strategy is introduced.
 
 ## Testing implementation
 
@@ -112,9 +126,12 @@ Current concrete tests include:
 - collection adapter tests for success, empty bodies, transport failures, HTTP status mapping, and `Retry-After`;
 - bounded Virtual Thread source-coordination tests with deterministic ordering and continuation after source-level failure;
 - collection-run behavior tests for success/partial/failure outcomes, Kafka correlation, publication failure continuation, and deterministic raw-item identity;
-- a cross-module PostgreSQL + deterministic HTTP + Kafka Testcontainers collection-run scenario.
+- a cross-module PostgreSQL + deterministic HTTP + Kafka Testcontainers collection-run scenario;
+- analysis normalization and keyword-rule unit tests;
+- PostgreSQL Testcontainers coverage for profile-scoped durable deduplication;
+- a collection -> raw Kafka -> analysis -> analyzed/rejected Kafka integration scenario that verifies normalized rediscovery deduplication.
 
-`modules:configuration` contains PostgreSQL Testcontainers coverage for Flyway bootstrap, CRUD/settings/provider behavior, REST validation/status mapping, and a server-level assertion that JDBC entry executes on a blocking Virtual Thread. `modules:collection` now contains a Kafka Testcontainers producer/consumer round-trip for the real `RawItemEventPublisher`, including Protobuf decoding and correlation/provenance assertions.
+`modules:configuration` contains PostgreSQL Testcontainers coverage for Flyway bootstrap, CRUD/settings/provider behavior, REST validation/status mapping, and a server-level assertion that JDBC entry executes on a blocking Virtual Thread. `modules:collection` contains a Kafka Testcontainers producer/consumer round-trip for the real `RawItemEventPublisher`. `modules:analysis` contains PostgreSQL deduplication integration coverage, and `testing:integration-tests` exercises the real collection-to-analysis Kafka chain.
 
 ## Infrastructure implementation
 
@@ -122,10 +139,9 @@ Current concrete tests include:
 
 ## Known limitations
 
-- no Kafka consumer wiring;
 - no source parsing/extraction into multiple external items;
 - collection-run history is not persisted and profile/source membership is not implemented yet;
-- no analysis/results implementation;
+- no results persistence/read API implementation;
 - no SSE implementation;
 - no outbound SSRF/network-destination policy yet; persisted source management must remain trusted until such a policy is defined;
 - no event-observation persistence/API;

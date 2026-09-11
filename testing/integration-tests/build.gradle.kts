@@ -14,6 +14,7 @@ dependencies {
     testImplementation(project(":app"))
     testImplementation(project(":modules:configuration"))
     testImplementation(project(":modules:collection"))
+    testImplementation(project(":modules:analysis"))
     testImplementation(project(":contracts:event-contracts"))
     testImplementation(project(":testing:test-support"))
 

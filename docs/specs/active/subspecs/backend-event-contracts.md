@@ -10,7 +10,7 @@ spec_status: active
 
 ## Status
 
-Active supporting technical sub-specification — the initial schemas, generation workflow, first collection producer adapter, and Kafka round-trip test exist, while consumer adapters, Event Explorer decoding, and later event families remain pending.
+Active supporting technical sub-specification — raw and analysis schemas, generation workflow, collection/analysis Kafka adapters, explicit byte serialization, and Testcontainers round trips exist. Event Explorer decoding, compatibility fixtures for evolved published schemas, and later event families remain pending.
 
 This specification refines the umbrella event-driven requirements and the backend modular-monolith structure. It defines how Kafka integration events are represented without turning Protocol Buffers into a universal internal application model.
 

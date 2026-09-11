@@ -45,15 +45,15 @@ The first collection-run application use case is also implemented:
 - `RawItemIdentityFactory` derives a stable SHA-256 raw-item identity from source id, requested URI, and raw bytes so identical rediscovery keeps item identity across runs;
 - `CollectionRunResult` exposes run timing and ordered terminal source outcomes but run history is not persisted yet.
 
-Parsing/extraction into multiple source items, persisted monitoring profiles/run history, scheduling, normalized deduplication, analysis, retry/DLQ policy, and Kafka consumers are not implemented yet.
+Parsing/extraction into multiple source items, persisted monitoring profiles/run history, scheduling, collection retry/DLQ policy, and public collection triggers are not implemented yet. Downstream normalization/deduplication and minimal deterministic analysis are now implemented by `modules:analysis`.
 
-Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, validate bounded best-effort coordination and collection-run status/correlation semantics, verify deterministic raw-item identity, verify Protobuf event mapping/serialization, and include a Kafka Testcontainers producer/consumer round-trip. `testing:integration-tests` adds the first persisted enabled-source -> deterministic HTTP -> Kafka collection-run scenario.
+Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, validate bounded best-effort coordination and collection-run status/correlation semantics, verify deterministic raw-item identity, verify Protobuf event mapping/serialization, and include a Kafka Testcontainers producer/consumer round-trip. `testing:integration-tests` covers both persisted enabled-source -> deterministic HTTP -> Kafka collection runs and the downstream raw Kafka -> analysis terminal-event chain.
 
 ## Read next
 
 - [`../AGENTS.md`](../AGENTS.md)
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-collection-run-orchestration.md`](../../docs/specs/active/subspecs/backend-collection-run-orchestration.md)
+- [`../../docs/specs/archive/subspecs/backend-collection-run-orchestration.md`](../../docs/specs/archive/subspecs/backend-collection-run-orchestration.md)
 - [`../../docs/specs/active/subspecs/backend-event-contracts.md`](../../docs/specs/active/subspecs/backend-event-contracts.md)
 
 ## Security note

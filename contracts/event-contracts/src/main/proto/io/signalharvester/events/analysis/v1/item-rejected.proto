@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package io.signalharvester.events.analysis.v1;
+
+import "io/signalharvester/events/common/v1/event-envelope.proto";
+
+option java_multiple_files = true;
+option java_package = "io.signalharvester.events.analysis.v1";
+
+// Describes a raw item intentionally excluded from downstream result processing.
+message ItemRejected {
+  // Cross-cutting event metadata for this rejection publication.
+  io.signalharvester.events.common.v1.EventEnvelope envelope = 1;
+
+  // Event id of the RawItemDiscovered event that produced this rejection.
+  string source_event_id = 2;
+
+  // Stable id assigned by collection to the discovered raw payload.
+  string raw_item_id = 3;
+
+  // Stable normalized logical id when normalization succeeded.
+  optional string normalized_item_id = 4;
+
+  // Identifier of the configured source that produced the item.
+  string source_id = 5;
+
+  // Monitoring profile in whose processing scope the item was rejected.
+  string monitoring_profile_id = 6;
+
+  // Product-level information category, for example JOB or TOPIC.
+  string information_category = 7;
+
+  // Stable machine-readable rejection reason.
+  string reason_code = 8;
+
+  // Human-readable explanation suitable for diagnostics/event observation.
+  string explanation = 9;
+}

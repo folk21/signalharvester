@@ -94,6 +94,7 @@ class CollectionRunIntegrationTest {
                 Map.entry("kafka.producers.collection-raw-items.acks", "all"),
                 Map.entry("kafka.producers.collection-raw-items.enable.idempotence", true),
                 Map.entry("signalharvester.kafka.raw-item-discovered-topic", TOPIC),
+                Map.entry("signalharvester.analysis.enabled", false),
                 Map.entry("signalharvester.collection.max-concurrency", 2)));
     }
 

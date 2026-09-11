@@ -86,13 +86,14 @@ The first implementation foundation is present:
 - centralized dependency/plugin versions through `gradle/libs.versions.toml`, with the Micronaut Platform version exposed as the Gradle plugin-compatible `micronautVersion` property;
 - the configuration-module Java API plus PostgreSQL/Flyway-backed source persistence;
 - the source REST/OpenAPI CRUD contract implemented under `/api/v1/sources`;
-- versioned Protobuf `EventEnvelope` and `RawItemDiscovered` Kafka schemas;
+- versioned Protobuf `EventEnvelope`, `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` Kafka schemas;
 - JUnit contract tests plus PostgreSQL and Kafka Testcontainers coverage for the implemented persistence/event boundaries;
 - the first collection HTTP transport using Micronaut-managed HTTP infrastructure with bounded Virtual Thread orchestration and deterministic loopback tests;
 - the first acknowledged collection Kafka publisher, mapping fetched content to versioned `RawItemDiscovered` Protobuf bytes with explicit correlation and event identity;
-- the first explicit collection-run use case over persisted enabled sources, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results.
+- the first explicit collection-run use case over persisted enabled sources, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results;
+- the first analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual Kafka offset commit, and `ItemAnalyzed`/`ItemRejected` publication.
 
-Kafka consumers, monitoring profiles/scheduling and persisted run history, SSE, source-specific parsing/adapters beyond the generic HTTP transport, normalization/deduplication, analysis/results persistence, and deployment infrastructure are still planned work.
+Monitoring profiles/scheduling and persisted run history, results persistence/read APIs, SSE/event observation, source-specific parsing/adapters beyond the generic HTTP transport, stronger cross-DB/Kafka consistency, and deployment infrastructure are still planned work.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

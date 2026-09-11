@@ -91,7 +91,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-collection-run-orchestration.md`](active/subspecs/backend-collection-run-orchestration.md) — explicit collection-run identity, enabled-source execution, best-effort failure semantics, and raw-item publication orchestration.
+- [`active/subspecs/backend-analysis-normalization-deduplication.md`](active/subspecs/backend-analysis-normalization-deduplication.md) — raw-event consumption, deterministic normalization, durable profile-scoped deduplication, and minimal deterministic analysis.
 
 Active supporting tracks:
 
@@ -101,14 +101,15 @@ Active supporting tracks:
 
 ## Recently completed sub-specifications
 
-- [`archive/subspecs/backend-collection-kafka-transport.md`](archive/subspecs/backend-collection-kafka-transport.md) — acknowledged `RawItemDiscovered` Protobuf publication boundary and Kafka round-trip, verified in the developer environment.
+- [`archive/subspecs/backend-collection-kafka-transport.md`](archive/subspecs/backend-collection-kafka-transport.md) — acknowledged `RawItemDiscovered` Protobuf publication boundary and Kafka round-trip, verified in the developer environment;
+- [`archive/subspecs/backend-collection-run-orchestration.md`](archive/subspecs/backend-collection-run-orchestration.md) — enabled-source collection execution, run correlation, deterministic raw identity, and best-effort partial-failure behavior, verified in the developer environment.
 
 ## Planned backend sub-specifications
 
 Likely future bounded specs include:
 
-- normalization/deduplication and minimal analysis;
-- first collection-to-results vertical slice;
+- results persistence and first read REST API;
+- first analyzed-item-to-results vertical slice;
 - result REST/SSE and event observation;
 - Kubernetes deployment and observability;
 - integration/system testing hardening.

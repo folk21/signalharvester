@@ -16,7 +16,7 @@ The current implementation requires:
 - JDK 21;
 - the repository Gradle Wrapper;
 - PostgreSQL 16-compatible infrastructure for persisted source configuration;
-- a Kafka 3-compatible broker when exercising the collection publication boundary;
+- a Kafka 3-compatible broker for the current collection -> analysis event flow;
 - network access to Maven/Gradle repositories on the first dependency resolution.
 
 A Docker-compatible runtime is required for the PostgreSQL and Kafka Testcontainers integration tests. Docker is also a convenient way to run local development infrastructure, but the backend uses configured PostgreSQL and Kafka endpoints rather than depending on Docker itself.
@@ -59,9 +59,9 @@ Override `SIGNALHARVESTER_DB_URL`, `SIGNALHARVESTER_DB_USERNAME`, and `SIGNALHAR
 
 ## Local Kafka
 
-The collection publisher defaults to Kafka at `localhost:9092`. Until repository-owned Docker Compose is introduced, use any Kafka 3-compatible development broker and override `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` when it is not reachable at the default address.
+The collection and analysis Kafka clients default to Kafka at `localhost:9092`. Until repository-owned Docker Compose is introduced, use any Kafka 3-compatible development broker and override `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` when it is not reachable at the default address. The runtime topic defaults are `signalharvester.collection.raw-item-discovered.v1`, `signalharvester.analysis.item-analyzed.v1`, and `signalharvester.analysis.item-rejected.v1`; broker-side topic auto-creation behavior is environment-specific, so development infrastructure should create these explicitly when auto-creation is disabled.
 
-The collection-run use case is implemented, but no public REST trigger or scheduler owns invocation yet. Kafka is exercised by the collection publisher test and the cross-module collection-run integration test until an operational trigger is introduced.
+The collection-run use case and analysis listener are implemented, but no public REST trigger or scheduler owns collection invocation yet. Integration tests exercise the complete collection -> raw Kafka -> analysis -> terminal Kafka path until an operational trigger is introduced.
 
 ## UI setup
 

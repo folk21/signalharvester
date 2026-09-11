@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Verify and accept the first collection-run orchestration slice over enabled sources. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-collection-run-orchestration.md`](specs/active/subspecs/backend-collection-run-orchestration.md). After acceptance, move directly to normalization/deduplication plus minimal deterministic analysis.
+Verify and accept the normalization/deduplication plus minimal deterministic analysis slice. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-analysis-normalization-deduplication.md`](specs/active/subspecs/backend-analysis-normalization-deduplication.md). After acceptance, move directly to results persistence and the first result read API.
 
 ## P0 — repository and contract foundation
 

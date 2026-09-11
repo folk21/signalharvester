@@ -7,18 +7,31 @@ description: Normalization, deduplication, relevance, classification, and scorin
 
 ## Ownership
 
-Own analysis of discovered information, including normalization/deduplication boundaries and replaceable relevance/classification/scoring logic.
+Own processing after raw discovery: transport-to-application mapping, deterministic normalization, logical-item identity, durable profile-scoped deduplication, replaceable analysis, and publication of terminal analysis outcomes.
+
+The module owns PostgreSQL schema `analysis`; other modules must not query its deduplication tables directly.
 
 ## Boundary
 
-Do not couple core analysis to one external AI provider. Generated Protobuf messages are transport types, not the module domain model.
+Generated Protobuf messages and Kafka client/consumer types stay under `event.kafka`. Core normalization, persistence, and analyzer logic use analysis-owned Java models. `ContentAnalyzer` is the replaceable analysis boundary; the initial implementation is deterministic keyword matching and does not require an external AI provider.
+
+The current listener manually commits raw Kafka offsets only after successful processing and acknowledged terminal publication. JDBC deduplication state and Kafka publication share one application transaction window for retryability, but that is not distributed exactly-once behavior; downstream result persistence must remain idempotent.
 
 ## Current state
 
-The Gradle/source skeleton exists; concrete implementation is not yet established.
+Implemented:
+
+- `RawItemDiscovered` Kafka consumption and adapter mapping;
+- deterministic URL/text normalization and stable normalized item identity;
+- PostgreSQL/Flyway-backed duplicate claims scoped by monitoring profile;
+- configurable deterministic keyword analysis;
+- `ItemAnalyzed` and duplicate `ItemRejected` Protobuf publication;
+- unit, PostgreSQL Testcontainers, and cross-module Kafka integration coverage.
+
+Monitoring-profile-owned analysis settings, richer category-specific normalization, retry/DLQ policy, results persistence, and stronger DB/Kafka consistency remain future work.
 
 ## Read next
 
 - [`../AGENTS.md`](../AGENTS.md)
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md)
+- [`../../docs/specs/active/subspecs/backend-analysis-normalization-deduplication.md`](../../docs/specs/active/subspecs/backend-analysis-normalization-deduplication.md)

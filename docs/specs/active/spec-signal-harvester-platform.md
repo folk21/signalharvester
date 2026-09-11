@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-collection-run-orchestration.md
+current_focus: subspecs/backend-analysis-normalization-deduplication.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -18,11 +18,11 @@ Backend, infrastructure, observability, persistence, and source-connector implem
 
 ## Active implementation focus
 
-The current technical focus is the first explicit collection-run orchestration slice, defined in `subspecs/backend-collection-run-orchestration.md`. The modular-monolith boundary rules in `subspecs/backend-project-structure.md`, the Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md`, and the verification-pending configuration persistence slice remain active supporting specifications. The completed collection-to-Kafka transport spec is archived after developer verification.
+The current technical focus is normalization, durable deduplication, and minimal deterministic analysis, defined in `subspecs/backend-analysis-normalization-deduplication.md`. The modular-monolith boundary rules in `subspecs/backend-project-structure.md`, the Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md`, and the verification-pending configuration persistence slice remain active supporting specifications. Collection-to-Kafka transport and collection-run orchestration are archived after developer verification.
 
 SignalHarvester starts with one deployable backend application composed from cohesive Gradle modules. Each functional module owns its behavior and infrastructure details, exposes narrow contracts where collaboration is required, and owns its persistence logically. Kafka remains an explicit asynchronous boundary between selected modules so event flow, replay, retries, lag, and future service extraction remain first-class concerns.
 
-The current backend already contains the runnable Micronaut composition root, PostgreSQL/Flyway-backed source configuration with REST CRUD, initial Protobuf schemas, the generic collection HTTP transport with bounded Virtual Thread execution, the first collection-owned Kafka publisher for `RawItemDiscovered`, and first collection-run orchestration over enabled sources with explicit run correlation and best-effort source failure semantics. Kafka consumers, persisted profiles/scheduling/run history, normalization/deduplication, analysis/results, SSE, and deployable infrastructure remain pending. Frontend-specific technical specifications live in the companion `signalharvester-ui` repository.
+The current backend already contains the runnable Micronaut composition root, PostgreSQL/Flyway-backed source configuration with REST CRUD, versioned raw/analysis Protobuf schemas, the generic collection HTTP transport with bounded Virtual Thread execution, collection-owned `RawItemDiscovered` publication, collection-run orchestration over enabled sources, and the first analysis consumer with normalization, durable profile-scoped deduplication, deterministic keyword classification, and terminal analysis-event publication. Persisted profiles/scheduling/run history, results persistence/read APIs, SSE/event observation, stronger DB/Kafka consistency, and deployable infrastructure remain pending. Frontend-specific technical specifications live in the companion `signalharvester-ui` repository.
 
 ## Goal
 
