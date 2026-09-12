@@ -20,6 +20,7 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 
 | Variable | Default | Purpose |
 |---|---:|---|
+| `SIGNALHARVESTER_HTTP_PORT` | `8080` | Backend HTTP server port. |
 | `SIGNALHARVESTER_DB_URL` | `jdbc:postgresql://localhost:5432/signalharvester` | JDBC URL for the application PostgreSQL database. |
 | `SIGNALHARVESTER_DB_USERNAME` | `signalharvester` | Local-development PostgreSQL username. |
 | `SIGNALHARVESTER_DB_PASSWORD` | `signalharvester` | Local-development PostgreSQL password; override outside local development. |
@@ -41,7 +42,7 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_COLLECTION_HTTP_MAX_PENDING_ACQUIRES` | `64` | Maximum pending connection-pool acquisitions. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_POOL_ACQUIRE_TIMEOUT` | `2s` | Maximum wait for a pooled connection. |
 
-`micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. Blocking collection workflows and future blocking controller methods use this executor rather than a Netty event loop.
+`micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. The current source, collection-admin, and analysis-inspection controllers use this executor for JDBC and synchronous collection workflows rather than running blocking work on a Netty event loop.
 
 The maximum concurrency value is validated through Micronaut/Jakarta Validation and must be positive. Micronaut may surface non-success HTTP statuses as `HttpClientResponseException`; the collection adapter normalizes that transport behavior into `SourceFetchException` while preserving status and raw `Retry-After` metadata. Redirect following is enabled but bounded. Automatic decompression is enabled, connection pooling is explicit, and `allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
 
@@ -55,7 +56,7 @@ Secrets must not be committed.
 
 ## Persisted application configuration
 
-The configuration module owns source configuration persistence in PostgreSQL. Its first Flyway migration lives under `db/migration/configuration` and creates module-owned `configuration.sources` and `configuration.source_settings` objects. Analysis owns its deduplication persistence under `db/migration/analysis` and schema `analysis`. Because both locations are applied to one datasource and one Flyway schema history, migration version numbers must remain globally unique across module locations. Other modules consume effective configuration through `SourceConfigurationProvider`; they must not read these tables directly.
+The configuration module owns source configuration persistence in PostgreSQL. Its first Flyway migration lives under `db/migration/configuration` and creates module-owned `configuration.sources` and `configuration.source_settings` objects. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history under `db/migration/collection` and schema `collection`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider`; they must not read configuration tables directly.
 
 Source names are not globally unique. The stable `SourceId` is the identity boundary, so two sources may intentionally share a display name while retaining different identifiers, locations, and settings.
 

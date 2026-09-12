@@ -59,7 +59,7 @@ curl http://localhost:8080/api/v1/sources
 
 Source URLs stored through this API are configuration data only. Do not expose source management to untrusted users as an unrestricted collection authorization mechanism until an outbound destination/SSRF policy is implemented.
 
-The collection module contains an executable `CollectionRunService` use case that reads enabled sources, performs bounded best-effort fetches, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results are not persisted or exposed yet.
+The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, persists the completed run snapshot, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results are not persisted or exposed yet.
 
 Start a manual collection run:
 

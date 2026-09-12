@@ -48,6 +48,10 @@ Small bugs, local refactors, routine dependency maintenance, and narrow docs imp
 
 Archived specs preserve historical intent but are not current source of truth and are ignored during normal implementation work unless explicitly requested.
 
+Lifecycle location is exclusive: a specification must not exist under both `active/` and `archive/`. Archival is a move, not a copy. When a spec is moved, update the umbrella `current_focus`, this index, and any current documentation links in the same change.
+
+`current_focus` metadata and the human-readable "current focus" text must agree. Keep only one current sub-specification at a time; supporting active specs may remain only when they still define unresolved intended behavior rather than restating accepted architecture.
+
 ## Document metadata
 
 Managed documentation uses minimal YAML frontmatter:

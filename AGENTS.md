@@ -237,6 +237,13 @@ Do not create a second document that restates an existing owner's content. Link 
 
 Specifications describe intended changes, not permanent current-state architecture. After implementation, move stable knowledge into the owning documentation and archive the completed specification.
 
+Keep specification lifecycle state unambiguous:
+
+- a spec exists in exactly one lifecycle location (`active/` or `archive/`), never both;
+- archival is a move, not a duplicated copy;
+- umbrella `current_focus`, `docs/specs/README.md`, and the active spec tree must agree;
+- an implemented-but-unverified slice may remain active with `verification-pending`, but accepted behavior belongs in current-state documentation rather than being maintained twice in the spec.
+
 Do not update broad documentation or CHANGELOG for trivial local refactors that do not change behavior, contracts, architecture, validation workflow, or contributor-facing knowledge.
 
 CHANGELOG entries begin with the date in `YYYY-MM-DD` format; time is omitted.

@@ -1,3 +1,8 @@
+---
+type: Infrastructure Guide
+title: Local Docker Compose infrastructure
+description: Local PostgreSQL and Redpanda lifecycle, fixed host endpoints, and reset behavior for backend development.
+---
 # Local development infrastructure
 
 This Docker Compose stack provides the infrastructure required by the host-run SignalHarvester backend:
@@ -26,6 +31,8 @@ Expected host endpoints:
 - PostgreSQL: `localhost:5432`;
 - Kafka API: `localhost:9092`;
 - Redpanda Admin API: `localhost:9644`.
+
+The current Compose file binds these local-development ports and credentials directly. Copying `.env.example` does not currently parameterize `compose.yaml`; backend runtime endpoints can still be overridden independently through the `SIGNALHARVESTER_*` application environment variables documented in [`../../docs/CONFIGURATION.md`](../../docs/CONFIGURATION.md).
 
 The Redpanda `dev-container` mode enables topic auto-creation for local development, so the current versioned application topics are created on first use. Production environments must provision topics explicitly.
 

@@ -54,7 +54,8 @@ This slice does not add authentication/authorization, monitoring profiles, sched
 ## Validation
 
 ```bash
-./gradlew :modules:collection:test :modules:analysis:test :testing:integration-tests:test :app:test --no-watch-fs
+./gradlew :modules:collection:test :modules:analysis:test :app:test --no-watch-fs
+./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs
 ```
 
-Acceptance requires REST contract validation, PostgreSQL run-history persistence/query coverage, blocking controller wiring, and analysis inspection query coverage.
+Acceptance requires REST contract validation, PostgreSQL run-history persistence/query coverage, blocking controller wiring, analysis inspection query coverage, and server-level HTTP verification of the operational endpoints. The default `test` tasks intentionally exclude `@Tag("integration")`; container-backed verification must use `integrationTest` explicitly.

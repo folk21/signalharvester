@@ -29,6 +29,8 @@ Fast/default verification excludes tests tagged `integration`:
 ./gradlew test
 ```
 
+The root build applies this rule to every Java subproject. A module may therefore have zero tests in its default `test` task when all of its current scenarios are integration-tagged.
+
 Run all container-backed and cross-module integration tests explicitly:
 
 ```bash
@@ -87,6 +89,7 @@ The first implementation foundation contains:
 - `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping and response charset handling;
 - `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
 - `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
+- `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap plus durable completed-run/source-outcome persistence and deterministic source ordering;
 - `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, duplicate-name semantics, and transactional rollback;
 - `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
 - `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`;
@@ -94,9 +97,10 @@ The first implementation foundation contains:
 - `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring rules and invalid rule configuration;
 - `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims and discovery counters;
 - `RawItemKafkaListenerTest` for explicit offset commit after success and no commit when processing fails;
+- `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
 
-PostgreSQL Testcontainers tests are implemented in `modules:configuration` and `modules:analysis`; Kafka producer round-trip coverage is implemented in `modules:collection`. `CollectionRunIntegrationTest` verifies persisted enabled-source selection, deterministic local HTTP fetch, partial source failure, run correlation, disabled-source exclusion, and successful Kafka publication. `CollectionAnalysisIntegrationTest` verifies the first real consumer chain through normalized deduplication and terminal analysis events.
+PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, and `modules:analysis`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
 
 ## Python
 
@@ -112,4 +116,4 @@ Focused validation for the manual-run/history and analysis-inspection slice:
 ./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs
 ```
 
-Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP validation should continue to verify blocking controller execution on Virtual Threads.
+Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP coverage currently exists for source CRUD, but equivalent server-level verification for the collection-admin and analysis-inspection endpoints is still part of the operational-admin verification gate.

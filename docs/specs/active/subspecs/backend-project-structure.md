@@ -12,6 +12,8 @@ spec_status: active
 
 Active supporting technical sub-specification — the initial repository structure is established and these requirements remain boundary guardrails while later vertical slices exercise them.
 
+Accepted current architecture is documented in `docs/ARCHITECTURE.md`, root/module `AGENTS.md`, and module `contract.md` files. This sub-spec remains active only for still-relevant acceptance guardrails; do not add current implementation inventories here or use it instead of the owning current-state documents.
+
 The backend starts as a modular monolith. There is one deployable backend application, while the codebase is split into independently owned functional Gradle modules.
 
 The repository structure is intentionally simpler than strict Hexagonal Architecture. It preserves the most important property of ports-and-adapters design — explicit boundaries around replaceable dependencies and module contracts — without requiring every use case to be wrapped in a fixed set of layers or interfaces.
@@ -36,7 +38,7 @@ Create a backend structure that:
 
 The backend repository root is `signalharvester/` and the Gradle root project name is `signalharvester`.
 
-The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration, and the first analysis Kafka/persistence path. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, Kubernetes/observability deployment infrastructure, and broader architecture enforcement remain pending. Local PostgreSQL/Kafka Docker Compose is implemented.
+The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration/history, and the first analysis Kafka/persistence path. Cross-module production dependencies are guarded by an ArchUnit rule that permits dependencies only on a providing module's `api..` package. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, Kubernetes deployment, and production observability remain pending. Local PostgreSQL/Redpanda Docker Compose is implemented.
 
 Java 21 is the initial toolchain target. Micronaut is the backend framework. Generic external-source access uses Micronaut's managed low-level HTTP client for configuration-driven absolute URLs, behind synchronous module-facing APIs executed on Micronaut's blocking executor, which uses Virtual Threads on the Java 21 baseline. Streaming boundaries remain reactive where appropriate.
 

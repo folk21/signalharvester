@@ -15,7 +15,7 @@ The current implementation requires:
 
 - JDK 21;
 - the repository Gradle Wrapper;
-- PostgreSQL 16-compatible infrastructure for persisted source configuration;
+- PostgreSQL 16-compatible infrastructure for the currently implemented configuration, collection-history, and analysis persistence;
 - a Kafka-compatible broker for the current collection -> analysis event flow;
 - network access to Maven/Gradle repositories on the first dependency resolution.
 
@@ -70,7 +70,7 @@ The defaults match the backend runtime configuration:
 
 These credentials are safe local-development defaults only. Override `SIGNALHARVESTER_DB_URL`, `SIGNALHARVESTER_DB_USERNAME`, `SIGNALHARVESTER_DB_PASSWORD`, and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` for other environments.
 
-See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for local port/topic overrides, shutdown, and volume reset commands.
+See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for the current fixed local endpoints, shutdown, and volume reset commands.
 
 ## UI setup
 

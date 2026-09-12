@@ -28,7 +28,7 @@ The first external-source transport boundary is implemented:
 
 The module now also owns the first Kafka publication boundary:
 
-- `RawItemEventPublisher` is the collection-owned API used by run orchestration;
+- `RawItemEventPublisher` is the collection-owned internal publication port used by run orchestration;
 - `RawItemPublicationContext` supplies caller-owned raw-item identity plus correlation/profile/category/trace metadata without making the Kafka adapter own run or idempotency semantics;
 - `RawItemDiscoveredMapper` keeps generated Protobuf types inside the Kafka adapter boundary;
 - `KafkaRawItemEventPublisher` performs acknowledged publication of explicit Protobuf bytes;

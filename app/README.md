@@ -15,7 +15,7 @@ It composes functional modules and owns startup/global runtime wiring. It must n
 
 `io.signalharvester.Application` is the runnable Micronaut entry point. The application is configured as the single Netty-based backend runtime and composes all functional modules. Micronaut's `blocking` executor is explicitly Virtual-Thread backed for the Java 21 baseline.
 
-No product REST endpoints or infrastructure integrations are wired yet. Future controller operations that invoke JDBC or other blocking application workflows use `@ExecuteOn(TaskExecutors.BLOCKING)`; streaming endpoints such as SSE remain reactive instead of being moved to the blocking executor mechanically.
+The assembled application currently wires PostgreSQL/Flyway, Kafka-compatible messaging, source configuration CRUD, manual collection-run/history administration, and analysis inspection. Blocking controllers owned by the functional modules use `@ExecuteOn(TaskExecutors.BLOCKING)` for JDBC and synchronous collection workflows. Streaming endpoints such as future SSE adapters remain reactive instead of being moved to the blocking executor mechanically.
 
 ## Read next
 
