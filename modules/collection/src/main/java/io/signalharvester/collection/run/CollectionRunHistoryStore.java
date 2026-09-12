@@ -3,13 +3,14 @@ package io.signalharvester.collection.run;
 import io.signalharvester.collection.api.CollectionRunResult;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Stores and queries durable operational snapshots of completed collection runs.
- * Callers own the JDBC transaction boundary for every operation.
+ * Every operation requires an application-owned active JDBC transaction.
  */
 public interface CollectionRunHistoryStore {
     void save(CollectionRunResult result);
     List<CollectionRunResult> findRecent(int limit);
-    Optional<CollectionRunResult> findById(String collectionRunId);
+    Optional<CollectionRunResult> findById(UUID collectionRunId);
 }

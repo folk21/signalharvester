@@ -15,7 +15,7 @@ The HTTP adapter preserves response status, `Retry-After`, source provenance, re
 
 The Kafka publication path maps collection-owned data to `RawItemDiscovered`, publishes explicit Protobuf bytes with acknowledgement, uses the caller-owned `rawItemId` as the record key, and assigns a new `eventId` for each publication. Producer idempotence and `acks=all` are enabled at the transport layer.
 
-Collection-run orchestration is implemented with explicit run identity, ordered per-source terminal outcomes, aggregate run status, deterministic raw-item identity, and durable completed-run history. Runs obtain enabled sources through the published configuration API. Fetch and publication failures are best-effort per source rather than cancelling unrelated source work.
+Collection-run orchestration is implemented with explicit run identity, ordered per-source terminal outcomes, aggregate run status, deterministic raw-item identity, and durable completed-run history. Recent-history reads load the bounded run page and all of its source outcomes in two PostgreSQL queries rather than issuing per-run source queries. Run-history reads and writes use short application-owned JDBC transactions, and the persistence adapter rejects direct access outside an active transaction. Runs obtain enabled sources through the published configuration API. Fetch and publication failures are best-effort per source rather than cancelling unrelated source work.
 
 Parsing/extraction into multiple source items, persisted monitoring profiles, scheduling, and collection retry/DLQ policy are not implemented yet. Downstream normalization/deduplication and deterministic analysis are implemented by `modules:analysis` through the Kafka flow.
 

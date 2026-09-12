@@ -49,4 +49,8 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-12 — Reconciled current-state documentation and active-spec lifecycle with the implemented REST/admin APIs, persistence, Redpanda infrastructure, dedicated integration-test tasks, and module API boundaries; removed duplicate active copies of archived sub-specifications.
 
+2026-09-12 — Batched collection recent-history persistence reads to eliminate per-run source queries while preserving deterministic run and source ordering.
+
+2026-09-13 — Hardened collection run-history persistence with enforced Micronaut transaction participation, atomicity regression coverage, typed UUID lookups, bounded Java API limits, centralized SQL, and defensive row mapping.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

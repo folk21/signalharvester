@@ -91,7 +91,7 @@ The first implementation foundation contains:
 - `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping and response charset handling;
 - `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
 - `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
-- `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap plus durable completed-run/source-outcome persistence and deterministic source ordering;
+- `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap, atomic run/source-outcome persistence, enforced application-owned transaction boundaries, bounded recent-history validation, deterministic ordering, and source-outcome association across multi-run reads;
 - `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, duplicate-name semantics, and transactional rollback;
 - `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
 - `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`;
