@@ -1,4 +1,4 @@
-package io.signalharvester.collection.run;
+package io.signalharvester.collection.api;
 
 /**
  * Describes the aggregate outcome of an explicit collection run.

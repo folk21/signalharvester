@@ -1,7 +1,7 @@
 package io.signalharvester.analysis.http;
 
 import io.micronaut.serde.annotation.Serdeable;
-import io.signalharvester.analysis.persistence.AnalysisItemInspection;
+import io.signalharvester.analysis.api.AnalysisItemInspection;
 import java.time.Instant;
 import java.util.Optional;
 

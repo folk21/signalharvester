@@ -1,4 +1,4 @@
-package io.signalharvester.collection.run;
+package io.signalharvester.collection.api;
 
 import java.time.Instant;
 import java.util.List;

@@ -11,8 +11,8 @@ import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.api.SourceType;
-import io.signalharvester.configuration.application.SourceConfigurationCommand;
-import io.signalharvester.configuration.application.SourceConfigurationManager;
+import io.signalharvester.configuration.api.SourceConfigurationCommand;
+import io.signalharvester.configuration.api.SourceConfigurationOperations;
 import io.signalharvester.configuration.application.SourceNotFoundException;
 import io.signalharvester.configuration.persistence.SourcePersistenceException;
 import java.net.URI;
@@ -72,7 +72,7 @@ class ConfigurationPostgresIntegrationTest {
 
     @Test
     void shouldPersistCrudSettingsAndProviderReads() {
-        SourceConfigurationManager manager = context.getBean(SourceConfigurationManager.class);
+        SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
         SourceConfigurationProvider provider = context.getBean(SourceConfigurationProvider.class);
 
         ConfiguredSource first = manager.create(command(
@@ -110,7 +110,7 @@ class ConfigurationPostgresIntegrationTest {
 
     @Test
     void shouldRollbackSourceUpdateWhenSettingsWriteFails() throws Exception {
-        SourceConfigurationManager manager = context.getBean(SourceConfigurationManager.class);
+        SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
         ConfiguredSource original = manager.create(command(
                 "Jobs API",
                 URI.create("https://example.test/jobs"),
@@ -139,7 +139,7 @@ class ConfigurationPostgresIntegrationTest {
 
     @Test
     void shouldReportNotFoundForMissingUpdateAndDelete() {
-        SourceConfigurationManager manager = context.getBean(SourceConfigurationManager.class);
+        SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
         SourceId missing = SourceId.of(java.util.UUID.randomUUID());
 
         assertThrows(

@@ -41,4 +41,8 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-11 — Replaced the broken native-Kafka local Compose setup with a complete PostgreSQL + single-node Redpanda stack while preserving the Kafka protocol contract.
 
+2026-09-12 — Separated integration-tagged Testcontainers/cross-module tests from the default Gradle `test` lifecycle with explicit `integrationTest` tasks.
+
+2026-09-12 — Standardized published module Java APIs under `api` packages, added module boundary contracts/selective-context guidance, and introduced ArchUnit enforcement for cross-module dependencies.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

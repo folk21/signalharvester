@@ -25,7 +25,7 @@ Expose the minimum backend operations needed by a technical administration UI wi
 
 ### R1 — collection owns run operations
 
-`modules:collection` owns `/api/v1/admin/collection-runs`. Starting a run invokes `CollectionRunService` on `TaskExecutors.BLOCKING`. Completed runs and ordered source outcomes are persisted in the collection-owned PostgreSQL schema.
+`modules:collection` owns `/api/v1/admin/collection-runs`. Starting a run invokes the `CollectionRunner` API (implemented by `CollectionRunService`) on `TaskExecutors.BLOCKING`. Completed runs and ordered source outcomes are persisted in the collection-owned PostgreSQL schema.
 
 ### R2 — run history is restart-safe and bounded
 

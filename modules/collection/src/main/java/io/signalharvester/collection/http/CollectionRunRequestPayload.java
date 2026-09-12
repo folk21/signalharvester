@@ -1,7 +1,7 @@
 package io.signalharvester.collection.http;
 
 import io.micronaut.serde.annotation.Serdeable;
-import io.signalharvester.collection.run.CollectionRunRequest;
+import io.signalharvester.collection.api.CollectionRunRequest;
 import jakarta.validation.constraints.NotBlank;
 import java.util.Optional;
 

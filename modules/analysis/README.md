@@ -13,6 +13,8 @@ The module owns PostgreSQL schema `analysis`; other modules must not query its d
 
 ## Boundary
 
+The only current synchronous published Java surface is `io.signalharvester.analysis.api.AnalysisItemInspectionQuery` with its `AnalysisItemInspection` projection. The raw Kafka processing path remains asynchronous; `RawItemProcessor`, `ContentAnalyzer`, `ContentNormalizer`, event publishers, and repositories are internal module ports rather than published APIs. The operational HTTP adapter depends on the query interface instead of persistence.
+
 Generated Protobuf messages and Kafka client/consumer types stay under `event.kafka`. Core normalization, persistence, and analyzer logic use analysis-owned Java models. `ContentAnalyzer` is the replaceable analysis boundary; the initial implementation is deterministic keyword matching and does not require an external AI provider.
 
 The current listener manually commits raw Kafka offsets only after successful processing and acknowledged terminal publication. JDBC deduplication state and Kafka publication share one application transaction window for retryability, but that is not distributed exactly-once behavior; downstream result persistence must remain idempotent.
@@ -29,6 +31,8 @@ Implemented:
 - unit, PostgreSQL Testcontainers, and cross-module Kafka integration coverage.
 
 Monitoring-profile-owned analysis settings, richer category-specific normalization, retry/DLQ policy, results persistence, and stronger DB/Kafka consistency remain future work.
+
+See [`contract.md`](contract.md) for the compact integration/context map.
 
 ## Read next
 

@@ -1,5 +1,6 @@
 package io.signalharvester.collection.run;
 
+import io.signalharvester.collection.api.CollectionRunResult;
 import java.util.List;
 import java.util.Optional;
 

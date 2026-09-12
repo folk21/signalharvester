@@ -10,8 +10,8 @@ import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.validation.Validated;
-import io.signalharvester.collection.run.CollectionRunHistoryQuery;
-import io.signalharvester.collection.run.CollectionRunService;
+import io.signalharvester.collection.api.CollectionRunHistory;
+import io.signalharvester.collection.api.CollectionRunner;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -23,30 +23,30 @@ import java.util.UUID;
 @Controller("/api/v1/admin/collection-runs")
 @ExecuteOn(TaskExecutors.BLOCKING)
 public class CollectionRunController {
-    private final CollectionRunService runService;
-    private final CollectionRunHistoryQuery historyQuery;
+    private final CollectionRunner runner;
+    private final CollectionRunHistory history;
 
-    public CollectionRunController(CollectionRunService runService, CollectionRunHistoryQuery historyQuery) {
-        this.runService = runService;
-        this.historyQuery = historyQuery;
+    public CollectionRunController(CollectionRunner runner, CollectionRunHistory history) {
+        this.runner = runner;
+        this.history = history;
     }
 
     /** Starts one synchronous best-effort collection run and returns its durable terminal state. */
     @Post
     public HttpResponse<CollectionRunResponse> start(@Body @Valid CollectionRunRequestPayload request) {
-        return HttpResponse.created(CollectionRunResponse.from(runService.run(request.toRunRequest())));
+        return HttpResponse.created(CollectionRunResponse.from(runner.run(request.toRunRequest())));
     }
 
     /** Returns the most recent completed collection runs, newest first. */
     @Get
     public List<CollectionRunResponse> recent(
             @QueryValue(defaultValue = "50") @Min(1) @Max(200) int limit) {
-        return historyQuery.recent(limit).stream().map(CollectionRunResponse::from).toList();
+        return history.recent(limit).stream().map(CollectionRunResponse::from).toList();
     }
 
     /** Returns one durable collection-run snapshot. */
     @Get("/{collectionRunId}")
     public CollectionRunResponse get(@PathVariable UUID collectionRunId) {
-        return CollectionRunResponse.from(historyQuery.get(collectionRunId.toString()));
+        return CollectionRunResponse.from(history.get(collectionRunId.toString()));
     }
 }

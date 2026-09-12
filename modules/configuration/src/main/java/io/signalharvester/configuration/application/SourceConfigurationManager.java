@@ -2,6 +2,8 @@ package io.signalharvester.configuration.application;
 
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.configuration.api.ConfiguredSource;
+import io.signalharvester.configuration.api.SourceConfigurationCommand;
+import io.signalharvester.configuration.api.SourceConfigurationOperations;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.persistence.SourceRepository;
@@ -16,7 +18,7 @@ import java.util.UUID;
  * Owns configured-source CRUD use cases, transaction boundaries, and persisted configuration reads.
  */
 @Singleton
-public final class SourceConfigurationManager implements SourceConfigurationProvider {
+public final class SourceConfigurationManager implements SourceConfigurationOperations, SourceConfigurationProvider {
 
     private final SourceRepository repository;
     private final TransactionOperations<Connection> transactions;
@@ -34,6 +36,7 @@ public final class SourceConfigurationManager implements SourceConfigurationProv
      * @param command source configuration input
      * @return persisted source
      */
+    @Override
     public ConfiguredSource create(SourceConfigurationCommand command) {
         SourceId sourceId = SourceId.of(UUID.randomUUID());
         ConfiguredSource source = materialize(sourceId, command);
@@ -48,6 +51,7 @@ public final class SourceConfigurationManager implements SourceConfigurationProv
      *
      * @return configured sources
      */
+    @Override
     public List<ConfiguredSource> list() {
         return transactions.executeRead(status -> repository.findAll());
     }
@@ -58,6 +62,7 @@ public final class SourceConfigurationManager implements SourceConfigurationProv
      * @param sourceId stable source identifier
      * @return configured source
      */
+    @Override
     public ConfiguredSource get(SourceId sourceId) {
         return transactions.executeRead(status ->
                 repository.findById(sourceId).orElseThrow(() -> new SourceNotFoundException(sourceId)));
@@ -70,6 +75,7 @@ public final class SourceConfigurationManager implements SourceConfigurationProv
      * @param command replacement configuration
      * @return updated source
      */
+    @Override
     public ConfiguredSource update(SourceId sourceId, SourceConfigurationCommand command) {
         ConfiguredSource source = materialize(sourceId, command);
         return transactions.executeWrite(status -> {
@@ -85,6 +91,7 @@ public final class SourceConfigurationManager implements SourceConfigurationProv
      *
      * @param sourceId stable source identifier
      */
+    @Override
     public void delete(SourceId sourceId) {
         transactions.executeWrite(status -> {
             if (!repository.delete(sourceId)) {

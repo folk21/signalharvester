@@ -17,20 +17,36 @@ Default automated tests must not require public network access, live external we
 - contract tests live with API/event contract ownership;
 - reusable deterministic fixtures belong in `testing/test-support` only when genuinely shared;
 - cross-module/backend integration tests belong in `testing/integration-tests`;
-- architectural dependency checks may use ArchUnit when meaningful package boundaries exist.
+- architectural dependency checks use ArchUnit for the established functional-module package boundaries.
 
 ## Current validation commands
 
 Use the repository Gradle Wrapper.
 
+Fast/default verification excludes tests tagged `integration`:
+
+```bash
+./gradlew test
+```
+
+Run all container-backed and cross-module integration tests explicitly:
+
+```bash
+./gradlew integrationTest
+```
+
+Focused commands follow the same split:
+
 ```bash
 ./gradlew :modules:configuration:test
+./gradlew :modules:configuration:integrationTest
 ./gradlew :modules:collection:test
+./gradlew :modules:collection:integrationTest
 ./gradlew :modules:analysis:test
+./gradlew :modules:analysis:integrationTest
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
-./gradlew :testing:integration-tests:test
-./gradlew test
+./gradlew :testing:integration-tests:integrationTest
 ```
 
 On systems where executable permission is not preserved after extracting an archive, use `bash ./gradlew ...` or restore the executable bit.
@@ -58,6 +74,7 @@ flowchart TB
 The first implementation foundation contains:
 
 - `ApplicationContextTest` for Micronaut context bootstrap;
+- `ModuleBoundaryArchitectureTest` for enforcing that production cross-module Java dependencies target only the providing module's `api..` package;
 - `ConfiguredSourceTest` for configuration-boundary invariants;
 - `RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` for Protobuf round trips and unknown additive fields;
 - `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, bounded redirects, and response-size enforcement against deterministic loopback servers;
@@ -91,7 +108,8 @@ Python may be used later for independent black-box/load/data tooling. It is not 
 Focused validation for the manual-run/history and analysis-inspection slice:
 
 ```bash
-./gradlew :modules:collection:test :modules:analysis:test :testing:integration-tests:test :app:test --no-watch-fs
+./gradlew :modules:collection:test :modules:analysis:test :app:test --no-watch-fs
+./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs
 ```
 
 Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP validation should continue to verify blocking controller execution on Virtual Threads.

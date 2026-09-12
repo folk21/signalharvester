@@ -47,7 +47,7 @@ Implemented in this slice:
 
 - configuration-owned PostgreSQL schema and module-specific Flyway migration location;
 - explicit JDBC source repository with atomic source/settings writes;
-- `SourceConfigurationManager` CRUD use cases and concrete `SourceConfigurationProvider` wiring;
+- `SourceConfigurationOperations` / `SourceConfigurationProvider` public interfaces with `SourceConfigurationManager` as their internal application implementation;
 - `/api/v1/sources` controller with separate HTTP records and centralized expected-failure handlers;
 - Jakarta Validation for source input aligned with `ConfiguredSource` invariants;
 - runtime PostgreSQL/Hikari/Flyway configuration;

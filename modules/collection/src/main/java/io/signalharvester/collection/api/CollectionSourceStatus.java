@@ -1,4 +1,4 @@
-package io.signalharvester.collection.run;
+package io.signalharvester.collection.api;
 
 /**
  * Describes the terminal outcome for one source requested by a collection run.

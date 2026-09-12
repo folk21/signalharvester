@@ -64,7 +64,7 @@ Implemented in this slice:
 
 ### R1 — every execution has an explicit run identity
 
-`CollectionRunService.run(...)` must create a new globally unique `collectionRunId` before source work starts.
+`CollectionRunner.run(...)`, implemented by `CollectionRunService`, must create a new globally unique `collectionRunId` before source work starts.
 
 The same id must be used as the Kafka `correlationId` for every raw-item event produced by that execution.
 
@@ -228,7 +228,7 @@ Acceptance requires tests covering:
 1. Add explicit run request/result/status source-outcome types.
 2. Change source coordination to return ordered best-effort outcomes.
 3. Add deterministic raw-item identity generation.
-4. Implement `CollectionRunService` over configuration, fetch, identity, and publisher boundaries.
+4. Implement `CollectionRunner` through `CollectionRunService` over configuration, fetch, identity, and publisher boundaries.
 5. Add unit/behavior tests for partial failures and identity semantics.
 6. Add the cross-module Testcontainers collection-run integration scenario.
 7. Synchronize current-state documentation and roadmap.

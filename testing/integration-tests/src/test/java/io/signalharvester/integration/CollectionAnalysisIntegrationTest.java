@@ -7,12 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.micronaut.context.ApplicationContext;
-import io.signalharvester.collection.run.CollectionRunRequest;
-import io.signalharvester.collection.run.CollectionRunResult;
-import io.signalharvester.collection.run.CollectionRunService;
+import io.signalharvester.collection.api.CollectionRunRequest;
+import io.signalharvester.collection.api.CollectionRunResult;
+import io.signalharvester.collection.api.CollectionRunner;
 import io.signalharvester.configuration.api.SourceType;
-import io.signalharvester.configuration.application.SourceConfigurationCommand;
-import io.signalharvester.configuration.application.SourceConfigurationManager;
+import io.signalharvester.configuration.api.SourceConfigurationCommand;
+import io.signalharvester.configuration.api.SourceConfigurationOperations;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import io.signalharvester.events.analysis.v1.ItemRejected;
 import java.io.IOException;
@@ -130,7 +130,7 @@ class CollectionAnalysisIntegrationTest {
 
     @Test
     void shouldNormalizeAnalyzeAndRejectEquivalentRediscoveryAsDuplicate() throws Exception {
-        SourceConfigurationManager configuration = context.getBean(SourceConfigurationManager.class);
+        SourceConfigurationOperations configuration = context.getBean(SourceConfigurationOperations.class);
         URI sourceUri = URI.create("http://127.0.0.1:" + sourceServer.getAddress().getPort() + "/jobs");
         configuration.create(new SourceConfigurationCommand(
                 "Jobs",
@@ -139,7 +139,7 @@ class CollectionAnalysisIntegrationTest {
                 true,
                 Map.of()));
 
-        CollectionRunService collection = context.getBean(CollectionRunService.class);
+        CollectionRunner collection = context.getBean(CollectionRunner.class);
         CollectionRunResult firstRun = collection.run(
                 new CollectionRunRequest("profile-analysis", "JOB", Optional.empty()));
         CollectionRunResult secondRun = collection.run(

@@ -155,9 +155,11 @@ collection
 configuration.persistence.JdbcSourceConfigurationRepository
 ```
 
-This rule should later be enforced with architecture tests, preferably ArchUnit.
+This rule is enforced with an ArchUnit-backed architecture test that rejects production cross-module Java dependencies outside the providing module's `api..` package.
 
-Public module APIs should remain small. A class must not be moved to an `api` package merely because another module wants convenient access to it.
+Public module APIs should remain small. A class must not be moved to an `api` package merely because another module wants convenient access to it. Published module behavior is expressed through interfaces under `api`; contract data may be colocated there or referenced from an existing owned model when duplication would add no value. Internal repositories, outbound clients, publishers, analyzers, and strategy interfaces remain outside `api` unless intentionally published. REST controllers remain transport adapters and are never promoted to Java API merely to make them injectable.
+
+Each functional module also keeps a root `contract.md` as a compact context/navigation index. It points to the authoritative Java `api/**`, OpenAPI, and Protobuf sources and records ownership/dependency/invariant information without copying complete method or field signatures. This supports selective context loading for both developers and coding agents.
 
 ## Interfaces and contracts
 
@@ -488,7 +490,7 @@ Most processing relationships between collection, analysis, results, and event o
 
 ### R14 — module internals should be architecture-testable
 
-The project should add ArchUnit once real Java packages exist.
+The project uses ArchUnit now that real Java package boundaries exist.
 
 Architecture tests should be able to verify at least:
 
@@ -718,7 +720,7 @@ The structure is valid when all of the following are true:
 10. Implement the first results projection and query endpoint.
 11. Implement SSE for live result updates.
 12. Add event-observation persistence and technical SSE.
-13. Add ArchUnit rules once packages and public APIs exist.
+13. Keep ArchUnit rules aligned with published module APIs as packages evolve.
 14. Add module-local Flyway migrations.
 15. Add OpenTelemetry instrumentation.
 16. Docker Compose for local PostgreSQL/Kafka dependencies is implemented; keep it aligned with runtime defaults.

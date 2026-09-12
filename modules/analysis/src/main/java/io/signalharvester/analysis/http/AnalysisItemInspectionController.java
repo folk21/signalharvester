@@ -8,7 +8,7 @@ import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.validation.Validated;
-import io.signalharvester.analysis.persistence.AnalysisItemInspectionRepository;
+import io.signalharvester.analysis.api.AnalysisItemInspectionQuery;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -21,10 +21,10 @@ import java.util.Optional;
 @Controller("/api/v1/admin/analysis/items")
 @ExecuteOn(TaskExecutors.BLOCKING)
 public class AnalysisItemInspectionController {
-    private final AnalysisItemInspectionRepository repository;
+    private final AnalysisItemInspectionQuery query;
 
-    public AnalysisItemInspectionController(AnalysisItemInspectionRepository repository) {
-        this.repository = repository;
+    public AnalysisItemInspectionController(AnalysisItemInspectionQuery query) {
+        this.query = query;
     }
 
     /** Returns recent normalized-item claims with optional profile/source filters. */
@@ -33,7 +33,7 @@ public class AnalysisItemInspectionController {
             @QueryValue(defaultValue = "50") @Min(1) @Max(200) int limit,
             @QueryValue(defaultValue = "") String monitoringProfileId,
             @QueryValue(defaultValue = "") String sourceId) {
-        return repository.findRecent(limit, optional(monitoringProfileId), optional(sourceId)).stream()
+        return query.recent(limit, optional(monitoringProfileId), optional(sourceId)).stream()
                 .map(AnalysisItemInspectionResponse::from)
                 .toList();
     }
@@ -43,7 +43,7 @@ public class AnalysisItemInspectionController {
     public HttpResponse<AnalysisItemInspectionResponse> get(
             @PathVariable @Pattern(regexp = "[0-9a-f]{64}") String normalizedItemId,
             @QueryValue @NotBlank String monitoringProfileId) {
-        return repository.find(monitoringProfileId, normalizedItemId)
+        return query.find(monitoringProfileId, normalizedItemId)
                 .map(AnalysisItemInspectionResponse::from)
                 .map(HttpResponse::ok)
                 .orElseGet(HttpResponse::notFound);

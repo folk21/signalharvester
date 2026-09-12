@@ -17,7 +17,12 @@ subprojects {
             add("testRuntimeOnly", libs.junit.platform.launcher)
         }
 
-        tasks.withType<Test>().configureEach {
+        val testSourceSet = extensions
+            .getByType<org.gradle.api.plugins.JavaPluginExtension>()
+            .sourceSets
+            .named("test")
+
+        tasks.named<Test>("test") {
             useJUnitPlatform {
                 excludeTags("integration")
             }
@@ -26,6 +31,8 @@ subprojects {
         tasks.register<Test>("integrationTest") {
             description = "Runs integration tests."
             group = "verification"
+            testClassesDirs = testSourceSet.get().output.classesDirs
+            classpath = testSourceSet.get().runtimeClasspath
             useJUnitPlatform {
                 includeTags("integration")
             }

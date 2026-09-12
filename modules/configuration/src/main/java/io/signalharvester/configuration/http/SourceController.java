@@ -12,7 +12,7 @@ import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.validation.Validated;
 import io.signalharvester.configuration.api.SourceId;
-import io.signalharvester.configuration.application.SourceConfigurationManager;
+import io.signalharvester.configuration.api.SourceConfigurationOperations;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -25,29 +25,29 @@ import java.util.UUID;
 @ExecuteOn(TaskExecutors.BLOCKING)
 public class SourceController {
 
-    private final SourceConfigurationManager manager;
+    private final SourceConfigurationOperations operations;
 
-    public SourceController(SourceConfigurationManager manager) {
-        this.manager = manager;
+    public SourceController(SourceConfigurationOperations operations) {
+        this.operations = operations;
     }
 
     /** Returns all configured sources. */
     @Get
     public List<SourceResponse> listSources() {
-        return manager.list().stream().map(SourceResponse::from).toList();
+        return operations.list().stream().map(SourceResponse::from).toList();
     }
 
     /** Creates and persists a configured source. */
     @Post
     public HttpResponse<SourceResponse> createSource(@Body @Valid SourceUpsertRequest request) {
-        SourceResponse response = SourceResponse.from(manager.create(request.toCommand()));
+        SourceResponse response = SourceResponse.from(operations.create(request.toCommand()));
         return HttpResponse.created(response);
     }
 
     /** Returns one configured source or maps a missing identifier to HTTP 404. */
     @Get("/{sourceId}")
     public SourceResponse getSource(@PathVariable UUID sourceId) {
-        return SourceResponse.from(manager.get(SourceId.of(sourceId)));
+        return SourceResponse.from(operations.get(SourceId.of(sourceId)));
     }
 
     /** Replaces an existing configured source and its settings. */
@@ -55,13 +55,13 @@ public class SourceController {
     public SourceResponse updateSource(
             @PathVariable UUID sourceId,
             @Body @Valid SourceUpsertRequest request) {
-        return SourceResponse.from(manager.update(SourceId.of(sourceId), request.toCommand()));
+        return SourceResponse.from(operations.update(SourceId.of(sourceId), request.toCommand()));
     }
 
     /** Deletes an existing configured source. */
     @Delete("/{sourceId}")
     public HttpResponse<?> deleteSource(@PathVariable UUID sourceId) {
-        manager.delete(SourceId.of(sourceId));
+        operations.delete(SourceId.of(sourceId));
         return HttpResponse.noContent();
     }
 }

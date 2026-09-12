@@ -35,4 +35,5 @@ dependencies {
     runtimeOnly("ch.qos.logback:logback-classic")
 
     testImplementation(libs.junit.jupiter)
+    testImplementation(libs.archunit.junit5)
 }

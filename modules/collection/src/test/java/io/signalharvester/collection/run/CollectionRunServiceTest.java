@@ -1,5 +1,10 @@
 package io.signalharvester.collection.run;
 
+import io.signalharvester.collection.api.CollectionRunRequest;
+import io.signalharvester.collection.api.CollectionRunResult;
+import io.signalharvester.collection.api.CollectionRunStatus;
+import io.signalharvester.collection.api.CollectionSourceResult;
+import io.signalharvester.collection.api.CollectionSourceStatus;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

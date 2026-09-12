@@ -1,5 +1,6 @@
 package io.signalharvester.analysis.persistence;
 
+import io.signalharvester.analysis.api.AnalysisItemInspection;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.Connection;

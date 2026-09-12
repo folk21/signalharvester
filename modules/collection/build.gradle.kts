@@ -19,7 +19,7 @@ dependencies {
     annotationProcessor("io.micronaut:micronaut-inject-java")
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
     annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
-    implementation(project(":modules:configuration"))
+    api(project(":modules:configuration"))
     implementation(project(":contracts:event-contracts"))
 
     implementation("io.micronaut.kafka:micronaut-kafka")

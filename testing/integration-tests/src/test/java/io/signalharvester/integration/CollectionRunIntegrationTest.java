@@ -7,15 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.micronaut.context.ApplicationContext;
-import io.signalharvester.collection.run.CollectionRunRequest;
-import io.signalharvester.collection.run.CollectionRunResult;
-import io.signalharvester.collection.run.CollectionRunService;
-import io.signalharvester.collection.run.CollectionRunStatus;
-import io.signalharvester.collection.run.CollectionSourceStatus;
+import io.signalharvester.collection.api.CollectionRunRequest;
+import io.signalharvester.collection.api.CollectionRunResult;
+import io.signalharvester.collection.api.CollectionRunner;
+import io.signalharvester.collection.api.CollectionRunStatus;
+import io.signalharvester.collection.api.CollectionSourceStatus;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceType;
-import io.signalharvester.configuration.application.SourceConfigurationCommand;
-import io.signalharvester.configuration.application.SourceConfigurationManager;
+import io.signalharvester.configuration.api.SourceConfigurationCommand;
+import io.signalharvester.configuration.api.SourceConfigurationOperations;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -112,13 +112,13 @@ class CollectionRunIntegrationTest {
 
     @Test
     void shouldCollectEnabledSourcesBestEffortAndPublishSuccessfulPayloads() throws Exception {
-        SourceConfigurationManager configuration = context.getBean(SourceConfigurationManager.class);
+        SourceConfigurationOperations configuration = context.getBean(SourceConfigurationOperations.class);
         ConfiguredSource alpha = configuration.create(command("A success", "/a-success", true));
         ConfiguredSource failing = configuration.create(command("B failure", "/b-failure", true));
         ConfiguredSource charlie = configuration.create(command("C success", "/c-success", true));
         configuration.create(command("D disabled", "/a-success", false));
 
-        CollectionRunResult result = context.getBean(CollectionRunService.class).run(
+        CollectionRunResult result = context.getBean(CollectionRunner.class).run(
                 new CollectionRunRequest("profile-integration", "JOB", Optional.empty()));
 
         assertEquals(CollectionRunStatus.PARTIALLY_SUCCEEDED, result.status());

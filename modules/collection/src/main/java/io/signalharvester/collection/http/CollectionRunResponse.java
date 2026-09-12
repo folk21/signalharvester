@@ -1,8 +1,8 @@
 package io.signalharvester.collection.http;
 
 import io.micronaut.serde.annotation.Serdeable;
-import io.signalharvester.collection.run.CollectionRunResult;
-import io.signalharvester.collection.run.CollectionRunStatus;
+import io.signalharvester.collection.api.CollectionRunResult;
+import io.signalharvester.collection.api.CollectionRunStatus;
 import java.time.Instant;
 import java.util.List;
 

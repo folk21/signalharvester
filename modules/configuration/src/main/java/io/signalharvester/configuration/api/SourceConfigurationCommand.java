@@ -1,14 +1,11 @@
-package io.signalharvester.configuration.application;
+package io.signalharvester.configuration.api;
 
-import io.signalharvester.configuration.api.ConfiguredSource;
-import io.signalharvester.configuration.api.SourceId;
-import io.signalharvester.configuration.api.SourceType;
 import java.net.URI;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * Carries validated source configuration input from the HTTP boundary into configuration use cases.
+ * Carries validated source configuration input into the configuration module application API.
  *
  * @param name human-readable source name
  * @param type collector type

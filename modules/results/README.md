@@ -22,3 +22,5 @@ The Gradle/source skeleton exists; concrete implementation is not yet establishe
 - [`../AGENTS.md`](../AGENTS.md)
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
 - [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md)
+
+See [`contract.md`](contract.md) for the current module boundary/context contract.

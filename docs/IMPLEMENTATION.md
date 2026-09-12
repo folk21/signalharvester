@@ -46,9 +46,11 @@ Implemented types:
 - `SourceId`;
 - `SourceType`;
 - `ConfiguredSource`;
-- `SourceConfigurationProvider`.
+- `SourceConfigurationProvider`;
+- `SourceConfigurationOperations`;
+- `SourceConfigurationCommand`.
 
-The API represents effective external-source configuration for cross-module use. `SourceConfigurationManager` implements the persisted CRUD use cases and is the concrete `SourceConfigurationProvider` bean.
+`SourceConfigurationProvider` remains the narrow effective-configuration contract used by collection. `SourceConfigurationOperations` is the administration application API used by the HTTP adapter. `SourceConfigurationManager` implements both interfaces; consumers no longer need the concrete manager class. The small API data surface is colocated under `configuration.api` rather than duplicated into a separate DTO package.
 
 Persistence uses an explicit JDBC adapter over Micronaut's managed Hikari `DataSource`. The configuration module owns PostgreSQL schema `configuration` and Flyway location `classpath:db/migration/configuration`; the initial migration creates `sources` and `source_settings`. `SourceConfigurationManager` owns write transaction boundaries through Micronaut JDBC transaction operations, while the JDBC adapter owns SQL/resource handling. Multi-statement source/settings writes therefore commit or roll back as one use case. Source names are intentionally not unique because `SourceId` is the stable identity.
 
@@ -75,8 +77,8 @@ Implemented types:
 - `CollectionConfiguration` — Jakarta-validated runtime collection settings;
 - `CollectionClockFactory` — module-owned qualified UTC clock used for deterministic transport and collection-run timestamps;
 - `SourceFetchCoordinator` — bounded best-effort worker coordination on Micronaut's blocking executor, preserving deterministic result order while using Virtual Threads on Java 21;
-- `CollectionRunService` — explicit collection execution over globally enabled sources through `SourceConfigurationProvider`;
-- `CollectionRunRequest` / `CollectionRunResult` — temporary caller-supplied profile/category context plus run id, timing, aggregate status, and per-source terminal outcomes;
+- `CollectionRunner` / `CollectionRunHistory` — published synchronous execution and operational-history interfaces; `CollectionRunService` and `CollectionRunHistoryQuery` are internal implementations; the module declares configuration as a Gradle `api` dependency because `CollectionSourceResult` intentionally exposes the stable `configuration.api.SourceId` type;
+- `CollectionRunRequest` / `CollectionRunResult` and their status/outcome types — collection API contract data for explicit run execution/history;
 - `RawItemIdentityFactory` — deterministic SHA-256 raw-item identity over source id, requested URI, and raw payload.
 
 The module also implements the first asynchronous publication boundary. `RawItemEventPublisher` accepts `FetchedSourceContent` plus explicit caller-owned publication metadata, including the stable raw-item identity; `KafkaRawItemEventPublisher` maps it to `RawItemDiscovered`, assigns a new event identity, serializes the generated Protobuf message to bytes, and sends an acknowledged Kafka record through a Micronaut `@KafkaClient`. The default topic is `signalharvester.collection.raw-item-discovered.v1`, the caller-owned `rawItemId` is the record key, and producer configuration uses String/byte-array serializers, `acks=all`, and Kafka producer idempotence. Generated Protobuf classes remain confined to the Kafka adapter/mapping boundary.
@@ -101,6 +103,8 @@ Generated Java transport classes are Gradle build output.
 Contract tests verify representative raw and analysis event round trips plus unknown additive-field tolerance. Collection publishes `RawItemDiscovered` as explicit Protobuf bytes; analysis consumes that contract and publishes explicit `ItemAnalyzed` or `ItemRejected` bytes. Event-observation decoding remains pending.
 
 ## Analysis module
+
+`modules:analysis` publishes only the bounded operational `AnalysisItemInspectionQuery` Java API. Its HTTP adapter depends on that interface through `AnalysisItemInspectionService`; persistence remains behind `AnalysisItemInspectionRepository`. Raw-item processing remains intentionally event-driven and its processor/analyzer/normalizer/publisher interfaces are internal ports rather than published module APIs.
 
 `modules:analysis` now owns the first deterministic asynchronous processing path after raw discovery. `RawItemKafkaListener` consumes `RawItemDiscovered` bytes with automatic offset commit disabled, maps generated Protobuf at the Kafka adapter boundary, invokes the analysis application model, and commits the consumed offset only after processing returns successfully.
 

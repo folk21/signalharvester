@@ -1,5 +1,11 @@
 package io.signalharvester.collection.run;
 
+import io.signalharvester.collection.api.CollectionRunRequest;
+import io.signalharvester.collection.api.CollectionRunResult;
+import io.signalharvester.collection.api.CollectionRunStatus;
+import io.signalharvester.collection.api.CollectionRunner;
+import io.signalharvester.collection.api.CollectionSourceResult;
+import io.signalharvester.collection.api.CollectionSourceStatus;
 import io.signalharvester.collection.configuration.CollectionClockFactory;
 import io.signalharvester.collection.event.RawItemEventPublisher;
 import io.signalharvester.collection.event.RawItemPublicationContext;
@@ -28,7 +34,7 @@ import org.slf4j.LoggerFactory;
  * workflow rather than a Netty event-loop thread.</p>
  */
 @Singleton
-public final class CollectionRunService {
+public final class CollectionRunService implements CollectionRunner {
 
     private static final Logger LOG = LoggerFactory.getLogger(CollectionRunService.class);
 
@@ -65,6 +71,7 @@ public final class CollectionRunService {
      * @param request caller-owned run context until monitoring profiles become persistent
      * @return explicit run identity, timing, aggregate status, and per-source outcomes
      */
+    @Override
     public CollectionRunResult run(CollectionRunRequest request) {
         Objects.requireNonNull(request, "request");
         String runId = runIdFactory.nextId();

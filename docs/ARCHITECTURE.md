@@ -23,7 +23,7 @@ Functional modules own complete capabilities rather than repository-wide technic
 - results;
 - event observation.
 
-Each module owns its model/use cases, persistence, adapters, tests, and public API. Cross-module synchronous access uses public Java contracts; internal implementation packages and private database tables are not cross-module APIs.
+Each module owns its model/use cases, persistence, adapters, tests, and public API. Deliberate synchronous module entry points live under `io.signalharvester.<module>.api` and are expressed as interfaces with only the minimal contract data they require. The `api` package is not a home for every Java interface: repositories, outbound clients, publishers, analyzers, and other internal ports stay internal unless they are intentionally published capabilities. Cross-module synchronous access may target only the providing module's `api..` package; internal implementation packages and private database tables are not cross-module APIs. Each module root also contains a concise `contract.md` that indexes its Java/OpenAPI/event surfaces, ownership, dependency rules, and invariants without duplicating source signatures.
 
 ## Communication boundaries
 

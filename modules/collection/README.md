@@ -35,7 +35,7 @@ The module now also owns the first Kafka publication boundary:
 - `CollectionKafkaConfiguration` owns the configurable versioned raw-item topic;
 - the Kafka record key is the caller-owned `rawItemId`, while each publication gets a new `eventId`; producer idempotence plus `acks=all` are enabled at the transport layer.
 
-The first collection-run application use case is also implemented:
+The first collection-run application use case is also implemented. Its published Java surface lives under `io.signalharvester.collection.api`: `CollectionRunner` executes runs, `CollectionRunHistory` reads durable history, and the run request/result/status types are the API contract data. `CollectionRunService` and `CollectionRunHistoryQuery` are internal implementations.
 
 - `CollectionRunService` obtains globally enabled sources only through `SourceConfigurationProvider`;
 - every execution receives an explicit `collectionRunId`, reused as Kafka correlation id;
@@ -48,6 +48,8 @@ The first collection-run application use case is also implemented:
 Parsing/extraction into multiple source items, persisted monitoring profiles, scheduling, and collection retry/DLQ policy are not implemented yet. Manual collection triggering and completed-run inspection are available through the operational API. Downstream normalization/deduplication and minimal deterministic analysis are now implemented by `modules:analysis`.
 
 Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, validate bounded best-effort coordination and collection-run status/correlation semantics, verify deterministic raw-item identity, verify Protobuf event mapping/serialization, and include a Kafka Testcontainers producer/consumer round-trip. `testing:integration-tests` covers both persisted enabled-source -> deterministic HTTP -> Kafka collection runs and the downstream raw Kafka -> analysis terminal-event chain.
+
+See [`contract.md`](contract.md) for the compact integration/context map. Internal interfaces such as `ExternalSourceClient` and `RawItemEventPublisher` are implementation ports, not published module APIs.
 
 ## Read next
 
