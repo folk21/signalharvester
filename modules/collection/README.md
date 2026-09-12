@@ -1,68 +1,36 @@
 ---
 type: Module Overview
 title: SignalHarvester collection module
-description: Explicit collection-run orchestration, configurable external-source access, and raw-item event publication ownership.
+description: Current implementation and developer entry point for collection-run orchestration and external-source acquisition.
 ---
 # SignalHarvester collection module
 
-## Ownership
+For module ownership, published Java APIs, event boundaries, data ownership, dependency rules, invariants, and extension points, read [`contract.md`](contract.md) first.
 
-Own due-work discovery, collection-run lifecycle, external HTTP/RSS/HTML access, parsing/extraction orchestration, and publication of discovered-item events.
+## Current implementation
 
-## Boundary
+The external-source transport path is implemented around a synchronous collection-owned fetch port and a Micronaut-managed HTTP adapter. Dynamic absolute source URLs are executed on Micronaut's blocking executor; on Java 21 that executor uses Virtual Threads. `SourceFetchCoordinator` still bounds concurrency independently of Virtual Thread cost and records source-level failures without cancelling unrelated work.
 
-External I/O must remain testable with deterministic fake sources. The generic HTTP path uses Micronaut's managed low-level HTTP client for dynamic absolute source URLs through a synchronous collection-owned contract executed on Micronaut's blocking executor. On Java 21 that executor uses Virtual Threads, keeping orchestration imperative while protecting Netty event-loop threads. Concurrency remains bounded independently of Virtual Thread cost.
+The HTTP adapter preserves response status, `Retry-After`, source provenance, response metadata, raw bytes, and fetch timestamps. Tests use deterministic loopback HTTP servers and cover multiple hosts, redirects, response-size limits, scoped filters, and bounded coordination.
 
-## Current state
+The Kafka publication path maps collection-owned data to `RawItemDiscovered`, publishes explicit Protobuf bytes with acknowledgement, uses the caller-owned `rawItemId` as the record key, and assigns a new `eventId` for each publication. Producer idempotence and `acks=all` are enabled at the transport layer.
 
-The first external-source transport boundary is implemented:
+Collection-run orchestration is implemented with explicit run identity, ordered per-source terminal outcomes, aggregate run status, deterministic raw-item identity, and durable completed-run history. Runs obtain enabled sources through the published configuration API. Fetch and publication failures are best-effort per source rather than cancelling unrelated source work.
 
-- `ExternalSourceClient` defines synchronous raw external-source fetching behind a module-owned interface;
-- `ExternalSourceHttpClient` is the internal blocking HTTP boundary and accepts validated `URI` values; `MicronautManagedExternalSourceHttpClient` executes those absolute requests through Micronaut's managed default client;
-- `ExternalSourceHttpFilter` owns common technical request headers and sanitized response diagnostics;
-- `MicronautExternalSourceClient` maps Micronaut transport responses/exceptions to collection-owned results/failures and preserves status/`Retry-After` metadata;
-- `FetchedSourceContent` preserves source provenance, response metadata, raw bytes, and fetch time;
-- `CollectionConfiguration` validates the configurable concurrency limit through Jakarta Validation;
-- `CollectionClockFactory` provides the qualified UTC clock used by collection transport timestamps;
-- `SourceFetchCoordinator` runs a bounded number of workers on Micronaut's blocking executor, preserves input order, and records source-level failures without cancelling unrelated work.
-
-The module now also owns the first Kafka publication boundary:
-
-- `RawItemEventPublisher` is the collection-owned internal publication port used by run orchestration;
-- `RawItemPublicationContext` supplies caller-owned raw-item identity plus correlation/profile/category/trace metadata without making the Kafka adapter own run or idempotency semantics;
-- `RawItemDiscoveredMapper` keeps generated Protobuf types inside the Kafka adapter boundary;
-- `KafkaRawItemEventPublisher` performs acknowledged publication of explicit Protobuf bytes;
-- `CollectionKafkaConfiguration` owns the configurable versioned raw-item topic;
-- the Kafka record key is the caller-owned `rawItemId`, while each publication gets a new `eventId`; producer idempotence plus `acks=all` are enabled at the transport layer.
-
-The first collection-run application use case is also implemented. Its published Java surface lives under `io.signalharvester.collection.api`: `CollectionRunner` executes runs, `CollectionRunHistory` reads durable history, and the run request/result/status types are the API contract data. `CollectionRunService` and `CollectionRunHistoryQuery` are internal implementations.
-
-- `CollectionRunService` obtains globally enabled sources only through `SourceConfigurationProvider`;
-- every execution receives an explicit `collectionRunId`, reused as Kafka correlation id;
-- `CollectionRunRequest` temporarily supplies monitoring-profile/category context until persisted profiles exist;
-- source fetch and Kafka publication are best-effort per source, producing deterministic `PUBLISHED`, `FETCH_FAILED`, or `PUBLICATION_FAILED` outcomes;
-- aggregate run status is `SUCCEEDED`, `PARTIALLY_SUCCEEDED`, or `FAILED`;
-- `RawItemIdentityFactory` derives a stable SHA-256 raw-item identity from source id, requested URI, and raw bytes so identical rediscovery keeps item identity across runs;
-- `CollectionRunResult` exposes run timing and ordered terminal source outcomes; completed snapshots are persisted for operational inspection.
-
-Parsing/extraction into multiple source items, persisted monitoring profiles, scheduling, and collection retry/DLQ policy are not implemented yet. Manual collection triggering and completed-run inspection are available through the operational API. Downstream normalization/deduplication and minimal deterministic analysis are now implemented by `modules:analysis`.
-
-Module tests exercise the Micronaut-managed HTTP transport against deterministic loopback HTTP servers, including multiple absolute hosts, response-size limits, redirects, and scoped filter behavior; they also verify Micronaut's blocking executor uses Virtual Threads, validate bounded best-effort coordination and collection-run status/correlation semantics, verify deterministic raw-item identity, verify Protobuf event mapping/serialization, and include a Kafka Testcontainers producer/consumer round-trip. `testing:integration-tests` covers both persisted enabled-source -> deterministic HTTP -> Kafka collection runs and the downstream raw Kafka -> analysis terminal-event chain.
-
-See [`contract.md`](contract.md) for the compact integration/context map. Internal interfaces such as `ExternalSourceClient` and `RawItemEventPublisher` are implementation ports, not published module APIs.
-
-## Read next
-
-- [`../AGENTS.md`](../AGENTS.md)
-- [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/archive/subspecs/backend-collection-run-orchestration.md`](../../docs/specs/archive/subspecs/backend-collection-run-orchestration.md)
-- [`../../docs/specs/active/subspecs/backend-event-contracts.md`](../../docs/specs/active/subspecs/backend-event-contracts.md)
-
-## Security note
-
-Source-management REST endpoints now persist configured URLs, but persistence is not outbound authorization. Until an explicit configurable outbound destination policy exists, expose source management only to trusted users/environments; the future policy must cover SSRF-sensitive addresses and redirects while preserving configurable loopback access for deterministic development and tests.
-
+Parsing/extraction into multiple source items, persisted monitoring profiles, scheduling, and collection retry/DLQ policy are not implemented yet. Downstream normalization/deduplication and deterministic analysis are implemented by `modules:analysis` through the Kafka flow.
 
 ## Operational API
 
-The module owns `/api/v1/admin/collection-runs` for manual blocking execution and bounded inspection of completed runs. Terminal run snapshots and ordered per-source outcomes are stored in the collection-owned PostgreSQL schema. This history is diagnostic/operational state and is not an atomic substitute for Kafka delivery guarantees.
+`/api/v1/admin/collection-runs` supports manual blocking execution and bounded inspection of completed runs. Terminal run snapshots and ordered per-source outcomes are stored in the collection-owned PostgreSQL schema. This history is diagnostic/operational state and is not an atomic substitute for Kafka delivery guarantees.
+
+## Security note
+
+Persisted source URLs are not outbound authorization. Until an explicit configurable outbound destination policy exists, expose source management only to trusted users/environments. A future policy must address SSRF-sensitive addresses and redirects while preserving configurable loopback access for deterministic development and tests.
+
+## Read next
+
+- [`contract.md`](contract.md) — authoritative module boundary and integration map
+- [`../AGENTS.md`](../AGENTS.md) — shared module-development rules
+- [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) — system architecture
+- [`../../docs/specs/archive/subspecs/backend-collection-run-orchestration.md`](../../docs/specs/archive/subspecs/backend-collection-run-orchestration.md) — completed run-orchestration history
+- [`../../docs/specs/active/subspecs/backend-event-contracts.md`](../../docs/specs/active/subspecs/backend-event-contracts.md) — active event-contract work

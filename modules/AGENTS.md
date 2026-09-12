@@ -81,4 +81,8 @@ Prefer tests and multi-module fixtures to resolve published API interfaces when 
 
 ## Documentation
 
-Each module README owns concise purpose/boundary/current-state information. `contract.md` owns the compact integration/context map. Add a module `IMPLEMENTATION.md` only when concrete classes/call paths become substantial enough to justify a separate current-state document.
+`contract.md` is authoritative for module ownership, published integration surfaces, data ownership, dependency rules, forbidden access, invariants, and extension points. Do not duplicate those sections in the module README beyond a short link or implementation-specific explanation.
+
+Each module README is the developer entry point for current implementation state, runtime/operational behavior, known limitations, and navigation to deeper documentation. Put an explicit link to `contract.md` near the top and again in the "Read next" section.
+
+Add a module `IMPLEMENTATION.md` only when concrete classes/call paths become substantial enough to justify a separate current-state document.

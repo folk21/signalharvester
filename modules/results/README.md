@@ -1,26 +1,21 @@
 ---
 type: Module Overview
 title: SignalHarvester results module
-description: Persisted result/read-model and result-facing API ownership.
+description: Developer entry point for the planned persisted result/read-model capability.
 ---
 # SignalHarvester results module
 
-## Ownership
+For planned ownership, dependency constraints, invariants, and future integration boundaries, read [`contract.md`](contract.md) first.
 
-Own the result projection/read model used for browsing discovered/analyzed information and result-oriented REST/SSE behavior.
+## Current implementation
 
-## Boundary
+Only the Gradle/source skeleton exists. Results persistence, result-facing REST/SSE APIs, and event consumption are not implemented yet.
 
-Do not expose private analysis or collection persistence directly to browser clients.
-
-## Current state
-
-The Gradle/source skeleton exists; concrete implementation is not yet established.
+Implementation should begin from the boundary and idempotency constraints in [`contract.md`](contract.md), rather than by reading private analysis or collection persistence.
 
 ## Read next
 
-- [`../AGENTS.md`](../AGENTS.md)
-- [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md)
-
-See [`contract.md`](contract.md) for the current module boundary/context contract.
+- [`contract.md`](contract.md) — authoritative module boundary and integration map
+- [`../AGENTS.md`](../AGENTS.md) — shared module-development rules
+- [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) — system architecture
+- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md) — remaining structural acceptance work

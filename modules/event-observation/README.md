@@ -1,26 +1,21 @@
 ---
 type: Module Overview
 title: SignalHarvester event observation module
-description: Technical event-history, correlation, and flow-visualization support ownership.
+description: Developer entry point for the planned technical event-observation capability.
 ---
 # SignalHarvester event observation module
 
-## Ownership
+For planned ownership, dependency constraints, invariants, and future integration boundaries, read [`contract.md`](contract.md) first.
 
-Own technical event observation needed to reconstruct and present how events move through the system.
+## Current implementation
 
-## Boundary
+Only the Gradle/source skeleton exists. Event-history projections, correlation/flow reconstruction, browser-facing diagnostic APIs, and SSE behavior are not implemented yet.
 
-Expose browser-friendly diagnostic JSON through backend APIs; the browser must not consume Kafka/Protobuf directly.
-
-## Current state
-
-The Gradle/source skeleton exists; concrete implementation is not yet established.
+Future implementation should consume published event contracts and expose observation-owned projections; it must not become a backdoor into other modules' implementation packages or private tables. The authoritative rule is defined in [`contract.md`](contract.md).
 
 ## Read next
 
-- [`../AGENTS.md`](../AGENTS.md)
-- [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md)
-
-See [`contract.md`](contract.md) for the current module boundary/context contract.
+- [`contract.md`](contract.md) — authoritative module boundary and integration map
+- [`../AGENTS.md`](../AGENTS.md) — shared module-development rules
+- [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) — system architecture
+- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md) — remaining structural acceptance work
