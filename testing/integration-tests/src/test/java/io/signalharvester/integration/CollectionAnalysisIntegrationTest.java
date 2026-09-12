@@ -110,9 +110,9 @@ class CollectionAnalysisIntegrationTest {
                 Map.entry("signalharvester.kafka.item-analyzed-topic", ANALYZED_TOPIC),
                 Map.entry("signalharvester.kafka.item-rejected-topic", REJECTED_TOPIC),
                 Map.entry("signalharvester.analysis.consumer-group", ANALYSIS_GROUP),
-                Map.entry("signalharvester.analysis.keyword-rules.keywords[0]", "java"),
-                Map.entry("signalharvester.analysis.keyword-rules.keywords[1]", "kafka"),
-                Map.entry("signalharvester.analysis.keyword-rules.keywords[2]", "postgresql"),
+                Map.entry(
+                        "signalharvester.analysis.keyword-rules.keywords",
+                        List.of("java", "kafka", "postgresql")),
                 Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1),
                 Map.entry("signalharvester.collection.max-concurrency", 2)));
     }

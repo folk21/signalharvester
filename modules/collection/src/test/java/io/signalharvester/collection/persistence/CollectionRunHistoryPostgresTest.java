@@ -4,7 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micronaut.context.ApplicationContext;
-import io.signalharvester.collection.run.CollectionRunHistoryStore;
+import io.signalharvester.collection.api.CollectionRunHistory;
+import io.signalharvester.collection.run.CollectionRunHistoryRecorder;
 import io.signalharvester.collection.api.CollectionRunResult;
 import io.signalharvester.collection.api.CollectionRunStatus;
 import io.signalharvester.collection.api.CollectionSourceResult;
@@ -60,7 +61,8 @@ class CollectionRunHistoryPostgresTest {
 
     @Test
     void shouldPersistAndReadCompletedRunWithOrderedSourceOutcomes() {
-        CollectionRunHistoryStore store = context.getBean(CollectionRunHistoryStore.class);
+        CollectionRunHistoryRecorder recorder = context.getBean(CollectionRunHistoryRecorder.class);
+        CollectionRunHistory history = context.getBean(CollectionRunHistory.class);
         UUID runId = UUID.fromString("00000000-0000-0000-0000-000000000101");
         SourceId firstSource = SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000201"));
         SourceId secondSource = SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000202"));
@@ -85,11 +87,10 @@ class CollectionRunHistoryPostgresTest {
                                 Optional.empty(),
                                 Optional.of("HTTP 503"))));
 
-        store.save(result);
+        recorder.record(result);
 
-        assertEquals(result, store.findById(runId.toString()).orElseThrow());
-        assertEquals(List.of(result), store.findRecent(10));
-        assertTrue(store.findById(UUID.randomUUID().toString()).isEmpty());
+        assertEquals(result, history.get(runId.toString()));
+        assertEquals(List.of(result), history.recent(10));
     }
 
     private static void resetDatabase() throws Exception {

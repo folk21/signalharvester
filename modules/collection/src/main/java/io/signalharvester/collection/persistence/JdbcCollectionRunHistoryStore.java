@@ -19,7 +19,10 @@ import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 
-/** PostgreSQL adapter for collection-owned operational run history. */
+/**
+ * PostgreSQL adapter for collection-owned operational run history.
+ * Transaction boundaries are owned by collection application use cases.
+ */
 @Singleton
 public final class JdbcCollectionRunHistoryStore implements CollectionRunHistoryStore {
     private final DataSource dataSource;
@@ -31,18 +34,8 @@ public final class JdbcCollectionRunHistoryStore implements CollectionRunHistory
     @Override
     public void save(CollectionRunResult result) {
         try (Connection connection = dataSource.getConnection()) {
-            boolean autoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
-                insertRun(connection, result);
-                insertSources(connection, result);
-                connection.commit();
-            } catch (SQLException exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(autoCommit);
-            }
+            insertRun(connection, result);
+            insertSources(connection, result);
         } catch (SQLException exception) {
             throw new CollectionRunPersistenceException("Failed to persist collection run history", exception);
         }

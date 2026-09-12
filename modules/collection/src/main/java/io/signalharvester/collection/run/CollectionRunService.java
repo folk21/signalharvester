@@ -43,7 +43,7 @@ public final class CollectionRunService implements CollectionRunner {
     private final RawItemEventPublisher eventPublisher;
     private final RawItemIdentityFactory rawItemIdentityFactory;
     private final CollectionRunIdFactory runIdFactory;
-    private final CollectionRunHistoryStore historyStore;
+    private final CollectionRunHistoryRecorder historyRecorder;
     private final Clock clock;
 
     public CollectionRunService(
@@ -52,7 +52,7 @@ public final class CollectionRunService implements CollectionRunner {
             RawItemEventPublisher eventPublisher,
             RawItemIdentityFactory rawItemIdentityFactory,
             CollectionRunIdFactory runIdFactory,
-            CollectionRunHistoryStore historyStore,
+            CollectionRunHistoryRecorder historyRecorder,
             @Named(CollectionClockFactory.COLLECTION_CLOCK) Clock clock) {
         this.sourceConfigurationProvider = Objects.requireNonNull(
                 sourceConfigurationProvider, "sourceConfigurationProvider");
@@ -60,7 +60,7 @@ public final class CollectionRunService implements CollectionRunner {
         this.eventPublisher = Objects.requireNonNull(eventPublisher, "eventPublisher");
         this.rawItemIdentityFactory = Objects.requireNonNull(rawItemIdentityFactory, "rawItemIdentityFactory");
         this.runIdFactory = Objects.requireNonNull(runIdFactory, "runIdFactory");
-        this.historyStore = Objects.requireNonNull(historyStore, "historyStore");
+        this.historyRecorder = Objects.requireNonNull(historyRecorder, "historyRecorder");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -101,7 +101,7 @@ public final class CollectionRunService implements CollectionRunner {
                 finishedAt,
                 status,
                 sourceResults);
-        historyStore.save(result);
+        historyRecorder.record(result);
         return result;
     }
 

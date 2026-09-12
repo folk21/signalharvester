@@ -33,5 +33,10 @@ zip -qr "$OUT" signalharvester \
   -x 'signalharvester/signalharvester_files.txt' \
   -x 'signalharvester/**/.DS_Store'
 
+WRAPPER_JAR='signalharvester/gradle/wrapper/gradle-wrapper.jar'
+if [ -f "$WRAPPER_JAR" ]; then
+  zip -q "$OUT" "$WRAPPER_JAR"
+fi
+
 echo "$OUT"
 

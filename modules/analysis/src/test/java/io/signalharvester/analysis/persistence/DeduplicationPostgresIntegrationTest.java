@@ -1,11 +1,14 @@
 package io.signalharvester.analysis.persistence;
 
 import io.signalharvester.analysis.api.AnalysisItemInspection;
+import io.signalharvester.analysis.api.AnalysisItemInspectionQuery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.inject.qualifiers.Qualifiers;
+import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.analysis.model.NormalizedContentItem;
 import java.net.URI;
 import java.sql.Connection;
@@ -13,6 +16,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
@@ -46,7 +50,7 @@ class DeduplicationPostgresIntegrationTest {
                 Map.entry("flyway.datasources.default.enabled", true),
                 Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/analysis"),
                 Map.entry("kafka.enabled", false),
-                Map.entry("signalharvester.analysis.keyword-rules.keywords[0]", "java"),
+                Map.entry("signalharvester.analysis.keyword-rules.keywords", List.of("java")),
                 Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1)));
     }
 
@@ -60,18 +64,24 @@ class DeduplicationPostgresIntegrationTest {
     @Test
     void shouldDeduplicateWithinProfileAndAllowSameLogicalItemForAnotherProfile() throws Exception {
         DeduplicationClaimRepository repository = context.getBean(DeduplicationClaimRepository.class);
+        @SuppressWarnings("unchecked")
+        TransactionOperations<Connection> transactions = context.getBean(
+                TransactionOperations.class, Qualifiers.byName("default"));
         Instant firstSeen = Instant.parse("2026-09-10T18:00:00Z");
         NormalizedContentItem first = item("profile-a", "raw-01", "event-01");
         NormalizedContentItem duplicate = item("profile-a", "raw-02", "event-02");
         NormalizedContentItem otherProfile = item("profile-b", "raw-03", "event-03");
 
-        assertTrue(repository.tryClaim(first, firstSeen));
-        assertFalse(repository.tryClaim(duplicate, firstSeen.plusSeconds(10)));
-        repository.recordDuplicate(duplicate, firstSeen.plusSeconds(10));
-        assertTrue(repository.tryClaim(otherProfile, firstSeen.plusSeconds(20)));
+        transactions.executeWrite(status -> {
+            assertTrue(repository.tryClaim(first, firstSeen));
+            assertFalse(repository.tryClaim(duplicate, firstSeen.plusSeconds(10)));
+            repository.recordDuplicate(duplicate, firstSeen.plusSeconds(10));
+            assertTrue(repository.tryClaim(otherProfile, firstSeen.plusSeconds(20)));
+            return null;
+        });
 
-        AnalysisItemInspectionRepository inspection = context.getBean(AnalysisItemInspectionRepository.class);
-        assertEquals(2, inspection.findRecent(10, Optional.empty(), Optional.empty()).size());
+        AnalysisItemInspectionQuery inspection = context.getBean(AnalysisItemInspectionQuery.class);
+        assertEquals(2, inspection.recent(10, Optional.empty(), Optional.empty()).size());
         AnalysisItemInspection inspected = inspection.find(
                 "profile-a",
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").orElseThrow();

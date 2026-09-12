@@ -174,7 +174,7 @@ class CollectionRunServiceTest {
                 publisher,
                 new RawItemIdentityFactory(),
                 new CollectionRunIdFactory(() -> UUID.fromString(RUN_ID)),
-                new InMemoryHistoryStore(),
+                new InMemoryHistoryRecorder(),
                 Clock.fixed(RUN_TIME, ZoneOffset.UTC));
     }
 
@@ -202,22 +202,10 @@ class CollectionRunServiceTest {
                 RUN_TIME);
     }
 
-    private static final class InMemoryHistoryStore implements CollectionRunHistoryStore {
-        private CollectionRunResult result;
-
+    private static final class InMemoryHistoryRecorder implements CollectionRunHistoryRecorder {
         @Override
-        public void save(CollectionRunResult result) {
-            this.result = result;
-        }
-
-        @Override
-        public List<CollectionRunResult> findRecent(int limit) {
-            return result == null ? List.of() : List.of(result);
-        }
-
-        @Override
-        public Optional<CollectionRunResult> findById(String collectionRunId) {
-            return Optional.ofNullable(result).filter(value -> value.collectionRunId().equals(collectionRunId));
+        public void record(CollectionRunResult result) {
+            // Intentionally no-op: unit tests assert run behavior, not persistence.
         }
     }
 
