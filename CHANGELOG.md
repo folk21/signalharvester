@@ -43,6 +43,8 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-12 — Separated integration-tagged Testcontainers/cross-module tests from the default Gradle `test` lifecycle with explicit `integrationTest` tasks.
 
+2026-09-12 — Strengthened test lifecycle isolation by moving container-backed and cross-module scenarios into dedicated `integrationTest` source sets instead of relying on JUnit tags.
+
 2026-09-12 — Standardized published module Java APIs under `api` packages, added module boundary contracts/selective-context guidance, and introduced ArchUnit enforcement for cross-module dependencies.
 
 2026-09-12 — Reconciled current-state documentation and active-spec lifecycle with the implemented REST/admin APIs, persistence, Redpanda infrastructure, dedicated integration-test tasks, and module API boundaries; removed duplicate active copies of archived sub-specifications.

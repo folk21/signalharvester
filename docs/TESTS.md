@@ -23,13 +23,13 @@ Default automated tests must not require public network access, live external we
 
 Use the repository Gradle Wrapper.
 
-Fast/default verification excludes tests tagged `integration`:
+Fast/default verification compiles and runs only the regular `src/test` source sets:
 
 ```bash
 ./gradlew test
 ```
 
-The root build applies this rule to every Java subproject. A module may therefore have zero tests in its default `test` task when all of its current scenarios are integration-tagged.
+Container-backed integration tests live in dedicated `src/integrationTest` source sets and are therefore structurally absent from the default `test` lifecycle. A module may have no regular tests even when it owns integration coverage.
 
 Run all container-backed and cross-module integration tests explicitly:
 
@@ -37,7 +37,7 @@ Run all container-backed and cross-module integration tests explicitly:
 ./gradlew integrationTest
 ```
 
-Focused commands follow the same split:
+Focused commands follow the same source-set split:
 
 ```bash
 ./gradlew :modules:configuration:test
@@ -52,6 +52,8 @@ Focused commands follow the same split:
 ```
 
 On systems where executable permission is not preserved after extracting an archive, use `bash ./gradlew ...` or restore the executable bit.
+
+When adding integration coverage, place it under `src/integrationTest/java` (and `src/integrationTest/resources` when needed). Do not put Testcontainers or cross-module integration scenarios under `src/test` and rely on tags to keep them out of the fast lifecycle.
 
 ## Integration infrastructure
 

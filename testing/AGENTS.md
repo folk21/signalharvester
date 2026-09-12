@@ -20,3 +20,5 @@ Use deterministic fake HTTP sources and controllable time/ID sources where behav
 ## Real infrastructure
 
 Use Testcontainers for PostgreSQL and Kafka when persistence/serialization/transaction/consumer behavior matters. Do not mock away the integration behavior a test is intended to validate.
+
+Place container-backed and cross-module integration tests under the owning project's `src/integrationTest/java` source set. Keep `src/test/java` for fast tests that are safe to execute in the default `test` lifecycle. Do not rely on JUnit tags as the primary lifecycle boundary.

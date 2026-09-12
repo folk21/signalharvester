@@ -23,13 +23,11 @@ import java.sql.Statement;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Tag("integration")
 @Testcontainers(disabledWithoutDocker = true)
 class ConfigurationPostgresIntegrationTest {
 

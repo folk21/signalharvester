@@ -116,10 +116,12 @@ Direct cross-module table access remains forbidden.
 
 ## Testing implementation
 
-The root Gradle build separates fast/default tests from tests tagged `integration`:
+The root Gradle build separates fast/default tests from integration tests through distinct source sets:
 
-- `./gradlew test` excludes integration-tagged Testcontainers/cross-module scenarios;
-- `./gradlew integrationTest` runs integration-tagged scenarios explicitly.
+- `./gradlew test` runs only regular `src/test` unit/behavior/contract tests;
+- `./gradlew integrationTest` runs dedicated `src/integrationTest` scenarios, including Testcontainers and cross-module flows.
+
+The separation is structural rather than tag-based, so a correctly placed integration test cannot accidentally execute as part of the default `test` lifecycle.
 
 Architecture enforcement includes `ModuleBoundaryArchitectureTest`, which rejects production dependencies from one functional module to another module outside the providing module's `api..` package.
 

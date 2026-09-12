@@ -75,7 +75,9 @@ Architecture tests should protect meaningful dependency direction and must not f
 
 ## Testing
 
-Keep module behavior tests with the module. Use deterministic adapters/fakes for unit tests and shared Testcontainers-based integration tests where real Kafka/PostgreSQL behavior matters.
+Keep module behavior tests with the module. Use deterministic adapters/fakes for unit tests and Testcontainers-based integration tests where real Kafka/PostgreSQL behavior matters.
+
+Put fast module tests in `src/test/java` and container-backed integration tests in `src/integrationTest/java`. The separate Gradle source sets are the lifecycle boundary; do not depend on JUnit tags to prevent an integration test from entering the default `test` task.
 
 Prefer tests and multi-module fixtures to resolve published API interfaces when the purpose is to exercise a module as a consumer would. Tests dedicated to one internal adapter may still use the internal contract directly.
 
