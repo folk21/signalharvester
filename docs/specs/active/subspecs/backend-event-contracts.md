@@ -10,7 +10,7 @@ spec_status: active
 
 ## Status
 
-Active technical sub-specification — initial asynchronous event-contract model.
+Active supporting technical sub-specification — raw and analysis schemas, generation workflow, collection/analysis Kafka adapters, explicit byte serialization, and Testcontainers round trips exist. Event Explorer decoding, compatibility fixtures for evolved published schemas, and later event families remain pending.
 
 This specification refines the umbrella event-driven requirements and the backend modular-monolith structure. It defines how Kafka integration events are represented without turning Protocol Buffers into a universal internal application model.
 
@@ -202,9 +202,9 @@ This specification is satisfied for the first vertical slice when:
 1. Define `common/v1/event-envelope.proto`.
 2. Define the first `collection/v1/raw-item-discovered.proto` contract.
 3. Configure Gradle Protobuf generation in `contracts:event-contracts`.
-4. Add Protobuf serializer/deserializer adapters at the Kafka boundary.
+4. Add Protobuf serializer/deserializer adapters at Kafka producer/consumer boundaries as those boundaries are implemented.
 5. Add contract-level serialization tests.
-6. Add a Kafka/Testcontainers producer-consumer integration test.
+6. Add Kafka/Testcontainers producer-consumer integration tests for implemented event flows.
 7. Add Event Explorer decoding/mapping for the first event type.
 8. Add compatibility fixtures before evolving the first published schema.
 9. Evaluate Schema Registry only after the basic contract workflow is stable.

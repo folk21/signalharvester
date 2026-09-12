@@ -23,7 +23,7 @@ Functional modules own complete capabilities rather than repository-wide technic
 - results;
 - event observation.
 
-Each module owns its model/use cases, persistence, adapters, tests, and public API. Cross-module synchronous access uses public Java contracts; internal implementation packages and private database tables are not cross-module APIs.
+Each module owns its model/use cases, persistence, adapters, tests, and public API. Deliberate synchronous module entry points live under `io.signalharvester.<module>.api` and are expressed as interfaces with only the minimal contract data they require. The `api` package is not a home for every Java interface: repositories, outbound clients, publishers, analyzers, and other internal ports stay internal unless they are intentionally published capabilities. Cross-module synchronous access may target only the providing module's `api..` package; internal implementation packages and private database tables are not cross-module APIs. Each module root also contains a concise `contract.md` that indexes its Java/OpenAPI/event surfaces, ownership, dependency rules, and invariants without duplicating source signatures.
 
 ## Communication boundaries
 
@@ -42,11 +42,25 @@ Transactional outbox and idempotent-consumer patterns are introduced where event
 
 ## External collection boundary
 
-Collection is configuration-driven where practical. External I/O remains behind testable boundaries and is a primary use case for straightforward blocking Java code running on Virtual Threads with bounded concurrency and explicit timeouts/retries.
+Collection is configuration-driven where practical. External I/O remains behind testable boundaries. The generic HTTP transport uses Micronaut's managed low-level HTTP client with absolute request URIs and a synchronous module-facing contract executed on Micronaut's blocking executor. On the Java 21 baseline that executor uses Virtual Threads, which keeps collection workflows imperative without blocking Netty event-loop threads.
+
+Collection concurrency remains explicitly bounded independently of thread cost. A collection run treats source-level fetch/publication failures as best-effort outcomes: failure of one source does not cancel unrelated source work. The explicit collection run id is the correlation id for raw-item events produced by that run. HTTP connect/read/request timeouts, response-size limits, redirect limits, and connection-pool limits remain explicit runtime configuration. Client filters own only cross-cutting transport concerns; collection adapters own status/error interpretation, including normalization of Micronaut response exceptions. Configured targets currently assume trusted application configuration; before source-management APIs are exposed to untrusted users, outbound network destination policy must address SSRF-sensitive loopback, link-local, private-network, and redirect targets without breaking deterministic local development sources.
+
+## Analysis processing boundary
+
+Analysis consumes versioned raw-item Kafka bytes at an adapter boundary and immediately maps them into module-owned semantic models. Generated Protobuf classes remain transport types; normalization, deduplication, analyzer logic, and persistence do not depend on generated messages.
+
+Normalization precedes deduplication and analysis. Logical item identity is stable across collection runs and monitoring profiles: an explicit source external id is preferred, otherwise identity is derived from normalized source URL/content plus source identity. Duplicate acceptance is monitoring-profile scoped, so the same logical item may be independently relevant to different profiles. Analysis owns its durable deduplication state in PostgreSQL.
+
+The initial analyzer is deterministic and replaceable through `ContentAnalyzer`; external AI is not a core dependency. Raw Kafka offsets are committed explicitly only after terminal analysis processing completes. The current JDBC-state + Kafka-publication window deliberately favors retryability when publication fails but is not distributed exactly-once; downstream result persistence must be idempotent until transactional outbox or an equivalent stronger strategy is introduced.
+
+## HTTP server execution boundary
+
+Micronaut Netty event-loop threads must not run blocking application work. REST controller methods or classes that invoke JDBC, blocking HTTP, or other imperative blocking workflows use `@ExecuteOn(TaskExecutors.BLOCKING)`. On the Java 21 baseline this means Virtual Threads. True streaming endpoints such as SSE keep their `Publisher`/reactive execution model and are not moved to blocking execution mechanically. Expected API/domain failures should be translated at the HTTP boundary through Micronaut `ExceptionHandler` implementations rather than repeated controller `try/catch` blocks; handlers and filters remain non-blocking unless explicitly offloaded.
 
 ## UI boundary
 
-The web UI lives in the separate `signalharvester-ui` repository. This repository owns backend REST/OpenAPI and SSE contracts; the UI repository owns React/TypeScript implementation and UI-specific specifications.
+The web UI lives in the separate `signalharvester-web` repository. This repository owns backend REST/OpenAPI and SSE contracts; the UI repository owns React/TypeScript implementation and UI-specific specifications.
 
 ## Observability and deployment
 

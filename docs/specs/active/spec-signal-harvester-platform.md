@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-project-structure.md
+current_focus: subspecs/backend-operational-admin-api.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -14,15 +14,15 @@ Active specification — initial product and architecture definition.
 
 This document defines the first functional product target for SignalHarvester. It is the umbrella specification for the system and intentionally focuses on product behavior, system boundaries, observable data flow, and acceptance targets rather than detailed service implementation.
 
-Backend, infrastructure, observability, persistence, and source-connector implementation details should be refined in bounded backend sub-specifications under `subspecs/` as implementation begins. Frontend-specific implementation details belong to the separate `signalharvester-ui` repository and its own `docs/specs/` tree. Sub-specifications may narrow technical choices but must preserve the requirements and invariants defined here unless this umbrella specification is explicitly updated.
+Backend, infrastructure, observability, persistence, and source-connector implementation details should be refined in bounded backend sub-specifications under `subspecs/` as implementation begins. Frontend-specific implementation details belong to the separate `signalharvester-web` repository and its own `docs/specs/` tree. Sub-specifications may narrow technical choices but must preserve the requirements and invariants defined here unless this umbrella specification is explicitly updated.
 
 ## Active implementation focus
 
-The current technical focus is the backend modular-monolith structure defined in `subspecs/backend-project-structure.md` and the Kafka/Protocol Buffers contract model defined in `subspecs/backend-event-contracts.md`.
+The current technical focus is verification and acceptance of the operational administration slice defined in `subspecs/backend-operational-admin-api.md`: manual collection execution, durable run/history inspection, and read-only analysis inspection. The modular-monolith boundary rules in `subspecs/backend-project-structure.md`, the Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md`, and the verification-pending configuration persistence slice remain active supporting specifications. Collection-to-Kafka transport, collection-run orchestration, and normalization/deduplication/minimal deterministic analysis are archived after implementation and developer verification.
 
 SignalHarvester starts with one deployable backend application composed from cohesive Gradle modules. Each functional module owns its behavior and infrastructure details, exposes narrow contracts where collaboration is required, and owns its persistence logically. Kafka remains an explicit asynchronous boundary between selected modules so event flow, replay, retries, lag, and future service extraction remain first-class concerns.
 
-Backend infrastructure specifications will refine this umbrella specification later. Frontend-specific technical specifications will live in the companion `signalharvester-ui` repository.
+The current backend already contains the runnable Micronaut composition root, PostgreSQL/Flyway-backed source configuration with REST CRUD, versioned raw/analysis Protobuf schemas, the generic collection HTTP transport with bounded Virtual Thread execution, collection-owned `RawItemDiscovered` publication, collection-run orchestration over enabled sources, durable completed-run history, and the first analysis consumer with normalization, durable profile-scoped deduplication, deterministic keyword classification, terminal analysis-event publication, and read-only operational inspection. Persisted monitoring profiles/scheduling, results persistence/read APIs, SSE/event observation, stronger DB/Kafka consistency, Kubernetes deployment, and production observability remain pending. Repository-owned Docker Compose provides local PostgreSQL and Kafka-compatible Redpanda development dependencies. Frontend-specific technical specifications live in the companion `signalharvester-web` repository.
 
 ## Goal
 
@@ -76,12 +76,12 @@ The browser communicates with application APIs over HTTP-based application proto
 
 ## Current state
 
-No production implementation is assumed by this specification.
+The repository has an implemented backend foundation, but the end-to-end product described by this umbrella is not complete. Current-state details remain owned by `docs/IMPLEMENTATION.md`; this section records only the technology direction that constrains active work.
 
 The intended initial technology direction is:
 
 - Java with Micronaut for backend services;
-- Java Virtual Threads for suitable blocking I/O workloads, especially external source collection;
+- Micronaut-managed HTTP client for generic source access, using low-level absolute requests for configuration-driven dynamic hosts, with blocking collection workflows executed on bounded Virtual Threads and `Publisher` reserved for true streaming boundaries;
 - Apache Kafka for asynchronous event transport;
 - Protocol Buffers for Kafka integration-event wire contracts;
 - PostgreSQL for application persistence;
@@ -411,11 +411,13 @@ The first minimal vertical slice may defer full outbox implementation only if th
 
 ### R23 — concurrency model suitable for external I/O
 
-External collection is expected to be dominated by blocking network I/O.
+External collection is expected to be dominated by network I/O.
 
-The Java backend should use a concurrency model that permits many concurrent source requests without requiring reactive programming merely for scalability.
+The Java backend must keep concurrency models explicit and simple. Generic external-source retrieval uses Micronaut's managed low-level HTTP client for dynamic absolute URLs through a synchronous module-facing contract executed on Micronaut's blocking executor. On the Java 21 baseline that executor uses Virtual Threads, allowing imperative collection workflows without blocking Netty event-loop threads.
 
-Java Virtual Threads are the preferred initial mechanism for suitable blocking collection workloads. Concurrency limits, timeouts, and protection against overwhelming external services must remain explicit.
+Concurrency limits, connect/read/request timeouts, response-size limits, redirect limits, connection-pool limits, and protection against overwhelming external services must remain explicit. Before source configuration is accepted from untrusted users, outbound destination policy must also cover SSRF-sensitive addresses and redirect targets. The low cost of Virtual Threads must not be treated as permission for unbounded external concurrency. `Publisher`/reactive types remain appropriate for genuine streaming boundaries such as SSE.
+
+REST controller operations that invoke JDBC, blocking HTTP, or other blocking application workflows must be offloaded with `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking executor boundary. Streaming/reactive controller methods must not be moved to blocking execution mechanically. Client/server filters must remain non-blocking unless they explicitly offload blocking work. Expected API/domain failures should be translated through Micronaut HTTP exception handlers rather than repeated controller-local error mapping.
 
 ### R24 — Kubernetes deployment
 
@@ -605,8 +607,8 @@ The initial product does not require:
 - Treat Kafka as asynchronous transport and durable event infrastructure, not as a replacement for all application persistence.
 - Keep the browser isolated from infrastructure protocols.
 - Prefer SSE over WebSocket for initial unidirectional live streams; introduce WebSocket only for a demonstrated bidirectional requirement.
-- Prefer blocking, readable Java code with Virtual Threads for suitable network-I/O concurrency rather than introducing a reactive programming model by default.
-- Preserve backpressure through bounded concurrency, Kafka consumer flow control, and explicit resource limits even when Virtual Threads make thread creation inexpensive.
+- Keep blocking application workflows imperative and run them on Micronaut's blocking executor, which is Virtual-Thread backed on the Java 21 baseline; never block Netty event-loop threads.
+- Preserve backpressure through bounded source concurrency, HTTP connection/resource limits, Kafka consumer flow control, and explicit downstream capacity limits. Use `Publisher` for genuinely streaming boundaries such as SSE rather than forcing all workflows into one concurrency model.
 - Keep collection adapters isolated from normalized domain processing.
 - Prefer configuration-driven integration when sources share a common protocol/extraction model.
 - Keep analysis replaceable and allow deterministic non-AI operation.

@@ -7,8 +7,3 @@ java {
         languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
-
-dependencies {
-    implementation(project(":common"))
-    implementation(project(":contracts:event-contracts"))
-}

@@ -17,26 +17,47 @@ Default automated tests must not require public network access, live external we
 - contract tests live with API/event contract ownership;
 - reusable deterministic fixtures belong in `testing/test-support` only when genuinely shared;
 - cross-module/backend integration tests belong in `testing/integration-tests`;
-- architectural dependency checks may use ArchUnit when meaningful package boundaries exist.
+- architectural dependency checks use ArchUnit for the established functional-module package boundaries.
 
 ## Current validation commands
 
 Use the repository Gradle Wrapper.
 
+Fast/default verification excludes tests tagged `integration`:
+
+```bash
+./gradlew test
+```
+
+The root build applies this rule to every Java subproject. A module may therefore have zero tests in its default `test` task when all of its current scenarios are integration-tagged.
+
+Run all container-backed and cross-module integration tests explicitly:
+
+```bash
+./gradlew integrationTest
+```
+
+Focused commands follow the same split:
+
 ```bash
 ./gradlew :modules:configuration:test
+./gradlew :modules:configuration:integrationTest
+./gradlew :modules:collection:test
+./gradlew :modules:collection:integrationTest
+./gradlew :modules:analysis:test
+./gradlew :modules:analysis:integrationTest
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
-./gradlew test
+./gradlew :testing:integration-tests:integrationTest
 ```
 
 On systems where executable permission is not preserved after extracting an archive, use `bash ./gradlew ...` or restore the executable bit.
 
 ## Integration infrastructure
 
-`testing:integration-tests` already declares Testcontainers support for PostgreSQL and Kafka. Add container-backed tests only when the scenario exercises real persistence or Kafka behavior.
+`modules:configuration` uses PostgreSQL Testcontainers for its persistence/server boundary. `modules:collection` uses Kafka Testcontainers for its producer/consumer transport boundary. `modules:analysis` uses PostgreSQL Testcontainers for durable deduplication. `testing:integration-tests` uses PostgreSQL + Kafka Testcontainers together for collection-run and collection-to-analysis flows. Container-backed tests require a supported Docker-compatible runtime.
 
-External HTTP sources must be deterministic local/fake servers controlled by tests.
+External HTTP sources must be deterministic local/fake servers controlled by tests. Blocking HTTP/controller tests must also verify that work is offloaded from Netty event-loop threads when that execution boundary is implemented.
 
 The target end-to-end scenario remains:
 
@@ -55,11 +76,44 @@ flowchart TB
 The first implementation foundation contains:
 
 - `ApplicationContextTest` for Micronaut context bootstrap;
+- `ModuleBoundaryArchitectureTest` for enforcing that production cross-module Java dependencies target only the providing module's `api..` package;
 - `ConfiguredSourceTest` for configuration-boundary invariants;
-- `RawItemDiscoveredSerializationTest` for Protobuf round-trip and unknown additive fields.
+- `RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` for Protobuf round trips and unknown additive fields;
+- `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, bounded redirects, and response-size enforcement against deterministic loopback servers;
+- `MicronautExternalSourceClientTest` for successful/empty responses, transport failure normalization, status mapping, and `Retry-After` preservation with a deterministic clock;
+- `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, deterministic result ordering, empty batches, and best-effort continuation of queued/in-flight work after a source-level failure;
+- `CollectionRunServiceTest` for explicit run identity/correlation, success/partial/failed/empty outcomes, and continued Kafka publication after one publication failure;
+- `RawItemIdentityFactoryTest` for stable raw-item identity across fetch timestamps and changed payload identity;
+- `MicronautBlockingExecutorTest` for verification that Micronaut's blocking executor is Virtual-Thread backed on the Java 21 baseline and that the collection bean graph resolves with its qualified UTC clock;
+- `CollectionConfigurationTest` for Jakarta Validation of invalid concurrency configuration;
+- `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping and response charset handling;
+- `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
+- `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
+- `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap plus durable completed-run/source-outcome persistence and deterministic source ordering;
+- `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, duplicate-name semantics, and transactional rollback;
+- `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
+- `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`;
+- `DefaultContentNormalizerTest` for deterministic whitespace/URL normalization and stable normalized identity;
+- `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring rules and invalid rule configuration;
+- `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims and discovery counters;
+- `RawItemKafkaListenerTest` for explicit offset commit after success and no commit when processing fails;
+- `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
+- `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
 
-No Docker/Testcontainers test is implemented yet because persistence and Kafka adapters do not exist.
+PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, and `modules:analysis`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
 
 ## Python
 
 Python may be used later for independent black-box/load/data tooling. It is not the primary backend integration-test framework.
+
+
+## Operational admin API
+
+Focused validation for the manual-run/history and analysis-inspection slice:
+
+```bash
+./gradlew :modules:collection:test :modules:analysis:test :app:test --no-watch-fs
+./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs
+```
+
+Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP coverage currently exists for source CRUD, but equivalent server-level verification for the collection-admin and analysis-inspection endpoints is still part of the operational-admin verification gate.

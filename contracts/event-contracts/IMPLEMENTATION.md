@@ -18,9 +18,11 @@ Implemented schemas:
 ```text
 common/v1/event-envelope.proto
 collection/v1/raw-item-discovered.proto
+analysis/v1/item-analyzed.proto
+analysis/v1/item-rejected.proto
 ```
 
-The `analysis/v1` and `results/v1` directories remain reserved for later vertical-slice events.
+The `results/v1` directory remains reserved for later result-domain events.
 
 ## Event envelope
 
@@ -42,22 +44,25 @@ The payload contract stays explicit rather than storing domain data in an opaque
 
 This is a Kafka transport contract, not the collection or analysis domain model.
 
+## Analysis events
+
+`ItemAnalyzed` carries normalized item identity/content, source/profile provenance, deterministic relevance/classification/score/tags, analyzer identity, and linkage back to the raw source event. `ItemRejected` carries the raw/normalized identity and a machine-readable rejection reason; the first implemented reason is `DUPLICATE`.
+
+These are Kafka transport contracts. Analysis core logic maps to and from module-owned Java models at the adapter boundary.
+
 ## Gradle generation
 
 The module uses the Gradle Protobuf plugin and a pinned `protoc` version from the root version catalog. Generated Java belongs under Gradle build output and is never authoritative source.
 
 ## Contract tests
 
-`RawItemDiscoveredSerializationTest` verifies:
+`RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` verify representative Protobuf serialization/deserialization and preservation/tolerance of unknown additive fields.
 
-- representative Protobuf serialization/deserialization;
-- preservation/tolerance of an unknown additive field.
-
-A real Kafka producer/consumer Testcontainers round trip remains pending until the first Kafka adapters are implemented.
+Collection provides the real `RawItemDiscovered` producer adapter. Analysis provides the first real consumer plus `ItemAnalyzed`/`ItemRejected` producers. Kafka/Testcontainers integration coverage exercises the byte-serialized flow across these boundaries.
 
 ## Current limitations
 
-- no Kafka producer/consumer adapter exists yet;
+- event observation does not decode these contracts yet;
 - no Schema Registry is configured;
-- no analysis/results event schemas exist yet;
-- no Event Explorer decoder is implemented yet.
+- results event schemas are not implemented yet;
+- compatibility fixtures for an evolved published schema are not implemented yet.

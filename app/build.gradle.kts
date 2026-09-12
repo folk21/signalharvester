@@ -9,8 +9,7 @@ java {
 }
 
 micronaut {
-    version.set(libs.versions.micronaut.get())
-    runtime.set("netty")
+    runtime("netty")
 
     processing {
         incremental.set(true)
@@ -36,4 +35,5 @@ dependencies {
     runtimeOnly("ch.qos.logback:logback-classic")
 
     testImplementation(libs.junit.jupiter)
+    testImplementation(libs.archunit.junit5)
 }

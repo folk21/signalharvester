@@ -12,4 +12,6 @@ Read [`AGENTS.md`](AGENTS.md) and [`../docs/TESTS.md`](../docs/TESTS.md) before 
 
 ## Current state
 
-The integration-test Gradle module is prepared with JUnit 5 and Testcontainers modules for PostgreSQL and Kafka. Container-backed scenarios will be added with the first persistence and Kafka adapters.
+The integration-test Gradle module contains cross-module PostgreSQL/Kafka scenarios for persisted enabled-source collection and the collection-to-analysis event flow. Module-local Testcontainers coverage remains with the owning configuration, collection, and analysis modules.
+
+Integration-tagged tests are intentionally excluded from the default `test` lifecycle and run through the dedicated `integrationTest` task. See [`../docs/TESTS.md`](../docs/TESTS.md) for the authoritative command matrix.

@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package io.signalharvester.events.analysis.v1;
+
+import "google/protobuf/timestamp.proto";
+import "io/signalharvester/events/common/v1/event-envelope.proto";
+
+option java_multiple_files = true;
+option java_package = "io.signalharvester.events.analysis.v1";
+
+// Describes one normalized, deduplicated item after deterministic analysis.
+message ItemAnalyzed {
+  // Cross-cutting event metadata for this analysis publication.
+  io.signalharvester.events.common.v1.EventEnvelope envelope = 1;
+
+  // Event id of the RawItemDiscovered event that produced this analysis outcome.
+  string source_event_id = 2;
+
+  // Stable id assigned by collection to the discovered raw payload.
+  string raw_item_id = 3;
+
+  // Stable logical item id produced by analysis normalization/deduplication.
+  string normalized_item_id = 4;
+
+  // Identifier of the configured source that produced the item.
+  string source_id = 5;
+
+  // Monitoring profile in whose processing scope the item was analyzed.
+  string monitoring_profile_id = 6;
+
+  // Product-level information category, for example JOB or TOPIC.
+  string information_category = 7;
+
+  // Source-provided identifier when one exists.
+  optional string external_id = 8;
+
+  // Normalized source-provided title when one exists.
+  optional string title = 9;
+
+  // Canonical or source URL associated with the item.
+  string url = 10;
+
+  // Normalized textual content used by analysis.
+  string normalized_content = 11;
+
+  // Media type or equivalent classification of the source content.
+  string content_type = 12;
+
+  // Category-specific normalized attributes without flattening them into fixed fields.
+  map<string, string> attributes = 13;
+
+  // Whether the deterministic analyzer considers the item relevant.
+  bool relevant = 14;
+
+  // Stable analyzer classification label.
+  string classification = 15;
+
+  // Deterministic score in the inclusive range 0..100.
+  int32 score = 16;
+
+  // Analyzer-produced tags that explain matched deterministic rules.
+  repeated string tags = 17;
+
+  // Human-readable explanation of the analysis outcome.
+  string explanation = 18;
+
+  // Stable implementation/rule identifier used to reproduce the outcome.
+  string analyzer = 19;
+
+  // Source publication time when it is known.
+  optional google.protobuf.Timestamp published_at = 20;
+}

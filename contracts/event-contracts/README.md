@@ -24,9 +24,11 @@ src/main/proto/io/signalharvester/events/
 The first `v1` schemas are implemented:
 
 - `common/v1/event-envelope.proto`;
-- `collection/v1/raw-item-discovered.proto`.
+- `collection/v1/raw-item-discovered.proto`;
+- `analysis/v1/item-analyzed.proto`;
+- `analysis/v1/item-rejected.proto`.
 
-Gradle generates Java transport classes from these sources. Contract tests verify representative serialization round trips and tolerance of unknown additive fields.
+Gradle generates Java transport classes from these sources. Contract tests verify representative raw/analysis serialization round trips and tolerance of unknown additive fields. Collection publishes `RawItemDiscovered`; analysis consumes it and publishes `ItemAnalyzed` or `ItemRejected`.
 
 ## Read next
 

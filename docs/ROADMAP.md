@@ -5,6 +5,10 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 ---
 # Roadmap
 
+## Current implementation focus
+
+Verify and accept the operational admin API slice. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-operational-admin-api.md`](specs/active/subspecs/backend-operational-admin-api.md); the gate includes the dedicated integration-test lifecycle and server-level operational HTTP coverage. After acceptance, move directly to results persistence and the first result read API.
+
 ## P0 — repository and contract foundation
 
 - stabilize modular-monolith ownership and documentation;
@@ -28,7 +32,6 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## P2 — deployment and observability
 
-- Docker Compose development stack;
 - Kubernetes deployment;
 - OpenTelemetry, Prometheus, Loki, Tempo, Grafana;
 - failure/retry/DLQ/idempotency demonstrations.
@@ -39,3 +42,6 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 - gRPC service boundaries;
 - Schema Registry;
 - LLM/embedding analysis as a required core dependency.
+
+
+The first operational admin API now provides manual collection execution, durable completed-run inspection, and read-only analysis deduplication inspection. Result persistence and Event Explorer/SSE remain subsequent vertical slices.

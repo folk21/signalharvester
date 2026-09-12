@@ -1,19 +1,19 @@
 ---
 type: Implementation
 title: SignalHarvester implementation guide
-description: Current backend implementation map, runtime wiring, contract locations, tests, and known limitations.
+description: Current backend runtime composition, implemented module wiring, persistence/event flow, and known limitations.
 ---
 # SignalHarvester implementation guide
 
 ## Purpose and ownership
 
-This document describes accepted current implementation only. Planned behavior remains in active specifications.
+This document describes the accepted **system-level current implementation**: what is assembled, how implemented modules interact, and which infrastructure/contracts are active. Detailed module internals belong in each module's `README.md` and `contract.md`; test inventory and commands belong in [`TESTS.md`](TESTS.md). Planned behavior remains in active specifications.
 
 ## Build and runtime foundation
 
-The repository is a Gradle multi-project modular monolith using Java 21.
+SignalHarvester is a Java 21 Gradle multi-project modular monolith with one runnable Micronaut application.
 
-Dependency and plugin versions are centralized in `gradle/libs.versions.toml`. The first implementation pins:
+Dependency and plugin versions are centralized in `gradle/libs.versions.toml`; the Micronaut Platform version is exposed through `gradle.properties` as `micronautVersion` for the Micronaut Gradle plugins. The current baseline pins:
 
 - Micronaut Gradle plugin 4.6.2;
 - Micronaut Framework 4.10.15;
@@ -21,79 +21,124 @@ Dependency and plugin versions are centralized in `gradle/libs.versions.toml`. T
 - JUnit 5.14.4;
 - Testcontainers 2.0.5.
 
-Micronaut 4 is intentionally retained while Java 21 remains the project baseline. A future Micronaut 5 upgrade must revisit the Java baseline rather than silently changing it.
+`app/src/main/java/io/signalharvester/Application.java` is the executable composition root. The application uses the Netty runtime, HTTP port `SIGNALHARVESTER_HTTP_PORT` (default `8080`), and a Virtual-Thread-backed Micronaut blocking executor on the Java 21 baseline.
 
-## Application composition
+All currently implemented REST controllers are blocking adapters and use `@ExecuteOn(TaskExecutors.BLOCKING)` for JDBC and synchronous collection work. Future true streaming endpoints such as SSE remain reactive rather than being moved to the blocking executor mechanically.
 
-`app/src/main/java/io/signalharvester/Application.java` is the runnable Micronaut entry point.
+## Current implemented flow
 
-`app` uses the Netty runtime and composes all functional Gradle modules. It contains no business logic.
+```mermaid
+flowchart LR
+    API[REST source/admin APIs] --> CFG[Configuration]
+    CFG --> DB1[(configuration schema)]
+    API --> COL[Collection]
+    COL --> DB2[(collection schema)]
+    COL --> HTTP[External HTTP source]
+    COL --> RAW[RawItemDiscovered]
+    RAW --> K[(Kafka-compatible broker)]
+    K --> ANA[Analysis]
+    ANA --> DB3[(analysis schema)]
+    ANA --> TERM[ItemAnalyzed / ItemRejected]
+```
 
-Application configuration currently defines:
-
-- Micronaut application name `signalharvester`;
-- HTTP port from `SIGNALHARVESTER_HTTP_PORT`, defaulting to `8080`.
-
-No REST controllers are implemented yet.
+The user-facing results projection is not implemented yet, so terminal analysis events currently stop at the event boundary rather than being persisted into `modules:results`.
 
 ## Configuration module
 
-`modules:configuration` now exposes the first synchronous public API under `io.signalharvester.configuration.api`.
+`modules:configuration` owns persisted source configuration and the `/api/v1/sources` REST implementation.
 
-Implemented types:
+Its published synchronous Java surface is under `io.signalharvester.configuration.api`:
 
-- `SourceId`;
-- `SourceType`;
-- `ConfiguredSource`;
-- `SourceConfigurationProvider`.
+- `SourceConfigurationProvider` is the narrow effective-source API consumed by collection;
+- `SourceConfigurationOperations` is the administration application API used by the HTTP adapter.
 
-The API represents effective external-source configuration for cross-module use. No persistence implementation or provider bean exists yet.
+`SourceConfigurationManager` implements both contracts. PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`; writes are transaction-owned by the application use case while JDBC SQL/resource handling stays in persistence adapters.
 
-## REST/OpenAPI contract
+See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md) for module-local detail.
 
-`contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml` is the first external API contract.
+## Collection module
 
-It currently defines source configuration CRUD operations under `/api/v1/sources` and source schemas for REST, RSS, and HTML source types.
+`modules:collection` owns bounded external-source fetching, explicit collection-run execution, deterministic raw-item identity, `RawItemDiscovered` publication, durable completed-run history, and `/api/v1/admin/collection-runs`.
 
-The OpenAPI contract exists before the controller implementation so the external boundary can be reviewed independently.
+Its published synchronous Java surface is `io.signalharvester.collection.api`, currently centered on `CollectionRunner` and `CollectionRunHistory`. Collection reads enabled sources only through `configuration.api`; the Gradle dependency on configuration is intentionally an `api` dependency because `CollectionSourceResult` exposes the stable `SourceId` contract type.
 
-## Kafka/Protobuf contracts
+External HTTP access and Kafka publication remain internal module ports. The generic HTTP path uses Micronaut-managed low-level absolute-URI requests with explicit time, response-size, redirect, connection-pool, and concurrency bounds. Source-level fetch/publication failures are best-effort terminal outcomes and do not cancel unrelated source work.
 
-`contracts:event-contracts` contains the first concrete versioned Protobuf schemas:
+Successful source payloads are published as versioned `RawItemDiscovered` Protobuf bytes. The collection run id is reused as the event correlation id, while raw-item identity is deterministic over source id, requested URI, and raw payload.
+
+PostgreSQL schema `collection` is created by `db/migration/collection/V3__create_collection_run_history.sql` and stores completed runs plus ordered per-source outcomes for operational inspection.
+
+See [`../modules/collection/README.md`](../modules/collection/README.md) and [`../modules/collection/contract.md`](../modules/collection/contract.md) for module-local detail.
+
+## Analysis module
+
+`modules:analysis` consumes `RawItemDiscovered`, maps transport messages into module-owned models, normalizes content, performs monitoring-profile-scoped durable deduplication, applies deterministic keyword analysis, and publishes terminal `ItemAnalyzed` or `ItemRejected` events.
+
+The raw-item processing path is intentionally event-driven and remains internal. The only published synchronous Java surface is the bounded `AnalysisItemInspectionQuery` under `io.signalharvester.analysis.api`, used by the read-only `/api/v1/admin/analysis/items` adapter.
+
+PostgreSQL schema `analysis` is created by `db/migration/analysis/V2__create_normalized_item_claims.sql`. Logical normalized identity excludes monitoring profile id; duplicate claims are scoped by `(monitoringProfileId, normalizedItemId)`.
+
+The listener disables automatic offset commit and commits the raw Kafka offset only after application processing and terminal publication return successfully. Deduplication state changes and acknowledged terminal Kafka publication share the JDBC transaction window for retryability, but this is **not** distributed exactly-once behavior. An acknowledged output followed by database commit failure can still be published again after redelivery, so future results persistence must be idempotent until an outbox or equivalent stronger cross-resource strategy is introduced.
+
+See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../modules/analysis/contract.md`](../modules/analysis/contract.md) for module-local detail.
+
+## Results and event observation
+
+`modules:results` and `modules:event-observation` currently contain module/build skeletons and boundary contracts only. Results persistence/read APIs, SSE, durable event observation, and Event Explorer backend support are not implemented.
+
+Their current intended boundaries are documented in:
+
+- [`../modules/results/contract.md`](../modules/results/contract.md);
+- [`../modules/event-observation/contract.md`](../modules/event-observation/contract.md).
+
+## External contracts
+
+The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source CRUD, manual collection-run/history operations, and read-only analysis inspection.
+
+The authoritative Kafka schemas are versioned `.proto` files under `contracts/event-contracts/src/main/proto/`:
 
 ```text
 common/v1/event-envelope.proto
 collection/v1/raw-item-discovered.proto
+analysis/v1/item-analyzed.proto
+analysis/v1/item-rejected.proto
 ```
 
-Generated Java transport classes are Gradle build output.
+Generated Protobuf Java classes are build output and remain transport types at Kafka adapter boundaries.
 
-The first contract test verifies a representative `RawItemDiscovered` round trip and unknown-field tolerance. Kafka adapters do not yet exist.
+## Persistence and Flyway
+
+Configuration, analysis, and collection currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
+
+Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, and so on) unless the Flyway topology is deliberately changed later.
+
+Direct cross-module table access remains forbidden.
 
 ## Testing implementation
 
-JUnit Platform is enabled for Java subprojects through the root Gradle build.
+The root Gradle build separates fast/default tests from tests tagged `integration`:
 
-Current concrete tests:
+- `./gradlew test` excludes integration-tagged Testcontainers/cross-module scenarios;
+- `./gradlew integrationTest` runs integration-tagged scenarios explicitly.
 
-- Micronaut application-context startup test;
-- configuration API invariant/defensive-copy tests;
-- Protobuf serialization and unknown-field tests.
+Architecture enforcement includes `ModuleBoundaryArchitectureTest`, which rejects production dependencies from one functional module to another module outside the providing module's `api..` package.
 
-`testing:integration-tests` is prepared with Testcontainers dependencies for PostgreSQL and Kafka, but no container-backed scenario exists yet.
+See [`TESTS.md`](TESTS.md) for the authoritative test inventory, infrastructure requirements, and focused commands.
 
-## Infrastructure implementation
+## Local infrastructure
 
-`infra/docker-compose`, `infra/kubernetes`, and `infra/observability` remain ownership placeholders. Deployable infrastructure configuration is not yet implemented.
+`infra/docker-compose/compose.yaml` provides repository-owned local PostgreSQL and a single-node Redpanda broker exposing a Kafka-compatible API. Redpanda runs in local development mode with topic auto-creation; Kubernetes and production observability configuration are not implemented yet.
+
+See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for the current local lifecycle and endpoints.
 
 ## Known limitations
 
-- no PostgreSQL schema, Flyway migration, or persistence adapter;
-- no Kafka producer/consumer wiring;
-- no source collector implementation;
-- no analysis/results implementation;
-- no REST controller implementation;
+- no source parsing/extraction into multiple external items;
+- no persisted monitoring profiles, profile-to-source membership, or scheduling;
+- no results persistence/read API;
 - no SSE implementation;
+- no outbound SSRF/network-destination policy; source management must remain trusted until one is defined;
 - no event-observation persistence/API;
 - no OpenTelemetry instrumentation;
-- no Docker Compose or Kubernetes deployment.
+- no Kubernetes deployment or production observability stack;
+- no cross-resource exactly-once guarantee between PostgreSQL and Kafka.

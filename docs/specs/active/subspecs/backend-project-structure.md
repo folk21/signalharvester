@@ -10,7 +10,9 @@ spec_status: active
 
 ## Status
 
-Active technical sub-specification — initial backend repository structure.
+Active supporting technical sub-specification — the initial repository structure is established and these requirements remain boundary guardrails while later vertical slices exercise them.
+
+Accepted current architecture is documented in `docs/ARCHITECTURE.md`, root/module `AGENTS.md`, and module `contract.md` files. This sub-spec remains active only for still-relevant acceptance guardrails; do not add current implementation inventories here or use it instead of the owning current-state documents.
 
 The backend starts as a modular monolith. There is one deployable backend application, while the codebase is split into independently owned functional Gradle modules.
 
@@ -36,9 +38,9 @@ Create a backend structure that:
 
 The backend repository root is `signalharvester/` and the Gradle root project name is `signalharvester`.
 
-The initial repository contains structure and specifications only. Source directories are intentionally empty.
+The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration/history, and the first analysis Kafka/persistence path. Cross-module production dependencies are guarded by an ArchUnit rule that permits dependencies only on a providing module's `api..` package. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, Kubernetes deployment, and production observability remain pending. Local PostgreSQL/Redpanda Docker Compose is implemented.
 
-Java 21 is the initial toolchain target because Virtual Threads are stable and directly useful for blocking external I/O. Micronaut is the preferred backend framework. Framework dependencies are intentionally deferred until the first executable vertical slice is implemented.
+Java 21 is the initial toolchain target. Micronaut is the backend framework. Generic external-source access uses Micronaut's managed low-level HTTP client for configuration-driven absolute URLs, behind synchronous module-facing APIs executed on Micronaut's blocking executor, which uses Virtual Threads on the Java 21 baseline. Streaming boundaries remain reactive where appropriate.
 
 ## Repository structure
 
@@ -155,9 +157,11 @@ collection
 configuration.persistence.JdbcSourceConfigurationRepository
 ```
 
-This rule should later be enforced with architecture tests, preferably ArchUnit.
+This rule is enforced with an ArchUnit-backed architecture test that rejects production cross-module Java dependencies outside the providing module's `api..` package.
 
-Public module APIs should remain small. A class must not be moved to an `api` package merely because another module wants convenient access to it.
+Public module APIs should remain small. A class must not be moved to an `api` package merely because another module wants convenient access to it. Published module behavior is expressed through interfaces under `api`; contract data may be colocated there or referenced from an existing owned model when duplication would add no value. Internal repositories, outbound clients, publishers, analyzers, and strategy interfaces remain outside `api` unless intentionally published. REST controllers remain transport adapters and are never promoted to Java API merely to make them injectable.
+
+Each functional module also keeps a root `contract.md` as a compact context/navigation index. It points to the authoritative Java `api/**`, OpenAPI, and Protobuf sources and records ownership/dependency/invariant information without copying complete method or field signatures. This supports selective context loading for both developers and coding agents.
 
 ## Interfaces and contracts
 
@@ -260,7 +264,10 @@ Its expected responsibilities include:
 - source fetching;
 - source parsing/extraction;
 - HTTP/RSS/HTML/API adapters;
-- Virtual Thread based concurrency for suitable blocking I/O;
+- Micronaut-managed low-level HTTP client behind a synchronous collection-owned transport contract for dynamic absolute source URLs;
+- bounded source fetching on `TaskExecutors.BLOCKING`, which uses Virtual Threads on the Java 21 baseline;
+- explicit connect/read/request timeouts, response-size limits, redirect limits, connection-pool limits, and collection-owned HTTP error mapping;
+- an explicit outbound destination/SSRF policy before configured source URLs are accepted from untrusted users; automatic redirects must be considered part of that policy;
 - source-specific retry/timeout behavior;
 - raw-item discovery;
 - collection status events;
@@ -318,6 +325,16 @@ Its expected responsibilities include:
 - reconstructing event-flow data required by the frontend visualization.
 
 It must not become a substitute for OpenTelemetry, Prometheus, Loki, Tempo, or Grafana.
+
+### R7a — HTTP server execution model
+
+Micronaut Netty event-loop threads must not execute blocking application work.
+
+REST controller methods or classes that invoke JDBC, blocking source access, or other imperative blocking workflows must use `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking execution boundary. On the Java 21 baseline the blocking executor is Virtual-Thread backed.
+
+Controllers that expose true streaming/reactive responses, especially SSE, must keep their reactive execution model instead of being moved to blocking execution mechanically.
+
+Micronaut client/server filters should remain lightweight and non-blocking. A filter that performs blocking work must explicitly offload that work and must not block a Netty event loop. Expected application/domain failures should be mapped through centralized Micronaut `ExceptionHandler` implementations at the HTTP boundary rather than duplicated controller `try/catch` logic.
 
 ### R8 — common contains only genuinely cross-cutting primitives
 
@@ -475,7 +492,7 @@ Most processing relationships between collection, analysis, results, and event o
 
 ### R14 — module internals should be architecture-testable
 
-The project should add ArchUnit once real Java packages exist.
+The project uses ArchUnit now that real Java package boundaries exist.
 
 Architecture tests should be able to verify at least:
 
@@ -705,8 +722,8 @@ The structure is valid when all of the following are true:
 10. Implement the first results projection and query endpoint.
 11. Implement SSE for live result updates.
 12. Add event-observation persistence and technical SSE.
-13. Add ArchUnit rules once packages and public APIs exist.
+13. Keep ArchUnit rules aligned with published module APIs as packages evolve.
 14. Add module-local Flyway migrations.
 15. Add OpenTelemetry instrumentation.
-16. Add Docker Compose for local dependencies.
+16. Docker Compose for local PostgreSQL/Kafka dependencies is implemented; keep it aligned with runtime defaults.
 17. Add Kubernetes deployment after the local vertical slice is stable.

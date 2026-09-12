@@ -1,31 +1,27 @@
 ---
 type: Module Overview
 title: SignalHarvester configuration module
-description: Persisted monitoring-profile, source, schedule, filter, and analysis configuration ownership.
+description: Current implementation and developer entry point for persisted SignalHarvester configuration.
 ---
 # SignalHarvester configuration module
 
-## Ownership
+For module ownership, published Java APIs, data ownership, dependency rules, invariants, and extension points, read [`contract.md`](contract.md) first.
 
-Own monitoring profiles, source definitions, schedules, filters, extraction settings, analysis settings, and their persistence.
+## Current implementation
 
-## Boundary
+Source configuration is persisted in the configuration-owned PostgreSQL schema through an explicit JDBC repository. `SourceConfigurationManager` owns write transaction boundaries, while the repository owns SQL and JDBC resource handling. Flyway migration `db/migration/configuration/V1__create_source_configuration.sql` creates `configuration.sources` and `configuration.source_settings`.
 
-Other modules consume effective configuration through a public Java API or event flow; they do not query configuration tables directly.
+The OpenAPI source-management contract is implemented under `/api/v1/sources`. HTTP request records are separate from persistence types, Jakarta Validation enforces the input boundary, expected not-found/invalid-configuration failures use centralized Micronaut `ExceptionHandler` beans, and the controller runs on `TaskExecutors.BLOCKING` for JDBC work.
 
-## Current state
+Collection consumes effective source configuration through the published configuration API rather than through persistence. Monitoring profiles, schedules, filters, extraction settings, and analysis settings remain planned configuration capabilities rather than completed persistence surfaces.
 
-The first public Java boundary is implemented under `io.signalharvester.configuration.api`:
+## Operational and security notes
 
-- `SourceId`;
-- `SourceType`;
-- `ConfiguredSource`;
-- `SourceConfigurationProvider`.
-
-`ConfiguredSource` validates basic boundary invariants and defensively copies source-specific settings. Persistence, monitoring profiles, REST implementation, and concrete provider wiring are not implemented yet.
+Persisting a URL is not outbound authorization. Source management remains trusted until a configurable outbound destination/SSRF policy exists; loopback/private destinations are intentionally not rejected by the source domain because deterministic tests and legitimate internal sources may require them.
 
 ## Read next
 
-- [`../AGENTS.md`](../AGENTS.md)
-- [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md)
+- [`contract.md`](contract.md) — authoritative module boundary and integration map
+- [`../AGENTS.md`](../AGENTS.md) — shared module-development rules
+- [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) — system architecture
+- [`../../docs/specs/active/subspecs/backend-configuration-persistence-rest.md`](../../docs/specs/active/subspecs/backend-configuration-persistence-rest.md) — active intended changes/acceptance criteria

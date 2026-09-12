@@ -9,7 +9,7 @@ description: SignalHarvester specification hierarchy, lifecycle, and minimal met
 
 Current implementation truth belongs in [`../ARCHITECTURE.md`](../ARCHITECTURE.md), [`../IMPLEMENTATION.md`](../IMPLEMENTATION.md), [`../CONFIGURATION.md`](../CONFIGURATION.md), [`../USAGE.md`](../USAGE.md), and owning module/contract documentation.
 
-Frontend implementation specifications belong in the separate `signalharvester-ui/docs/specs/` tree. This backend umbrella may state cross-project product/API requirements, but it must not become the owner of React/UI implementation detail.
+Frontend implementation specifications belong in the separate `signalharvester-web/docs/specs/` tree. This backend umbrella may state cross-project product/API requirements, but it must not become the owner of React/UI implementation detail.
 
 ## Specification hierarchy
 
@@ -47,6 +47,10 @@ Small bugs, local refactors, routine dependency maintenance, and narrow docs imp
 8. Archive the umbrella only after its own acceptance target is complete.
 
 Archived specs preserve historical intent but are not current source of truth and are ignored during normal implementation work unless explicitly requested.
+
+Lifecycle location is exclusive: a specification must not exist under both `active/` and `archive/`. Archival is a move, not a copy. When a spec is moved, update the umbrella `current_focus`, this index, and any current documentation links in the same change.
+
+`current_focus` metadata and the human-readable "current focus" text must agree. Keep only one current sub-specification at a time; supporting active specs may remain only when they still define unresolved intended behavior rather than restating accepted architecture.
 
 ## Document metadata
 
@@ -91,20 +95,28 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith repository structure and module boundaries.
+- [`active/subspecs/backend-operational-admin-api.md`](active/subspecs/backend-operational-admin-api.md) — manual collection execution, durable run inspection, and read-only analysis inspection.
 
-Active supporting contract track:
+Active supporting tracks:
 
+- [`active/subspecs/backend-configuration-persistence-rest.md`](active/subspecs/backend-configuration-persistence-rest.md) — implementation complete; Gradle/Testcontainers verification pending before archival;
+- [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith repository structure and module boundaries;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
+
+## Recently completed sub-specifications
+
+- [`archive/subspecs/backend-analysis-normalization-deduplication.md`](archive/subspecs/backend-analysis-normalization-deduplication.md) — normalization, profile-scoped deduplication, deterministic analysis, and terminal analysis events, verified in the developer environment;
+- [`archive/subspecs/backend-collection-kafka-transport.md`](archive/subspecs/backend-collection-kafka-transport.md) — acknowledged `RawItemDiscovered` Protobuf publication boundary and Kafka round-trip, verified in the developer environment;
+- [`archive/subspecs/backend-collection-run-orchestration.md`](archive/subspecs/backend-collection-run-orchestration.md) — enabled-source collection execution, run correlation, deterministic raw identity, and best-effort partial-failure behavior, verified in the developer environment.
 
 ## Planned backend sub-specifications
 
 Likely future bounded specs include:
 
-- PostgreSQL persistence/migrations and transactional outbox;
-- REST/OpenAPI and SSE API;
-- first collection-to-results vertical slice;
+- results persistence and first read REST API;
+- first analyzed-item-to-results vertical slice;
+- result REST/SSE and event observation;
 - Kubernetes deployment and observability;
 - integration/system testing hardening.
 
-Frontend architecture/live-UI specs belong to `signalharvester-ui`, not this backend repository.
+Frontend architecture/live-UI specs belong to `signalharvester-web`, not this backend repository.

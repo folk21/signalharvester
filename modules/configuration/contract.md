@@ -1,0 +1,83 @@
+---
+type: Module Contract
+title: SignalHarvester module contract — Configuration
+description: Public integration surface, ownership, invariants, and dependency rules for the configuration module.
+---
+# SignalHarvester module contract — Configuration
+
+## Purpose
+
+Own persisted configuration and expose effective source configuration without leaking persistence or HTTP implementation details.
+
+## Owned responsibilities
+
+- source configuration lifecycle and validation;
+- configuration-owned PostgreSQL schema and migrations;
+- effective source configuration consumed by collection;
+- source-management REST implementation.
+
+## Public integration surface
+
+### Synchronous Java API
+
+Authoritative package:
+
+`src/main/java/io/signalharvester/configuration/api/`
+
+Primary interfaces:
+
+- `SourceConfigurationProvider` — narrow read API intended for cross-module consumption;
+- `SourceConfigurationOperations` — administration application API used by the module's inbound adapters and available only when a caller intentionally owns configuration administration.
+
+Contract data is colocated in the same package because the current surface is small:
+
+- `SourceId`;
+- `SourceType`;
+- `ConfiguredSource`;
+- `SourceConfigurationCommand`.
+
+Consumers should read the Java files above rather than relying on duplicated method signatures in this document.
+
+### REST API
+
+Authoritative schema: `contracts/api-contracts/`.
+
+Implementation adapter: `src/main/java/io/signalharvester/configuration/http/`.
+
+HTTP controllers and HTTP request/response models are transport adapters, not cross-module Java APIs.
+
+### Events
+
+No configuration event contract is currently implemented.
+
+## Owned data
+
+- PostgreSQL schema `configuration`;
+- source and source-settings tables created by configuration-owned Flyway migrations.
+
+Other modules must not query or mutate these tables directly.
+
+## Dependencies
+
+The module does not synchronously depend on another functional module.
+
+Collection may depend on `io.signalharvester.configuration.api..` only.
+
+## Forbidden access
+
+Consumers must not import configuration `application`, `persistence`, or `http` packages and must not use configuration-owned database tables directly.
+
+Do not expose repository, JDBC, Micronaut HTTP, or persistence types through the Java API.
+
+## Important invariants
+
+- `SourceId` is the stable source identity;
+- source names are not unique identities;
+- configured-source writes are transactional;
+- persisted source URLs do not imply outbound network authorization.
+
+## Extension points
+
+Add new synchronous module capabilities only when another adapter/module has a concrete need. Prefer extending an existing focused API over exposing implementation classes.
+
+When monitoring profiles or schedules are implemented, expose only the minimal effective configuration needed by consumers rather than persistence models.
