@@ -15,6 +15,7 @@ The current implementation requires:
 
 - JDK 21;
 - the repository Gradle Wrapper;
+- `zip` and `unzip` for FULL-archive creation/validation through `archive.sh` and `run_checks.sh`;
 - PostgreSQL 16-compatible infrastructure for the currently implemented configuration, collection-history, and analysis persistence;
 - a Kafka-compatible broker for the current collection -> analysis event flow;
 - network access to Maven/Gradle repositories on the first dependency resolution.
@@ -68,9 +69,9 @@ The defaults match the backend runtime configuration:
 - analyzed topic: `signalharvester.analysis.item-analyzed.v1`;
 - rejected topic: `signalharvester.analysis.item-rejected.v1`.
 
-These credentials are safe local-development defaults only. Override `SIGNALHARVESTER_DB_URL`, `SIGNALHARVESTER_DB_USERNAME`, `SIGNALHARVESTER_DB_PASSWORD`, and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` for other environments.
+These credentials are safe local-development defaults only. The Compose file supports local host-port, database-name, credential, advertised-host, and Redpanda-admin-port overrides. Copy `infra/docker-compose/.env.example` to `infra/docker-compose/.env` and pass it explicitly with `docker compose --env-file infra/docker-compose/.env ...`. Keep the backend `SIGNALHARVESTER_DB_URL` and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` aligned with any overridden Compose host ports/database name.
 
-See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for the current fixed local endpoints, shutdown, and volume reset commands.
+See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for parameterized local endpoints, explicit `.env` usage, shutdown, and volume reset commands.
 
 ## UI setup
 

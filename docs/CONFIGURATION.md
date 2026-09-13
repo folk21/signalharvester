@@ -54,6 +54,31 @@ The first analyzer uses a small global keyword list in `application.properties` 
 
 Secrets must not be committed.
 
+## Local Docker Compose overrides
+
+`infra/docker-compose/compose.yaml` provides safe defaults but is parameterized for developer-machine conflicts and local experiments. Its supported infrastructure overrides are:
+
+| Variable | Default | Compose purpose |
+|---|---:|---|
+| `SIGNALHARVESTER_DB_NAME` | `signalharvester` | PostgreSQL database created by the local container. |
+| `SIGNALHARVESTER_DB_USERNAME` | `signalharvester` | PostgreSQL local username. |
+| `SIGNALHARVESTER_DB_PASSWORD` | `signalharvester` | PostgreSQL local password. |
+| `SIGNALHARVESTER_DB_PORT` | `5432` | PostgreSQL host port. |
+| `SIGNALHARVESTER_KAFKA_ADVERTISED_HOST` | `localhost` | Host Redpanda advertises to host-run Kafka clients. |
+| `SIGNALHARVESTER_KAFKA_PORT` | `9092` | Kafka API host port. |
+| `SIGNALHARVESTER_REDPANDA_ADMIN_PORT` | `9644` | Redpanda Admin API host port. |
+
+The checked-in `.env.example` also contains `SIGNALHARVESTER_DB_URL` and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` so one local file can be sourced for the host-run backend. Docker Compose cannot derive a JDBC URL for the backend, so when `DB_NAME`, `DB_PORT`, or the Kafka host port changes, keep those runtime endpoint values synchronized explicitly.
+
+Use the env file explicitly:
+
+```bash
+cp infra/docker-compose/.env.example infra/docker-compose/.env
+docker compose --env-file infra/docker-compose/.env -f infra/docker-compose/compose.yaml up -d
+```
+
+The local `.env` file is ignored by Git and excluded from FULL archives.
+
 ## Persisted application configuration
 
 The configuration module owns source configuration persistence in PostgreSQL. Its first Flyway migration lives under `db/migration/configuration` and creates module-owned `configuration.sources` and `configuration.source_settings` objects. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history under `db/migration/collection` and schema `collection`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider`; they must not read configuration tables directly.

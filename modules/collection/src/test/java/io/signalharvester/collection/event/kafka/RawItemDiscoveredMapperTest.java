@@ -14,14 +14,30 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies {@link RawItemDiscoveredMapper} mapping from fetched source content and publication context to the
+ * versioned {@code RawItemDiscovered} event contract.
+ *
+ * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-event-contracts}.</p>
+ */
 class RawItemDiscoveredMapperTest {
 
+    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000101");
+    private static final UUID SOURCE_UUID = UUID.fromString("00000000-0000-0000-0000-000000000201");
+    private static final String RAW_ITEM_ID = "raw-42";
+    private static final String RUN_ID = "run-42";
+    private static final String PROFILE_ID = "profile-7";
+    private static final String TRACEPARENT =
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+    /**
+     * Map fetched content without leaking transport types.
+     */
     @Test
     void shouldMapFetchedContentWithoutLeakingTransportTypes() {
-        UUID eventId = UUID.fromString("00000000-0000-0000-0000-000000000101");
-        RawItemDiscoveredMapper mapper = new RawItemDiscoveredMapper(() -> eventId);
+        RawItemDiscoveredMapper mapper = new RawItemDiscoveredMapper(() -> EVENT_ID);
         Instant fetchedAt = Instant.parse("2026-09-10T12:34:56.123456789Z");
-        SourceId sourceId = SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000201"));
+        SourceId sourceId = SourceId.of(SOURCE_UUID);
         FetchedSourceContent content = new FetchedSourceContent(
                 sourceId,
                 URI.create("https://example.test/jobs?language=java"),
@@ -30,24 +46,24 @@ class RawItemDiscoveredMapperTest {
                 "café".getBytes(Charset.forName("ISO-8859-1")),
                 fetchedAt);
         RawItemPublicationContext context = new RawItemPublicationContext(
-                "raw-42",
-                "run-42",
-                "profile-7",
+                RAW_ITEM_ID,
+                RUN_ID,
+                PROFILE_ID,
                 "JOB",
-                Optional.of("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"));
+                Optional.of(TRACEPARENT));
 
         RawItemDiscovered event = mapper.map(content, context);
 
-        assertEquals(eventId.toString(), event.getEnvelope().getEventId());
-        assertEquals("raw-42", event.getRawItemId());
+        assertEquals(EVENT_ID.toString(), event.getEnvelope().getEventId());
+        assertEquals(RAW_ITEM_ID, event.getRawItemId());
         assertEquals(RawItemDiscoveredMapper.EVENT_TYPE, event.getEnvelope().getEventType());
-        assertEquals("run-42", event.getEnvelope().getCorrelationId());
+        assertEquals(RUN_ID, event.getEnvelope().getCorrelationId());
         assertEquals(RawItemDiscoveredMapper.PRODUCER, event.getEnvelope().getProducer());
         assertEquals(RawItemDiscoveredMapper.SCHEMA_VERSION, event.getEnvelope().getSchemaVersion());
         assertEquals(fetchedAt.getEpochSecond(), event.getEnvelope().getOccurredAt().getSeconds());
         assertEquals(fetchedAt.getNano(), event.getEnvelope().getOccurredAt().getNanos());
         assertEquals(sourceId.value().toString(), event.getSourceId());
-        assertEquals("profile-7", event.getMonitoringProfileId());
+        assertEquals(PROFILE_ID, event.getMonitoringProfileId());
         assertEquals("JOB", event.getInformationCategory());
         assertEquals(content.requestedUri().toString(), event.getUrl());
         assertEquals("café", event.getContent());
@@ -57,6 +73,9 @@ class RawItemDiscoveredMapperTest {
         assertFalse(event.hasPublishedAt());
     }
 
+    /**
+     * Default unknown response charset to UTF-8.
+     */
     @Test
     void shouldDefaultUnknownResponseCharsetToUtf8() {
         RawItemDiscoveredMapper mapper = new RawItemDiscoveredMapper(UUID::randomUUID);

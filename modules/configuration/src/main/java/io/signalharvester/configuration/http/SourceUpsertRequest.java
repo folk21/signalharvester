@@ -1,9 +1,10 @@
 package io.signalharvester.configuration.http;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.micronaut.serde.annotation.Serdeable;
 import io.signalharvester.configuration.api.SourceType;
 import io.signalharvester.configuration.application.InvalidSourceConfigurationException;
-import io.signalharvester.configuration.api.SourceConfigurationCommand;
+import io.signalharvester.configuration.application.SourceConfigurationCommand;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.net.URI;
@@ -25,7 +26,7 @@ public record SourceUpsertRequest(
         @NotBlank String name,
         @NotNull SourceType type,
         @NotBlank @ValidSourceLocation String location,
-        boolean enabled,
+        @JsonProperty(defaultValue = "false") boolean enabled,
         Map<@NotNull String, @NotNull String> settings) {
 
     public SourceUpsertRequest {

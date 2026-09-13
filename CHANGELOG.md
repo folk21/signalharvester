@@ -6,6 +6,7 @@ description: Notable project changes organized by release state, with each chang
 # Changelog
 
 ## Unreleased
+- Improve `run_checks.sh` diagnostics for FULL archive validation by persisting offending archive entries in `build/reports/verification/archive-cleanliness.txt` and separating non-Gradle reports from Gradle report locations.
 
 2026-09-08 — Established the initial SignalHarvester modular-monolith backend skeleton and specification hierarchy.
 
@@ -43,8 +44,18 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-12 — Separated integration-tagged Testcontainers/cross-module tests from the default Gradle `test` lifecycle with explicit `integrationTest` tasks.
 
+2026-09-12 — Strengthened test lifecycle isolation by moving container-backed and cross-module scenarios into dedicated `integrationTest` source sets instead of relying on JUnit tags.
+
 2026-09-12 — Standardized published module Java APIs under `api` packages, added module boundary contracts/selective-context guidance, and introduced ArchUnit enforcement for cross-module dependencies.
 
 2026-09-12 — Reconciled current-state documentation and active-spec lifecycle with the implemented REST/admin APIs, persistence, Redpanda infrastructure, dedicated integration-test tasks, and module API boundaries; removed duplicate active copies of archived sub-specifications.
+
+2026-09-12 — Batched collection recent-history persistence reads to eliminate per-run source queries while preserving deterministic run and source ordering.
+
+2026-09-13 — Hardened collection run-history persistence with enforced Micronaut transaction participation, atomicity regression coverage, typed UUID lookups, bounded Java API limits, centralized SQL, and defensive row mapping.
+
+2026-09-13 — Reconciled REST/OpenAPI defaults and validation, made required JSON response fields serialization-stable, and added server-level contract coverage for collection and analysis operational endpoints.
+
+2026-09-13 — Pipelined collection fetch completion into terminal publication with bounded backpressure so raw source payload retention scales with configured concurrency instead of total run size.
 
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

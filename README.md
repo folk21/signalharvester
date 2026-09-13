@@ -98,11 +98,13 @@ Monitoring profiles/scheduling, results persistence/read APIs, SSE/event observa
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 
-For local development infrastructure:
+For local development infrastructure, defaults work without an env file:
 
 ```bash
 docker compose -f infra/docker-compose/compose.yaml up -d
 ```
+
+For local overrides, copy `infra/docker-compose/.env.example` to `infra/docker-compose/.env` and pass it explicitly with `--env-file`. See [`infra/docker-compose/README.md`](infra/docker-compose/README.md).
 
 ## Documentation model
 

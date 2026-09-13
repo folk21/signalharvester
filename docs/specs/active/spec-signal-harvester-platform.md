@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-operational-admin-api.md
+current_focus: subspecs/backend-project-structure.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -18,7 +18,7 @@ Backend, infrastructure, observability, persistence, and source-connector implem
 
 ## Active implementation focus
 
-The current technical focus is verification and acceptance of the operational administration slice defined in `subspecs/backend-operational-admin-api.md`: manual collection execution, durable run/history inspection, and read-only analysis inspection. The modular-monolith boundary rules in `subspecs/backend-project-structure.md`, the Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md`, and the verification-pending configuration persistence slice remain active supporting specifications. Collection-to-Kafka transport, collection-run orchestration, and normalization/deduplication/minimal deterministic analysis are archived after implementation and developer verification.
+The current technical focus is architecture stabilization and boundary hardening under `subspecs/backend-project-structure.md`: strict published-API semantics, acyclic functional-module dependencies, architecture-test enforcement, and the remaining verification/quality baseline before the next product vertical slice. The Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md` remains an active supporting specification. Configuration persistence/REST and the operational administration slice are archived after successful developer verification, alongside the completed collection and analysis slices.
 
 SignalHarvester starts with one deployable backend application composed from cohesive Gradle modules. Each functional module owns its behavior and infrastructure details, exposes narrow contracts where collaboration is required, and owns its persistence logically. Kafka remains an explicit asynchronous boundary between selected modules so event flow, replay, retries, lag, and future service extraction remain first-class concerns.
 

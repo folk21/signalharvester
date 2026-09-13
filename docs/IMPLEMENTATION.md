@@ -47,12 +47,9 @@ The user-facing results projection is not implemented yet, so terminal analysis 
 
 `modules:configuration` owns persisted source configuration and the `/api/v1/sources` REST implementation.
 
-Its published synchronous Java surface is under `io.signalharvester.configuration.api`:
+Its published synchronous Java surface is deliberately narrow: `io.signalharvester.configuration.api.SourceConfigurationProvider` plus the effective configuration types required by that provider. Configuration administration remains an internal application boundary used by the module-owned HTTP adapter.
 
-- `SourceConfigurationProvider` is the narrow effective-source API consumed by collection;
-- `SourceConfigurationOperations` is the administration application API used by the HTTP adapter.
-
-`SourceConfigurationManager` implements both contracts. PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`; writes are transaction-owned by the application use case while JDBC SQL/resource handling stays in persistence adapters.
+`SourceConfigurationManager` implements both the internal administration boundary and the published provider contract. PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`; writes are transaction-owned by the application use case while JDBC SQL/resource handling stays in persistence adapters.
 
 See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md) for module-local detail.
 
@@ -60,9 +57,9 @@ See [`../modules/configuration/README.md`](../modules/configuration/README.md) a
 
 `modules:collection` owns bounded external-source fetching, explicit collection-run execution, deterministic raw-item identity, `RawItemDiscovered` publication, durable completed-run history, and `/api/v1/admin/collection-runs`.
 
-Its published synchronous Java surface is `io.signalharvester.collection.api`, currently centered on `CollectionRunner` and `CollectionRunHistory`. Collection reads enabled sources only through `configuration.api`; the Gradle dependency on configuration is intentionally an `api` dependency because `CollectionSourceResult` exposes the stable `SourceId` contract type.
+Collection currently publishes no synchronous cross-module Java API. `CollectionRunner`, `CollectionRunHistory`, and their run/result models are internal `collection.run` application boundaries used by collection-owned adapters and tests. Collection reads enabled sources only through `configuration.api`; the Gradle dependency on configuration is therefore an `implementation` dependency.
 
-External HTTP access and Kafka publication remain internal module ports. The generic HTTP path uses Micronaut-managed low-level absolute-URI requests with explicit time, response-size, redirect, connection-pool, and concurrency bounds. Source-level fetch/publication failures are best-effort terminal outcomes and do not cancel unrelated source work.
+External HTTP access and Kafka publication remain internal module ports. The generic HTTP path uses Micronaut-managed low-level absolute-URI requests with explicit time, response-size, redirect, connection-pool, and concurrency bounds. Fetch completion is pipelined into terminal publication with backpressure: only the bounded in-flight window may retain raw payload bodies, while final per-source results are reconstructed in configured-source order. Source-level fetch/publication failures are best-effort terminal outcomes and do not cancel unrelated source work.
 
 Successful source payloads are published as versioned `RawItemDiscovered` Protobuf bytes. The collection run id is reused as the event correlation id, while raw-item identity is deterministic over source id, requested URI, and raw payload.
 
@@ -74,11 +71,11 @@ See [`../modules/collection/README.md`](../modules/collection/README.md) and [`.
 
 `modules:analysis` consumes `RawItemDiscovered`, maps transport messages into module-owned models, normalizes content, performs monitoring-profile-scoped durable deduplication, applies deterministic keyword analysis, and publishes terminal `ItemAnalyzed` or `ItemRejected` events.
 
-The raw-item processing path is intentionally event-driven and remains internal. The only published synchronous Java surface is the bounded `AnalysisItemInspectionQuery` under `io.signalharvester.analysis.api`, used by the read-only `/api/v1/admin/analysis/items` adapter.
+The raw-item processing path is intentionally event-driven and remains internal. Analysis currently publishes no synchronous cross-module Java API; the bounded `AnalysisItemInspectionQuery` is an internal application boundary used by the analysis-owned `/api/v1/admin/analysis/items` adapter.
 
 PostgreSQL schema `analysis` is created by `db/migration/analysis/V2__create_normalized_item_claims.sql`. Logical normalized identity excludes monitoring profile id; duplicate claims are scoped by `(monitoringProfileId, normalizedItemId)`.
 
-The listener disables automatic offset commit and commits the raw Kafka offset only after application processing and terminal publication return successfully. Deduplication state changes and acknowledged terminal Kafka publication share the JDBC transaction window for retryability, but this is **not** distributed exactly-once behavior. An acknowledged output followed by database commit failure can still be published again after redelivery, so future results persistence must be idempotent until an outbox or equivalent stronger cross-resource strategy is introduced.
+The listener disables automatic offset commit and commits the raw Kafka offset only after application processing and terminal publication return successfully. Deduplication persistence uses the transaction-aware JDBC connection owned by `RawItemProcessingService`; failed analyzed/rejected publication rolls back the corresponding claim/counter update and leaves the consumed input offset uncommitted. This is **not** distributed exactly-once behavior. An acknowledged output followed by database commit failure can still be published again after redelivery, so future results persistence must be idempotent until an outbox or equivalent stronger cross-resource strategy is introduced.
 
 See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../modules/analysis/contract.md`](../modules/analysis/contract.md) for module-local detail.
 
@@ -116,10 +113,12 @@ Direct cross-module table access remains forbidden.
 
 ## Testing implementation
 
-The root Gradle build separates fast/default tests from tests tagged `integration`:
+The root Gradle build separates fast/default tests from integration tests through distinct source sets:
 
-- `./gradlew test` excludes integration-tagged Testcontainers/cross-module scenarios;
-- `./gradlew integrationTest` runs integration-tagged scenarios explicitly.
+- `./gradlew test` runs only regular `src/test` unit/behavior/contract tests;
+- `./gradlew integrationTest` runs dedicated `src/integrationTest` scenarios, including Testcontainers and cross-module flows.
+
+The separation is structural rather than tag-based, so a correctly placed integration test cannot accidentally execute as part of the default `test` lifecycle.
 
 Architecture enforcement includes `ModuleBoundaryArchitectureTest`, which rejects production dependencies from one functional module to another module outside the providing module's `api..` package.
 

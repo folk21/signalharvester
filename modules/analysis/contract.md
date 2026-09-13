@@ -22,17 +22,11 @@ Own post-discovery normalization, profile-scoped deduplication, deterministic an
 
 ### Synchronous Java API
 
-Authoritative package:
+No synchronous cross-module Java API is currently published by Analysis.
 
-`src/main/java/io/signalharvester/analysis/api/`
+`AnalysisItemInspectionQuery` and `AnalysisItemInspection` live under `analysis.application` as an internal read-only application boundary used by the analysis-owned HTTP adapter and tests. The raw-item processing path is also intentionally internal and event-driven.
 
-Current interface:
-
-- `AnalysisItemInspectionQuery` — bounded read-only operational query API.
-
-Its returned projection is `AnalysisItemInspection` in the same package.
-
-The raw-item processing path is intentionally not a published synchronous module API. `RawItemProcessor`, `ContentAnalyzer`, `ContentNormalizer`, `AnalysisEventPublisher`, and repository interfaces are internal ports used to structure the module implementation.
+`RawItemProcessor`, `ContentAnalyzer`, `ContentNormalizer`, `AnalysisEventPublisher`, inspection queries, and repository interfaces are internal ports used to structure the module implementation, not published module contracts.
 
 ### REST API
 
@@ -40,7 +34,7 @@ Authoritative schema: `contracts/api-contracts/`.
 
 Implementation adapter: `src/main/java/io/signalharvester/analysis/http/`.
 
-The operational controller depends on `AnalysisItemInspectionQuery`, not directly on persistence.
+The operational controller depends on the internal `AnalysisItemInspectionQuery` application boundary, not directly on persistence.
 
 ### Events
 
@@ -71,6 +65,8 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 
 - deduplication identity is scoped by monitoring profile;
 - raw Kafka offsets are committed only after successful terminal processing/publication;
+- deduplication writes require an active application-owned JDBC transaction;
+- terminal publication failure rolls back the new claim or duplicate observation and leaves the input offset uncommitted;
 - current DB/Kafka transaction semantics are retryable but not distributed exactly-once;
 - downstream result persistence must remain idempotent.
 

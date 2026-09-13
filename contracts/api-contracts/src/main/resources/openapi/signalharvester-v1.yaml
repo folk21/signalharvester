@@ -206,6 +206,7 @@ paths:
       schema:
         type: string
         minLength: 1
+        pattern: .*\S.*
     get:
       tags:
       - Analysis Inspection
@@ -276,7 +277,6 @@ components:
       - name
       - type
       - location
-      - enabled
       properties:
         name:
           type: string
@@ -292,6 +292,8 @@ components:
             a fragment.
         enabled:
           type: boolean
+          default: false
+          description: Whether collection is enabled. Omitted requests default to false.
         settings:
           type: object
           default: {}

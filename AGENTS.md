@@ -150,7 +150,7 @@ PostgreSQL is shared infrastructure, but data ownership is module-local.
 - Public or protected methods that form a contract should have Javadoc when their behavior is not obvious from the signature.
 - Complex or key methods, including important interface implementations and integration entry points, must have a concise Javadoc comment describing what they do and any important guarantees, side effects, or failure semantics.
 - Do not add comments that merely restate the code or method name.
-- Inline `//` comments are allowed only for non-obvious or complex logic where the reasoning, invariant, workaround, or algorithm would otherwise be difficult to understand.
+- Inline `//` comments are allowed only for non-obvious or complex logic where the reasoning, invariant, workaround, or algorithm would otherwise be difficult to understand. Test-purpose comments use the Javadoc-style convention defined in the Testing Rules rather than inline comments.
 - Prefer making code self-explanatory through naming and structure before adding inline comments.
 - Keep comments synchronized with behavior; outdated comments are defects.
 
@@ -208,7 +208,15 @@ Tests must not depend on:
 
 Never disable or weaken a failing test merely to make the build green.
 
-Validation commands and the current command matrix are owned by `docs/TESTS.md`. Use the Gradle wrapper when it exists. Run focused tests first, then broader validation appropriate to the change.
+Keep tests readable as executable specifications:
+
+- Give every test class a concise but informative class-level Javadoc that names the behavior/boundary it protects and links to the primary tested production type with `{@link ...}` when practical. Reference an existing stable feature/spec identifier when it improves navigation; never invent ad-hoc feature codes.
+- Put a concise Javadoc-style purpose comment (`/** ... */`, normally one line, at most two) immediately before every test method annotation. Describe only the scenario/guarantee; do not prefix it with labels such as `Test purpose:`.
+- Name opaque or semantically meaningful fixture values (IDs, hashes, correlation values, profile/source identifiers, fixed timestamps) with constants when the name makes the scenario clearer, especially when reused. Do not extract trivial one-off literals mechanically.
+- Prefer parameterized JUnit tests when the same behavior/assertions are exercised over a list of input values; do not use parameterization to hide materially different scenarios.
+- Apply DRY inside tests: extract repeated fixture construction/setup into focused helpers when it improves readability. Promote helpers to shared test-support only when multiple owners genuinely share the same semantics.
+
+Validation commands and the current command matrix are owned by `docs/TESTS.md`. Use the Gradle wrapper when it exists. Run focused tests first, then broader validation appropriate to the change. `./run_checks.sh` is the canonical full repository gate for default checks, container-backed integration tests, and FULL-archive reproducibility.
 
 Never claim a test/build passed unless it was actually run successfully.
 

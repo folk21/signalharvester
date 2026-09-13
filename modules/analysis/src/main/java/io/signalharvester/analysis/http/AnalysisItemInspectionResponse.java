@@ -1,11 +1,13 @@
 package io.signalharvester.analysis.http;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.micronaut.serde.annotation.Serdeable;
-import io.signalharvester.analysis.api.AnalysisItemInspection;
+import io.signalharvester.analysis.application.AnalysisItemInspection;
 import java.time.Instant;
 import java.util.Optional;
 
 /** REST representation of durable analysis deduplication state. */
+@JsonInclude(JsonInclude.Include.ALWAYS)
 @Serdeable
 public record AnalysisItemInspectionResponse(
         String monitoringProfileId,

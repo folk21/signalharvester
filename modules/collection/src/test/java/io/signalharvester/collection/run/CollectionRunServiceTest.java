@@ -1,10 +1,5 @@
 package io.signalharvester.collection.run;
 
-import io.signalharvester.collection.api.CollectionRunRequest;
-import io.signalharvester.collection.api.CollectionRunResult;
-import io.signalharvester.collection.api.CollectionRunStatus;
-import io.signalharvester.collection.api.CollectionSourceResult;
-import io.signalharvester.collection.api.CollectionSourceStatus;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,16 +24,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies orchestration semantics of {@link CollectionRunService}, including bounded fetch-to-publication
+ * behavior, partial failures, run correlation, and deterministic terminal-result ordering.
+ *
+ * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ */
 class CollectionRunServiceTest {
 
     private static final String RUN_ID = "00000000-0000-0000-0000-000000000601";
     private static final Instant RUN_TIME = Instant.parse("2026-09-10T18:00:00Z");
+    private static final String PROFILE_ID = "profile-1";
+    private static final String RAW_ITEM_TOPIC = "raw-items";
+    private static final String EVENT_ID_PREFIX = "event-";
 
+    /**
+     * Publish all enabled sources with run correlation.
+     */
     @Test
     void shouldPublishAllEnabledSourcesWithRunCorrelation() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"));
@@ -58,11 +68,60 @@ class CollectionRunServiceTest {
                     .toList());
             assertEquals(2, publisher.contexts.size());
             assertTrue(publisher.contexts.stream().allMatch(context -> RUN_ID.equals(context.correlationId())));
-            assertTrue(publisher.contexts.stream().allMatch(context -> "profile-1".equals(context.monitoringProfileId())));
+            assertTrue(publisher.contexts.stream().allMatch(context -> PROFILE_ID.equals(context.monitoringProfileId())));
             assertTrue(publisher.contexts.stream().allMatch(context -> "JOB".equals(context.informationCategory())));
         }
     }
 
+    /**
+     * Publish completed payload before fetching beyond concurrency window.
+     */
+    @Test
+    void shouldPublishCompletedPayloadBeforeFetchingBeyondConcurrencyWindow() throws Exception {
+        List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
+        CountDownLatch releaseFirstFetch = new CountDownLatch(1);
+        CountDownLatch thirdFetchStarted = new CountDownLatch(1);
+        CountDownLatch secondPublicationStarted = new CountDownLatch(1);
+        CountDownLatch releaseSecondPublication = new CountDownLatch(1);
+
+        ExternalSourceClient client = source -> {
+            if ("one".equals(source.name())) {
+                await(releaseFirstFetch);
+            } else if ("three".equals(source.name())) {
+                thirdFetchStarted.countDown();
+            }
+            return content(source);
+        };
+        RawItemEventPublisher publisher = (content, context) -> {
+            if (content.requestedUri().getPath().endsWith("/two")) {
+                secondPublicationStarted.countDown();
+                await(releaseSecondPublication);
+            }
+            return new RawItemPublicationResult(EVENT_ID_PREFIX + context.rawItemId(), context.rawItemId(), RAW_ITEM_TOPIC);
+        };
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CollectionRunService service = service(sources, client, publisher, executor);
+            CompletableFuture<CollectionRunResult> result = CompletableFuture.supplyAsync(() -> service.run(request()));
+
+            assertTrue(secondPublicationStarted.await(2, TimeUnit.SECONDS));
+            assertTrue(!thirdFetchStarted.await(100, TimeUnit.MILLISECONDS),
+                    "third fetch must wait while the completed payload is being published");
+
+            releaseSecondPublication.countDown();
+            assertTrue(thirdFetchStarted.await(2, TimeUnit.SECONDS));
+            releaseFirstFetch.countDown();
+
+            assertEquals(List.of(sources.get(0).id(), sources.get(1).id(), sources.get(2).id()),
+                    result.get(2, TimeUnit.SECONDS).sources().stream()
+                            .map(CollectionSourceResult::sourceId)
+                            .toList());
+        }
+    }
+
+    /**
+     * Report partial success and continue after fetch failure.
+     */
     @Test
     void shouldReportPartialSuccessAndContinueAfterFetchFailure() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
@@ -88,18 +147,22 @@ class CollectionRunServiceTest {
         }
     }
 
+    /**
+     * Continue publication after one Kafka failure.
+     */
     @Test
     void shouldContinuePublicationAfterOneKafkaFailure() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
+        SourceId failingSourceId = sources.get(1).id();
         AtomicInteger publication = new AtomicInteger();
         RawItemEventPublisher publisher = (content, context) -> {
             int current = publication.incrementAndGet();
-            if (current == 2) {
+            if (content.sourceId().equals(failingSourceId)) {
                 throw new RawItemPublicationException(
-                        context.rawItemId(), context.correlationId(), "raw-items", "synthetic Kafka failure",
+                        context.rawItemId(), context.correlationId(), RAW_ITEM_TOPIC, "synthetic Kafka failure",
                         new IllegalStateException("broker failure"));
             }
-            return new RawItemPublicationResult("event-" + current, context.rawItemId(), "raw-items");
+            return new RawItemPublicationResult(EVENT_ID_PREFIX + current, context.rawItemId(), RAW_ITEM_TOPIC);
         };
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -117,6 +180,9 @@ class CollectionRunServiceTest {
         }
     }
 
+    /**
+     * Report failed when every source fails.
+     */
     @Test
     void shouldReportFailedWhenEverySourceFails() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"));
@@ -135,6 +201,9 @@ class CollectionRunServiceTest {
         }
     }
 
+    /**
+     * Succeed without work when no sources are enabled.
+     */
     @Test
     void shouldSucceedWithoutWorkWhenNoSourcesAreEnabled() {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -178,8 +247,17 @@ class CollectionRunServiceTest {
                 Clock.fixed(RUN_TIME, ZoneOffset.UTC));
     }
 
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("synthetic test wait interrupted", interrupted);
+        }
+    }
+
     private static CollectionRunRequest request() {
-        return new CollectionRunRequest("profile-1", "JOB", Optional.empty());
+        return new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty());
     }
 
     private static ConfiguredSource source(String name) {
@@ -215,7 +293,7 @@ class CollectionRunServiceTest {
         @Override
         public RawItemPublicationResult publish(FetchedSourceContent content, RawItemPublicationContext context) {
             contexts.add(context);
-            return new RawItemPublicationResult("event-" + contexts.size(), context.rawItemId(), "raw-items");
+            return new RawItemPublicationResult(EVENT_ID_PREFIX + contexts.size(), context.rawItemId(), RAW_ITEM_TOPIC);
         }
     }
 }

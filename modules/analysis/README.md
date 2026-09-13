@@ -24,11 +24,11 @@ Monitoring-profile-owned analysis settings, richer category-specific normalizati
 
 ## Operational inspection
 
-Read-only `/api/v1/admin/analysis/items` endpoints expose durable normalization/deduplication provenance from `analysis.normalized_item_claims`. Classification, score, tags, and user-facing results remain event-only until results persistence is implemented.
+Read-only `/api/v1/admin/analysis/items` endpoints expose durable normalization/deduplication provenance from `analysis.normalized_item_claims`. The query interface behind this controller is an internal application boundary, not a published cross-module Java API. Classification, score, tags, and user-facing results remain event-only until results persistence is implemented.
 
 ## Runtime notes
 
-The Kafka listener manually commits raw offsets only after successful terminal processing/publication. JDBC deduplication state and Kafka publication share one application transaction window for retryability, but this is not distributed exactly-once behavior. The corresponding invariant and downstream idempotency requirement are defined in [`contract.md`](contract.md).
+The Kafka listener manually commits raw offsets only after successful terminal processing/publication. JDBC deduplication state uses the application-owned transaction-aware connection, and terminal publication failure rolls back the new claim or duplicate observation before the input offset can be committed. PostgreSQL and Kafka still do not form a distributed exactly-once transaction: an acknowledged output followed by database commit failure can be published again after redelivery. The corresponding invariant and downstream idempotency requirement are defined in [`contract.md`](contract.md).
 
 ## Read next
 

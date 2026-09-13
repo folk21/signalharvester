@@ -20,23 +20,21 @@ Own persisted configuration and expose effective source configuration without le
 
 ### Synchronous Java API
 
-Authoritative package:
+Authoritative published package:
 
 `src/main/java/io/signalharvester/configuration/api/`
 
-Primary interfaces:
+Published cross-module interface:
 
-- `SourceConfigurationProvider` — narrow read API intended for cross-module consumption;
-- `SourceConfigurationOperations` — administration application API used by the module's inbound adapters and available only when a caller intentionally owns configuration administration.
+- `SourceConfigurationProvider` — narrow read API consumed by collection.
 
-Contract data is colocated in the same package because the current surface is small:
+Published contract data remains in the same package because it is part of the provider surface:
 
 - `SourceId`;
 - `SourceType`;
-- `ConfiguredSource`;
-- `SourceConfigurationCommand`.
+- `ConfiguredSource`.
 
-Consumers should read the Java files above rather than relying on duplicated method signatures in this document.
+Configuration administration is an internal application boundary under `configuration.application`; its command/interface types are intentionally not published to other functional modules. Consumers should read the Java files above rather than relying on duplicated method signatures in this document.
 
 ### REST API
 

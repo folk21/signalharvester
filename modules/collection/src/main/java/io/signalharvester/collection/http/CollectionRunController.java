@@ -10,8 +10,8 @@ import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.validation.Validated;
-import io.signalharvester.collection.api.CollectionRunHistory;
-import io.signalharvester.collection.api.CollectionRunner;
+import io.signalharvester.collection.run.CollectionRunHistory;
+import io.signalharvester.collection.run.CollectionRunner;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -40,13 +40,15 @@ public class CollectionRunController {
     /** Returns the most recent completed collection runs, newest first. */
     @Get
     public List<CollectionRunResponse> recent(
-            @QueryValue(defaultValue = "50") @Min(1) @Max(200) int limit) {
+            @QueryValue(defaultValue = "50")
+            @Min(CollectionRunHistory.MIN_RECENT_LIMIT)
+            @Max(CollectionRunHistory.MAX_RECENT_LIMIT) int limit) {
         return history.recent(limit).stream().map(CollectionRunResponse::from).toList();
     }
 
     /** Returns one durable collection-run snapshot. */
     @Get("/{collectionRunId}")
     public CollectionRunResponse get(@PathVariable UUID collectionRunId) {
-        return CollectionRunResponse.from(history.get(collectionRunId.toString()));
+        return CollectionRunResponse.from(history.get(collectionRunId));
     }
 }

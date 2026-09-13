@@ -1,8 +1,6 @@
 package io.signalharvester.analysis.application;
 
 import io.micronaut.transaction.TransactionOperations;
-import io.signalharvester.analysis.api.AnalysisItemInspection;
-import io.signalharvester.analysis.api.AnalysisItemInspectionQuery;
 import io.signalharvester.analysis.persistence.AnalysisItemInspectionRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;

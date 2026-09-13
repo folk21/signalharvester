@@ -69,13 +69,15 @@ Prefer code that remains understandable if the module is later extracted, withou
 
 ## Architecture enforcement
 
-Cross-module production Java dependencies may target only the providing functional module's `api..` package. Keep this invariant covered by architecture tests as module packages evolve.
+Cross-module production Java dependencies may target only the providing functional module's `api..` package. A module with no synchronous functional-module consumer should normally have no published `api` package; keep HTTP-facing or other local inbound interfaces internal.
 
-Architecture tests should protect meaningful dependency direction and must not force internal ports into `api` merely to satisfy a naming convention.
+Architecture tests must protect the acyclic functional-module graph, published-API purity, the public-API-only cross-module dependency rule, and obvious adapter-boundary violations such as direct HTTP-to-persistence coupling. They must not force internal ports into `api` merely to satisfy a naming convention.
 
 ## Testing
 
-Keep module behavior tests with the module. Use deterministic adapters/fakes for unit tests and shared Testcontainers-based integration tests where real Kafka/PostgreSQL behavior matters.
+Keep module behavior tests with the module. Use deterministic adapters/fakes for unit tests and Testcontainers-based integration tests where real Kafka/PostgreSQL behavior matters.
+
+Put fast module tests in `src/test/java` and container-backed integration tests in `src/integrationTest/java`. The separate Gradle source sets are the lifecycle boundary; do not depend on JUnit tags to prevent an integration test from entering the default `test` task.
 
 Prefer tests and multi-module fixtures to resolve published API interfaces when the purpose is to exercise a module as a consumer would. Tests dedicated to one internal adapter may still use the internal contract directly.
 

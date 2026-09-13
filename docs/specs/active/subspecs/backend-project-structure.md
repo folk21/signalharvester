@@ -38,7 +38,7 @@ Create a backend structure that:
 
 The backend repository root is `signalharvester/` and the Gradle root project name is `signalharvester`.
 
-The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration/history, and the first analysis Kafka/persistence path. Cross-module production dependencies are guarded by an ArchUnit rule that permits dependencies only on a providing module's `api..` package. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, Kubernetes deployment, and production observability remain pending. Local PostgreSQL/Redpanda Docker Compose is implemented.
+The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration/history, and the first analysis Kafka/persistence path. Cross-module production dependencies are guarded by ArchUnit rules that permit dependencies only on a providing module's `api..` package, reject functional-module cycles, keep published APIs free of implementation/framework types, prevent direct HTTP-to-persistence coupling, and forbid functional modules from depending on the app composition root. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, Kubernetes deployment, and production observability remain pending. Local PostgreSQL/Redpanda Docker Compose is implemented with explicit environment overrides, and the repository provides a single full verification entry point through `run_checks.sh`.
 
 Java 21 is the initial toolchain target. Micronaut is the backend framework. Generic external-source access uses Micronaut's managed low-level HTTP client for configuration-driven absolute URLs, behind synchronous module-facing APIs executed on Micronaut's blocking executor, which uses Virtual Threads on the Java 21 baseline. Streaming boundaries remain reactive where appropriate.
 
@@ -132,9 +132,9 @@ A module may internally use packages such as `api`, `application`, `model`, and 
 
 ## Module contract rule
 
-Every functional module has an internal implementation surface and may expose a narrow public contract surface.
+Every functional module has an internal implementation surface and may expose a narrow public contract surface when a real synchronous functional-module consumer exists. A module whose inbound interfaces are used only by its own adapters should keep those interfaces internal rather than creating a nominal public API.
 
-The preferred Java namespace convention is:
+When published, the preferred Java namespace convention is:
 
 ```text
 io.signalharvester.<module>.api
@@ -159,7 +159,7 @@ configuration.persistence.JdbcSourceConfigurationRepository
 
 This rule is enforced with an ArchUnit-backed architecture test that rejects production cross-module Java dependencies outside the providing module's `api..` package.
 
-Public module APIs should remain small. A class must not be moved to an `api` package merely because another module wants convenient access to it. Published module behavior is expressed through interfaces under `api`; contract data may be colocated there or referenced from an existing owned model when duplication would add no value. Internal repositories, outbound clients, publishers, analyzers, and strategy interfaces remain outside `api` unless intentionally published. REST controllers remain transport adapters and are never promoted to Java API merely to make them injectable.
+Public module APIs should remain small. A class must not be moved to an `api` package merely because another module wants convenient access to it. Published module behavior is expressed through interfaces under `api`; contract data may be colocated there or referenced from an existing owned model when duplication would add no value. Controller-facing application ports that have no external functional-module consumer remain internal, just like repositories, outbound clients, publishers, analyzers, and strategy interfaces. REST controllers remain transport adapters and are never promoted to Java API merely to make them injectable.
 
 Each functional module also keeps a root `contract.md` as a compact context/navigation index. It points to the authoritative Java `api/**`, OpenAPI, and Protobuf sources and records ownership/dependency/invariant information without copying complete method or field signatures. This supports selective context loading for both developers and coding agents.
 
@@ -725,5 +725,6 @@ The structure is valid when all of the following are true:
 13. Keep ArchUnit rules aligned with published module APIs as packages evolve.
 14. Add module-local Flyway migrations.
 15. Add OpenTelemetry instrumentation.
-16. Docker Compose for local PostgreSQL/Kafka dependencies is implemented; keep it aligned with runtime defaults.
+16. Docker Compose for local PostgreSQL/Kafka dependencies is implemented with safe defaults and explicit environment overrides; keep it aligned with runtime defaults.
+17. Keep `run_checks.sh` as the canonical repository-level verification entry point for default checks, integration tests, and archive reproducibility.
 17. Add Kubernetes deployment after the local vertical slice is stable.

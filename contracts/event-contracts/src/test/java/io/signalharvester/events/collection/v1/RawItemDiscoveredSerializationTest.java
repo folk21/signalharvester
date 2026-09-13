@@ -10,8 +10,27 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies Protobuf round trips and forward-compatible decoding for {@link RawItemDiscovered}, including
+ * preservation of identifiers, provenance, attributes, and shared event-envelope metadata.
+ *
+ * <p>Related specification: {@code backend-event-contracts}.</p>
+ */
 class RawItemDiscoveredSerializationTest {
 
+    private static final int UNKNOWN_FIELD_NUMBER = 1000;
+    private static final String UNKNOWN_FIELD_VALUE = "future-field";
+    private static final String EVENT_ID = "event-01";
+    private static final String RUN_ID = "run-01";
+    private static final String RAW_ITEM_ID = "raw-01";
+    private static final String SOURCE_ID = "source-01";
+    private static final String PROFILE_ID = "profile-01";
+    private static final String TRACEPARENT =
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+    /**
+     * Round trip representative event.
+     */
     @Test
     void shouldRoundTripRepresentativeEvent() throws IOException {
         RawItemDiscovered original = representativeEvent();
@@ -21,6 +40,9 @@ class RawItemDiscoveredSerializationTest {
         assertEquals(original, decoded);
     }
 
+    /**
+     * Tolerate unknown additive fields.
+     */
     @Test
     void shouldTolerateUnknownAdditiveFields() throws IOException {
         RawItemDiscovered original = representativeEvent();
@@ -28,14 +50,14 @@ class RawItemDiscoveredSerializationTest {
         bytes.write(original.toByteArray());
 
         CodedOutputStream codedOutput = CodedOutputStream.newInstance(bytes);
-        codedOutput.writeString(1000, "future-field");
+        codedOutput.writeString(UNKNOWN_FIELD_NUMBER, UNKNOWN_FIELD_VALUE);
         codedOutput.flush();
 
         RawItemDiscovered decoded = RawItemDiscovered.parseFrom(bytes.toByteArray());
 
         assertEquals(original.getRawItemId(), decoded.getRawItemId());
         assertEquals(original.getEnvelope().getEventId(), decoded.getEnvelope().getEventId());
-        assertTrue(decoded.getUnknownFields().hasField(1000));
+        assertTrue(decoded.getUnknownFields().hasField(UNKNOWN_FIELD_NUMBER));
     }
 
     private static RawItemDiscovered representativeEvent() {
@@ -44,20 +66,20 @@ class RawItemDiscoveredSerializationTest {
                 .build();
 
         EventEnvelope envelope = EventEnvelope.newBuilder()
-                .setEventId("event-01")
+                .setEventId(EVENT_ID)
                 .setEventType("collection.raw-item-discovered.v1")
                 .setOccurredAt(occurredAt)
-                .setCorrelationId("run-01")
-                .setTraceparent("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+                .setCorrelationId(RUN_ID)
+                .setTraceparent(TRACEPARENT)
                 .setProducer("collection")
                 .setSchemaVersion("v1")
                 .build();
 
         return RawItemDiscovered.newBuilder()
                 .setEnvelope(envelope)
-                .setRawItemId("raw-01")
-                .setSourceId("source-01")
-                .setMonitoringProfileId("profile-01")
+                .setRawItemId(RAW_ITEM_ID)
+                .setSourceId(SOURCE_ID)
+                .setMonitoringProfileId(PROFILE_ID)
                 .setInformationCategory("JOB")
                 .setExternalId("external-42")
                 .setTitle("Senior Java Backend Engineer")

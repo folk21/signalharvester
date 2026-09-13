@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Verify and accept the operational admin API slice. Detailed acceptance criteria for the current verification gate live in [`specs/active/subspecs/backend-operational-admin-api.md`](specs/active/subspecs/backend-operational-admin-api.md); the gate includes the dedicated integration-test lifecycle and server-level operational HTTP coverage. After acceptance, move directly to results persistence and the first result read API.
+Complete the architecture-stabilization cycle around module boundaries, verification tooling, and trial-readiness regression coverage. The current structural guardrails live in [`specs/active/subspecs/backend-project-structure.md`](specs/active/subspecs/backend-project-structure.md). After the remaining stabilization/quality baseline, move to results persistence and the first result read API, then source extraction needed for a meaningful real-source trial.
 
 ## P0 — repository and contract foundation
 

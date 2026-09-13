@@ -2,8 +2,6 @@ package io.signalharvester.configuration.application;
 
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.configuration.api.ConfiguredSource;
-import io.signalharvester.configuration.api.SourceConfigurationCommand;
-import io.signalharvester.configuration.api.SourceConfigurationOperations;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.persistence.SourceRepository;

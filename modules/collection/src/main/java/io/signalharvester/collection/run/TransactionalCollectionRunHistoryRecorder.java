@@ -1,7 +1,6 @@
 package io.signalharvester.collection.run;
 
 import io.micronaut.transaction.TransactionOperations;
-import io.signalharvester.collection.api.CollectionRunResult;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.Connection;

@@ -95,16 +95,16 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-operational-admin-api.md`](active/subspecs/backend-operational-admin-api.md) — manual collection execution, durable run inspection, and read-only analysis inspection.
+- [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith boundaries, published API rules, and architecture-test guardrails.
 
 Active supporting tracks:
 
-- [`active/subspecs/backend-configuration-persistence-rest.md`](active/subspecs/backend-configuration-persistence-rest.md) — implementation complete; Gradle/Testcontainers verification pending before archival;
-- [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith repository structure and module boundaries;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
 
 ## Recently completed sub-specifications
 
+- [`archive/subspecs/backend-configuration-persistence-rest.md`](archive/subspecs/backend-configuration-persistence-rest.md) — PostgreSQL-backed source CRUD, REST validation, and configuration-provider wiring, verified in the developer environment;
+- [`archive/subspecs/backend-operational-admin-api.md`](archive/subspecs/backend-operational-admin-api.md) — manual collection execution, durable run inspection, and read-only analysis inspection, verified in the developer environment;
 - [`archive/subspecs/backend-analysis-normalization-deduplication.md`](archive/subspecs/backend-analysis-normalization-deduplication.md) — normalization, profile-scoped deduplication, deterministic analysis, and terminal analysis events, verified in the developer environment;
 - [`archive/subspecs/backend-collection-kafka-transport.md`](archive/subspecs/backend-collection-kafka-transport.md) — acknowledged `RawItemDiscovered` Protobuf publication boundary and Kafka round-trip, verified in the developer environment;
 - [`archive/subspecs/backend-collection-run-orchestration.md`](archive/subspecs/backend-collection-run-orchestration.md) — enabled-source collection execution, run correlation, deterministic raw identity, and best-effort partial-failure behavior, verified in the developer environment.

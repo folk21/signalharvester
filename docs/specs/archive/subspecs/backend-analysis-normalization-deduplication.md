@@ -4,13 +4,13 @@ title: SignalHarvester normalization, deduplication, and minimal analysis
 description: Current implementation sub-specification for consuming RawItemDiscovered, normalizing content, durable profile-scoped deduplication, deterministic rule analysis, and terminal analysis events.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # SignalHarvester normalization, deduplication, and minimal analysis
 
 ## Status
 
-Implementation complete — Gradle and PostgreSQL/Kafka Testcontainers verification pending before archival.
+Completed and verified — archived after the analysis PostgreSQL/Kafka, focused processing, rollback/no-commit, and cross-module integration suites passed in the developer environment.
 
 This slice implements the first real asynchronous consumer path after collection. It deliberately stops before results persistence/read APIs and before monitoring-profile-owned analysis rules.
 

@@ -1,6 +1,6 @@
 package io.signalharvester.analysis.persistence;
 
-import io.signalharvester.analysis.api.AnalysisItemInspection;
+import io.signalharvester.analysis.application.AnalysisItemInspection;
 import java.util.List;
 import java.util.Optional;
 
