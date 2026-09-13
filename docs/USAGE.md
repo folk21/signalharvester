@@ -43,7 +43,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies the configuration, analysis, and collection operational-history migrations at startup. The backend exposes source configuration CRUD under `/api/v1/sources`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events.
+Flyway applies the configuration, analysis, collection, and Results migrations at startup. The backend exposes source configuration CRUD under `/api/v1/sources`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
 
 Example source creation:
 
@@ -84,7 +84,7 @@ python3 tools/source-import/import_sources.py \
 
 The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
 
-The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, persists the completed run snapshot, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results are not persisted or exposed yet.
+The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, persists the completed run snapshot, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events and persists an idempotent Results-owned projection. A public Results read API is not implemented yet.
 
 Start a manual collection run:
 
@@ -106,7 +106,17 @@ Inspect recent normalized analysis claims:
 curl 'http://localhost:8080/api/v1/admin/analysis/items?limit=20'
 ```
 
-The analysis inspection API exposes durable normalization/deduplication provenance only. Classification, score, and user-facing results are not yet persisted and therefore are intentionally absent from this API.
+The analysis inspection API exposes durable normalization/deduplication provenance only. Classification, score, tags, explanation, normalized content, and provenance are now persisted by Results but are intentionally not exposed through the Analysis API.
+
+Until the Results REST API is implemented, local developers may inspect the materialized projection directly for verification:
+
+```bash
+docker compose -f infra/docker-compose/compose.yaml exec postgres \
+  psql -U signalharvester -d signalharvester -c \
+  'SELECT monitoring_profile_id, normalized_item_id, classification, score, relevant, title FROM results.analyzed_items ORDER BY analyzed_at DESC;'
+```
+
+Direct SQL is a temporary local verification workflow only; application modules and browser clients must not depend on Results tables directly.
 
 ## Run tests and repository checks
 

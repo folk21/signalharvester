@@ -54,6 +54,10 @@ Normalization precedes deduplication and analysis. Logical item identity is stab
 
 The initial analyzer is deterministic and replaceable through `ContentAnalyzer`; external AI is not a core dependency. Raw Kafka offsets are committed explicitly only after terminal analysis processing completes. The current JDBC-state + Kafka-publication window deliberately favors retryability when publication fails but is not distributed exactly-once; downstream result persistence must be idempotent until transactional outbox or an equivalent stronger strategy is introduced.
 
+## Results persistence boundary
+
+Results consumes versioned terminal Analysis events asynchronously and never reads Analysis tables or implementation types. The materialized analyzed-result identity is `(monitoringProfileId, normalizedItemId)`; rejection retry identity is the upstream `sourceEventId`. Results owns its JDBC transaction and commits Kafka offsets only after durable projection completes. These idempotent keys absorb normal at-least-once redelivery, including the Analysis publish-ack/database-commit gap, without claiming distributed exactly-once semantics.
+
 ## HTTP server execution boundary
 
 Micronaut Netty event-loop threads must not run blocking application work. REST controller methods or classes that invoke JDBC, blocking HTTP, or other imperative blocking workflows use `@ExecuteOn(TaskExecutors.BLOCKING)`. On the Java 21 baseline this means Virtual Threads. True streaming endpoints such as SSE keep their `Publisher`/reactive execution model and are not moved to blocking execution mechanically. Expected API/domain failures should be translated at the HTTP boundary through Micronaut `ExceptionHandler` implementations rather than repeated controller `try/catch` blocks; handlers and filters remain non-blocking unless explicitly offloaded.

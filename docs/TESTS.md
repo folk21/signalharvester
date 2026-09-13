@@ -61,6 +61,8 @@ Focused commands follow the same source-set split:
 ./gradlew :modules:collection:integrationTest
 ./gradlew :modules:analysis:test
 ./gradlew :modules:analysis:integrationTest
+./gradlew :modules:results:test
+./gradlew :modules:results:integrationTest
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
 ./gradlew :testing:integration-tests:integrationTest
@@ -72,7 +74,7 @@ When adding integration coverage, place it under `src/integrationTest/java` (and
 
 ## Integration infrastructure
 
-`modules:configuration` uses PostgreSQL Testcontainers for its persistence/server boundary. `modules:collection` uses Kafka Testcontainers for its producer/consumer transport boundary. `modules:analysis` uses PostgreSQL Testcontainers for durable deduplication. `testing:integration-tests` uses PostgreSQL + Kafka Testcontainers together for collection-run and collection-to-analysis flows. Container-backed tests require a supported Docker-compatible runtime.
+`modules:configuration` uses PostgreSQL Testcontainers for its persistence/server boundary. `modules:collection` uses Kafka Testcontainers for its producer/consumer transport boundary. `modules:analysis` uses PostgreSQL Testcontainers for durable deduplication. `modules:results` uses PostgreSQL + Kafka Testcontainers for real terminal-event consumption and idempotent projection persistence. `testing:integration-tests` uses PostgreSQL + Kafka Testcontainers together for collection-run and collection-to-analysis flows. Container-backed tests require a supported Docker-compatible runtime.
 
 External HTTP sources must be deterministic local/fake servers controlled by tests. Blocking HTTP/controller tests must also verify that work is offloaded from Netty event-loop threads when that execution boundary is implemented.
 
@@ -118,6 +120,8 @@ The first implementation foundation contains:
 - `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
 - `RawItemKafkaListenerTest` for explicit offset commit after success plus no-commit behavior for processing failure, malformed Protobuf, Kafka key mismatch, and invalid mapped domain data;
 - `KafkaAnalysisEventPublisherTest` for analyzed/rejected topic-key mapping, full provenance serialization, and publication-failure normalization;
+- `AnalysisOutcomeKafkaListenerTest` for Results terminal-event mapping, Kafka key validation, poison-input handling, persistence-failure no-commit behavior, and manual offset commit after successful projection;
+- `ResultsKafkaPostgresIntegrationTest` for real Kafka -> Results listener -> PostgreSQL materialization of analyzed/rejected events, including idempotent retry/upsert behavior and transactional replacement of result tags/attributes;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
 - `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> manual collection -> deterministic HTTP source -> Kafka -> Analysis -> durable collection history and analysis inspection, including equivalent rediscovery observed through public HTTP APIs only.
@@ -136,7 +140,7 @@ raw Kafka input
     -> input offset commit
 ```
 
-The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` now starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence/read APIs are still required before a broader product trial can retain and inspect user-facing analyzed outcomes instead of only operational deduplication state.
+The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` now starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence now retains terminal analyzed/rejected outcomes. A Results read REST API is still required before the broader product trial can inspect that user-facing state without direct database access.
 
 ## Python tooling tests
 

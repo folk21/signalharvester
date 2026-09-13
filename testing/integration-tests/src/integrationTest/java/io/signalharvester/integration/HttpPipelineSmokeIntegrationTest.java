@@ -42,7 +42,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * {@link io.signalharvester.analysis.http.AnalysisItemInspectionController} over real PostgreSQL and Kafka.
  *
  * <p>The test drives source creation, repeated collection, durable run history, and analysis inspection only
- * through HTTP. Until Results persistence exists, analysis inspection is the terminal observable boundary.</p>
+ * through HTTP. Until a Results read API exists, analysis inspection remains the terminal public observable boundary.</p>
  *
  * <p>Related specifications: {@code backend-configuration-persistence-rest},
  * {@code backend-collection-run-orchestration}, {@code backend-analysis-normalization-deduplication},
@@ -242,6 +242,7 @@ class HttpPipelineSmokeIntegrationTest {
                 Map.entry("signalharvester.kafka.item-rejected-topic", REJECTED_TOPIC),
                 Map.entry("signalharvester.analysis.enabled", true),
                 Map.entry("signalharvester.analysis.consumer-group", ANALYSIS_GROUP),
+                Map.entry("signalharvester.results.enabled", false),
                 Map.entry("signalharvester.analysis.keyword-rules.keywords", List.of("java", "kafka", "postgresql")),
                 Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1),
                 Map.entry("signalharvester.collection.max-concurrency", 2));

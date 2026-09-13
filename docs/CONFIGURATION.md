@@ -31,6 +31,8 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_KAFKA_ITEM_REJECTED_TOPIC` | `signalharvester.analysis.item-rejected.v1` | Versioned topic for analysis rejection outcomes such as duplicates. |
 | `SIGNALHARVESTER_ANALYSIS_ENABLED` | `true` | Enables the raw-item analysis Kafka listener. |
 | `SIGNALHARVESTER_ANALYSIS_CONSUMER_GROUP` | `signalharvester-analysis-v1` | Consumer group for the analysis raw-item listener. |
+| `SIGNALHARVESTER_RESULTS_ENABLED` | `true` | Enables Results consumption/materialization of terminal Analysis events. |
+| `SIGNALHARVESTER_RESULTS_CONSUMER_GROUP` | `signalharvester-results-v1` | Consumer group for the Results terminal-analysis listeners. |
 | `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` | `1` | Minimum configured keyword matches required for relevance. |
 | `SIGNALHARVESTER_COLLECTION_MAX_CONCURRENCY` | `8` | Maximum concurrently active source-fetch workers. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_CONNECT_TIMEOUT` | `3s` | External HTTP connection timeout. |
@@ -48,7 +50,7 @@ The maximum concurrency value is validated through Micronaut/Jakarta Validation 
 
 Configured source URLs are domain values: they must be absolute HTTP/HTTPS locations with a host, without embedded user-info credentials and without URI fragments. Secrets should be modeled separately rather than embedded into URLs.
 
-Collection and analysis producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They wait for acknowledgements with `acks=all` and enable Kafka producer idempotence. Analysis explicitly configures String/byte-array consumer deserializers and consumes raw bytes with offset commit only after successful processing. These transport settings do not replace application-level replay/idempotency rules.
+Collection and analysis producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They wait for acknowledgements with `acks=all` and enable Kafka producer idempotence. Analysis and Results consume String-keyed byte-array payloads with explicit offset commit only after their durable application processing succeeds. These transport settings do not replace application-level replay/idempotency rules.
 
 The first analyzer uses a small global keyword list in `application.properties` and `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` for the threshold. This is temporary runtime configuration until monitoring profiles own analysis rules. The threshold must be positive and cannot exceed the number of unique configured keywords.
 
@@ -81,7 +83,7 @@ The local `.env` file is ignored by Git and excluded from FULL archives.
 
 ## Persisted application configuration
 
-The configuration module owns source configuration persistence in PostgreSQL. Its first Flyway migration lives under `db/migration/configuration` and creates module-owned `configuration.sources` and `configuration.source_settings` objects. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history under `db/migration/collection` and schema `collection`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider`; they must not read configuration tables directly.
+The configuration module owns source configuration persistence in PostgreSQL. Its first Flyway migration lives under `db/migration/configuration` and creates module-owned `configuration.sources` and `configuration.source_settings` objects. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history under `db/migration/collection` and schema `collection`; Results owns analyzed/rejected projections under `db/migration/results` and schema `results`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider`; they must not read configuration tables directly.
 
 Source names are not globally unique. The stable `SourceId` is the identity boundary, so two sources may intentionally share a display name while retaining different identifiers, locations, and settings.
 

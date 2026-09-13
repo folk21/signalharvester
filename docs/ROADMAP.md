@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Complete the architecture-stabilization cycle around module boundaries, verification tooling, and trial-readiness regression coverage. The current structural guardrails live in [`specs/active/subspecs/backend-project-structure.md`](specs/active/subspecs/backend-project-structure.md). After the remaining stabilization/quality baseline, move to results persistence and the first result read API, then source extraction needed for a meaningful real-source trial.
+Complete the first Results vertical slice. Terminal Analysis events are now materialized into Results-owned PostgreSQL state under [`specs/active/subspecs/backend-results-persistence.md`](specs/active/subspecs/backend-results-persistence.md); the next step is the first result read REST API, followed by source extraction needed for a meaningful real-source trial.
 
 ## P0 — repository and contract foundation
 
@@ -44,4 +44,4 @@ Complete the architecture-stabilization cycle around module boundaries, verifica
 - LLM/embedding analysis as a required core dependency.
 
 
-The first operational admin API now provides manual collection execution, durable completed-run inspection, and read-only analysis deduplication inspection. Result persistence and Event Explorer/SSE remain subsequent vertical slices.
+The first operational admin API now provides manual collection execution, durable completed-run inspection, and read-only analysis deduplication inspection. Result read REST/SSE and Event Explorer remain subsequent vertical slices.
