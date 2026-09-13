@@ -122,6 +122,8 @@ The first implementation foundation contains:
 - `KafkaAnalysisEventPublisherTest` for analyzed/rejected topic-key mapping, full provenance serialization, and publication-failure normalization;
 - `AnalysisOutcomeKafkaListenerTest` for Results terminal-event mapping, Kafka key validation, poison-input handling, persistence-failure no-commit behavior, and manual offset commit after successful projection;
 - `ResultsKafkaPostgresIntegrationTest` for real Kafka -> Results listener -> PostgreSQL materialization of analyzed/rejected events, including idempotent retry/upsert behavior and transactional replacement of result tags/attributes;
+- `ResultControllerTest` for public Results list/detail HTTP defaults, filters, validation/not-found mapping, stable nullable JSON fields, and blocking Virtual Thread execution;
+- `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, newest-first ordering, bounded limits, ordered tags, attributes, and profile-scoped detail reads;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
 - `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> manual collection -> deterministic HTTP source -> Kafka -> Analysis -> durable collection history and analysis inspection, including equivalent rediscovery observed through public HTTP APIs only.
@@ -140,7 +142,7 @@ raw Kafka input
     -> input offset commit
 ```
 
-The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` now starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence now retains terminal analyzed/rejected outcomes. A Results read REST API is still required before the broader product trial can inspect that user-facing state without direct database access.
+The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` now starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes and the public Results REST API now exposes analyzed state without direct database access. The next black-box expansion can therefore terminate at `/api/v1/results` instead of Analysis inspection.
 
 ## Python tooling tests
 

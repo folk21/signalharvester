@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: SignalHarvester Backend API
   version: 0.1.0
-  description: Public HTTP contract for SignalHarvester configuration and operational
+  description: Public HTTP contract for SignalHarvester configuration, results, and operational
     APIs.
 tags:
 - name: Sources
@@ -11,6 +11,8 @@ tags:
   description: Manual collection execution and operational run history.
 - name: Analysis Inspection
   description: Read-only operational inspection of analysis deduplication state.
+- name: Results
+  description: Read-only browsing of durable analyzed results.
 paths:
   /api/v1/sources:
     get:
@@ -221,6 +223,92 @@ paths:
                 $ref: '#/components/schemas/AnalysisItemInspection'
         '404':
           description: Analysis item not found
+  /api/v1/results:
+    get:
+      tags:
+      - Results
+      operationId: listResults
+      summary: List recent analyzed results
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: monitoringProfileId
+        in: query
+        schema:
+          type: string
+      - name: sourceId
+        in: query
+        schema:
+          type: string
+      - name: informationCategory
+        in: query
+        schema:
+          type: string
+      - name: relevant
+        in: query
+        schema:
+          type: boolean
+      - name: classification
+        in: query
+        schema:
+          type: string
+      - name: analyzedFrom
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: analyzedTo
+        in: query
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: Recent analyzed results matching the supplied filters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResultSummary'
+        '400':
+          description: Invalid result query parameters
+  /api/v1/results/{normalizedItemId}:
+    parameters:
+    - name: normalizedItemId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[0-9a-f]{64}$
+    - name: monitoringProfileId
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        pattern: .*\S.*
+    get:
+      tags:
+      - Results
+      operationId: getResult
+      summary: Get one profile-scoped analyzed result
+      responses:
+        '200':
+          description: Detailed analyzed result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultDetail'
+        '400':
+          description: Invalid result identity
+        '404':
+          description: Result not found
 components:
   parameters:
     SourceId:
@@ -437,3 +525,163 @@ components:
           type: integer
           format: int64
           minimum: 1
+
+    ResultSummary:
+      type: object
+      required:
+      - monitoringProfileId
+      - normalizedItemId
+      - sourceId
+      - informationCategory
+      - externalId
+      - title
+      - url
+      - relevant
+      - classification
+      - score
+      - attributes
+      - tags
+      - explanation
+      - analyzer
+      - publishedAt
+      - analyzedAt
+      properties:
+        monitoringProfileId:
+          type: string
+        normalizedItemId:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        sourceId:
+          type: string
+        informationCategory:
+          type: string
+        externalId:
+          type:
+          - string
+          - 'null'
+        title:
+          type:
+          - string
+          - 'null'
+        url:
+          type: string
+          format: uri
+        relevant:
+          type: boolean
+        classification:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+        analyzer:
+          type: string
+        publishedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        analyzedAt:
+          type: string
+          format: date-time
+    ResultDetail:
+      type: object
+      required:
+      - monitoringProfileId
+      - normalizedItemId
+      - analysisEventId
+      - sourceEventId
+      - rawItemId
+      - sourceId
+      - informationCategory
+      - externalId
+      - title
+      - url
+      - normalizedContent
+      - contentType
+      - attributes
+      - relevant
+      - classification
+      - score
+      - tags
+      - explanation
+      - analyzer
+      - publishedAt
+      - analyzedAt
+      - correlationId
+      - traceparent
+      properties:
+        monitoringProfileId:
+          type: string
+        normalizedItemId:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        analysisEventId:
+          type: string
+        sourceEventId:
+          type: string
+        rawItemId:
+          type: string
+        sourceId:
+          type: string
+        informationCategory:
+          type: string
+        externalId:
+          type:
+          - string
+          - 'null'
+        title:
+          type:
+          - string
+          - 'null'
+        url:
+          type: string
+          format: uri
+        normalizedContent:
+          type: string
+        contentType:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        relevant:
+          type: boolean
+        classification:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        tags:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+        analyzer:
+          type: string
+        publishedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        analyzedAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+        traceparent:
+          type:
+          - string
+          - 'null'

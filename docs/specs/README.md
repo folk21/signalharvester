@@ -95,7 +95,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-results-persistence.md`](active/subspecs/backend-results-persistence.md) — idempotent Results-owned persistence for terminal Analysis events.
+- [`active/subspecs/backend-results-rest-api.md`](active/subspecs/backend-results-rest-api.md) — bounded public REST browsing over Results-owned analyzed projections.
 
 Active supporting tracks:
 
@@ -103,6 +103,8 @@ Active supporting tracks:
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
 
 ## Recently completed sub-specifications
+
+- [`archive/subspecs/backend-results-persistence.md`](archive/subspecs/backend-results-persistence.md) — idempotent Results-owned persistence for terminal Analysis events, verified in the developer environment;
 
 - [`archive/subspecs/backend-configuration-persistence-rest.md`](archive/subspecs/backend-configuration-persistence-rest.md) — PostgreSQL-backed source CRUD, REST validation, and configuration-provider wiring, verified in the developer environment;
 - [`archive/subspecs/backend-operational-admin-api.md`](archive/subspecs/backend-operational-admin-api.md) — manual collection execution, durable run inspection, and read-only analysis inspection, verified in the developer environment;
@@ -114,8 +116,7 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
-- first Results read REST API over the persisted projection;
-- result REST/SSE and event observation;
+- result SSE/live delivery and event observation;
 - Kubernetes deployment and observability;
 - integration/system testing hardening.
 
