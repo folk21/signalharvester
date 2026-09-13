@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "name": "GitHub REST API rate limit",
+      "type": "REST",
+      "location": "https://api.github.com/rate_limit",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "name": "NASA JPL news feed",
+      "type": "RSS",
+      "location": "https://www.jpl.nasa.gov/feeds/news/",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "name": "NASA CNEOS news feed",
+      "type": "RSS",
+      "location": "https://cneos.jpl.nasa.gov/feed/news.xml",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "name": "IANA reserved domains",
+      "type": "HTML",
+      "location": "https://www.iana.org/domains/reserved",
+      "enabled": true,
+      "settings": {}
+    }
+  ]
+}
+

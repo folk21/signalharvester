@@ -6,6 +6,7 @@ set -eu
 # Main verification commands/check groups executed by this script:
 # - docker info
 # - git diff --check (when executed inside a Git worktree)
+# - ./tools/source-import/run_tests.sh
 # - ./gradlew clean check --no-watch-fs
 # - ./gradlew integrationTest --no-watch-fs (container-backed module tests + cross-module HTTP smoke)
 # - ./archive.sh <temporary FULL archive>
@@ -160,6 +161,7 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   run_step "git diff --check" git diff --check
 fi
 
+run_step "./tools/source-import/run_tests.sh" ./tools/source-import/run_tests.sh
 run_step "./gradlew clean check --no-watch-fs" run_gradle clean check --no-watch-fs
 run_step "./gradlew integrationTest --no-watch-fs" run_gradle integrationTest --no-watch-fs
 

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "name": "Example jobs RSS",
+      "type": "RSS",
+      "location": "https://example.test/jobs.xml",
+      "enabled": false,
+      "settings": {}
+    },
+    {
+      "name": "Example jobs REST API",
+      "type": "REST",
+      "location": "https://example.test/api/jobs",
+      "enabled": false,
+      "settings": {
+        "query": "java backend"
+      }
+    },
+    {
+      "name": "Example jobs HTML page",
+      "type": "HTML",
+      "location": "https://example.test/jobs",
+      "enabled": false,
+      "settings": {}
+    }
+  ]
+}
