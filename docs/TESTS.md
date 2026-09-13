@@ -35,7 +35,7 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 4. `./gradlew integrationTest --no-watch-fs`;
 5. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
 
-The script prints a final PASS/FAIL summary of every verification step that actually ran and lists the standard Gradle test/problems report locations. Use focused Gradle commands during development, but run `./run_checks.sh` before treating a substantial PATCH or branch as fully verified. New repository-wide static-analysis or coverage gates should be wired into Gradle `check` where practical so this entry point remains stable as verification grows.
+The script prints a final PASS/FAIL summary of every routine verification step that actually ran and lists the relevant test/problems report locations. Use focused Gradle commands during development, but run `./run_checks.sh` before treating a substantial PATCH or branch as functionally verified. Slower coverage/static/dependency analysis and repository-size metrics run through `./run_rare_checks.sh`; quality-tool policy and report ownership are documented in [`QUALITY.md`](QUALITY.md).
 
 Fast/default verification compiles and runs only the regular `src/test` source sets:
 

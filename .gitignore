@@ -5,3 +5,7 @@ build/
 *.iml
 .DS_Store
 .env
+
+# Python-generated local bytecode/cache
+**/__pycache__/
+*.py[cod]

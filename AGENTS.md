@@ -216,7 +216,7 @@ Keep tests readable as executable specifications:
 - Prefer parameterized JUnit tests when the same behavior/assertions are exercised over a list of input values; do not use parameterization to hide materially different scenarios.
 - Apply DRY inside tests: extract repeated fixture construction/setup into focused helpers when it improves readability. Promote helpers to shared test-support only when multiple owners genuinely share the same semantics.
 
-Validation commands and the current command matrix are owned by `docs/TESTS.md`. Use the Gradle wrapper when it exists. Run focused tests first, then broader validation appropriate to the change. `./run_checks.sh` is the canonical full repository gate for default checks, container-backed integration tests, and FULL-archive reproducibility.
+Validation commands and the current command matrix are owned by `docs/TESTS.md`; quality-tool policy and report ownership are in `docs/QUALITY.md`. Use the Gradle wrapper when it exists. Run focused tests first, then broader validation appropriate to the change. `./run_checks.sh` is the canonical routine repository gate for default checks, container-backed integration tests, and FULL-archive reproducibility. `./run_rare_checks.sh` is the broader periodic gate for coverage, static analysis, dependency analysis, and project-size metrics; it runs `run_checks.sh` first.
 
 Never claim a test/build passed unless it was actually run successfully.
 
@@ -234,6 +234,7 @@ Each topic should have one authoritative owner:
 | Backend installation | `docs/INSTALLATION.md` |
 | Backend usage/operations | `docs/USAGE.md` |
 | Test strategy and commands | `docs/TESTS.md` |
+| Coverage and code-quality tooling | `docs/QUALITY.md` |
 | Future work | `docs/ROADMAP.md` |
 | Completed project changes | `CHANGELOG.md` |
 | Specification workflow/navigation | `docs/specs/README.md` |
@@ -312,6 +313,7 @@ Read detailed guidance only when relevant:
 - `docs/ARCHITECTURE.md` — system/module boundaries and dependency direction;
 - `docs/IMPLEMENTATION.md` — current implementation and wiring;
 - `docs/TESTS.md` — test layers and validation commands;
+- `docs/QUALITY.md` — coverage, static-analysis, dependency-analysis, and quality-gate policy;
 - `docs/specs/README.md` — specification workflow;
 - `modules/AGENTS.md` — functional module rules;
 - `contracts/AGENTS.md` — contract rules;
