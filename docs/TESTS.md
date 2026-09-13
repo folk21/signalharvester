@@ -119,6 +119,7 @@ The first implementation foundation contains:
 - `KafkaAnalysisEventPublisherTest` for analyzed/rejected topic-key mapping, full provenance serialization, and publication-failure normalization;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
+- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> manual collection -> deterministic HTTP source -> Kafka -> Analysis -> durable collection history and analysis inspection, including equivalent rediscovery observed through public HTTP APIs only.
 
 PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, and `modules:analysis`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
 
@@ -134,7 +135,7 @@ raw Kafka input
     -> input offset commit
 ```
 
-The analysis module now verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. The remaining high-value system-level gap before a broader trial is an HTTP-driven smoke test that starts from source configuration/manual collection and observes the downstream analysis/result boundary through public interfaces. Results persistence/read APIs are still required before the trial can retain and inspect user-facing analyzed outcomes without reading Kafka directly.
+The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` now starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence/read APIs are still required before a broader product trial can retain and inspect user-facing analyzed outcomes instead of only operational deduplication state.
 
 ## Python
 

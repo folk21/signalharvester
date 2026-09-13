@@ -7,7 +7,7 @@ set -eu
 # - docker info
 # - git diff --check (when executed inside a Git worktree)
 # - ./gradlew clean check --no-watch-fs
-# - ./gradlew integrationTest --no-watch-fs
+# - ./gradlew integrationTest --no-watch-fs (container-backed module tests + cross-module HTTP smoke)
 # - ./archive.sh <temporary FULL archive>
 # - FULL archive content/cleanliness validation with unzip/grep
 #

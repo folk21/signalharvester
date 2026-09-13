@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased — runtime and verification hardening
 
+2026-09-13 — Added an HTTP-driven backend smoke test covering REST source configuration, manual collection, deterministic external HTTP, Kafka analysis ingestion, durable run history, and analysis inspection without using internal application beans.
+
 2026-09-13 — Parameterized local PostgreSQL and Redpanda Compose host ports, credentials, advertised host, and admin endpoint while preserving safe defaults.
 
 2026-09-13 — Added an explicit `.env.example` workflow that can be shared by Compose interpolation and the host-run backend without committing local secrets.
