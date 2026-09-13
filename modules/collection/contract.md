@@ -13,6 +13,7 @@ Own collection-run orchestration, bounded external-source access, and publicatio
 
 - explicit collection-run lifecycle;
 - external source fetching and bounded concurrency;
+- collection-owned source extraction, including bounded RSS/Atom entry parsing;
 - raw-item identity generation;
 - `RawItemDiscovered` publication;
 - durable operational collection-run history;
@@ -63,12 +64,12 @@ Other functional modules must not depend on collection `run`, `source`, `event`,
 
 ## Important invariants
 
-- source-level failures are best-effort and do not cancel unrelated source work;
+- source/item-level failures are best-effort and do not cancel unrelated source work;
 - one collection run id is reused as correlation id for raw-item events from that run;
 - raw-item identity is deterministic for equivalent source content;
-- external I/O has explicit timeout, size, redirect, and concurrency bounds;
+- external I/O has explicit timeout, size, redirect, and concurrency bounds; RSS/Atom extraction has an explicit item-count bound and disables DTD/external-entity processing;
 - completed fetch payloads are terminally handled with backpressure, so raw response bodies are retained only within the bounded in-flight concurrency window rather than for the full run;
-- terminal source results preserve configured-source order, while Kafka publication follows fetch completion and must not be treated as a source-order guarantee;
+- terminal run outcomes preserve configured-source order and per-source item order, while Kafka publication follows fetch completion and must not be treated as a global source-order guarantee;
 - completed run history is operational state, not an atomic substitute for Kafka delivery guarantees;
 - run-history reads and writes execute inside short application-owned JDBC transactions; persistence adapters require an active transaction and never self-commit.
 

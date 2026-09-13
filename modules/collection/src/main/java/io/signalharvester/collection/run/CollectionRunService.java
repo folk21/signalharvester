@@ -5,6 +5,9 @@ import io.signalharvester.collection.event.RawItemEventPublisher;
 import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationException;
 import io.signalharvester.collection.event.RawItemPublicationResult;
+import io.signalharvester.collection.source.ExtractedSourceItem;
+import io.signalharvester.collection.source.extract.SourceItemExtractionException;
+import io.signalharvester.collection.source.extract.SourceItemExtractor;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import jakarta.inject.Named;
@@ -19,13 +22,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Executes the first explicit best-effort collection run across all currently enabled sources.
+ * Executes explicit best-effort collection runs across all currently enabled sources.
  *
- * <p>The run id is also used as the Kafka correlation id. Source-level fetch or publication failures
- * are retained as terminal outcomes while unrelated sources continue. Monitoring-profile source
- * membership remains deferred; completed operational run history is persisted by the collection module. Because Kafka
- * publication is acknowledged/blocking, callers must invoke this use case from a blocking/Virtual-Thread
- * workflow rather than a Netty event-loop thread.</p>
+ * <p>One fetched source response may produce multiple semantic items. RSS/Atom feeds therefore emit
+ * one raw event per extracted entry, while REST/HTML retain their one-response-per-item behavior.
+ * Fetch, extraction, and publication failures remain isolated from unrelated sources/items.</p>
  */
 @Singleton
 public final class CollectionRunService implements CollectionRunner {
@@ -34,6 +35,7 @@ public final class CollectionRunService implements CollectionRunner {
 
     private final SourceConfigurationProvider sourceConfigurationProvider;
     private final SourceFetchCoordinator fetchCoordinator;
+    private final SourceItemExtractor itemExtractor;
     private final RawItemEventPublisher eventPublisher;
     private final RawItemIdentityFactory rawItemIdentityFactory;
     private final CollectionRunIdFactory runIdFactory;
@@ -43,6 +45,7 @@ public final class CollectionRunService implements CollectionRunner {
     public CollectionRunService(
             SourceConfigurationProvider sourceConfigurationProvider,
             SourceFetchCoordinator fetchCoordinator,
+            SourceItemExtractor itemExtractor,
             RawItemEventPublisher eventPublisher,
             RawItemIdentityFactory rawItemIdentityFactory,
             CollectionRunIdFactory runIdFactory,
@@ -51,6 +54,7 @@ public final class CollectionRunService implements CollectionRunner {
         this.sourceConfigurationProvider = Objects.requireNonNull(
                 sourceConfigurationProvider, "sourceConfigurationProvider");
         this.fetchCoordinator = Objects.requireNonNull(fetchCoordinator, "fetchCoordinator");
+        this.itemExtractor = Objects.requireNonNull(itemExtractor, "itemExtractor");
         this.eventPublisher = Objects.requireNonNull(eventPublisher, "eventPublisher");
         this.rawItemIdentityFactory = Objects.requireNonNull(rawItemIdentityFactory, "rawItemIdentityFactory");
         this.runIdFactory = Objects.requireNonNull(runIdFactory, "runIdFactory");
@@ -59,12 +63,8 @@ public final class CollectionRunService implements CollectionRunner {
     }
 
     /**
-     * Loads enabled sources and pipelines bounded fetch completion into acknowledged publication.
-     * The call is synchronous and completes only after all terminal source outcomes are known. Large
-     * fetched payloads are released after terminal handling instead of being retained for the whole run.
-     *
-     * @param request caller-owned run context until monitoring profiles become persistent
-     * @return explicit run identity, timing, aggregate status, and per-source outcomes
+     * Loads enabled sources and pipelines bounded fetch completion into extraction and publication.
+     * The call is synchronous and completes only after all terminal source/item outcomes are known.
      */
     @Override
     public CollectionRunResult run(CollectionRunRequest request) {
@@ -74,19 +74,22 @@ public final class CollectionRunService implements CollectionRunner {
         List<ConfiguredSource> sources = List.copyOf(sourceConfigurationProvider.findEnabledSources());
         LOG.info("Starting collection run {} profile={} category={} sources={}",
                 runId, request.monitoringProfileId(), request.informationCategory(), sources.size());
-        CollectionSourceResult[] terminalResults = new CollectionSourceResult[sources.size()];
+
+        @SuppressWarnings("unchecked")
+        List<CollectionSourceResult>[] terminalResults = new List[sources.size()];
         fetchCoordinator.fetchEach(
                 sources,
-                (sourceIndex, outcome) -> terminalResults[sourceIndex] = toSourceResult(runId, request, outcome));
-        List<CollectionSourceResult> sourceResults = orderedSourceResults(terminalResults);
+                (sourceIndex, outcome) -> terminalResults[sourceIndex] = toSourceResults(runId, request, outcome));
+        List<CollectionSourceResult> sourceResults = orderedResults(terminalResults);
 
         Instant finishedAt = clock.instant();
         CollectionRunStatus status = aggregateStatus(sourceResults);
         long published = sourceResults.stream()
                 .filter(result -> result.status() == CollectionSourceStatus.PUBLISHED)
                 .count();
-        LOG.info("Completed collection run {} status={} published={} failed={}",
-                runId, status, published, sourceResults.size() - published);
+        long failed = sourceResults.stream().filter(CollectionSourceResult::failed).count();
+        LOG.info("Completed collection run {} status={} publishedItems={} failures={}",
+                runId, status, published, failed);
         CollectionRunResult result = new CollectionRunResult(
                 runId,
                 request.monitoringProfileId(),
@@ -99,23 +102,58 @@ public final class CollectionRunService implements CollectionRunner {
         return result;
     }
 
-    private CollectionSourceResult toSourceResult(
+    private List<CollectionSourceResult> toSourceResults(
             String runId,
             CollectionRunRequest request,
             SourceFetchOutcome outcome) {
         if (outcome instanceof SourceFetchOutcome.Failure failure) {
             LOG.warn("Collection run {} source {} fetch failed: {}",
                     runId, failure.source().id().value(), failureMessage(failure.cause()));
-            return new CollectionSourceResult(
+            return List.of(new CollectionSourceResult(
                     failure.source().id(),
                     CollectionSourceStatus.FETCH_FAILED,
                     Optional.empty(),
                     Optional.empty(),
-                    Optional.of(failureMessage(failure.cause())));
+                    Optional.of(failureMessage(failure.cause()))));
         }
 
         SourceFetchOutcome.Success success = (SourceFetchOutcome.Success) outcome;
-        String rawItemId = rawItemIdentityFactory.identityFor(success.content());
+        List<ExtractedSourceItem> items;
+        try {
+            items = itemExtractor.extract(success.source(), success.content());
+        } catch (SourceItemExtractionException failure) {
+            LOG.warn("Collection run {} source {} extraction failed: {}",
+                    runId, success.source().id().value(), failureMessage(failure));
+            return List.of(new CollectionSourceResult(
+                    success.source().id(),
+                    CollectionSourceStatus.EXTRACTION_FAILED,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(failureMessage(failure))));
+        }
+
+        if (items.isEmpty()) {
+            LOG.info("Collection run {} source {} extracted no items", runId, success.source().id().value());
+            return List.of(new CollectionSourceResult(
+                    success.source().id(),
+                    CollectionSourceStatus.NO_ITEMS,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty()));
+        }
+
+        List<CollectionSourceResult> results = new ArrayList<>(items.size());
+        for (ExtractedSourceItem item : items) {
+            results.add(publishItem(runId, request, item));
+        }
+        return List.copyOf(results);
+    }
+
+    private CollectionSourceResult publishItem(
+            String runId,
+            CollectionRunRequest request,
+            ExtractedSourceItem item) {
+        String rawItemId = rawItemIdentityFactory.identityFor(item);
         RawItemPublicationContext publicationContext = new RawItemPublicationContext(
                 rawItemId,
                 runId,
@@ -123,18 +161,18 @@ public final class CollectionRunService implements CollectionRunner {
                 request.informationCategory(),
                 request.traceparent());
         try {
-            RawItemPublicationResult publication = eventPublisher.publish(success.content(), publicationContext);
+            RawItemPublicationResult publication = eventPublisher.publish(item, publicationContext);
             return new CollectionSourceResult(
-                    success.source().id(),
+                    item.sourceId(),
                     CollectionSourceStatus.PUBLISHED,
                     Optional.of(publication.rawItemId()),
                     Optional.of(publication.eventId()),
                     Optional.empty());
         } catch (RawItemPublicationException failure) {
             LOG.warn("Collection run {} source {} publication failed rawItemId={}: {}",
-                    runId, success.source().id().value(), rawItemId, failureMessage(failure));
+                    runId, item.sourceId().value(), rawItemId, failureMessage(failure));
             return new CollectionSourceResult(
-                    success.source().id(),
+                    item.sourceId(),
                     CollectionSourceStatus.PUBLICATION_FAILED,
                     Optional.of(rawItemId),
                     Optional.empty(),
@@ -142,28 +180,23 @@ public final class CollectionRunService implements CollectionRunner {
         }
     }
 
-    private static List<CollectionSourceResult> orderedSourceResults(CollectionSourceResult[] results) {
-        List<CollectionSourceResult> ordered = new ArrayList<>(results.length);
-        for (int index = 0; index < results.length; index++) {
-            ordered.add(Objects.requireNonNull(
-                    results[index],
-                    "Missing terminal source result at index " + index));
+    private static List<CollectionSourceResult> orderedResults(List<CollectionSourceResult>[] resultsBySource) {
+        List<CollectionSourceResult> ordered = new ArrayList<>();
+        for (int index = 0; index < resultsBySource.length; index++) {
+            List<CollectionSourceResult> sourceResults = Objects.requireNonNull(
+                    resultsBySource[index], "Missing terminal source result at index " + index);
+            ordered.addAll(sourceResults);
         }
         return List.copyOf(ordered);
     }
 
     private static CollectionRunStatus aggregateStatus(List<CollectionSourceResult> sourceResults) {
-        long successful = sourceResults.stream()
-                .filter(result -> result.status() == CollectionSourceStatus.PUBLISHED)
-                .count();
-        long failed = sourceResults.size() - successful;
-        if (failed == 0) {
+        long failures = sourceResults.stream().filter(CollectionSourceResult::failed).count();
+        if (failures == 0) {
             return CollectionRunStatus.SUCCEEDED;
         }
-        if (successful == 0) {
-            return CollectionRunStatus.FAILED;
-        }
-        return CollectionRunStatus.PARTIALLY_SUCCEEDED;
+        long nonFailures = sourceResults.size() - failures;
+        return nonFailures == 0 ? CollectionRunStatus.FAILED : CollectionRunStatus.PARTIALLY_SUCCEEDED;
     }
 
     private static String failureMessage(RuntimeException failure) {

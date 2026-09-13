@@ -8,7 +8,11 @@ import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationException;
 import io.signalharvester.collection.event.RawItemPublicationResult;
 import io.signalharvester.collection.source.ExternalSourceClient;
+import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.collection.source.FetchedSourceContent;
+import io.signalharvester.collection.source.extract.DefaultSourceItemExtractor;
+import io.signalharvester.collection.source.extract.RssAtomItemExtractor;
+import io.signalharvester.collection.source.extract.SourceItemExtractor;
 import io.signalharvester.collection.source.SourceFetchException;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
@@ -36,7 +40,7 @@ import org.junit.jupiter.api.Test;
  * Verifies orchestration semantics of {@link CollectionRunService}, including bounded fetch-to-publication
  * behavior, partial failures, run correlation, and deterministic terminal-result ordering.
  *
- * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-rss-atom-extraction}.</p>
  */
 class CollectionRunServiceTest {
 
@@ -93,7 +97,7 @@ class CollectionRunServiceTest {
             return content(source);
         };
         RawItemEventPublisher publisher = (content, context) -> {
-            if (content.requestedUri().getPath().endsWith("/two")) {
+            if (content.url().getPath().endsWith("/two")) {
                 secondPublicationStarted.countDown();
                 await(releaseSecondPublication);
             }
@@ -180,6 +184,101 @@ class CollectionRunServiceTest {
         }
     }
 
+
+    /**
+     * Publish one terminal outcome per extracted RSS entry while preserving source ordering.
+     */
+    @Test
+    void shouldPublishEachExtractedRssEntry() {
+        ConfiguredSource rss = new ConfiguredSource(
+                SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000777")),
+                "rss",
+                SourceType.RSS,
+                URI.create("https://example.test/feed.xml"),
+                true,
+                Map.of());
+        String feed = """
+                <rss version="2.0"><channel>
+                  <item><guid>one</guid><title>One</title><link>https://example.test/one</link><description>Java one</description></item>
+                  <item><guid>two</guid><title>Two</title><link>https://example.test/two</link><description>Java two</description></item>
+                </channel></rss>
+                """;
+        ExternalSourceClient client = ignored -> new FetchedSourceContent(
+                rss.id(), rss.location(), 200, Optional.of("application/rss+xml"),
+                feed.getBytes(StandardCharsets.UTF_8), RUN_TIME);
+        RecordingPublisher publisher = new RecordingPublisher();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CollectionRunService service = service(List.of(rss), client, publisher, executor);
+
+            CollectionRunResult result = service.run(request());
+
+            assertEquals(CollectionRunStatus.SUCCEEDED, result.status());
+            assertEquals(2, result.publishedCount());
+            assertEquals(0, result.failedCount());
+            assertEquals(List.of(rss.id(), rss.id()), result.sources().stream()
+                    .map(CollectionSourceResult::sourceId)
+                    .toList());
+            assertEquals(2, publisher.contexts.size());
+        }
+    }
+
+    /**
+     * Record a valid empty feed without treating it as a failure.
+     */
+    @Test
+    void shouldRecordNoItemsForEmptyRssFeed() {
+        ConfiguredSource rss = new ConfiguredSource(
+                SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000778")),
+                "rss-empty",
+                SourceType.RSS,
+                URI.create("https://example.test/empty.xml"),
+                true,
+                Map.of());
+        ExternalSourceClient client = ignored -> new FetchedSourceContent(
+                rss.id(), rss.location(), 200, Optional.of("application/rss+xml"),
+                "<rss version=\"2.0\"><channel/></rss>".getBytes(StandardCharsets.UTF_8), RUN_TIME);
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CollectionRunResult result = service(List.of(rss), client, new RecordingPublisher(), executor).run(request());
+
+            assertEquals(CollectionRunStatus.SUCCEEDED, result.status());
+            assertEquals(0, result.publishedCount());
+            assertEquals(0, result.failedCount());
+            assertEquals(CollectionSourceStatus.NO_ITEMS, result.sources().getFirst().status());
+        }
+    }
+
+    /**
+     * Isolate malformed feed extraction failure from otherwise successful sources.
+     */
+    @Test
+    void shouldContinueAfterRssExtractionFailure() {
+        ConfiguredSource rss = new ConfiguredSource(
+                SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000779")),
+                "rss-broken",
+                SourceType.RSS,
+                URI.create("https://example.test/broken.xml"),
+                true,
+                Map.of());
+        ConfiguredSource rest = source("rest-ok");
+        ExternalSourceClient client = configured -> configured.type() == SourceType.RSS
+                ? new FetchedSourceContent(configured.id(), configured.location(), 200,
+                        Optional.of("application/rss+xml"), "<rss><channel><item>".getBytes(StandardCharsets.UTF_8), RUN_TIME)
+                : content(configured);
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CollectionRunResult result = service(
+                    List.of(rss, rest), client, new RecordingPublisher(), executor).run(request());
+
+            assertEquals(CollectionRunStatus.PARTIALLY_SUCCEEDED, result.status());
+            assertEquals(1, result.publishedCount());
+            assertEquals(1, result.failedCount());
+            assertEquals(CollectionSourceStatus.EXTRACTION_FAILED, result.sources().getFirst().status());
+            assertEquals(CollectionSourceStatus.PUBLISHED, result.sources().get(1).status());
+        }
+    }
+
     /**
      * Report failed when every source fails.
      */
@@ -240,11 +339,16 @@ class CollectionRunServiceTest {
         return new CollectionRunService(
                 provider,
                 coordinator,
+                defaultExtractor(),
                 publisher,
                 new RawItemIdentityFactory(),
                 new CollectionRunIdFactory(() -> UUID.fromString(RUN_ID)),
                 new InMemoryHistoryRecorder(),
                 Clock.fixed(RUN_TIME, ZoneOffset.UTC));
+    }
+
+    private static SourceItemExtractor defaultExtractor() {
+        return new DefaultSourceItemExtractor(new RssAtomItemExtractor(() -> 500));
     }
 
     private static void await(CountDownLatch latch) {
@@ -291,7 +395,7 @@ class CollectionRunServiceTest {
         private final List<RawItemPublicationContext> contexts = new ArrayList<>();
 
         @Override
-        public RawItemPublicationResult publish(FetchedSourceContent content, RawItemPublicationContext context) {
+        public RawItemPublicationResult publish(ExtractedSourceItem content, RawItemPublicationContext context) {
             contexts.add(context);
             return new RawItemPublicationResult(EVENT_ID_PREFIX + contexts.size(), context.rawItemId(), RAW_ITEM_TOPIC);
         }

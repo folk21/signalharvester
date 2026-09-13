@@ -6,7 +6,7 @@ import io.micronaut.context.ApplicationContext;
 import io.signalharvester.collection.event.RawItemEventPublisher;
 import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationResult;
-import io.signalharvester.collection.source.FetchedSourceContent;
+import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.net.URI;
@@ -37,7 +37,7 @@ import org.testcontainers.kafka.KafkaContainer;
  * Verifies {@link KafkaRawItemEventPublisher} against a real Kafka-compatible broker, including serialized
  * {@code RawItemDiscovered} delivery, configured topic selection, and raw-item message keys.
  *
- * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-event-contracts}.</p>
+ * <p>Related specifications: {@code backend-rss-atom-extraction}, {@code backend-event-contracts}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class KafkaRawItemEventPublisherIntegrationTest {
@@ -83,7 +83,7 @@ class KafkaRawItemEventPublisherIntegrationTest {
     @Test
     void shouldPublishAndDecodeRawItemThroughKafka() throws Exception {
         RawItemEventPublisher publisher = context.getBean(RawItemEventPublisher.class);
-        RawItemPublicationResult publication = publisher.publish(content(), new RawItemPublicationContext(
+        RawItemPublicationResult publication = publisher.publish(item(), new RawItemPublicationContext(
                 RAW_ITEM_ID,
                 RUN_ID,
                 PROFILE_ID,
@@ -100,8 +100,8 @@ class KafkaRawItemEventPublisherIntegrationTest {
         assertEquals(RUN_ID, decoded.getEnvelope().getCorrelationId());
         assertEquals(PROFILE_ID, decoded.getMonitoringProfileId());
         assertEquals("JOB", decoded.getInformationCategory());
-        assertEquals(content().sourceId().value().toString(), decoded.getSourceId());
-        assertEquals(content().requestedUri().toString(), decoded.getUrl());
+        assertEquals(item().sourceId().value().toString(), decoded.getSourceId());
+        assertEquals(item().url().toString(), decoded.getUrl());
         assertEquals(CONTENT, decoded.getContent());
     }
 
@@ -139,13 +139,16 @@ class KafkaRawItemEventPublisherIntegrationTest {
         }
     }
 
-    private static FetchedSourceContent content() {
-        return new FetchedSourceContent(
+    private static ExtractedSourceItem item() {
+        return new ExtractedSourceItem(
                 SOURCE_ID,
                 URI.create("https://example.test/jobs/401"),
-                200,
-                Optional.of("text/plain; charset=UTF-8"),
-                CONTENT.getBytes(StandardCharsets.UTF_8),
-                Instant.parse("2026-09-10T14:00:00Z"));
+                Optional.of("job-401"),
+                Optional.of("Java Kafka PostgreSQL"),
+                CONTENT,
+                "text/plain; charset=UTF-8",
+                Optional.empty(),
+                Instant.parse("2026-09-10T14:00:00Z"),
+                CONTENT.getBytes(StandardCharsets.UTF_8));
     }
 }

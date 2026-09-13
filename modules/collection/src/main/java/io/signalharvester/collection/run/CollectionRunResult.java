@@ -41,21 +41,21 @@ public record CollectionRunResult(
     }
 
     /**
-     * Returns the number of source payloads successfully published to Kafka.
+     * Returns the number of semantic items successfully published to Kafka.
      *
-     * @return successful publication count
+     * @return successful item publication count
      */
     public long publishedCount() {
         return sources.stream().filter(source -> source.status() == CollectionSourceStatus.PUBLISHED).count();
     }
 
     /**
-     * Returns the number of source operations that ended in fetch or publication failure.
+     * Returns the number of fetch, extraction, or item-publication failures.
      *
-     * @return failed source count
+     * @return failed terminal outcome count
      */
     public long failedCount() {
-        return sources.size() - publishedCount();
+        return sources.stream().filter(CollectionSourceResult::failed).count();
     }
 
     private static void requireNonBlank(String value, String name) {

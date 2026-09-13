@@ -1,16 +1,16 @@
 ---
 type: Specification
 title: SignalHarvester backend Results REST API
-description: Active sub-specification for browsing persisted analyzed results through a bounded public REST read API.
+description: Completed sub-specification for browsing persisted analyzed results through a bounded public REST read API.
 document_role: subspec
-parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+parent: ../../active/spec-signal-harvester-platform.md
+spec_status: completed
 ---
 # SignalHarvester backend Results REST API
 
 ## Status
 
-Verification-pending implementation slice. Results persistence is already accepted; this slice exposes the analyzed projection through a bounded public REST contract suitable for frontend browsing and black-box product verification.
+Completed and verified in the developer environment. Results persistence is exposed through a bounded public REST contract suitable for frontend browsing and black-box product verification.
 
 ## Goal
 

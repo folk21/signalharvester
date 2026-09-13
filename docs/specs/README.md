@@ -95,7 +95,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-results-rest-api.md`](active/subspecs/backend-results-rest-api.md) — bounded public REST browsing over Results-owned analyzed projections.
+- [`active/subspecs/backend-rss-atom-extraction.md`](active/subspecs/backend-rss-atom-extraction.md) — bounded collection-owned extraction of RSS/Atom documents into individual raw items.
 
 Active supporting tracks:
 
@@ -103,6 +103,8 @@ Active supporting tracks:
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
 
 ## Recently completed sub-specifications
+
+- [`archive/subspecs/backend-results-rest-api.md`](archive/subspecs/backend-results-rest-api.md) — public Results feed/detail REST reads over Results-owned projections, verified in the developer environment;
 
 - [`archive/subspecs/backend-results-persistence.md`](archive/subspecs/backend-results-persistence.md) — idempotent Results-owned persistence for terminal Analysis events, verified in the developer environment;
 

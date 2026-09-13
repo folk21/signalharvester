@@ -5,13 +5,16 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Captures the terminal result for one source in a collection run without leaking transport types.
+ * Captures one terminal source/item outcome without leaking transport or parser types.
+ *
+ * <p>REST/HTML sources normally contribute one outcome. RSS/Atom sources contribute one outcome per
+ * extracted entry; an empty valid feed contributes one {@link CollectionSourceStatus#NO_ITEMS} outcome.</p>
  *
  * @param sourceId configured source identifier
- * @param status terminal source outcome
- * @param rawItemId stable raw-item identity when content was fetched
+ * @param status terminal source/item outcome
+ * @param rawItemId stable raw-item identity when one semantic item reached publication
  * @param eventId acknowledged Kafka event identifier when publication succeeded
- * @param failureMessage diagnostic failure summary when the source did not publish successfully
+ * @param failureMessage diagnostic failure summary when fetch/extraction/publication failed
  */
 public record CollectionSourceResult(
         SourceId sourceId,
@@ -34,13 +37,18 @@ public record CollectionSourceResult(
             case PUBLISHED -> {
                 if (rawItemId.isEmpty() || eventId.isEmpty() || failureMessage.isPresent()) {
                     throw new IllegalArgumentException(
-                            "published source result requires rawItemId/eventId and no failureMessage");
+                            "published outcome requires rawItemId/eventId and no failureMessage");
                 }
             }
-            case FETCH_FAILED -> {
+            case NO_ITEMS -> {
+                if (rawItemId.isPresent() || eventId.isPresent() || failureMessage.isPresent()) {
+                    throw new IllegalArgumentException("no-items outcome must not contain item or failure metadata");
+                }
+            }
+            case FETCH_FAILED, EXTRACTION_FAILED -> {
                 if (rawItemId.isPresent() || eventId.isPresent() || failureMessage.isEmpty()) {
                     throw new IllegalArgumentException(
-                            "fetch failure requires only failureMessage");
+                            status + " outcome requires only failureMessage");
                 }
             }
             case PUBLICATION_FAILED -> {
@@ -50,6 +58,13 @@ public record CollectionSourceResult(
                 }
             }
         }
+    }
+
+    /** Returns whether this outcome represents a source/item failure. */
+    public boolean failed() {
+        return status == CollectionSourceStatus.FETCH_FAILED
+                || status == CollectionSourceStatus.EXTRACTION_FAILED
+                || status == CollectionSourceStatus.PUBLICATION_FAILED;
     }
 
     private static void requireNonBlank(String value, String name) {

@@ -405,6 +405,7 @@ components:
           pattern: .*\S.*
     CollectionSourceRun:
       type: object
+      description: One terminal source/item outcome. RSS/Atom sources may contribute multiple outcomes with the same sourceId.
       required:
       - sourceId
       - status
@@ -419,7 +420,9 @@ components:
           type: string
           enum:
           - PUBLISHED
+          - NO_ITEMS
           - FETCH_FAILED
+          - EXTRACTION_FAILED
           - PUBLICATION_FAILED
         rawItemId:
           type:
@@ -469,10 +472,12 @@ components:
           type: integer
           format: int64
           minimum: 0
+          description: Number of semantic items successfully published to Kafka.
         failedCount:
           type: integer
           format: int64
           minimum: 0
+          description: Number of fetch, extraction, or item-publication failures.
         sources:
           type: array
           items:

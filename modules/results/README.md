@@ -46,5 +46,5 @@ The consumed topics are the existing `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC`
 
 - [`contract.md`](contract.md)
 - [`../AGENTS.md`](../AGENTS.md)
-- [`../../docs/specs/active/subspecs/backend-results-rest-api.md`](../../docs/specs/active/subspecs/backend-results-rest-api.md)
+- [`../../docs/specs/archive/subspecs/backend-results-rest-api.md`](../../docs/specs/archive/subspecs/backend-results-rest-api.md)
 - [`../../docs/IMPLEMENTATION.md`](../../docs/IMPLEMENTATION.md)

@@ -5,14 +5,12 @@ import io.signalharvester.collection.event.RawItemEventPublisher;
 import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationException;
 import io.signalharvester.collection.event.RawItemPublicationResult;
-import io.signalharvester.collection.source.FetchedSourceContent;
+import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import jakarta.inject.Singleton;
 import java.util.Objects;
 
-/**
- * Publishes collection raw-item integration events to Kafka as explicit Protobuf bytes.
- */
+/** Publishes collection raw-item integration events to Kafka as explicit Protobuf bytes. */
 @Singleton
 public final class KafkaRawItemEventPublisher implements RawItemEventPublisher {
 
@@ -29,19 +27,17 @@ public final class KafkaRawItemEventPublisher implements RawItemEventPublisher {
         this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
 
-    /**
-     * Maps and serializes the event locally, then uses a blocking acknowledged Kafka send.
-     */
+    /** Maps and serializes the event locally, then uses a blocking acknowledged Kafka send. */
     @Override
     public RawItemPublicationResult publish(
-            FetchedSourceContent content,
+            ExtractedSourceItem item,
             RawItemPublicationContext context) {
-        Objects.requireNonNull(content, "content");
+        Objects.requireNonNull(item, "item");
         Objects.requireNonNull(context, "context");
 
         String topic = configuration.getRawItemDiscoveredTopic();
         try {
-            RawItemDiscovered event = mapper.map(content, context);
+            RawItemDiscovered event = mapper.map(item, context);
             kafkaClient.send(topic, event.getRawItemId(), event.toByteArray());
             return new RawItemPublicationResult(
                     event.getEnvelope().getEventId(),

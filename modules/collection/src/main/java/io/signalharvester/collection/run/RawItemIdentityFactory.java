@@ -1,5 +1,6 @@
 package io.signalharvester.collection.run;
 
+import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.collection.source.FetchedSourceContent;
 import jakarta.inject.Singleton;
 import java.nio.ByteBuffer;
@@ -10,30 +11,44 @@ import java.util.HexFormat;
 import java.util.Objects;
 
 /**
- * Derives a deterministic raw-item identity from source provenance, requested URI, and raw payload.
+ * Derives deterministic raw-item identities from source provenance, item URL, and identity payload.
  *
- * <p>This is idempotency groundwork for the one-payload-per-source HTTP model. Source-specific
- * extraction may later supply finer-grained external identities without changing the Kafka publisher.</p>
+ * <p>Passthrough REST/HTML extraction supplies the original response bytes as identity material, so
+ * existing one-response-per-source identities stay stable. RSS/Atom extraction supplies canonical
+ * per-entry identity material, allowing one fetched feed document to produce multiple stable raw ids.</p>
  */
 @Singleton
 public final class RawItemIdentityFactory {
 
     private static final byte[] SEPARATOR = new byte[] {0};
 
+    /** Returns the same identity for the same extracted source item across collection runs. */
+    public String identityFor(ExtractedSourceItem item) {
+        Objects.requireNonNull(item, "item");
+        return identity(item.sourceId().value().getMostSignificantBits(),
+                item.sourceId().value().getLeastSignificantBits(),
+                item.url().toASCIIString(),
+                item.identityPayload());
+    }
+
     /**
-     * Returns the same identity for the same source, URI, and payload across collection runs.
-     *
-     * @param content fetched raw source content
-     * @return lowercase SHA-256 identity
+     * Retains the original fetch-payload identity contract for focused transport tests and compatibility.
      */
     public String identityFor(FetchedSourceContent content) {
         Objects.requireNonNull(content, "content");
+        return identity(content.sourceId().value().getMostSignificantBits(),
+                content.sourceId().value().getLeastSignificantBits(),
+                content.requestedUri().toASCIIString(),
+                content.body());
+    }
+
+    private static String identity(long mostSignificantBits, long leastSignificantBits, String url, byte[] payload) {
         MessageDigest digest = sha256();
-        digest.update(uuidBytes(content.sourceId().value().getMostSignificantBits(), content.sourceId().value().getLeastSignificantBits()));
+        digest.update(uuidBytes(mostSignificantBits, leastSignificantBits));
         digest.update(SEPARATOR);
-        digest.update(content.requestedUri().toASCIIString().getBytes(StandardCharsets.UTF_8));
+        digest.update(url.getBytes(StandardCharsets.UTF_8));
         digest.update(SEPARATOR);
-        digest.update(content.body());
+        digest.update(payload);
         return HexFormat.of().formatHex(digest.digest());
     }
 

@@ -3,6 +3,7 @@ package io.signalharvester.collection.run;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
+import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.collection.source.FetchedSourceContent;
 import io.signalharvester.configuration.api.SourceId;
 import java.net.URI;
@@ -16,7 +17,7 @@ import org.junit.jupiter.api.Test;
  * Verifies deterministic identifiers produced by {@link RawItemIdentityFactory}, including which payload and
  * provenance changes must preserve or change raw-item identity.
  *
- * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-rss-atom-extraction}.</p>
  */
 class RawItemIdentityFactoryTest {
 
@@ -65,6 +66,33 @@ class RawItemIdentityFactoryTest {
                         JOBS_URI,
                         "payload",
                         Instant.EPOCH)));
+    }
+
+
+    /**
+     * Keep extracted-item identity stable across discovery timestamps and change it with item payload.
+     */
+    @Test
+    void shouldUseExtractedItemIdentityPayload() {
+        ExtractedSourceItem first = extracted("entry-payload", Instant.parse("2026-09-10T10:00:00Z"));
+        ExtractedSourceItem repeated = extracted("entry-payload", Instant.parse("2026-09-10T11:00:00Z"));
+        ExtractedSourceItem changed = extracted("changed-entry", Instant.parse("2026-09-10T11:00:00Z"));
+
+        assertEquals(factory.identityFor(first), factory.identityFor(repeated));
+        assertNotEquals(factory.identityFor(first), factory.identityFor(changed));
+    }
+
+    private static ExtractedSourceItem extracted(String identityPayload, Instant discoveredAt) {
+        return new ExtractedSourceItem(
+                SOURCE_ID,
+                URI.create("https://example.test/jobs/42"),
+                Optional.of("job-42"),
+                Optional.of("Java job"),
+                "Java Kafka PostgreSQL",
+                "text/plain",
+                Optional.empty(),
+                discoveredAt,
+                identityPayload.getBytes(StandardCharsets.UTF_8));
     }
 
     private static FetchedSourceContent content(

@@ -7,7 +7,7 @@ import io.signalharvester.collection.run.CollectionSourceStatus;
 import java.util.Optional;
 import java.util.UUID;
 
-/** REST representation of one source outcome inside a collection run. */
+/** REST representation of one terminal source/item outcome inside a collection run. */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 @Serdeable
 public record CollectionSourceRunResponse(

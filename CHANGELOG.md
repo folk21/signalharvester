@@ -7,6 +7,7 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-13 — Added bounded collection-owned RSS/Atom entry extraction, per-item raw-event publication, extraction-aware run history statuses, and opt-in live-backend verification including a deterministic local two-entry RSS fixture.
 - 2026-09-13 — Added the public Results REST API with bounded feed filters, compact list responses, profile-scoped detail reads, and PostgreSQL/controller regression coverage.
 
 - 2026-09-13 — Added Results-owned idempotent PostgreSQL materialization of `ItemAnalyzed` and `ItemRejected`, with manual Kafka offset commit after durable persistence and real Kafka/PostgreSQL integration coverage.

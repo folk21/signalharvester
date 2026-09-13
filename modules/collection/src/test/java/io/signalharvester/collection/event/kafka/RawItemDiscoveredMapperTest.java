@@ -2,23 +2,24 @@ package io.signalharvester.collection.event.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.signalharvester.collection.event.RawItemPublicationContext;
-import io.signalharvester.collection.source.FetchedSourceContent;
+import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.net.URI;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies {@link RawItemDiscoveredMapper} mapping from fetched source content and publication context to the
- * versioned {@code RawItemDiscovered} event contract.
+ * Verifies {@link RawItemDiscoveredMapper} mapping from collection-owned extracted items to the
+ * versioned raw-item event, including optional RSS/Atom metadata.
  *
- * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-event-contracts}.</p>
+ * <p>Related specifications: {@code backend-rss-atom-extraction}, {@code backend-event-contracts}.</p>
  */
 class RawItemDiscoveredMapperTest {
 
@@ -29,69 +30,75 @@ class RawItemDiscoveredMapperTest {
     private static final String PROFILE_ID = "profile-7";
     private static final String TRACEPARENT =
             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    private static final Instant DISCOVERED_AT = Instant.parse("2026-09-10T12:34:56.123456789Z");
+    private static final Instant PUBLISHED_AT = Instant.parse("2026-09-10T10:00:00Z");
 
     /**
-     * Map fetched content without leaking transport types.
+     * Preserve semantic item metadata and correlation in the event contract.
      */
     @Test
-    void shouldMapFetchedContentWithoutLeakingTransportTypes() {
+    void shouldMapExtractedItemMetadata() {
         RawItemDiscoveredMapper mapper = new RawItemDiscoveredMapper(() -> EVENT_ID);
-        Instant fetchedAt = Instant.parse("2026-09-10T12:34:56.123456789Z");
-        SourceId sourceId = SourceId.of(SOURCE_UUID);
-        FetchedSourceContent content = new FetchedSourceContent(
-                sourceId,
-                URI.create("https://example.test/jobs?language=java"),
-                200,
-                Optional.of("text/plain; charset=ISO-8859-1"),
-                "café".getBytes(Charset.forName("ISO-8859-1")),
-                fetchedAt);
+        ExtractedSourceItem item = new ExtractedSourceItem(
+                SourceId.of(SOURCE_UUID),
+                URI.create("https://example.test/news/42"),
+                Optional.of("feed-entry-42"),
+                Optional.of("Java 25 released"),
+                "Java 25 is now available.",
+                "text/plain; charset=UTF-8",
+                Optional.of(PUBLISHED_AT),
+                DISCOVERED_AT,
+                "identity".getBytes(StandardCharsets.UTF_8));
         RawItemPublicationContext context = new RawItemPublicationContext(
                 RAW_ITEM_ID,
                 RUN_ID,
                 PROFILE_ID,
-                "JOB",
+                "TOPIC",
                 Optional.of(TRACEPARENT));
 
-        RawItemDiscovered event = mapper.map(content, context);
+        RawItemDiscovered event = mapper.map(item, context);
 
         assertEquals(EVENT_ID.toString(), event.getEnvelope().getEventId());
         assertEquals(RAW_ITEM_ID, event.getRawItemId());
-        assertEquals(RawItemDiscoveredMapper.EVENT_TYPE, event.getEnvelope().getEventType());
         assertEquals(RUN_ID, event.getEnvelope().getCorrelationId());
-        assertEquals(RawItemDiscoveredMapper.PRODUCER, event.getEnvelope().getProducer());
-        assertEquals(RawItemDiscoveredMapper.SCHEMA_VERSION, event.getEnvelope().getSchemaVersion());
-        assertEquals(fetchedAt.getEpochSecond(), event.getEnvelope().getOccurredAt().getSeconds());
-        assertEquals(fetchedAt.getNano(), event.getEnvelope().getOccurredAt().getNanos());
-        assertEquals(sourceId.value().toString(), event.getSourceId());
+        assertEquals(TRACEPARENT, event.getEnvelope().getTraceparent());
+        assertEquals(DISCOVERED_AT.getEpochSecond(), event.getEnvelope().getOccurredAt().getSeconds());
+        assertEquals(SOURCE_UUID.toString(), event.getSourceId());
         assertEquals(PROFILE_ID, event.getMonitoringProfileId());
-        assertEquals("JOB", event.getInformationCategory());
-        assertEquals(content.requestedUri().toString(), event.getUrl());
-        assertEquals("café", event.getContent());
-        assertEquals("text/plain; charset=ISO-8859-1", event.getContentType());
-        assertFalse(event.hasExternalId());
-        assertFalse(event.hasTitle());
-        assertFalse(event.hasPublishedAt());
+        assertEquals("feed-entry-42", event.getExternalId());
+        assertEquals("Java 25 released", event.getTitle());
+        assertEquals(item.url().toString(), event.getUrl());
+        assertEquals(item.content(), event.getContent());
+        assertEquals(item.contentType(), event.getContentType());
+        assertEquals(PUBLISHED_AT.getEpochSecond(), event.getPublishedAt().getSeconds());
+        assertTrue(event.hasExternalId());
+        assertTrue(event.hasTitle());
+        assertTrue(event.hasPublishedAt());
     }
 
     /**
-     * Default unknown response charset to UTF-8.
+     * Leave optional fields absent for passthrough-style items.
      */
     @Test
-    void shouldDefaultUnknownResponseCharsetToUtf8() {
+    void shouldLeaveOptionalFieldsAbsent() {
         RawItemDiscoveredMapper mapper = new RawItemDiscoveredMapper(UUID::randomUUID);
-        FetchedSourceContent content = new FetchedSourceContent(
+        ExtractedSourceItem item = new ExtractedSourceItem(
                 SourceId.of(UUID.randomUUID()),
-                URI.create("https://example.test/feed"),
-                200,
+                URI.create("https://example.test/api"),
                 Optional.empty(),
-                "hello".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                Instant.parse("2026-09-10T12:00:00Z"));
+                Optional.empty(),
+                "hello",
+                "application/json",
+                Optional.empty(),
+                DISCOVERED_AT,
+                "hello".getBytes(StandardCharsets.UTF_8));
 
-        RawItemDiscovered event = mapper.map(content, new RawItemPublicationContext(
+        RawItemDiscovered event = mapper.map(item, new RawItemPublicationContext(
                 "raw-1", "run-1", "profile-1", "TOPIC", Optional.empty()));
 
-        assertEquals("hello", event.getContent());
-        assertEquals("application/octet-stream", event.getContentType());
+        assertFalse(event.hasExternalId());
+        assertFalse(event.hasTitle());
+        assertFalse(event.hasPublishedAt());
         assertEquals("", event.getEnvelope().getTraceparent());
     }
 }
