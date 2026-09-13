@@ -11,8 +11,26 @@ import java.io.IOException;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies Protobuf round trips and forward-compatible decoding for {@link ItemAnalyzed} and
+ * {@link ItemRejected}, including preservation of shared event-envelope metadata.
+ *
+ * <p>Related specification: {@code backend-event-contracts}.</p>
+ */
 class AnalysisEventSerializationTest {
 
+    private static final int UNKNOWN_FIELD_NUMBER = 1000;
+    private static final String UNKNOWN_FIELD_VALUE = "future-field";
+    private static final String NORMALIZED_ITEM_ID = "normalized-01";
+    private static final String SOURCE_ID = "source-01";
+    private static final String PROFILE_ID = "profile-01";
+    private static final String CORRELATION_ID = "run-01";
+    private static final String TRACEPARENT =
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+    /**
+     * Round trip analyzed event.
+     */
     @Test
     void shouldRoundTripAnalyzedEvent() throws IOException {
         ItemAnalyzed original = analyzedEvent();
@@ -22,6 +40,9 @@ class AnalysisEventSerializationTest {
         assertEquals(original, decoded);
     }
 
+    /**
+     * Round trip rejected event.
+     */
     @Test
     void shouldRoundTripRejectedEvent() throws IOException {
         ItemRejected original = rejectedEvent();
@@ -31,38 +52,32 @@ class AnalysisEventSerializationTest {
         assertEquals(original, decoded);
     }
 
+    /**
+     * Tolerate unknown additive fields on analyzed event.
+     */
     @Test
     void shouldTolerateUnknownAdditiveFieldsOnAnalyzedEvent() throws IOException {
         ItemAnalyzed original = analyzedEvent();
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        bytes.write(original.toByteArray());
 
-        CodedOutputStream codedOutput = CodedOutputStream.newInstance(bytes);
-        codedOutput.writeString(1000, "future-field");
-        codedOutput.flush();
-
-        ItemAnalyzed decoded = ItemAnalyzed.parseFrom(bytes.toByteArray());
+        ItemAnalyzed decoded = ItemAnalyzed.parseFrom(withUnknownField(original.toByteArray()));
 
         assertEquals(original.getNormalizedItemId(), decoded.getNormalizedItemId());
         assertEquals(original.getEnvelope().getEventId(), decoded.getEnvelope().getEventId());
-        assertTrue(decoded.getUnknownFields().hasField(1000));
+        assertTrue(decoded.getUnknownFields().hasField(UNKNOWN_FIELD_NUMBER));
     }
 
+    /**
+     * Tolerate unknown additive fields on rejected event.
+     */
     @Test
     void shouldTolerateUnknownAdditiveFieldsOnRejectedEvent() throws IOException {
         ItemRejected original = rejectedEvent();
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        bytes.write(original.toByteArray());
 
-        CodedOutputStream codedOutput = CodedOutputStream.newInstance(bytes);
-        codedOutput.writeString(1000, "future-field");
-        codedOutput.flush();
-
-        ItemRejected decoded = ItemRejected.parseFrom(bytes.toByteArray());
+        ItemRejected decoded = ItemRejected.parseFrom(withUnknownField(original.toByteArray()));
 
         assertEquals(original.getNormalizedItemId(), decoded.getNormalizedItemId());
         assertEquals(original.getEnvelope().getEventId(), decoded.getEnvelope().getEventId());
-        assertTrue(decoded.getUnknownFields().hasField(1000));
+        assertTrue(decoded.getUnknownFields().hasField(UNKNOWN_FIELD_NUMBER));
     }
 
     private static ItemAnalyzed analyzedEvent() {
@@ -71,9 +86,9 @@ class AnalysisEventSerializationTest {
                 .setEnvelope(envelope("analysis.item-analyzed.v1", "analysis-event-01", timestamp))
                 .setSourceEventId("raw-event-01")
                 .setRawItemId("raw-01")
-                .setNormalizedItemId("normalized-01")
-                .setSourceId("source-01")
-                .setMonitoringProfileId("profile-01")
+                .setNormalizedItemId(NORMALIZED_ITEM_ID)
+                .setSourceId(SOURCE_ID)
+                .setMonitoringProfileId(PROFILE_ID)
                 .setInformationCategory("JOB")
                 .setExternalId("external-42")
                 .setTitle("Senior Java Backend Engineer")
@@ -98,9 +113,9 @@ class AnalysisEventSerializationTest {
                 .setEnvelope(envelope("analysis.item-rejected.v1", "rejection-event-01", timestamp))
                 .setSourceEventId("raw-event-02")
                 .setRawItemId("raw-02")
-                .setNormalizedItemId("normalized-01")
-                .setSourceId("source-01")
-                .setMonitoringProfileId("profile-01")
+                .setNormalizedItemId(NORMALIZED_ITEM_ID)
+                .setSourceId(SOURCE_ID)
+                .setMonitoringProfileId(PROFILE_ID)
                 .setInformationCategory("JOB")
                 .setReasonCode("DUPLICATE")
                 .setExplanation("Logical item was already accepted for this monitoring profile")
@@ -112,10 +127,19 @@ class AnalysisEventSerializationTest {
                 .setEventId(eventId)
                 .setEventType(eventType)
                 .setOccurredAt(timestamp)
-                .setCorrelationId("run-01")
-                .setTraceparent("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+                .setCorrelationId(CORRELATION_ID)
+                .setTraceparent(TRACEPARENT)
                 .setProducer("analysis")
                 .setSchemaVersion("v1")
                 .build();
+    }
+
+    private static byte[] withUnknownField(byte[] message) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        bytes.write(message);
+        CodedOutputStream codedOutput = CodedOutputStream.newInstance(bytes);
+        codedOutput.writeString(UNKNOWN_FIELD_NUMBER, UNKNOWN_FIELD_VALUE);
+        codedOutput.flush();
+        return bytes.toByteArray();
     }
 }

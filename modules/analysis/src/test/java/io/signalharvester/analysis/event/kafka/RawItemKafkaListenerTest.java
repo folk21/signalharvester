@@ -20,11 +20,24 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies {@link RawItemKafkaListener} input validation and manual offset-commit semantics for valid,
+ * poison, and processing-failure paths before analysis state is acknowledged.
+ *
+ * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>
+ */
 class RawItemKafkaListenerTest {
 
     private static final String TOPIC = "raw-items";
     private static final String RAW_ITEM_ID = "raw-01";
+    private static final String SOURCE_EVENT_ID = "source-event-01";
+    private static final String RUN_ID = "run-01";
+    private static final String SOURCE_ID = "source-01";
+    private static final String PROFILE_ID = "profile-01";
 
+    /**
+     * Commit only after successful processing.
+     */
     @Test
     void shouldCommitOnlyAfterSuccessfulProcessing() {
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
@@ -42,6 +55,9 @@ class RawItemKafkaListenerTest {
         assertEquals(8L, offsets.get(new TopicPartition(TOPIC, 2)).offset());
     }
 
+    /**
+     * Leave offset uncommitted when processing fails.
+     */
     @Test
     void shouldLeaveOffsetUncommittedWhenProcessingFails() {
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
@@ -56,6 +72,9 @@ class RawItemKafkaListenerTest {
         assertNull(committed.get());
     }
 
+    /**
+     * Leave offset uncommitted and skip processing for malformed protobuf.
+     */
     @Test
     void shouldLeaveOffsetUncommittedAndSkipProcessingForMalformedProtobuf() {
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
@@ -74,6 +93,9 @@ class RawItemKafkaListenerTest {
         assertFalse(processed.get());
     }
 
+    /**
+     * Leave offset uncommitted and skip processing when Kafka key does not match payload.
+     */
     @Test
     void shouldLeaveOffsetUncommittedAndSkipProcessingWhenKafkaKeyDoesNotMatchPayload() {
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
@@ -92,6 +114,9 @@ class RawItemKafkaListenerTest {
         assertFalse(processed.get());
     }
 
+    /**
+     * Leave offset uncommitted and skip processing for invalid mapped domain data.
+     */
     @Test
     void shouldLeaveOffsetUncommittedAndSkipProcessingForInvalidMappedDomainData() {
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
@@ -116,16 +141,16 @@ class RawItemKafkaListenerTest {
     private static RawItemDiscovered event() {
         return RawItemDiscovered.newBuilder()
                 .setEnvelope(EventEnvelope.newBuilder()
-                        .setEventId("source-event-01")
+                        .setEventId(SOURCE_EVENT_ID)
                         .setEventType("collection.raw-item-discovered.v1")
                         .setOccurredAt(Timestamp.newBuilder().setSeconds(1_789_000_000L).build())
-                        .setCorrelationId("run-01")
+                        .setCorrelationId(RUN_ID)
                         .setProducer("collection")
                         .setSchemaVersion("v1")
                         .build())
                 .setRawItemId(RAW_ITEM_ID)
-                .setSourceId("source-01")
-                .setMonitoringProfileId("profile-01")
+                .setSourceId(SOURCE_ID)
+                .setMonitoringProfileId(PROFILE_ID)
                 .setInformationCategory("JOB")
                 .setUrl("https://example.test/jobs/1")
                 .setContent("Java Kafka")

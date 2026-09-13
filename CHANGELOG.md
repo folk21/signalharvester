@@ -5,25 +5,8 @@ description: Notable project changes organized by release state, with each chang
 ---
 # Changelog
 
-## Unreleased — runtime and verification hardening
-
-2026-09-13 — Added an HTTP-driven backend smoke test covering REST source configuration, manual collection, deterministic external HTTP, Kafka analysis ingestion, durable run history, and analysis inspection without using internal application beans.
-
-2026-09-13 — Parameterized local PostgreSQL and Redpanda Compose host ports, credentials, advertised host, and admin endpoint while preserving safe defaults.
-
-2026-09-13 — Added an explicit `.env.example` workflow that can be shared by Compose interpolation and the host-run backend without committing local secrets.
-
-2026-09-13 — Added root `run_checks.sh` as the canonical full verification gate for Gradle checks, Testcontainers integration tests, and FULL-archive validation.
-
-2026-09-13 — Expanded persistence, HTTP-boundary, and Protobuf regression coverage for restart durability, create rollback, analysis inspection queries, HTTP timeout/redirect limits, and rejected-event forward compatibility.
-
-2026-09-13 — Enhanced `run_checks.sh` with an end-of-run verification summary and standard Gradle report locations for faster failure diagnosis.
-
-2026-09-13 — Hardened `archive.sh` so a FULL archive cannot be produced without `gradle-wrapper.jar` and verifies that the wrapper is actually present.
-
-2026-09-13 — Synchronized installation, configuration, usage, testing, infrastructure, and active project-structure documentation with the new runtime/reproducibility workflow.
-
 ## Unreleased
+- Improve `run_checks.sh` diagnostics for FULL archive validation by persisting offending archive entries in `build/reports/verification/archive-cleanliness.txt` and separating non-Gradle reports from Gradle report locations.
 
 2026-09-08 — Established the initial SignalHarvester modular-monolith backend skeleton and specification hierarchy.
 
@@ -74,9 +57,5 @@ description: Notable project changes organized by release state, with each chang
 2026-09-13 — Reconciled REST/OpenAPI defaults and validation, made required JSON response fields serialization-stable, and added server-level contract coverage for collection and analysis operational endpoints.
 
 2026-09-13 — Pipelined collection fetch completion into terminal publication with bounded backpressure so raw source payload retention scales with configured concurrency instead of total run size.
-
-2026-09-13 — Hardened analysis transaction/event guarantees with transaction-aware deduplication persistence, rollback coverage for failed terminal publication, poison-input offset protection, and focused analysis Kafka mapping/publication tests.
-
-2026-09-13 — Tightened module API semantics so only real synchronous cross-module contracts remain published, reduced the collection-to-configuration dependency to implementation scope, and expanded architecture enforcement for cycles, API purity, adapter layering, and composition-root direction.
 
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

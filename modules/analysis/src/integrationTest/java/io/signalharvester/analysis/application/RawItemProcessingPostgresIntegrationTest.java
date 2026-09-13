@@ -45,10 +45,31 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+/**
+ * Verifies {@link RawItemProcessingService} transaction guarantees against real PostgreSQL, including
+ * deduplication rollback when terminal event publication fails and retryable Kafka offset behavior.
+ *
+ * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class RawItemProcessingPostgresIntegrationTest {
 
     private static final Instant PROCESSING_TIME = Instant.parse("2026-09-13T08:00:00Z");
+    private static final Instant DISCOVERED_AT = Instant.parse("2026-09-13T07:59:00Z");
+    private static final Instant PUBLISHED_AT = Instant.parse("2026-09-13T07:55:00Z");
+    private static final String DEFAULT_PROFILE_ID = "profile-01";
+    private static final String PROFILE_A = "profile-a";
+    private static final String PROFILE_B = "profile-b";
+    private static final String SOURCE_ID = "source-01";
+    private static final String RUN_ID = "run-01";
+    private static final String RAW_ITEMS_TOPIC = "raw-items";
+    private static final String TEST_ANALYZER = "test-analyzer";
+    private static final String RAW_ITEM_1 = "raw-01";
+    private static final String RAW_ITEM_2 = "raw-02";
+    private static final String SOURCE_EVENT_1 = "source-event-01";
+    private static final String SOURCE_EVENT_2 = "source-event-02";
+    private static final String TRACEPARENT =
+            "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01";
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -92,6 +113,9 @@ class RawItemProcessingPostgresIntegrationTest {
         }
     }
 
+    /**
+     * Publish analyzed for valid irrelevant item and persist claim.
+     */
     @Test
     void shouldPublishAnalyzedForValidIrrelevantItemAndPersistClaim() {
         RecordingPublisher publisher = new RecordingPublisher();
@@ -101,9 +125,9 @@ class RawItemProcessingPostgresIntegrationTest {
                 0,
                 List.of(),
                 "No configured keywords matched",
-                "test-analyzer");
+                TEST_ANALYZER);
         RawItemProcessingService service = service(analyzer, publisher);
-        DiscoveredRawItem rawItem = rawItem("raw-01", "source-event-01", "Unrelated content");
+        DiscoveredRawItem rawItem = rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Unrelated content");
 
         RawItemProcessingResult result = service.process(rawItem);
 
@@ -113,11 +137,14 @@ class RawItemProcessingPostgresIntegrationTest {
         assertTrue(publisher.rejected().isEmpty());
 
         String normalizedItemId = normalizer.normalize(rawItem).normalizedItemId();
-        AnalysisItemInspection persisted = inspection.find("profile-01", normalizedItemId).orElseThrow();
+        AnalysisItemInspection persisted = inspection.find(DEFAULT_PROFILE_ID, normalizedItemId).orElseThrow();
         assertEquals(1, persisted.discoveryCount());
-        assertEquals("raw-01", persisted.lastRawItemId());
+        assertEquals(RAW_ITEM_1, persisted.lastRawItemId());
     }
 
+    /**
+     * Reject duplicate without running analyzer again.
+     */
     @Test
     void shouldRejectDuplicateWithoutRunningAnalyzerAgain() {
         AtomicInteger analyzerCalls = new AtomicInteger();
@@ -129,12 +156,12 @@ class RawItemProcessingPostgresIntegrationTest {
                     100,
                     List.of("java"),
                     "Matched test keyword",
-                    "test-analyzer");
+                    TEST_ANALYZER);
         };
         RecordingPublisher publisher = new RecordingPublisher();
         RawItemProcessingService service = service(analyzer, publisher);
-        DiscoveredRawItem first = rawItem("raw-01", "source-event-01", "Java Kafka");
-        DiscoveredRawItem duplicate = rawItem("raw-02", "source-event-02", "Java   Kafka");
+        DiscoveredRawItem first = rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka");
+        DiscoveredRawItem duplicate = rawItem(RAW_ITEM_2, SOURCE_EVENT_2, "Java   Kafka");
 
         RawItemProcessingResult firstResult = service.process(first);
         RawItemProcessingResult duplicateResult = service.process(duplicate);
@@ -146,12 +173,15 @@ class RawItemProcessingPostgresIntegrationTest {
         assertEquals("DUPLICATE", publisher.rejected().orElseThrow().reasonCode());
 
         String normalizedItemId = normalizer.normalize(first).normalizedItemId();
-        AnalysisItemInspection persisted = inspection.find("profile-01", normalizedItemId).orElseThrow();
+        AnalysisItemInspection persisted = inspection.find(DEFAULT_PROFILE_ID, normalizedItemId).orElseThrow();
         assertEquals(2, persisted.discoveryCount());
-        assertEquals("raw-02", persisted.lastRawItemId());
-        assertEquals("source-event-02", persisted.lastSourceEventId());
+        assertEquals(RAW_ITEM_2, persisted.lastRawItemId());
+        assertEquals(SOURCE_EVENT_2, persisted.lastSourceEventId());
     }
 
+    /**
+     * Analyze same logical item independently for different profiles.
+     */
     @Test
     void shouldAnalyzeSameLogicalItemIndependentlyForDifferentProfiles() {
         AtomicInteger analyzerCalls = new AtomicInteger();
@@ -163,12 +193,12 @@ class RawItemProcessingPostgresIntegrationTest {
                     100,
                     List.of("java"),
                     "Matched test keyword",
-                    "test-analyzer");
+                    TEST_ANALYZER);
         };
         RecordingPublisher publisher = new RecordingPublisher();
         RawItemProcessingService service = service(analyzer, publisher);
-        DiscoveredRawItem firstProfile = rawItem("profile-a", "raw-01", "source-event-01", "Java Kafka");
-        DiscoveredRawItem secondProfile = rawItem("profile-b", "raw-02", "source-event-02", "Java Kafka");
+        DiscoveredRawItem firstProfile = rawItem(PROFILE_A, RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka");
+        DiscoveredRawItem secondProfile = rawItem(PROFILE_B, RAW_ITEM_2, SOURCE_EVENT_2, "Java Kafka");
 
         RawItemProcessingResult firstResult = service.process(firstProfile);
         RawItemProcessingResult secondResult = service.process(secondProfile);
@@ -177,17 +207,20 @@ class RawItemProcessingPostgresIntegrationTest {
         assertEquals(RawItemProcessingStatus.ANALYZED, secondResult.status());
         assertEquals(firstResult.normalizedItemId(), secondResult.normalizedItemId());
         assertEquals(2, analyzerCalls.get());
-        assertTrue(inspection.find("profile-a", firstResult.normalizedItemId()).isPresent());
-        assertTrue(inspection.find("profile-b", secondResult.normalizedItemId()).isPresent());
+        assertTrue(inspection.find(PROFILE_A, firstResult.normalizedItemId()).isPresent());
+        assertTrue(inspection.find(PROFILE_B, secondResult.normalizedItemId()).isPresent());
     }
 
+    /**
+     * Rollback new claim and leave input offset uncommitted when analyzed publication fails.
+     */
     @Test
     void shouldRollbackNewClaimAndLeaveInputOffsetUncommittedWhenAnalyzedPublicationFails() {
         RecordingPublisher publisher = new RecordingPublisher();
         publisher.failAnalyzed();
         RawItemProcessingService service = service(matchingAnalyzer(), publisher);
         RawItemKafkaListener listener = new RawItemKafkaListener(new RawItemDiscoveredMapper(), service);
-        DiscoveredRawItem rawItem = rawItem("raw-01", "source-event-01", "Java Kafka");
+        DiscoveredRawItem rawItem = rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka");
         RawItemDiscovered event = event(rawItem);
         String normalizedItemId = normalizer.normalize(rawItem).normalizedItemId();
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
@@ -197,19 +230,22 @@ class RawItemProcessingPostgresIntegrationTest {
                 event.toByteArray(),
                 9L,
                 0,
-                "raw-items",
+                RAW_ITEMS_TOPIC,
                 consumer(committed)));
 
-        assertTrue(inspection.find("profile-01", normalizedItemId).isEmpty());
+        assertTrue(inspection.find(DEFAULT_PROFILE_ID, normalizedItemId).isEmpty());
         assertNull(committed.get());
     }
 
+    /**
+     * Rollback duplicate observation when rejected publication fails.
+     */
     @Test
     void shouldRollbackDuplicateObservationWhenRejectedPublicationFails() {
         RecordingPublisher publisher = new RecordingPublisher();
         RawItemProcessingService service = service(matchingAnalyzer(), publisher);
-        DiscoveredRawItem first = rawItem("raw-01", "source-event-01", "Java Kafka");
-        DiscoveredRawItem duplicate = rawItem("raw-02", "source-event-02", "Java Kafka");
+        DiscoveredRawItem first = rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka");
+        DiscoveredRawItem duplicate = rawItem(RAW_ITEM_2, SOURCE_EVENT_2, "Java Kafka");
         String normalizedItemId = normalizer.normalize(first).normalizedItemId();
 
         service.process(first);
@@ -217,10 +253,10 @@ class RawItemProcessingPostgresIntegrationTest {
 
         assertThrows(AnalysisPublicationException.class, () -> service.process(duplicate));
 
-        AnalysisItemInspection persisted = inspection.find("profile-01", normalizedItemId).orElseThrow();
+        AnalysisItemInspection persisted = inspection.find(DEFAULT_PROFILE_ID, normalizedItemId).orElseThrow();
         assertEquals(1, persisted.discoveryCount());
-        assertEquals("raw-01", persisted.lastRawItemId());
-        assertEquals("source-event-01", persisted.lastSourceEventId());
+        assertEquals(RAW_ITEM_1, persisted.lastRawItemId());
+        assertEquals(SOURCE_EVENT_1, persisted.lastSourceEventId());
     }
 
     private RawItemProcessingService service(ContentAnalyzer analyzer, AnalysisEventPublisher publisher) {
@@ -240,7 +276,7 @@ class RawItemProcessingPostgresIntegrationTest {
                 100,
                 List.of("java", "kafka"),
                 "Matched test keywords",
-                "test-analyzer");
+                TEST_ANALYZER);
     }
 
     private static RawItemDiscovered event(DiscoveredRawItem rawItem) {
@@ -297,18 +333,18 @@ class RawItemProcessingPostgresIntegrationTest {
     }
 
     private static DiscoveredRawItem rawItem(String rawItemId, String sourceEventId, String content) {
-        return rawItem("profile-01", rawItemId, sourceEventId, content);
+        return rawItem(DEFAULT_PROFILE_ID, rawItemId, sourceEventId, content);
     }
 
     private static DiscoveredRawItem rawItem(
             String profileId, String rawItemId, String sourceEventId, String content) {
         return new DiscoveredRawItem(
                 sourceEventId,
-                "run-01",
-                Optional.of("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"),
-                Instant.parse("2026-09-13T07:59:00Z"),
+                RUN_ID,
+                Optional.of(TRACEPARENT),
+                DISCOVERED_AT,
                 rawItemId,
-                "source-01",
+                SOURCE_ID,
                 profileId,
                 "JOB",
                 Optional.of("external-job-01"),
@@ -316,7 +352,7 @@ class RawItemProcessingPostgresIntegrationTest {
                 URI.create("https://example.test/jobs/1"),
                 content,
                 "text/plain",
-                Optional.of(Instant.parse("2026-09-13T07:55:00Z")));
+                Optional.of(PUBLISHED_AT));
     }
 
     private static void resetDatabase() throws Exception {

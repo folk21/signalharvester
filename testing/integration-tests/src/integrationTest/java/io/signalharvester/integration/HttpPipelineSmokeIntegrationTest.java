@@ -36,11 +36,17 @@ import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Black-box backend smoke test that drives the current collection-to-analysis slice only through REST.
+ * Black-box smoke coverage for the public backend surface implemented by
+ * {@link io.signalharvester.configuration.http.SourceController},
+ * {@link io.signalharvester.collection.http.CollectionRunController}, and
+ * {@link io.signalharvester.analysis.http.AnalysisItemInspectionController} over real PostgreSQL and Kafka.
  *
- * <p>PostgreSQL and Kafka are provisioned as infrastructure, but application behavior is exercised through
- * the same HTTP surface available to an external operator. Until Results persistence exists, durable analysis
- * inspection is the terminal observable boundary for this smoke flow.</p>
+ * <p>The test drives source creation, repeated collection, durable run history, and analysis inspection only
+ * through HTTP. Until Results persistence exists, analysis inspection is the terminal observable boundary.</p>
+ *
+ * <p>Related specifications: {@code backend-configuration-persistence-rest},
+ * {@code backend-collection-run-orchestration}, {@code backend-analysis-normalization-deduplication},
+ * {@code backend-operational-admin-api}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class HttpPipelineSmokeIntegrationTest {
@@ -95,6 +101,9 @@ class HttpPipelineSmokeIntegrationTest {
         sourceRequests.set(0);
     }
 
+    /**
+     * Drive configured source through collection Kafka and analysis using only HTTP application APIs.
+     */
     @Test
     void shouldDriveConfiguredSourceThroughCollectionKafkaAndAnalysisUsingOnlyHttpApplicationApis() throws Exception {
         String sourceUrl = "http://127.0.0.1:" + sourceServer.getAddress().getPort() + "/jobs";

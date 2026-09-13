@@ -33,10 +33,22 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
 
+/**
+ * Verifies {@link KafkaRawItemEventPublisher} against a real Kafka-compatible broker, including serialized
+ * {@code RawItemDiscovered} delivery, configured topic selection, and raw-item message keys.
+ *
+ * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-event-contracts}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class KafkaRawItemEventPublisherIntegrationTest {
 
     private static final String TOPIC = "signalharvester.collection.raw-item-discovered.v1.test";
+    private static final String RAW_ITEM_ID = "raw-kafka-1";
+    private static final String RUN_ID = "run-kafka-1";
+    private static final String PROFILE_ID = "profile-kafka-1";
+    private static final String CONTENT = "Java Kafka PostgreSQL";
+    private static final SourceId SOURCE_ID = SourceId.of(
+            UUID.fromString("00000000-0000-0000-0000-000000000401"));
 
     @Container
     private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:3.8.0");
@@ -65,13 +77,16 @@ class KafkaRawItemEventPublisherIntegrationTest {
         }
     }
 
+    /**
+     * Publish and decode raw item through Kafka.
+     */
     @Test
     void shouldPublishAndDecodeRawItemThroughKafka() throws Exception {
         RawItemEventPublisher publisher = context.getBean(RawItemEventPublisher.class);
         RawItemPublicationResult publication = publisher.publish(content(), new RawItemPublicationContext(
-                "raw-kafka-1",
-                "run-kafka-1",
-                "profile-kafka-1",
+                RAW_ITEM_ID,
+                RUN_ID,
+                PROFILE_ID,
                 "JOB",
                 Optional.empty()));
 
@@ -82,12 +97,12 @@ class KafkaRawItemEventPublisherIntegrationTest {
         assertEquals(publication.rawItemId(), record.key());
         assertEquals(publication.eventId(), decoded.getEnvelope().getEventId());
         assertEquals(publication.rawItemId(), decoded.getRawItemId());
-        assertEquals("run-kafka-1", decoded.getEnvelope().getCorrelationId());
-        assertEquals("profile-kafka-1", decoded.getMonitoringProfileId());
+        assertEquals(RUN_ID, decoded.getEnvelope().getCorrelationId());
+        assertEquals(PROFILE_ID, decoded.getMonitoringProfileId());
         assertEquals("JOB", decoded.getInformationCategory());
         assertEquals(content().sourceId().value().toString(), decoded.getSourceId());
         assertEquals(content().requestedUri().toString(), decoded.getUrl());
-        assertEquals("Java Kafka PostgreSQL", decoded.getContent());
+        assertEquals(CONTENT, decoded.getContent());
     }
 
     private ConsumerRecord<String, byte[]> consumeOne() {
@@ -126,11 +141,11 @@ class KafkaRawItemEventPublisherIntegrationTest {
 
     private static FetchedSourceContent content() {
         return new FetchedSourceContent(
-                SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000401")),
+                SOURCE_ID,
                 URI.create("https://example.test/jobs/401"),
                 200,
                 Optional.of("text/plain; charset=UTF-8"),
-                "Java Kafka PostgreSQL".getBytes(StandardCharsets.UTF_8),
+                CONTENT.getBytes(StandardCharsets.UTF_8),
                 Instant.parse("2026-09-10T14:00:00Z"));
     }
 }

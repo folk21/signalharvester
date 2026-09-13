@@ -12,41 +12,57 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies deterministic identifiers produced by {@link RawItemIdentityFactory}, including which payload and
+ * provenance changes must preserve or change raw-item identity.
+ *
+ * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ */
 class RawItemIdentityFactoryTest {
 
     private static final SourceId SOURCE_ID = SourceId.of(
             UUID.fromString("00000000-0000-0000-0000-000000000501"));
+    private static final SourceId OTHER_SOURCE_ID = SourceId.of(
+            UUID.fromString("00000000-0000-0000-0000-000000000502"));
+    private static final URI JOBS_URI = URI.create("https://example.test/jobs");
+    private static final URI PAGED_JOBS_URI = URI.create("https://example.test/jobs?page=2");
 
     private final RawItemIdentityFactory factory = new RawItemIdentityFactory();
 
+    /**
+     * Keep identity stable across fetch timestamps.
+     */
     @Test
     void shouldKeepIdentityStableAcrossFetchTimestamps() {
-        FetchedSourceContent first = content(SOURCE_ID, URI.create("https://example.test/jobs"), "payload",
+        FetchedSourceContent first = content(SOURCE_ID, JOBS_URI, "payload",
                 Instant.parse("2026-09-10T10:00:00Z"));
-        FetchedSourceContent repeated = content(SOURCE_ID, URI.create("https://example.test/jobs"), "payload",
+        FetchedSourceContent repeated = content(SOURCE_ID, JOBS_URI, "payload",
                 Instant.parse("2026-09-10T11:00:00Z"));
 
         assertEquals(factory.identityFor(first), factory.identityFor(repeated));
     }
 
+    /**
+     * Change identity when payload or provenance changes.
+     */
     @Test
     void shouldChangeIdentityWhenPayloadOrProvenanceChanges() {
         FetchedSourceContent original = content(
-                SOURCE_ID, URI.create("https://example.test/jobs"), "payload", Instant.EPOCH);
+                SOURCE_ID, JOBS_URI, "payload", Instant.EPOCH);
 
         assertNotEquals(
                 factory.identityFor(original),
                 factory.identityFor(content(
-                        SOURCE_ID, URI.create("https://example.test/jobs"), "different", Instant.EPOCH)));
+                        SOURCE_ID, JOBS_URI, "different", Instant.EPOCH)));
         assertNotEquals(
                 factory.identityFor(original),
                 factory.identityFor(content(
-                        SOURCE_ID, URI.create("https://example.test/jobs?page=2"), "payload", Instant.EPOCH)));
+                        SOURCE_ID, PAGED_JOBS_URI, "payload", Instant.EPOCH)));
         assertNotEquals(
                 factory.identityFor(original),
                 factory.identityFor(content(
-                        SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000502")),
-                        URI.create("https://example.test/jobs"),
+                        OTHER_SOURCE_ID,
+                        JOBS_URI,
                         "payload",
                         Instant.EPOCH)));
     }

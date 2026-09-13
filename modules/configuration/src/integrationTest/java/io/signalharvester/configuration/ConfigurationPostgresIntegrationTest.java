@@ -28,6 +28,12 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+/**
+ * Verifies {@link io.signalharvester.configuration.application.SourceConfigurationManager} with real PostgreSQL,
+ * covering Flyway setup, CRUD transactions, rollback behavior, provider reads, and restart durability.
+ *
+ * <p>Related specification: {@code backend-configuration-persistence-rest}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class ConfigurationPostgresIntegrationTest {
 
@@ -52,6 +58,9 @@ class ConfigurationPostgresIntegrationTest {
         }
     }
 
+    /**
+     * Migrate empty database.
+     */
     @Test
     void shouldMigrateEmptyDatabase() throws Exception {
         try (Connection connection = DriverManager.getConnection(
@@ -68,6 +77,9 @@ class ConfigurationPostgresIntegrationTest {
         }
     }
 
+    /**
+     * Persist CRUD settings and provider reads.
+     */
     @Test
     void shouldPersistCrudSettingsAndProviderReads() {
         SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
@@ -106,6 +118,9 @@ class ConfigurationPostgresIntegrationTest {
         assertFalse(manager.list().isEmpty());
     }
 
+    /**
+     * Rollback source create when settings write fails.
+     */
     @Test
     void shouldRollbackSourceCreateWhenSettingsWriteFails() throws Exception {
         SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
@@ -123,6 +138,9 @@ class ConfigurationPostgresIntegrationTest {
         assertEquals(0, countSourceRows());
     }
 
+    /**
+     * Rollback source update when settings write fails.
+     */
     @Test
     void shouldRollbackSourceUpdateWhenSettingsWriteFails() throws Exception {
         SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
@@ -145,6 +163,9 @@ class ConfigurationPostgresIntegrationTest {
         assertEquals(original, manager.get(original.id()));
     }
 
+    /**
+     * Read persisted source after application context restart.
+     */
     @Test
     void shouldReadPersistedSourceAfterApplicationContextRestart() {
         SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
@@ -161,6 +182,9 @@ class ConfigurationPostgresIntegrationTest {
         assertEquals(created, provider.findSource(created.id()).orElseThrow());
     }
 
+    /**
+     * Report not found for missing update and delete.
+     */
     @Test
     void shouldReportNotFoundForMissingUpdateAndDelete() {
         SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);

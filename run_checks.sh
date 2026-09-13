@@ -7,18 +7,21 @@ set -eu
 # - docker info
 # - git diff --check (when executed inside a Git worktree)
 # - ./gradlew clean check --no-watch-fs
-# - ./gradlew integrationTest --no-watch-fs (container-backed module tests + cross-module HTTP smoke)
+# - ./gradlew integrationTest --no-watch-fs
 # - ./archive.sh <temporary FULL archive>
 # - FULL archive content/cleanliness validation with unzip/grep
+#   Report: build/reports/verification/archive-cleanliness.txt
 #
 # The final summary lists every verification step that actually ran and points to
-# the standard Gradle report locations used to diagnose failures.
+# Gradle report locations and persistent non-Gradle verification reports.
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$ROOT_DIR"
 
 SUMMARY_FILE=$(mktemp "${TMPDIR:-/tmp}/signalharvester-check-summary.XXXXXX")
 TMP_DIR=""
+REPORT_DIR="$ROOT_DIR/build/reports/verification"
+ARCHIVE_REPORT="$REPORT_DIR/archive-cleanliness.txt"
 
 print_summary() {
   status=$?
@@ -34,10 +37,13 @@ print_summary() {
   fi
 
   echo
-  echo "Report locations when a Gradle task fails:"
+  echo "Gradle report locations when a Gradle task fails:"
   echo "  - Default tests: <project>/build/reports/tests/test/index.html"
   echo "  - Integration tests: <project>/build/reports/tests/integrationTest/index.html"
   echo "  - Gradle problems: build/reports/problems/problems-report.html"
+  echo
+  echo "Non-Gradle verification reports:"
+  echo "  - FULL archive validation: build/reports/verification/archive-cleanliness.txt"
 
   if [ "$status" -eq 0 ]; then
     echo
@@ -96,26 +102,50 @@ generate_full_archive() {
 }
 
 validate_full_archive() {
+  mkdir -p "$REPORT_DIR"
+  : > "$ARCHIVE_REPORT"
   unzip -Z1 "$ARCHIVE" > "$ENTRIES"
 
+  {
+    echo "SignalHarvester FULL archive validation"
+    echo "Archive: $ARCHIVE"
+    echo
+  } >> "$ARCHIVE_REPORT"
+
+  failed=0
+
   if ! grep -Fqx 'signalharvester/gradle/wrapper/gradle-wrapper.jar' "$ENTRIES"; then
-    echo "FULL archive does not contain the Gradle Wrapper JAR" >&2
-    return 1
+    echo "[FAIL] Missing Gradle Wrapper JAR: signalharvester/gradle/wrapper/gradle-wrapper.jar" >> "$ARCHIVE_REPORT"
+    failed=1
   fi
 
   FORBIDDEN_ENTRY_PATTERN='(^|/)(\.gradle|\.idea|\.kotlin|\.vscode|\.venv|__pycache__|build|target|out|dist|node_modules)/|(^|/)\.env$|\.class$|\.log$'
-  if grep -Eq "$FORBIDDEN_ENTRY_PATTERN" "$ENTRIES"; then
-    echo "Forbidden generated/local entries found in FULL archive:" >&2
-    grep -E "$FORBIDDEN_ENTRY_PATTERN" "$ENTRIES" >&2
-    return 1
+  FORBIDDEN_ENTRIES=$(grep -E "$FORBIDDEN_ENTRY_PATTERN" "$ENTRIES" || true)
+  if [ -n "$FORBIDDEN_ENTRIES" ]; then
+    {
+      echo "[FAIL] Forbidden generated/local entries:"
+      printf '%s\n' "$FORBIDDEN_ENTRIES"
+    } >> "$ARCHIVE_REPORT"
+    failed=1
   fi
 
   OTHER_JARS=$(grep -E '\.jar$' "$ENTRIES" | grep -Fvx 'signalharvester/gradle/wrapper/gradle-wrapper.jar' || true)
   if [ -n "$OTHER_JARS" ]; then
-    echo "Unexpected JAR files found in FULL archive:" >&2
-    printf '%s\n' "$OTHER_JARS" >&2
+    {
+      echo "[FAIL] Unexpected JAR files:"
+      printf '%s\n' "$OTHER_JARS"
+    } >> "$ARCHIVE_REPORT"
+    failed=1
+  fi
+
+  if [ "$failed" -ne 0 ]; then
+    echo "FULL archive validation failed. Details:" >&2
+    cat "$ARCHIVE_REPORT" >&2
+    echo "Persistent report: $ARCHIVE_REPORT" >&2
     return 1
   fi
+
+  echo "[PASS] Archive content and cleanliness checks passed." >> "$ARCHIVE_REPORT"
 }
 
 [ -f gradle/wrapper/gradle-wrapper.jar ] || fail "gradle/wrapper/gradle-wrapper.jar is missing"
@@ -132,6 +162,7 @@ fi
 run_step "./gradlew clean check --no-watch-fs" run_gradle clean check --no-watch-fs
 run_step "./gradlew integrationTest --no-watch-fs" run_gradle integrationTest --no-watch-fs
 
+mkdir -p "$REPORT_DIR"
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/signalharvester-checks.XXXXXX")
 ARCHIVE="$TMP_DIR/signalharvester-FULL.zip"
 ENTRIES="$TMP_DIR/archive-entries.txt"

@@ -11,20 +11,37 @@ import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies deterministic normalization and logical-item identity produced by {@link DefaultContentNormalizer}
+ * across equivalent content, formatting, and provenance variations.
+ *
+ * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>
+ */
 class DefaultContentNormalizerTest {
+
+    private static final String PROFILE_A = "profile-a";
+    private static final String PROFILE_B = "profile-b";
+    private static final String SOURCE_EVENT_ID = "raw-event-01";
+    private static final String RUN_ID = "run-01";
+    private static final String RAW_ITEM_ID = "raw-01";
+    private static final String SOURCE_ID = "source-01";
+    private static final Instant DISCOVERED_AT = Instant.parse("2026-09-10T18:00:00Z");
 
     private final DefaultContentNormalizer normalizer =
             new DefaultContentNormalizer(new NormalizedItemIdentityFactory());
 
+    /**
+     * Normalize whitespace URL and fallback identity deterministically.
+     */
     @Test
     void shouldNormalizeWhitespaceUrlAndFallbackIdentityDeterministically() {
         NormalizedContentItem first = normalizer.normalize(raw(
-                "profile-a",
+                PROFILE_A,
                 Optional.empty(),
                 URI.create("HTTPS://Example.TEST:443/jobs/../jobs/42"),
                 "  Java   backend\nKafka  "));
         NormalizedContentItem second = normalizer.normalize(raw(
-                "profile-b",
+                PROFILE_B,
                 Optional.empty(),
                 URI.create("https://example.test/jobs/42"),
                 "Java backend Kafka"));
@@ -34,10 +51,13 @@ class DefaultContentNormalizerTest {
         assertEquals(first.normalizedItemId(), second.normalizedItemId());
     }
 
+    /**
+     * Preserve existing percent encoding during URL normalization.
+     */
     @Test
     void shouldPreserveExistingPercentEncodingDuringUrlNormalization() {
         NormalizedContentItem normalized = normalizer.normalize(raw(
-                "profile-a",
+                PROFILE_A,
                 Optional.empty(),
                 URI.create("HTTPS://Example.TEST:443/jobs/a%2Fb?q=java%20backend"),
                 "Java"));
@@ -45,26 +65,32 @@ class DefaultContentNormalizerTest {
         assertEquals("https://example.test/jobs/a%2Fb?q=java%20backend", normalized.url().toString());
     }
 
+    /**
+     * Reject non-HTTP raw item URL before normalization.
+     */
     @Test
     void shouldRejectNonHttpRawItemUrlBeforeNormalization() {
         assertThrows(IllegalArgumentException.class, () -> raw(
-                "profile-a", Optional.empty(), URI.create("file:///tmp/jobs"), "Java"));
+                PROFILE_A, Optional.empty(), URI.create("file:///tmp/jobs"), "Java"));
     }
 
+    /**
+     * Prefer stable external identity over content fingerprint.
+     */
     @Test
     void shouldPreferStableExternalIdentityOverContentFingerprint() {
         NormalizedContentItem first = normalizer.normalize(raw(
-                "profile-a",
+                PROFILE_A,
                 Optional.of(" external-42 "),
                 URI.create("https://example.test/jobs/42"),
                 "Original content"));
         NormalizedContentItem changed = normalizer.normalize(raw(
-                "profile-a",
+                PROFILE_A,
                 Optional.of("external-42"),
                 URI.create("https://example.test/jobs/42?revision=2"),
                 "Changed content"));
         NormalizedContentItem otherExternalId = normalizer.normalize(raw(
-                "profile-a",
+                PROFILE_A,
                 Optional.of("external-43"),
                 URI.create("https://example.test/jobs/42"),
                 "Original content"));
@@ -79,12 +105,12 @@ class DefaultContentNormalizerTest {
             URI url,
             String content) {
         return new DiscoveredRawItem(
-                "raw-event-01",
-                "run-01",
+                SOURCE_EVENT_ID,
+                RUN_ID,
                 Optional.empty(),
-                Instant.parse("2026-09-10T18:00:00Z"),
-                "raw-01",
-                "source-01",
+                DISCOVERED_AT,
+                RAW_ITEM_ID,
+                SOURCE_ID,
                 profileId,
                 "JOB",
                 externalId,

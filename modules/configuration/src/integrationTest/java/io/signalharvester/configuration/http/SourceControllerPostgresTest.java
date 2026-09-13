@@ -31,15 +31,24 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+/**
+ * Verifies {@link SourceController} through an embedded HTTP server backed by real PostgreSQL, including CRUD,
+ * validation, runtime defaults, supported source types, and blocking execution.
+ *
+ * <p>Related specification: {@code backend-configuration-persistence-rest}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class SourceControllerPostgresTest {
 
     private static final String SPEC_NAME = "source-controller-postgres";
     private static final Pattern ID_PATTERN = Pattern.compile("\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
+    private static final String MISSING_SOURCE_ID = "00000000-0000-0000-0000-000000000001";
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -66,6 +75,9 @@ class SourceControllerPostgresTest {
         }
     }
 
+    /**
+     * Serve CRUD through PostgreSQL on blocking virtual thread.
+     */
     @Test
     void shouldServeCrudThroughPostgresOnBlockingVirtualThread() throws Exception {
         HttpResponse<String> created = send("POST", "/api/v1/sources", """
@@ -109,6 +121,9 @@ class SourceControllerPostgresTest {
         assertEquals(404, send("GET", "/api/v1/sources/" + sourceId, null).statusCode());
     }
 
+    /**
+     * Reject invalid input and map missing sources.
+     */
     @Test
     void shouldRejectInvalidInputAndMapMissingSources() throws Exception {
         HttpResponse<String> blankName = send("POST", "/api/v1/sources", """
@@ -143,11 +158,14 @@ class SourceControllerPostgresTest {
 
         assertEquals(404, send(
                 "GET",
-                "/api/v1/sources/00000000-0000-0000-0000-000000000001",
+                "/api/v1/sources/" + MISSING_SOURCE_ID,
                 null).statusCode());
     }
 
 
+    /**
+     * Reject missing and malformed source fields.
+     */
     @Test
     void shouldRejectMissingAndMalformedSourceFields() throws Exception {
         HttpResponse<String> missingLocation = send("POST", "/api/v1/sources", """
@@ -178,27 +196,27 @@ class SourceControllerPostgresTest {
         assertEquals(400, invalidType.statusCode());
     }
 
-    @Test
-    void shouldPersistAllSupportedSourceTypes() throws Exception {
-        for (String type : List.of("REST", "RSS", "HTML")) {
-            HttpResponse<String> created = send("POST", "/api/v1/sources", """
-                    {
-                      "name": "%s Source",
-                      "type": "%s",
-                      "location": "https://example.test/%s"
-                    }
-                    """.formatted(type, type, type.toLowerCase()));
+    /**
+     * Persist each supported source type through the REST boundary.
+     */
+    @ParameterizedTest(name = "persists {0} source")
+    @ValueSource(strings = {"REST", "RSS", "HTML"})
+    void shouldPersistSupportedSourceType(String type) throws Exception {
+        HttpResponse<String> created = send("POST", "/api/v1/sources", """
+                {
+                  "name": "%s Source",
+                  "type": "%s",
+                  "location": "https://example.test/%s"
+                }
+                """.formatted(type, type, type.toLowerCase()));
 
-            assertEquals(201, created.statusCode());
-            assertTrue(created.body().contains("\"enabled\":false"));
-            assertTrue(created.body().contains("\"settings\":{}"));
-        }
+        assertEquals(201, created.statusCode());
+        assertTrue(created.body().contains("\"enabled\":false"));
+        assertTrue(created.body().contains("\"settings\":{}"));
 
         HttpResponse<String> listed = send("GET", "/api/v1/sources", null);
         assertEquals(200, listed.statusCode());
-        assertTrue(listed.body().contains("REST"));
-        assertTrue(listed.body().contains("RSS"));
-        assertTrue(listed.body().contains("HTML"));
+        assertTrue(listed.body().contains(type));
     }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {

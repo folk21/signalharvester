@@ -32,11 +32,23 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies orchestration semantics of {@link CollectionRunService}, including bounded fetch-to-publication
+ * behavior, partial failures, run correlation, and deterministic terminal-result ordering.
+ *
+ * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ */
 class CollectionRunServiceTest {
 
     private static final String RUN_ID = "00000000-0000-0000-0000-000000000601";
     private static final Instant RUN_TIME = Instant.parse("2026-09-10T18:00:00Z");
+    private static final String PROFILE_ID = "profile-1";
+    private static final String RAW_ITEM_TOPIC = "raw-items";
+    private static final String EVENT_ID_PREFIX = "event-";
 
+    /**
+     * Publish all enabled sources with run correlation.
+     */
     @Test
     void shouldPublishAllEnabledSourcesWithRunCorrelation() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"));
@@ -56,11 +68,14 @@ class CollectionRunServiceTest {
                     .toList());
             assertEquals(2, publisher.contexts.size());
             assertTrue(publisher.contexts.stream().allMatch(context -> RUN_ID.equals(context.correlationId())));
-            assertTrue(publisher.contexts.stream().allMatch(context -> "profile-1".equals(context.monitoringProfileId())));
+            assertTrue(publisher.contexts.stream().allMatch(context -> PROFILE_ID.equals(context.monitoringProfileId())));
             assertTrue(publisher.contexts.stream().allMatch(context -> "JOB".equals(context.informationCategory())));
         }
     }
 
+    /**
+     * Publish completed payload before fetching beyond concurrency window.
+     */
     @Test
     void shouldPublishCompletedPayloadBeforeFetchingBeyondConcurrencyWindow() throws Exception {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
@@ -82,7 +97,7 @@ class CollectionRunServiceTest {
                 secondPublicationStarted.countDown();
                 await(releaseSecondPublication);
             }
-            return new RawItemPublicationResult("event-" + context.rawItemId(), context.rawItemId(), "raw-items");
+            return new RawItemPublicationResult(EVENT_ID_PREFIX + context.rawItemId(), context.rawItemId(), RAW_ITEM_TOPIC);
         };
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -104,6 +119,9 @@ class CollectionRunServiceTest {
         }
     }
 
+    /**
+     * Report partial success and continue after fetch failure.
+     */
     @Test
     void shouldReportPartialSuccessAndContinueAfterFetchFailure() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
@@ -129,6 +147,9 @@ class CollectionRunServiceTest {
         }
     }
 
+    /**
+     * Continue publication after one Kafka failure.
+     */
     @Test
     void shouldContinuePublicationAfterOneKafkaFailure() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
@@ -138,10 +159,10 @@ class CollectionRunServiceTest {
             int current = publication.incrementAndGet();
             if (content.sourceId().equals(failingSourceId)) {
                 throw new RawItemPublicationException(
-                        context.rawItemId(), context.correlationId(), "raw-items", "synthetic Kafka failure",
+                        context.rawItemId(), context.correlationId(), RAW_ITEM_TOPIC, "synthetic Kafka failure",
                         new IllegalStateException("broker failure"));
             }
-            return new RawItemPublicationResult("event-" + current, context.rawItemId(), "raw-items");
+            return new RawItemPublicationResult(EVENT_ID_PREFIX + current, context.rawItemId(), RAW_ITEM_TOPIC);
         };
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -159,6 +180,9 @@ class CollectionRunServiceTest {
         }
     }
 
+    /**
+     * Report failed when every source fails.
+     */
     @Test
     void shouldReportFailedWhenEverySourceFails() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"));
@@ -177,6 +201,9 @@ class CollectionRunServiceTest {
         }
     }
 
+    /**
+     * Succeed without work when no sources are enabled.
+     */
     @Test
     void shouldSucceedWithoutWorkWhenNoSourcesAreEnabled() {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -220,7 +247,6 @@ class CollectionRunServiceTest {
                 Clock.fixed(RUN_TIME, ZoneOffset.UTC));
     }
 
-
     private static void await(CountDownLatch latch) {
         try {
             latch.await();
@@ -231,7 +257,7 @@ class CollectionRunServiceTest {
     }
 
     private static CollectionRunRequest request() {
-        return new CollectionRunRequest("profile-1", "JOB", Optional.empty());
+        return new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty());
     }
 
     private static ConfiguredSource source(String name) {
@@ -267,7 +293,7 @@ class CollectionRunServiceTest {
         @Override
         public RawItemPublicationResult publish(FetchedSourceContent content, RawItemPublicationContext context) {
             contexts.add(context);
-            return new RawItemPublicationResult("event-" + contexts.size(), context.rawItemId(), "raw-items");
+            return new RawItemPublicationResult(EVENT_ID_PREFIX + contexts.size(), context.rawItemId(), RAW_ITEM_TOPIC);
         }
     }
 }

@@ -29,8 +29,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies {@link SourceFetchCoordinator} bounded concurrency, payload backpressure, source-index retention,
+ * peer failure isolation, and abort behavior for unexpected worker failures.
+ *
+ * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ */
 class SourceFetchCoordinatorTest {
 
+    /**
+     * Bound virtual thread fetches and allow caller to reconstruct input order.
+     */
     @Test
     void shouldBoundVirtualThreadFetchesAndAllowCallerToReconstructInputOrder() throws Exception {
         ControlledSourceClient client = new ControlledSourceClient();
@@ -61,6 +70,9 @@ class SourceFetchCoordinatorTest {
         }
     }
 
+    /**
+     * Apply backpressure until completed payload is handled.
+     */
     @Test
     void shouldApplyBackpressureUntilCompletedPayloadIsHandled() throws Exception {
         ControlledSourceClient client = new ControlledSourceClient();
@@ -95,6 +107,9 @@ class SourceFetchCoordinatorTest {
         }
     }
 
+    /**
+     * Continue queued work after source failure.
+     */
     @Test
     void shouldContinueQueuedWorkAfterSourceFailure() {
         AtomicInteger started = new AtomicInteger();
@@ -120,6 +135,9 @@ class SourceFetchCoordinatorTest {
         }
     }
 
+    /**
+     * Not cancel in-flight peer when another source fails.
+     */
     @Test
     void shouldNotCancelInFlightPeerWhenAnotherSourceFails() throws Exception {
         CountDownLatch blockingStarted = new CountDownLatch(1);
@@ -170,6 +188,9 @@ class SourceFetchCoordinatorTest {
         }
     }
 
+    /**
+     * Abort on unexpected worker failure.
+     */
     @Test
     void shouldAbortOnUnexpectedWorkerFailure() {
         AtomicInteger started = new AtomicInteger();
@@ -190,6 +211,9 @@ class SourceFetchCoordinatorTest {
         }
     }
 
+    /**
+     * Return empty batch without submitting or handling work.
+     */
     @Test
     void shouldReturnEmptyBatchWithoutSubmittingOrHandlingWork() {
         AtomicInteger started = new AtomicInteger();

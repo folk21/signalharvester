@@ -28,8 +28,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies HTTP transport behavior used by external-source collection, including configured headers, response
+ * bounds, redirects, redirect limits, and read timeouts through {@link ExternalSourceHttpClient}.
+ *
+ * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ */
 class ExternalSourceHttpClientTest {
 
+    /**
+     * Fetch absolute URL synchronously and apply filter headers.
+     */
     @Test
     void shouldFetchAbsoluteUrlSynchronouslyAndApplyFilterHeaders() throws Exception {
         AtomicReference<String> userAgent = new AtomicReference<>();
@@ -61,6 +70,9 @@ class ExternalSourceHttpClientTest {
         }
     }
 
+    /**
+     * Reuse managed client across different absolute hosts.
+     */
     @Test
     void shouldReuseManagedClientAcrossDifferentAbsoluteHosts() throws Exception {
         HttpServer firstServer = textServer("first");
@@ -82,6 +94,9 @@ class ExternalSourceHttpClientTest {
         }
     }
 
+    /**
+     * Not apply collection headers to unmarked HTTP client requests.
+     */
     @Test
     void shouldNotApplyCollectionHeadersToUnmarkedHttpClientRequests() throws Exception {
         AtomicReference<String> userAgent = new AtomicReference<>();
@@ -103,6 +118,9 @@ class ExternalSourceHttpClientTest {
         }
     }
 
+    /**
+     * Expose error response through HTTP client response exception.
+     */
     @Test
     void shouldExposeErrorResponseThroughHttpClientResponseException() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -127,6 +145,9 @@ class ExternalSourceHttpClientTest {
         }
     }
 
+    /**
+     * Reject response larger than configured maximum.
+     */
     @Test
     void shouldRejectResponseLargerThanConfiguredMaximum() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -148,6 +169,9 @@ class ExternalSourceHttpClientTest {
         }
     }
 
+    /**
+     * Follow bounded redirects for normal source URLs.
+     */
     @Test
     void shouldFollowBoundedRedirectsForNormalSourceUrls() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -176,6 +200,9 @@ class ExternalSourceHttpClientTest {
         }
     }
 
+    /**
+     * Fail when configured read timeout is exceeded.
+     */
     @Test
     void shouldFailWhenConfiguredReadTimeoutIsExceeded() throws Exception {
         CountDownLatch requestArrived = new CountDownLatch(1);
@@ -219,6 +246,9 @@ class ExternalSourceHttpClientTest {
         }
     }
 
+    /**
+     * Reject redirect loop after configured maximum.
+     */
     @Test
     void shouldRejectRedirectLoopAfterConfiguredMaximum() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

@@ -14,8 +14,17 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies deterministic classification, score calculation, tag selection, and configuration validation in
+ * {@link KeywordContentAnalyzer}.
+ *
+ * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>
+ */
 class KeywordContentAnalyzerTest {
 
+    /**
+     * Classify and score configured keyword matches.
+     */
     @Test
     void shouldClassifyAndScoreConfiguredKeywordMatches() {
         KeywordContentAnalyzer analyzer = new KeywordContentAnalyzer(
@@ -30,12 +39,18 @@ class KeywordContentAnalyzerTest {
         assertEquals("keyword-v1", decision.analyzer());
     }
 
+    /**
+     * Reject impossible minimum match configuration.
+     */
     @Test
     void shouldRejectImpossibleMinimumMatchConfiguration() {
         assertThrows(IllegalArgumentException.class, () ->
                 new KeywordContentAnalyzer(List.of("java", "kafka", "java"), 3));
     }
 
+    /**
+     * Explain deterministic non match.
+     */
     @Test
     void shouldExplainDeterministicNonMatch() {
         KeywordContentAnalyzer analyzer = new KeywordContentAnalyzer(

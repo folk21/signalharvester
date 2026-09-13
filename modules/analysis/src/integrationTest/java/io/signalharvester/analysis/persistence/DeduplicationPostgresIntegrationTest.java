@@ -27,8 +27,30 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+/**
+ * Verifies durable behavior of {@link io.signalharvester.analysis.persistence.JdbcDeduplicationClaimRepository}
+ * and {@link AnalysisItemInspectionService} against real PostgreSQL, including filtering and ordering.
+ *
+ * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class DeduplicationPostgresIntegrationTest {
+
+    private static final Instant BASE_TIME = Instant.parse("2026-09-10T18:00:00Z");
+    private static final String PROFILE_A = "profile-a";
+    private static final String PROFILE_B = "profile-b";
+    private static final String SOURCE_A = "source-01";
+    private static final String SOURCE_B = "source-02";
+    private static final String RUN_ID = "run-01";
+    private static final String NORMALIZED_ITEM_A = "a".repeat(64);
+    private static final String NORMALIZED_ITEM_B = "b".repeat(64);
+    private static final String NORMALIZED_ITEM_C = "c".repeat(64);
+    private static final String RAW_ITEM_1 = "raw-01";
+    private static final String RAW_ITEM_2 = "raw-02";
+    private static final String RAW_ITEM_3 = "raw-03";
+    private static final String SOURCE_EVENT_1 = "event-01";
+    private static final String SOURCE_EVENT_2 = "event-02";
+    private static final String SOURCE_EVENT_3 = "event-03";
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -60,16 +82,19 @@ class DeduplicationPostgresIntegrationTest {
         }
     }
 
+    /**
+     * Deduplicate within profile and allow same logical item for another profile.
+     */
     @Test
     void shouldDeduplicateWithinProfileAndAllowSameLogicalItemForAnotherProfile() throws Exception {
         DeduplicationClaimRepository repository = context.getBean(DeduplicationClaimRepository.class);
         @SuppressWarnings("unchecked")
         TransactionOperations<Connection> transactions = context.getBean(
                 TransactionOperations.class, Qualifiers.byName("default"));
-        Instant firstSeen = Instant.parse("2026-09-10T18:00:00Z");
-        NormalizedContentItem first = item("profile-a", "raw-01", "event-01");
-        NormalizedContentItem duplicate = item("profile-a", "raw-02", "event-02");
-        NormalizedContentItem otherProfile = item("profile-b", "raw-03", "event-03");
+        Instant firstSeen = BASE_TIME;
+        NormalizedContentItem first = item(PROFILE_A, RAW_ITEM_1, SOURCE_EVENT_1);
+        NormalizedContentItem duplicate = item(PROFILE_A, RAW_ITEM_2, SOURCE_EVENT_2);
+        NormalizedContentItem otherProfile = item(PROFILE_B, RAW_ITEM_3, SOURCE_EVENT_3);
 
         transactions.executeWrite(status -> {
             assertTrue(repository.tryClaim(first, firstSeen));
@@ -82,10 +107,10 @@ class DeduplicationPostgresIntegrationTest {
         AnalysisItemInspectionQuery inspection = context.getBean(AnalysisItemInspectionQuery.class);
         assertEquals(2, inspection.recent(10, Optional.empty(), Optional.empty()).size());
         AnalysisItemInspection inspected = inspection.find(
-                "profile-a",
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").orElseThrow();
+                PROFILE_A,
+                NORMALIZED_ITEM_A).orElseThrow();
         assertEquals(2, inspected.discoveryCount());
-        assertEquals("raw-02", inspected.lastRawItemId());
+        assertEquals(RAW_ITEM_2, inspected.lastRawItemId());
 
         try (Connection connection = DriverManager.getConnection(
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -96,46 +121,49 @@ class DeduplicationPostgresIntegrationTest {
                          ORDER BY monitoring_profile_id
                         """)) {
             assertTrue(resultSet.next());
-            assertEquals("profile-a", resultSet.getString("monitoring_profile_id"));
+            assertEquals(PROFILE_A, resultSet.getString("monitoring_profile_id"));
             assertEquals(2, resultSet.getLong("discovery_count"));
-            assertEquals("raw-02", resultSet.getString("last_raw_item_id"));
+            assertEquals(RAW_ITEM_2, resultSet.getString("last_raw_item_id"));
             assertTrue(resultSet.next());
-            assertEquals("profile-b", resultSet.getString("monitoring_profile_id"));
+            assertEquals(PROFILE_B, resultSet.getString("monitoring_profile_id"));
             assertEquals(1, resultSet.getLong("discovery_count"));
             assertFalse(resultSet.next());
         }
     }
 
+    /**
+     * Filter order and limit inspection queries.
+     */
     @Test
     void shouldFilterOrderAndLimitInspectionQueries() {
         DeduplicationClaimRepository repository = context.getBean(DeduplicationClaimRepository.class);
         @SuppressWarnings("unchecked")
         TransactionOperations<Connection> transactions = context.getBean(
                 TransactionOperations.class, Qualifiers.byName("default"));
-        Instant base = Instant.parse("2026-09-10T18:00:00Z");
+        Instant base = BASE_TIME;
 
         transactions.executeWrite(status -> {
             assertTrue(repository.tryClaim(
                     item(
-                            "profile-a",
-                            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "source-01",
+                            PROFILE_A,
+                            NORMALIZED_ITEM_A,
+                            SOURCE_A,
                             "raw-a",
                             "event-a"),
                     base));
             assertTrue(repository.tryClaim(
                     item(
-                            "profile-a",
-                            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                            "source-02",
+                            PROFILE_A,
+                            NORMALIZED_ITEM_B,
+                            SOURCE_B,
                             "raw-b",
                             "event-b"),
                     base.plusSeconds(30)));
             assertTrue(repository.tryClaim(
                     item(
-                            "profile-b",
-                            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                            "source-01",
+                            PROFILE_B,
+                            NORMALIZED_ITEM_C,
+                            SOURCE_A,
                             "raw-c",
                             "event-c"),
                     base.plusSeconds(20)));
@@ -146,41 +174,44 @@ class DeduplicationPostgresIntegrationTest {
 
         assertEquals(
                 List.of(
-                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+                        NORMALIZED_ITEM_B,
+                        NORMALIZED_ITEM_C),
                 normalizedIds(inspection.recent(2, Optional.empty(), Optional.empty())));
         assertEquals(
                 List.of(
-                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-                normalizedIds(inspection.recent(10, Optional.of("profile-a"), Optional.empty())));
+                        NORMALIZED_ITEM_B,
+                        NORMALIZED_ITEM_A),
+                normalizedIds(inspection.recent(10, Optional.of(PROFILE_A), Optional.empty())));
         assertEquals(
                 List.of(
-                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-                normalizedIds(inspection.recent(10, Optional.empty(), Optional.of("source-01"))));
+                        NORMALIZED_ITEM_C,
+                        NORMALIZED_ITEM_A),
+                normalizedIds(inspection.recent(10, Optional.empty(), Optional.of(SOURCE_A))));
         assertEquals(
-                List.of("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
-                normalizedIds(inspection.recent(10, Optional.of("profile-b"), Optional.of("source-01"))));
+                List.of(NORMALIZED_ITEM_C),
+                normalizedIds(inspection.recent(10, Optional.of(PROFILE_B), Optional.of(SOURCE_A))));
         assertEquals(
-                List.of("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                List.of(NORMALIZED_ITEM_B),
                 normalizedIds(inspection.recent(1, Optional.empty(), Optional.empty())));
     }
 
+    /**
+     * Reject repository access outside application-owned transaction.
+     */
     @Test
     void shouldRejectRepositoryAccessOutsideApplicationOwnedTransaction() {
         DeduplicationClaimRepository repository = context.getBean(DeduplicationClaimRepository.class);
 
         assertThrows(AnalysisPersistenceException.class, () -> repository.tryClaim(
-                item("profile-a", "raw-01", "event-01"),
-                Instant.parse("2026-09-10T18:00:00Z")));
+                item(PROFILE_A, RAW_ITEM_1, SOURCE_EVENT_1),
+                BASE_TIME));
     }
 
     private static NormalizedContentItem item(String profileId, String rawItemId, String sourceEventId) {
         return item(
                 profileId,
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "source-01",
+                NORMALIZED_ITEM_A,
+                SOURCE_A,
                 rawItemId,
                 sourceEventId);
     }
@@ -193,9 +224,9 @@ class DeduplicationPostgresIntegrationTest {
             String sourceEventId) {
         return new NormalizedContentItem(
                 sourceEventId,
-                "run-01",
+                RUN_ID,
                 Optional.empty(),
-                Instant.parse("2026-09-10T18:00:00Z"),
+                BASE_TIME,
                 rawItemId,
                 normalizedItemId,
                 sourceId,

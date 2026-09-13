@@ -23,13 +23,32 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies {@link KafkaAnalysisEventPublisher} and {@link AnalysisEventMapper} topic/key selection,
+ * terminal-event payload mapping, provenance propagation, and publication failure normalization.
+ *
+ * <p>Related specifications: {@code backend-analysis-normalization-deduplication}, {@code backend-event-contracts}.</p>
+ */
 class KafkaAnalysisEventPublisherTest {
 
     private static final String ANALYZED_TOPIC = "analysis.analyzed.test";
     private static final String REJECTED_TOPIC = "analysis.rejected.test";
     private static final Instant EVENT_TIME = Instant.parse("2026-09-13T08:00:00Z");
     private static final UUID EVENT_ID = UUID.fromString("11111111-2222-3333-4444-555555555555");
+    private static final String SOURCE_EVENT_ID = "source-event-01";
+    private static final String RUN_ID = "run-01";
+    private static final String RAW_ITEM_ID = "raw-01";
+    private static final String NORMALIZED_ITEM_ID = "normalized-01";
+    private static final String SOURCE_ID = "source-01";
+    private static final String PROFILE_ID = "profile-01";
+    private static final String DUPLICATE_EXPLANATION = "Already accepted for this profile";
+    private static final String BROKER_FAILURE_MESSAGE = "broker unavailable";
+    private static final String TRACEPARENT =
+            "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01";
 
+    /**
+     * Publish analyzed with normalized item key and complete provenance.
+     */
     @Test
     void shouldPublishAnalyzedWithNormalizedItemKeyAndCompleteProvenance() throws Exception {
         AtomicReference<SentRecord> sent = new AtomicReference<>();
@@ -80,6 +99,9 @@ class KafkaAnalysisEventPublisherTest {
         assertEquals(item.normalizedItemId(), result.normalizedItemId());
     }
 
+    /**
+     * Publish rejected with normalized item key and duplicate reason.
+     */
     @Test
     void shouldPublishRejectedWithNormalizedItemKeyAndDuplicateReason() throws Exception {
         AtomicReference<SentRecord> sent = new AtomicReference<>();
@@ -88,7 +110,7 @@ class KafkaAnalysisEventPublisherTest {
         NormalizedContentItem item = item();
 
         AnalysisPublicationResult result = publisher.publishRejected(
-                new RejectedItem(item, "DUPLICATE", "Already accepted for this profile"));
+                new RejectedItem(item, "DUPLICATE", DUPLICATE_EXPLANATION));
 
         assertEquals(REJECTED_TOPIC, sent.get().topic());
         assertEquals(item.normalizedItemId(), sent.get().key());
@@ -104,16 +126,19 @@ class KafkaAnalysisEventPublisherTest {
         assertEquals(item.monitoringProfileId(), event.getMonitoringProfileId());
         assertEquals(item.informationCategory(), event.getInformationCategory());
         assertEquals("DUPLICATE", event.getReasonCode());
-        assertEquals("Already accepted for this profile", event.getExplanation());
+        assertEquals(DUPLICATE_EXPLANATION, event.getExplanation());
         assertEquals(EVENT_ID.toString(), result.eventId());
         assertEquals(REJECTED_TOPIC, result.topic());
         assertEquals(item.normalizedItemId(), result.normalizedItemId());
     }
 
+    /**
+     * Normalize Kafka client failure to analysis publication exception.
+     */
     @Test
     void shouldNormalizeKafkaClientFailureToAnalysisPublicationException() {
         KafkaAnalysisEventPublisher publisher = publisher((topic, key, payload) -> {
-            throw new IllegalStateException("broker unavailable");
+            throw new IllegalStateException(BROKER_FAILURE_MESSAGE);
         });
         NormalizedContentItem item = item();
         AnalysisDecision decision = new AnalysisDecision(
@@ -125,7 +150,7 @@ class KafkaAnalysisEventPublisherTest {
 
         assertEquals(item.normalizedItemId(), failure.normalizedItemId());
         assertEquals(ANALYZED_TOPIC, failure.topic());
-        assertEquals("broker unavailable", failure.getCause().getMessage());
+        assertEquals(BROKER_FAILURE_MESSAGE, failure.getCause().getMessage());
     }
 
     private static KafkaAnalysisEventPublisher publisher(AnalysisKafkaClient client) {
@@ -148,14 +173,14 @@ class KafkaAnalysisEventPublisherTest {
 
     private static NormalizedContentItem item() {
         return new NormalizedContentItem(
-                "source-event-01",
-                "run-01",
-                Optional.of("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"),
+                SOURCE_EVENT_ID,
+                RUN_ID,
+                Optional.of(TRACEPARENT),
                 Instant.parse("2026-09-13T07:59:00Z"),
-                "raw-01",
-                "normalized-01",
-                "source-01",
-                "profile-01",
+                RAW_ITEM_ID,
+                NORMALIZED_ITEM_ID,
+                SOURCE_ID,
+                PROFILE_ID,
                 "JOB",
                 Optional.of("job-01"),
                 Optional.of("Senior Java Engineer"),

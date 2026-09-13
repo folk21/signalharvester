@@ -31,11 +31,21 @@ zip -qr "$OUT" signalharvester \
   -x 'signalharvester/**/__pycache__/*' \
   -x 'signalharvester/**/configuration-cache/*' \
   -x 'signalharvester/**/.pytest_cache/*' \
+  -x 'signalharvester/build/' \
+  -x 'signalharvester/build/*' \
   -x 'signalharvester/**/build/*' \
+  -x 'signalharvester/target/' \
+  -x 'signalharvester/target/*' \
   -x 'signalharvester/**/target/*' \
+  -x 'signalharvester/out/' \
+  -x 'signalharvester/out/*' \
   -x 'signalharvester/**/out/*' \
+  -x 'signalharvester/dist/' \
+  -x 'signalharvester/dist/*' \
   -x 'signalharvester/**/dist/*' \
   -x 'signalharvester/**/.structurizr/*' \
+  -x 'signalharvester/node_modules/' \
+  -x 'signalharvester/node_modules/*' \
   -x 'signalharvester/**/node_modules/*' \
   -x 'signalharvester/**/*.jar' \
   -x 'signalharvester/.env' \

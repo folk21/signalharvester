@@ -48,6 +48,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+/**
+ * Verifies the cross-module flow from {@link io.signalharvester.collection.run.CollectionRunService} through
+ * Kafka into {@link io.signalharvester.analysis.application.RawItemProcessingService}, including rediscovery.
+ *
+ * <p>Related specifications: {@code backend-collection-run-orchestration},
+ * {@code backend-analysis-normalization-deduplication}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class CollectionAnalysisIntegrationTest {
 
@@ -55,6 +62,8 @@ class CollectionAnalysisIntegrationTest {
     private static final String ANALYZED_TOPIC = "signalharvester.analysis.item-analyzed.v1.test";
     private static final String REJECTED_TOPIC = "signalharvester.analysis.item-rejected.v1.test";
     private static final String ANALYSIS_GROUP = "signalharvester-analysis-integration-test";
+    private static final String PROFILE_ID = "profile-analysis";
+    private static final String NORMALIZED_CONTENT = "Java backend Kafka";
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -126,6 +135,9 @@ class CollectionAnalysisIntegrationTest {
         requests.set(0);
     }
 
+    /**
+     * Normalize analyze and reject equivalent rediscovery as duplicate.
+     */
     @Test
     void shouldNormalizeAnalyzeAndRejectEquivalentRediscoveryAsDuplicate() throws Exception {
         SourceConfigurationOperations configuration = context.getBean(SourceConfigurationOperations.class);
@@ -139,9 +151,9 @@ class CollectionAnalysisIntegrationTest {
 
         CollectionRunner collection = context.getBean(CollectionRunner.class);
         CollectionRunResult firstRun = collection.run(
-                new CollectionRunRequest("profile-analysis", "JOB", Optional.empty()));
+                new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty()));
         CollectionRunResult secondRun = collection.run(
-                new CollectionRunRequest("profile-analysis", "JOB", Optional.empty()));
+                new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty()));
 
         assertNotEquals(firstRun.collectionRunId(), secondRun.collectionRunId());
         assertNotEquals(
@@ -164,7 +176,7 @@ class CollectionAnalysisIntegrationTest {
         assertEquals(analyzed.getNormalizedItemId(), analyzedRecord.key());
         assertEquals(analyzed.getNormalizedItemId(), rejectedRecord.key());
         assertEquals(analyzed.getNormalizedItemId(), rejected.getNormalizedItemId());
-        assertEquals("Java backend Kafka", analyzed.getNormalizedContent());
+        assertEquals(NORMALIZED_CONTENT, analyzed.getNormalizedContent());
         assertTrue(analyzed.getRelevant());
         assertEquals("MATCHED_KEYWORDS", analyzed.getClassification());
         assertEquals(67, analyzed.getScore());
@@ -180,7 +192,7 @@ class CollectionAnalysisIntegrationTest {
     private void respondWithEquivalentContent(HttpExchange exchange) throws IOException {
         String body = requests.getAndIncrement() == 0
                 ? "  Java   backend\nKafka  "
-                : "Java backend Kafka";
+                : NORMALIZED_CONTENT;
         byte[] payload = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
         exchange.sendResponseHeaders(200, payload.length);
@@ -221,7 +233,7 @@ class CollectionAnalysisIntegrationTest {
                           FROM analysis.normalized_item_claims
                         """)) {
             assertTrue(resultSet.next());
-            assertEquals("profile-analysis", resultSet.getString("monitoring_profile_id"));
+            assertEquals(PROFILE_ID, resultSet.getString("monitoring_profile_id"));
             assertEquals(normalizedItemId, resultSet.getString("normalized_item_id"));
             assertEquals(2, resultSet.getLong("discovery_count"));
             assertTrue(!resultSet.next());

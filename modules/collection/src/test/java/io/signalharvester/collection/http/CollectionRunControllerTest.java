@@ -34,12 +34,21 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Server-level contract tests for the collection operational HTTP API. */
+/**
+ * Verifies the operational HTTP contract implemented by {@link CollectionRunController}, including request
+ * validation, response mapping, history lookup, status handling, and blocking-work offload.
+ *
+ * <p>Related specification: {@code backend-operational-admin-api}.</p>
+ */
 class CollectionRunControllerTest {
 
     private static final String SPEC_NAME = "collection-run-controller";
     private static final UUID RUN_ID = UUID.fromString("00000000-0000-0000-0000-000000000101");
     private static final UUID SOURCE_ID = UUID.fromString("00000000-0000-0000-0000-000000000201");
+    private static final UUID MISSING_RUN_ID = UUID.fromString("00000000-0000-0000-0000-000000000999");
+    private static final String PROFILE_ID = "profile-a";
+    private static final String RAW_ITEM_ID = "raw-1";
+    private static final String EVENT_ID = "event-1";
 
     private EmbeddedServer server;
     private HttpClient client;
@@ -57,14 +66,17 @@ class CollectionRunControllerTest {
         }
     }
 
+    /**
+     * Serve manual run and history through blocking HTTP boundary.
+     */
     @Test
     void shouldServeManualRunAndHistoryThroughBlockingHttpBoundary() throws Exception {
         HttpResponse<String> started = send("POST", "/api/v1/admin/collection-runs", """
                 {
-                  "monitoringProfileId": "profile-a",
+                  "monitoringProfileId": "%s",
                   "informationCategory": "JOB"
                 }
-                """);
+                """.formatted(PROFILE_ID));
         assertEquals(201, started.statusCode());
         assertTrue(started.body().contains("\"collectionRunId\":\"" + RUN_ID + "\""));
         assertTrue(started.body().contains("\"status\":\"SUCCEEDED\""));
@@ -72,7 +84,7 @@ class CollectionRunControllerTest {
         assertTrue(started.body().contains("\"failureMessage\":null"));
 
         TestCollectionRunner runner = server.getApplicationContext().getBean(TestCollectionRunner.class);
-        assertEquals("profile-a", runner.lastRequest().monitoringProfileId());
+        assertEquals(PROFILE_ID, runner.lastRequest().monitoringProfileId());
         assertEquals("JOB", runner.lastRequest().informationCategory());
         assertTrue(runner.lastThread().isVirtual());
         assertFalse(runner.lastThread().getName().contains("EventLoop"));
@@ -91,6 +103,9 @@ class CollectionRunControllerTest {
         assertTrue(fetched.body().contains(RUN_ID.toString()));
     }
 
+    /**
+     * Validate run request and history bounds and map missing run.
+     */
     @Test
     void shouldValidateRunRequestAndHistoryBoundsAndMapMissingRun() throws Exception {
         HttpResponse<String> invalidRequest = send("POST", "/api/v1/admin/collection-runs", """
@@ -106,7 +121,7 @@ class CollectionRunControllerTest {
         assertEquals(400, send("GET", "/api/v1/admin/collection-runs/not-a-uuid", null).statusCode());
         assertEquals(404, send(
                 "GET",
-                "/api/v1/admin/collection-runs/00000000-0000-0000-0000-000000000999",
+                "/api/v1/admin/collection-runs/" + MISSING_RUN_ID,
                 null).statusCode());
     }
 
@@ -131,7 +146,7 @@ class CollectionRunControllerTest {
     private static CollectionRunResult runResult() {
         return new CollectionRunResult(
                 RUN_ID.toString(),
-                "profile-a",
+                PROFILE_ID,
                 "JOB",
                 Instant.parse("2026-09-12T10:00:00Z"),
                 Instant.parse("2026-09-12T10:00:01Z"),
@@ -139,8 +154,8 @@ class CollectionRunControllerTest {
                 List.of(new CollectionSourceResult(
                         SourceId.of(SOURCE_ID),
                         CollectionSourceStatus.PUBLISHED,
-                        Optional.of("raw-1"),
-                        Optional.of("event-1"),
+                        Optional.of(RAW_ITEM_ID),
+                        Optional.of(EVENT_ID),
                         Optional.empty())));
     }
 

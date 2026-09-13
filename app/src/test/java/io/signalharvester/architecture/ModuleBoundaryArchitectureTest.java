@@ -17,7 +17,13 @@ import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** Guards functional-module dependency direction and published Java boundaries. */
+/**
+ * Protects functional-module dependency direction, published API purity, and adapter boundaries across
+ * the backend; representative published contracts include
+ * {@link io.signalharvester.configuration.api.SourceConfigurationProvider}.
+ *
+ * <p>Related specification: {@code backend-project-structure}.</p>
+ */
 class ModuleBoundaryArchitectureTest {
 
     private static final Map<String, String> MODULE_PACKAGES = Map.of(
@@ -36,6 +42,9 @@ class ModuleBoundaryArchitectureTest {
             "org.slf4j.",
             "com.fasterxml.jackson.");
 
+    /**
+     * Cross module dependencies use only published API packages.
+     */
     @Test
     void crossModuleDependenciesUseOnlyPublishedApiPackages() {
         JavaClasses classes = functionalModuleClasses();
@@ -64,6 +73,9 @@ class ModuleBoundaryArchitectureTest {
                         + String.join("\n", violations));
     }
 
+    /**
+     * Functional module dependency graph is acyclic.
+     */
     @Test
     void functionalModuleDependencyGraphIsAcyclic() {
         JavaClasses classes = functionalModuleClasses();
@@ -89,6 +101,9 @@ class ModuleBoundaryArchitectureTest {
                 () -> "Functional module dependency graph must remain acyclic:\n" + String.join("\n", cycles));
     }
 
+    /**
+     * Published API packages stay free of owning internals and framework types.
+     */
     @Test
     void publishedApiPackagesStayFreeOfOwningInternalsAndFrameworkTypes() {
         JavaClasses classes = functionalModuleClasses();
@@ -121,6 +136,9 @@ class ModuleBoundaryArchitectureTest {
                         + String.join("\n", violations));
     }
 
+    /**
+     * HTTP adapters do not depend directly on persistence.
+     */
     @Test
     void httpAdaptersDoNotDependDirectlyOnPersistence() {
         JavaClasses classes = functionalModuleClasses();
@@ -147,6 +165,9 @@ class ModuleBoundaryArchitectureTest {
                         + String.join("\n", violations));
     }
 
+    /**
+     * Functional modules do not depend on application composition root.
+     */
     @Test
     void functionalModulesDoNotDependOnApplicationCompositionRoot() {
         JavaClasses classes = functionalModuleClasses();

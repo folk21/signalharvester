@@ -24,10 +24,19 @@ import java.time.ZoneOffset;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies {@link MicronautExternalSourceClient} adaptation from transport responses and failures into
+ * collection-owned fetched-content and source-failure semantics.
+ *
+ * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ */
 class MicronautExternalSourceClientTest {
 
     private static final Instant FETCH_TIME = Instant.parse("2026-09-09T10:15:30Z");
 
+    /**
+     * Map successful response to collection result.
+     */
     @Test
     void shouldMapSuccessfulResponseToCollectionResult() {
         ExternalSourceHttpClient httpClient = uri -> HttpResponse.ok("payload".getBytes(StandardCharsets.UTF_8))
@@ -44,6 +53,9 @@ class MicronautExternalSourceClientTest {
         assertArrayEquals("payload".getBytes(StandardCharsets.UTF_8), result.body());
     }
 
+    /**
+     * Treat empty successful response body as empty content.
+     */
     @Test
     void shouldTreatEmptySuccessfulResponseBodyAsEmptyContent() {
         ExternalSourceHttpClient httpClient = uri -> HttpResponse.<byte[]>noContent();
@@ -56,6 +68,9 @@ class MicronautExternalSourceClientTest {
         assertTrue(result.contentType().isEmpty());
     }
 
+    /**
+     * Expose error status and retry after without leaking micronaut types.
+     */
     @Test
     void shouldExposeErrorStatusAndRetryAfterWithoutLeakingMicronautTypes() {
         ExternalSourceHttpClient httpClient = uri -> HttpResponse.<byte[]>status(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "120");
@@ -68,6 +83,9 @@ class MicronautExternalSourceClientTest {
         assertEquals("External source returned HTTP status 429", failure.getMessage());
     }
 
+    /**
+     * Normalize response exception for error status.
+     */
     @Test
     void shouldNormalizeResponseExceptionForErrorStatus() {
         ExternalSourceHttpClient httpClient = uri -> {
@@ -82,6 +100,9 @@ class MicronautExternalSourceClientTest {
         assertEquals("5", failure.retryAfter().orElseThrow());
     }
 
+    /**
+     * Normalize transport exception without inventing status code.
+     */
     @Test
     void shouldNormalizeTransportExceptionWithoutInventingStatusCode() {
         HttpClientException transportFailure = new HttpClientException("synthetic transport failure");

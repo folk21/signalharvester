@@ -18,8 +18,29 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies {@link KafkaRawItemEventPublisher} and {@link RawItemDiscoveredMapper} topic/key selection,
+ * event mapping, acknowledged publication behavior, and contextual failure normalization.
+ *
+ * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-event-contracts}.</p>
+ */
 class KafkaRawItemEventPublisherTest {
 
+    private static final String RAW_ITEM_TOPIC = "raw-items";
+    private static final String RAW_ITEM_ID = "raw-1";
+    private static final String RUN_ID = "run-1";
+    private static final String PROFILE_ID = "profile-1";
+    private static final String BROKER_FAILURE_MESSAGE = "broker unavailable";
+    private static final URI JOBS_URI = URI.create("https://example.test/jobs");
+    private static final Instant FETCHED_AT = Instant.parse("2026-09-10T13:00:00Z");
+    private static final SourceId SOURCE_ID = SourceId.of(
+            UUID.fromString("00000000-0000-0000-0000-000000000301"));
+    private static final SourceId INVALID_CHARSET_SOURCE_ID = SourceId.of(
+            UUID.fromString("00000000-0000-0000-0000-000000000302"));
+
+    /**
+     * Serialize Protobuf and use raw item id as Kafka key.
+     */
     @Test
     void shouldSerializeProtobufAndUseRawItemIdAsKafkaKey() throws Exception {
         AtomicReference<String> topic = new AtomicReference<>();
@@ -42,66 +63,72 @@ class KafkaRawItemEventPublisherTest {
         assertEquals(decoded.getEnvelope().getEventId(), result.eventId());
         assertEquals(decoded.getRawItemId(), result.rawItemId());
         assertEquals(topic.get(), result.topic());
-        assertEquals("run-1", decoded.getEnvelope().getCorrelationId());
+        assertEquals(RUN_ID, decoded.getEnvelope().getCorrelationId());
     }
 
+    /**
+     * Normalize Kafka failure to collection publication exception.
+     */
     @Test
     void shouldNormalizeKafkaFailureToCollectionPublicationException() {
         CollectionRawItemKafkaClient client = (topic, key, payload) -> {
-            throw new IllegalStateException("broker unavailable");
+            throw new IllegalStateException(BROKER_FAILURE_MESSAGE);
         };
         KafkaRawItemEventPublisher publisher = new KafkaRawItemEventPublisher(
                 client,
-                () -> "raw-items",
+                () -> RAW_ITEM_TOPIC,
                 new RawItemDiscoveredMapper(UUID::randomUUID));
 
         RawItemPublicationException failure = assertThrows(
                 RawItemPublicationException.class,
                 () -> publisher.publish(content(), publicationContext()));
 
-        assertEquals("raw-1", failure.rawItemId());
-        assertEquals("run-1", failure.correlationId());
-        assertEquals("raw-items", failure.topic());
-        assertEquals("broker unavailable", failure.getCause().getMessage());
+        assertEquals(RAW_ITEM_ID, failure.rawItemId());
+        assertEquals(RUN_ID, failure.correlationId());
+        assertEquals(RAW_ITEM_TOPIC, failure.topic());
+        assertEquals(BROKER_FAILURE_MESSAGE, failure.getCause().getMessage());
     }
 
+    /**
+     * Normalize mapping failure to publication exception.
+     */
     @Test
     void shouldNormalizeMappingFailureToPublicationException() {
         FetchedSourceContent invalidCharsetContent = new FetchedSourceContent(
-                SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000302")),
-                URI.create("https://example.test/jobs"),
+                INVALID_CHARSET_SOURCE_ID,
+                JOBS_URI,
                 200,
                 Optional.of("text/plain; charset=not-a-real-charset"),
                 "payload".getBytes(StandardCharsets.UTF_8),
-                Instant.parse("2026-09-10T13:00:00Z"));
+                FETCHED_AT);
         KafkaRawItemEventPublisher publisher = new KafkaRawItemEventPublisher(
                 (topic, key, payload) -> {
                     throw new AssertionError("Kafka must not be called when mapping fails");
                 },
-                () -> "raw-items",
+                () -> RAW_ITEM_TOPIC,
                 new RawItemDiscoveredMapper(UUID::randomUUID));
 
         RawItemPublicationException failure = assertThrows(
                 RawItemPublicationException.class,
                 () -> publisher.publish(invalidCharsetContent, publicationContext()));
 
-        assertEquals("raw-1", failure.rawItemId());
-        assertEquals("run-1", failure.correlationId());
-        assertEquals("raw-items", failure.topic());
+        assertEquals(RAW_ITEM_ID, failure.rawItemId());
+        assertEquals(RUN_ID, failure.correlationId());
+        assertEquals(RAW_ITEM_TOPIC, failure.topic());
         assertEquals(java.nio.charset.UnsupportedCharsetException.class, failure.getCause().getClass());
     }
 
     private static FetchedSourceContent content() {
         return new FetchedSourceContent(
-                SourceId.of(UUID.fromString("00000000-0000-0000-0000-000000000301")),
-                URI.create("https://example.test/jobs"),
+                SOURCE_ID,
+                JOBS_URI,
                 200,
                 Optional.of("application/json; charset=UTF-8"),
                 "{\"title\":\"Java Developer\"}".getBytes(StandardCharsets.UTF_8),
-                Instant.parse("2026-09-10T13:00:00Z"));
+                FETCHED_AT);
     }
 
     private static RawItemPublicationContext publicationContext() {
-        return new RawItemPublicationContext("raw-1", "run-1", "profile-1", "JOB", Optional.empty());
+        return new RawItemPublicationContext(RAW_ITEM_ID, RUN_ID, PROFILE_ID, "JOB", Optional.empty());
     }
 }

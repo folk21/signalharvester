@@ -50,10 +50,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+/**
+ * Verifies {@link io.signalharvester.collection.run.CollectionRunService} with real PostgreSQL, deterministic
+ * external HTTP, and Kafka, including best-effort processing of enabled configured sources.
+ *
+ * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class CollectionRunIntegrationTest {
 
     private static final String TOPIC = "signalharvester.collection.raw-item-discovered.v1.run-test";
+    private static final String PROFILE_ID = "profile-integration";
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -108,6 +115,9 @@ class CollectionRunIntegrationTest {
         }
     }
 
+    /**
+     * Collect enabled sources best-effort and publish successful payloads.
+     */
     @Test
     void shouldCollectEnabledSourcesBestEffortAndPublishSuccessfulPayloads() throws Exception {
         SourceConfigurationOperations configuration = context.getBean(SourceConfigurationOperations.class);
@@ -117,7 +127,7 @@ class CollectionRunIntegrationTest {
         configuration.create(command("D disabled", "/a-success", false));
 
         CollectionRunResult result = context.getBean(CollectionRunner.class).run(
-                new CollectionRunRequest("profile-integration", "JOB", Optional.empty()));
+                new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty()));
 
         assertEquals(CollectionRunStatus.PARTIALLY_SUCCEEDED, result.status());
         assertEquals(2, result.publishedCount());
@@ -139,7 +149,7 @@ class CollectionRunIntegrationTest {
             assertEquals(TOPIC, record.topic());
             assertEquals(record.key(), event.getRawItemId());
             assertEquals(result.collectionRunId(), event.getEnvelope().getCorrelationId());
-            assertEquals("profile-integration", event.getMonitoringProfileId());
+            assertEquals(PROFILE_ID, event.getMonitoringProfileId());
             assertEquals("JOB", event.getInformationCategory());
             publishedSourceIds.add(event.getSourceId());
             rawItemIds.add(event.getRawItemId());

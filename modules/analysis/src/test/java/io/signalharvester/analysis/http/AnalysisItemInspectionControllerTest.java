@@ -27,11 +27,19 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Server-level contract tests for the read-only analysis inspection HTTP API. */
+/**
+ * Verifies the HTTP contract implemented by {@link AnalysisItemInspectionController}, including validation,
+ * status mapping, response shape, and blocking-work offload through the application query boundary.
+ *
+ * <p>Related specification: {@code backend-operational-admin-api}.</p>
+ */
 class AnalysisItemInspectionControllerTest {
 
     private static final String SPEC_NAME = "analysis-item-inspection-controller";
     private static final String NORMALIZED_ITEM_ID = "a".repeat(64);
+    private static final String MISSING_NORMALIZED_ITEM_ID = "b".repeat(64);
+    private static final String PROFILE_ID = "profile-a";
+    private static final String SOURCE_ID = "source-a";
 
     private EmbeddedServer server;
     private HttpClient client;
@@ -49,6 +57,9 @@ class AnalysisItemInspectionControllerTest {
         }
     }
 
+    /**
+     * Serve bounded inspection and forward optional filters on blocking thread.
+     */
     @Test
     void shouldServeBoundedInspectionAndForwardOptionalFiltersOnBlockingThread() throws Exception {
         HttpResponse<String> recent = send("GET", "/api/v1/admin/analysis/items", null);
@@ -63,27 +74,31 @@ class AnalysisItemInspectionControllerTest {
         assertTrue(query.lastThread().isVirtual());
         assertFalse(query.lastThread().getName().contains("EventLoop"));
 
-        String path = "/api/v1/admin/analysis/items?limit=10&monitoringProfileId=profile-a&sourceId=source-a";
+        String path = "/api/v1/admin/analysis/items?limit=10&monitoringProfileId=" + PROFILE_ID
+                + "&sourceId=" + SOURCE_ID;
         assertEquals(200, send("GET", path, null).statusCode());
         assertEquals(10, query.lastLimit());
-        assertEquals(Optional.of("profile-a"), query.lastProfile());
-        assertEquals(Optional.of("source-a"), query.lastSource());
+        assertEquals(Optional.of(PROFILE_ID), query.lastProfile());
+        assertEquals(Optional.of(SOURCE_ID), query.lastSource());
 
         HttpResponse<String> fetched = send(
                 "GET",
-                "/api/v1/admin/analysis/items/" + NORMALIZED_ITEM_ID + "?monitoringProfileId=profile-a",
+                "/api/v1/admin/analysis/items/" + NORMALIZED_ITEM_ID + "?monitoringProfileId=" + PROFILE_ID,
                 null);
         assertEquals(200, fetched.statusCode());
         assertTrue(fetched.body().contains(NORMALIZED_ITEM_ID));
     }
 
+    /**
+     * Validate inspection parameters and return not found.
+     */
     @Test
     void shouldValidateInspectionParametersAndReturnNotFound() throws Exception {
         assertEquals(400, send("GET", "/api/v1/admin/analysis/items?limit=0", null).statusCode());
         assertEquals(400, send("GET", "/api/v1/admin/analysis/items?limit=201", null).statusCode());
         assertEquals(400, send(
                 "GET",
-                "/api/v1/admin/analysis/items/not-a-hash?monitoringProfileId=profile-a",
+                "/api/v1/admin/analysis/items/not-a-hash?monitoringProfileId=" + PROFILE_ID,
                 null).statusCode());
 
         String blankProfile = URLEncoder.encode("   ", StandardCharsets.UTF_8);
@@ -94,7 +109,7 @@ class AnalysisItemInspectionControllerTest {
 
         assertEquals(404, send(
                 "GET",
-                "/api/v1/admin/analysis/items/" + "b".repeat(64) + "?monitoringProfileId=profile-a",
+                "/api/v1/admin/analysis/items/" + MISSING_NORMALIZED_ITEM_ID + "?monitoringProfileId=" + PROFILE_ID,
                 null).statusCode());
     }
 
@@ -120,9 +135,9 @@ class AnalysisItemInspectionControllerTest {
 
     private static AnalysisItemInspection inspection() {
         return new AnalysisItemInspection(
-                "profile-a",
+                PROFILE_ID,
                 NORMALIZED_ITEM_ID,
-                "source-a",
+                SOURCE_ID,
                 Optional.empty(),
                 "https://example.test/item",
                 "raw-first",

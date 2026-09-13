@@ -11,8 +11,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Verifies the executor wiring consumed by {@link CollectionRunService} and collection HTTP/application work
+ * so blocking operations run on the configured Micronaut blocking executor rather than an event loop.
+ *
+ * <p>Related specification: {@code backend-project-structure}.</p>
+ */
 class MicronautBlockingExecutorTest {
 
+    /**
+     * Use virtual threads for blocking executor on java 21.
+     */
     @Test
     void shouldUseVirtualThreadsForBlockingExecutorOnJava21() throws Exception {
         try (ApplicationContext context = ApplicationContext.run(Map.of(
@@ -28,6 +37,9 @@ class MicronautBlockingExecutorTest {
         }
     }
 
+    /**
+     * Resolve collection coordinator with module-owned clock.
+     */
     @Test
     void shouldResolveCollectionCoordinatorWithModuleOwnedClock() {
         try (ApplicationContext context = ApplicationContext.run(Map.of(
