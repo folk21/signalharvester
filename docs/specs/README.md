@@ -95,10 +95,11 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith boundaries, published API rules, and architecture-test guardrails.
+- [`active/subspecs/backend-results-persistence.md`](active/subspecs/backend-results-persistence.md) — idempotent Results-owned persistence for terminal Analysis events.
 
 Active supporting tracks:
 
+- [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith boundaries, published API rules, and architecture-test guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
 
 ## Recently completed sub-specifications
@@ -113,8 +114,7 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
-- results persistence and first read REST API;
-- first analyzed-item-to-results vertical slice;
+- first Results read REST API over the persisted projection;
 - result REST/SSE and event observation;
 - Kubernetes deployment and observability;
 - integration/system testing hardening.

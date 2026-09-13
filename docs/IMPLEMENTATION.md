@@ -39,9 +39,11 @@ flowchart LR
     K --> ANA[Analysis]
     ANA --> DB3[(analysis schema)]
     ANA --> TERM[ItemAnalyzed / ItemRejected]
+    TERM --> RES[Results projection]
+    RES --> DB4[(results schema)]
 ```
 
-The user-facing results projection is not implemented yet, so terminal analysis events currently stop at the event boundary rather than being persisted into `modules:results`.
+Terminal analysis events are now materialized by `modules:results`; public result queries remain pending until the next Results REST slice.
 
 ## Configuration module
 
@@ -79,14 +81,21 @@ The listener disables automatic offset commit and commits the raw Kafka offset o
 
 See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../modules/analysis/contract.md`](../modules/analysis/contract.md) for module-local detail.
 
-## Results and event observation
+## Results module
 
-`modules:results` and `modules:event-observation` currently contain module/build skeletons and boundary contracts only. Results persistence/read APIs, SSE, durable event observation, and Event Explorer backend support are not implemented.
+`modules:results` consumes terminal `ItemAnalyzed` and `ItemRejected` events and materializes them into the module-owned PostgreSQL `results` schema. Generated Protobuf messages are confined to the Kafka adapter and mapped into immutable Results-owned models before application/persistence logic.
 
-Their current intended boundaries are documented in:
+`ResultProjectionService` owns the JDBC transaction. `JdbcResultProjectionRepository` uses the transaction-aware default connection and upserts analyzed projections by `(monitoringProfileId, normalizedItemId)`. Tags and attributes are replaced atomically with the parent projection. Rejections are keyed by `sourceEventId`, so retry of one raw source event does not create another rejection row while later rediscovery events remain separate.
 
-- [`../modules/results/contract.md`](../modules/results/contract.md);
-- [`../modules/event-observation/contract.md`](../modules/event-observation/contract.md).
+The Results listener disables automatic Kafka commit and commits the consumed offset only after the Results transaction completes. This is an at-least-once/idempotent-consumer model, not distributed exactly-once processing.
+
+Result query REST/SSE is not implemented yet; until that next slice exists, persisted Results state is verified through module/container tests rather than exposed to browser clients.
+
+See [`../modules/results/README.md`](../modules/results/README.md) and [`../modules/results/contract.md`](../modules/results/contract.md).
+
+## Event observation
+
+`modules:event-observation` still contains only its module/build skeleton and boundary contract. Durable event observation and Event Explorer backend support are not implemented. See [`../modules/event-observation/contract.md`](../modules/event-observation/contract.md).
 
 ## External contracts
 
@@ -105,9 +114,9 @@ Generated Protobuf Java classes are build output and remain transport types at K
 
 ## Persistence and Flyway
 
-Configuration, analysis, and collection currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
+Configuration, analysis, collection, and results currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
 
-Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, and so on) unless the Flyway topology is deliberately changed later.
+Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, and so on) unless the Flyway topology is deliberately changed later.
 
 Direct cross-module table access remains forbidden.
 
@@ -134,10 +143,11 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 
 - no source parsing/extraction into multiple external items;
 - no persisted monitoring profiles, profile-to-source membership, or scheduling;
-- no results persistence/read API;
+- no result read REST/SSE API;
 - no SSE implementation;
 - no outbound SSRF/network-destination policy; source management must remain trusted until one is defined;
 - no event-observation persistence/API;
 - no OpenTelemetry instrumentation;
 - no Kubernetes deployment or production observability stack;
-- no cross-resource exactly-once guarantee between PostgreSQL and Kafka.
+- no cross-resource exactly-once guarantee between PostgreSQL and Kafka;
+- no bounded retry/DLQ policy for poison Analysis or Results input events.
