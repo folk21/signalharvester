@@ -20,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,9 +29,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.sql.DataSource;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -44,11 +47,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * <p>Related specification: {@code backend-configuration-persistence-rest}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SourceControllerPostgresTest {
 
     private static final String SPEC_NAME = "source-controller-postgres";
     private static final Pattern ID_PATTERN = Pattern.compile("\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private static final String MISSING_SOURCE_ID = "00000000-0000-0000-0000-000000000001";
+    private static final Duration HTTP_CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(15);
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -60,16 +66,25 @@ class SourceControllerPostgresTest {
     private EmbeddedServer server;
     private HttpClient client;
 
-    @BeforeEach
-    void setUp() throws Exception {
+    @BeforeAll
+    void startServer() throws Exception {
         resetDatabase();
         server = ApplicationContext.run(EmbeddedServer.class, serverProperties(), "test");
         context = server.getApplicationContext();
-        client = HttpClient.newHttpClient();
+        client = HttpClient.newBuilder().connectTimeout(HTTP_CONNECT_TIMEOUT).build();
     }
 
-    @AfterEach
-    void tearDown() {
+    @BeforeEach
+    void resetData() throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement()) {
+            statement.execute("TRUNCATE TABLE configuration.source_settings, configuration.sources CASCADE");
+        }
+    }
+
+    @AfterAll
+    void stopServer() {
         if (server != null) {
             server.close();
         }
@@ -220,7 +235,8 @@ class SourceControllerPostgresTest {
     }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
-        HttpRequest.Builder builder = HttpRequest.newBuilder(server.getURI().resolve(path));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(server.getURI().resolve(path))
+                .timeout(HTTP_REQUEST_TIMEOUT);
         if (body == null) {
             builder.method(method, HttpRequest.BodyPublishers.noBody());
         } else {

@@ -6,6 +6,10 @@ description: Notable project changes organized by release state, with each chang
 # Changelog
 
 ## Unreleased
+
+- 2026-09-13 — Split routine and rare verification: `run_checks.sh` keeps correctness/integration/archive checks, while `run_rare_checks.sh` adds JaCoCo, SpotBugs, dependency analysis, and project-size metrics.
+- 2026-09-13 — Added reusable project-size metrics tooling with SignalHarvester-specific classification and text/JSON reports.
+- 2026-09-13 — Added repository-wide JaCoCo aggregate coverage, SpotBugs production static-analysis reports, and Gradle dependency-health analysis to the periodic quality-verification workflow.
 - Improve `run_checks.sh` diagnostics for FULL archive validation by persisting offending archive entries in `build/reports/verification/archive-cleanliness.txt` and separating non-Gradle reports from Gradle report locations.
 
 2026-09-08 — Established the initial SignalHarvester modular-monolith backend skeleton and specification hierarchy.

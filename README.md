@@ -48,6 +48,7 @@ Backend [`docs/INSTALLATION.md`](docs/INSTALLATION.md) and [`docs/USAGE.md`](doc
 | Backend usage/run workflows | [`docs/USAGE.md`](docs/USAGE.md) |
 | Configuration ownership | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) |
 | Tests and validation | [`docs/TESTS.md`](docs/TESTS.md) |
+| Coverage and code quality | [`docs/QUALITY.md`](docs/QUALITY.md) |
 | Product/technical roadmap | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 
 ## Repository structure
@@ -88,6 +89,7 @@ The first implementation foundation is present:
 - the source REST/OpenAPI CRUD contract implemented under `/api/v1/sources`;
 - versioned Protobuf `EventEnvelope`, `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` Kafka schemas;
 - JUnit contract tests plus PostgreSQL and Kafka Testcontainers coverage for the implemented persistence/event boundaries;
+- repository-level JaCoCo coverage, SpotBugs static-analysis, and dependency-health reporting integrated into the canonical verification workflow;
 - the first collection HTTP transport using Micronaut-managed HTTP infrastructure with bounded Virtual Thread orchestration and deterministic loopback tests;
 - the first acknowledged collection Kafka publisher, mapping fetched content to versioned `RawItemDiscovered` Protobuf bytes with explicit correlation and event identity;
 - the first explicit collection-run use case over persisted enabled sources, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results;

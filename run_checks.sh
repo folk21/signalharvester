@@ -7,13 +7,14 @@ set -eu
 # - docker info
 # - git diff --check (when executed inside a Git worktree)
 # - ./gradlew clean check --no-watch-fs
-# - ./gradlew integrationTest --no-watch-fs
+# - ./gradlew integrationTest --no-watch-fs (container-backed module tests + cross-module HTTP smoke)
 # - ./archive.sh <temporary FULL archive>
 # - FULL archive content/cleanliness validation with unzip/grep
 #   Report: build/reports/verification/archive-cleanliness.txt
 #
-# The final summary lists every verification step that actually ran and points to
-# Gradle report locations and persistent non-Gradle verification reports.
+# The final summary lists every routine verification step that actually ran and points to
+# test/problem reports and persistent non-Gradle verification reports. Long-running quality
+# tooling is intentionally owned by run_rare_checks.sh.
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$ROOT_DIR"
@@ -37,7 +38,7 @@ print_summary() {
   fi
 
   echo
-  echo "Gradle report locations when a Gradle task fails:"
+  echo "Gradle report locations:"
   echo "  - Default tests: <project>/build/reports/tests/test/index.html"
   echo "  - Integration tests: <project>/build/reports/tests/integrationTest/index.html"
   echo "  - Gradle problems: build/reports/problems/problems-report.html"
@@ -119,7 +120,7 @@ validate_full_archive() {
     failed=1
   fi
 
-  FORBIDDEN_ENTRY_PATTERN='(^|/)(\.gradle|\.idea|\.kotlin|\.vscode|\.venv|__pycache__|build|target|out|dist|node_modules)/|(^|/)\.env$|\.class$|\.log$'
+  FORBIDDEN_ENTRY_PATTERN='(^|/)(\.gradle|\.idea|\.kotlin|\.vscode|\.venv|__pycache__|build|target|out|dist|node_modules)/|(^|/)\.env$|\.class$|\.log$|\.py[co]$'
   FORBIDDEN_ENTRIES=$(grep -E "$FORBIDDEN_ENTRY_PATTERN" "$ENTRIES" || true)
   if [ -n "$FORBIDDEN_ENTRIES" ]; then
     {

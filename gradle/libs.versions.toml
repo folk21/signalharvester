@@ -6,6 +6,9 @@ junit = "5.14.4"
 junit-platform = "1.14.4"
 testcontainers = "2.0.5"
 archunit = "1.5.0"
+jacoco = "0.8.15"
+spotbugs-gradle-plugin = "6.5.11"
+dependency-analysis-gradle-plugin = "3.19.1"
 
 [libraries]
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
@@ -18,6 +21,8 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 
 [plugins]
+spotbugs = { id = "com.github.spotbugs", version.ref = "spotbugs-gradle-plugin" }
+dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis-gradle-plugin" }
 micronaut-application = { id = "io.micronaut.application", version.ref = "micronaut-gradle-plugin" }
 micronaut-library = { id = "io.micronaut.library", version.ref = "micronaut-gradle-plugin" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-gradle-plugin" }

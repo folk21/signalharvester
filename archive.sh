@@ -28,7 +28,10 @@ zip -qr "$OUT" signalharvester \
   -x 'signalharvester/.kotlin/*' \
   -x 'signalharvester/.vscode/*' \
   -x 'signalharvester/.venv/*' \
-  -x 'signalharvester/**/__pycache__/*' \
+  -x '*/__pycache__/' \
+  -x '*/__pycache__/*' \
+  -x '*.pyc' \
+  -x '*.pyo' \
   -x 'signalharvester/**/configuration-cache/*' \
   -x 'signalharvester/**/.pytest_cache/*' \
   -x 'signalharvester/build/' \
