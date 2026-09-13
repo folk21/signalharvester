@@ -5,6 +5,18 @@ description: Notable project changes organized by release state, with each chang
 ---
 # Changelog
 
+## Unreleased — runtime and verification hardening
+
+2026-09-13 — Parameterized local PostgreSQL and Redpanda Compose host ports, credentials, advertised host, and admin endpoint while preserving safe defaults.
+
+2026-09-13 — Added an explicit `.env.example` workflow that can be shared by Compose interpolation and the host-run backend without committing local secrets.
+
+2026-09-13 — Added root `run_checks.sh` as the canonical full verification gate for Gradle checks, Testcontainers integration tests, and FULL-archive validation.
+
+2026-09-13 — Hardened `archive.sh` so a FULL archive cannot be produced without `gradle-wrapper.jar` and verifies that the wrapper is actually present.
+
+2026-09-13 — Synchronized installation, configuration, usage, testing, infrastructure, and active project-structure documentation with the new runtime/reproducibility workflow.
+
 ## Unreleased
 
 2026-09-08 — Established the initial SignalHarvester modular-monolith backend skeleton and specification hierarchy.

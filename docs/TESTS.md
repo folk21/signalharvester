@@ -21,7 +21,20 @@ Default automated tests must not require public network access, live external we
 
 ## Current validation commands
 
-Use the repository Gradle Wrapper.
+Use the repository Gradle Wrapper. The canonical full repository gate is:
+
+```bash
+./run_checks.sh
+```
+
+`run_checks.sh` performs, in order:
+
+1. optional `git diff --check` when running inside a Git worktree;
+2. `./gradlew clean check --no-watch-fs`;
+3. `./gradlew integrationTest --no-watch-fs` after verifying Docker is available;
+4. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
+
+Use focused Gradle commands during development, but run `./run_checks.sh` before treating a substantial PATCH or branch as fully verified. New repository-wide static-analysis or coverage gates should be wired into Gradle `check` where practical so this entry point remains stable as verification grows.
 
 Fast/default verification compiles and runs only the regular `src/test` source sets:
 
@@ -136,4 +149,4 @@ Focused validation for the manual-run/history and analysis-inspection slice:
 ./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs
 ```
 
-Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP coverage now verifies source CRUD plus the collection-admin and analysis-inspection endpoints, including validation/status mapping and blocking Virtual Thread execution. The operational-admin spec remains verification-pending until the focused Gradle and container-backed commands complete successfully in a Docker-capable environment.
+Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP coverage now verifies source CRUD plus the collection-admin and analysis-inspection endpoints, including validation/status mapping and blocking Virtual Thread execution. The operational-admin slice has completed its focused Gradle and container-backed verification and its spec is archived; these commands remain useful targeted regressions.

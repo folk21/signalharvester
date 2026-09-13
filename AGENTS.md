@@ -208,7 +208,7 @@ Tests must not depend on:
 
 Never disable or weaken a failing test merely to make the build green.
 
-Validation commands and the current command matrix are owned by `docs/TESTS.md`. Use the Gradle wrapper when it exists. Run focused tests first, then broader validation appropriate to the change.
+Validation commands and the current command matrix are owned by `docs/TESTS.md`. Use the Gradle wrapper when it exists. Run focused tests first, then broader validation appropriate to the change. `./run_checks.sh` is the canonical full repository gate for default checks, container-backed integration tests, and FULL-archive reproducibility.
 
 Never claim a test/build passed unless it was actually run successfully.
 

@@ -17,6 +17,8 @@ From the repository root:
 docker compose -f infra/docker-compose/compose.yaml up -d
 ```
 
+The defaults require no `.env` file. For customized local ports or credentials, follow [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) and use the same explicit `--env-file` for Compose lifecycle commands.
+
 Wait until PostgreSQL and Redpanda report healthy before starting the backend:
 
 ```bash
@@ -83,9 +85,15 @@ curl 'http://localhost:8080/api/v1/admin/analysis/items?limit=20'
 
 The analysis inspection API exposes durable normalization/deduplication provenance only. Classification, score, and user-facing results are not yet persisted and therefore are intentionally absent from this API.
 
-## Run tests
+## Run tests and repository checks
 
-See [`TESTS.md`](TESTS.md) for the authoritative test command matrix.
+Run the complete repository verification gate with:
+
+```bash
+./run_checks.sh
+```
+
+It runs the default Gradle verification, all container-backed integration tests, and a reproducible FULL-archive check. See [`TESTS.md`](TESTS.md) for focused commands and the authoritative validation matrix.
 
 ## Planned operational workflow
 
