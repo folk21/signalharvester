@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Complete the first Results vertical slice. Terminal Analysis events are now materialized into Results-owned PostgreSQL state under [`specs/active/subspecs/backend-results-persistence.md`](specs/active/subspecs/backend-results-persistence.md); the next step is the first result read REST API, followed by source extraction needed for a meaningful real-source trial.
+Complete the first useful real-source vertical slice. Terminal Analysis events are materialized and exposed through the Results REST API under [`specs/active/subspecs/backend-results-rest-api.md`](specs/active/subspecs/backend-results-rest-api.md); the next product step is source extraction, starting with RSS/Atom items.
 
 ## P0 — repository and contract foundation
 

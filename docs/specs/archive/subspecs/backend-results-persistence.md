@@ -4,13 +4,13 @@ title: SignalHarvester backend results persistence
 description: Active sub-specification for consuming terminal analysis events into an idempotent Results-owned PostgreSQL projection.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # SignalHarvester backend results persistence
 
 ## Status
 
-Verification-pending implementation slice. This sub-specification introduces the first durable Results projection from existing `ItemAnalyzed` and `ItemRejected` Kafka contracts. Result query REST/SSE remains a subsequent slice.
+Completed implementation slice, verified in the developer environment. This sub-specification introduces the first durable Results projection from existing `ItemAnalyzed` and `ItemRejected` Kafka contracts. Result query REST/SSE remains a subsequent slice.
 
 ## Goal
 

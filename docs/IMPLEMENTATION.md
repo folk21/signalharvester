@@ -43,7 +43,7 @@ flowchart LR
     RES --> DB4[(results schema)]
 ```
 
-Terminal analysis events are now materialized by `modules:results`; public result queries remain pending until the next Results REST slice.
+Terminal analysis events are materialized by `modules:results` and exposed through the bounded public `/api/v1/results` read API.
 
 ## Configuration module
 
@@ -89,7 +89,7 @@ See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../mo
 
 The Results listener disables automatic Kafka commit and commits the consumed offset only after the Results transaction completes. This is an at-least-once/idempotent-consumer model, not distributed exactly-once processing.
 
-Result query REST/SSE is not implemented yet; until that next slice exists, persisted Results state is verified through module/container tests rather than exposed to browser clients.
+`ResultQueryService` owns short read-only JDBC transactions for the public Results API. `GET /api/v1/results` exposes a bounded recent-result feed with profile/source/category/relevance/classification/time filters without returning large normalized content, while `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` returns the detailed content, attributes, tags, and provenance for one profile-scoped logical result. SSE/live delivery remains pending.
 
 See [`../modules/results/README.md`](../modules/results/README.md) and [`../modules/results/contract.md`](../modules/results/contract.md).
 
@@ -99,7 +99,7 @@ See [`../modules/results/README.md`](../modules/results/README.md) and [`../modu
 
 ## External contracts
 
-The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source CRUD, manual collection-run/history operations, and read-only analysis inspection.
+The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source CRUD, manual collection-run/history operations, analysis inspection, and public Results browsing/detail queries.
 
 The authoritative Kafka schemas are versioned `.proto` files under `contracts/event-contracts/src/main/proto/`:
 
@@ -143,8 +143,8 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 
 - no source parsing/extraction into multiple external items;
 - no persisted monitoring profiles, profile-to-source membership, or scheduling;
-- no result read REST/SSE API;
-- no SSE implementation;
+- no result SSE/live-update API;
+- no cursor/full-text result search beyond bounded REST filters;
 - no outbound SSRF/network-destination policy; source management must remain trusted until one is defined;
 - no event-observation persistence/API;
 - no OpenTelemetry instrumentation;

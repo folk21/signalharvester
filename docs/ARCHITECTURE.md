@@ -54,9 +54,11 @@ Normalization precedes deduplication and analysis. Logical item identity is stab
 
 The initial analyzer is deterministic and replaceable through `ContentAnalyzer`; external AI is not a core dependency. Raw Kafka offsets are committed explicitly only after terminal analysis processing completes. The current JDBC-state + Kafka-publication window deliberately favors retryability when publication fails but is not distributed exactly-once; downstream result persistence must be idempotent until transactional outbox or an equivalent stronger strategy is introduced.
 
-## Results persistence boundary
+## Results persistence and read boundary
 
 Results consumes versioned terminal Analysis events asynchronously and never reads Analysis tables or implementation types. The materialized analyzed-result identity is `(monitoringProfileId, normalizedItemId)`; rejection retry identity is the upstream `sourceEventId`. Results owns its JDBC transaction and commits Kafka offsets only after durable projection completes. These idempotent keys absorb normal at-least-once redelivery, including the Analysis publish-ack/database-commit gap, without claiming distributed exactly-once semantics.
+
+Results also owns the public read-only `/api/v1/results` REST boundary. Feed queries are bounded, newest-first, filterable by product dimensions, and avoid per-result N+1 reads; point detail lookup is monitoring-profile scoped and returns the persisted content, normalized attributes/tags, and provenance. Other modules and browser clients do not read Results tables directly.
 
 ## HTTP server execution boundary
 

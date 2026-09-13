@@ -84,7 +84,7 @@ python3 tools/source-import/import_sources.py \
 
 The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
 
-The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, persists the completed run snapshot, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events and persists an idempotent Results-owned projection. A public Results read API is not implemented yet.
+The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, persists the completed run snapshot, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through the public REST API.
 
 Start a manual collection run:
 
@@ -106,17 +106,23 @@ Inspect recent normalized analysis claims:
 curl 'http://localhost:8080/api/v1/admin/analysis/items?limit=20'
 ```
 
-The analysis inspection API exposes durable normalization/deduplication provenance only. Classification, score, tags, explanation, normalized content, and provenance are now persisted by Results but are intentionally not exposed through the Analysis API.
+The analysis inspection API exposes durable normalization/deduplication provenance only. User-facing analyzed state belongs to Results.
 
-Until the Results REST API is implemented, local developers may inspect the materialized projection directly for verification:
+Browse recent analyzed results:
 
 ```bash
-docker compose -f infra/docker-compose/compose.yaml exec postgres \
-  psql -U signalharvester -d signalharvester -c \
-  'SELECT monitoring_profile_id, normalized_item_id, classification, score, relevant, title FROM results.analyzed_items ORDER BY analyzed_at DESC;'
+curl 'http://localhost:8080/api/v1/results?limit=20&monitoringProfileId=real-trial'
 ```
 
-Direct SQL is a temporary local verification workflow only; application modules and browser clients must not depend on Results tables directly.
+Useful optional filters are `sourceId`, `informationCategory`, `relevant`, `classification`, `analyzedFrom`, and `analyzedTo`. The list representation intentionally omits the potentially large normalized content and attribute map.
+
+Inspect one detailed profile-scoped result:
+
+```bash
+curl 'http://localhost:8080/api/v1/results/<NORMALIZED_ITEM_ID>?monitoringProfileId=real-trial'
+```
+
+The detail response includes normalized content, attributes, ordered tags, analysis metadata, and event/correlation provenance. Browser clients must use this REST boundary rather than Results tables directly.
 
 ## Run tests and repository checks
 

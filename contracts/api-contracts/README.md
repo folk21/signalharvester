@@ -19,7 +19,8 @@ It currently defines:
 
 - CRUD operations and schemas for configurable external sources;
 - manual collection-run execution plus bounded durable run-history reads;
-- read-only inspection of analysis-owned normalized-item/deduplication state.
+- read-only inspection of analysis-owned normalized-item/deduplication state;
+- bounded public Results feed and profile-scoped result-detail reads.
 
 Source names must contain at least one non-whitespace character, and source locations require an absolute HTTP(S) URL with a host and without embedded credentials or fragments so the external contract matches the configuration-module invariant. `SourceUpsertRequest.enabled` is optional and defaults to `false`; omitted `settings` default to an empty object. Response DTOs explicitly preserve schema-required fields even when collections are empty or nullable operational values are unavailable.
 
