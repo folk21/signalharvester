@@ -33,7 +33,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * Verifies PostgreSQL persistence used by {@link JdbcCollectionRunHistoryStore}, including transaction
  * participation, atomic writes, deterministic recent-history ordering, and restart durability.
  *
- * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-rss-atom-extraction}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class CollectionRunHistoryPostgresTest {
@@ -163,6 +163,41 @@ class CollectionRunHistoryPostgresTest {
 
         CollectionRunHistory history = context.getBean(CollectionRunHistory.class);
         assertEquals(persisted, history.get(runId));
+    }
+
+
+    /**
+     * Persist the new no-items and extraction-failure terminal statuses introduced by feed extraction.
+     */
+    @Test
+    void shouldPersistFeedExtractionStatuses() {
+        CollectionRunHistoryRecorder recorder = context.getBean(CollectionRunHistoryRecorder.class);
+        CollectionRunHistory history = context.getBean(CollectionRunHistory.class);
+        UUID runId = uuid("00000000-0000-0000-0000-000000000701");
+        CollectionRunResult result = new CollectionRunResult(
+                runId.toString(),
+                PROFILE_ID,
+                "TOPIC",
+                Instant.parse("2026-09-11T15:00:00Z"),
+                Instant.parse("2026-09-11T15:00:02Z"),
+                CollectionRunStatus.PARTIALLY_SUCCEEDED,
+                List.of(
+                        new CollectionSourceResult(
+                                SourceId.of(uuid("00000000-0000-0000-0000-000000000702")),
+                                CollectionSourceStatus.NO_ITEMS,
+                                Optional.empty(),
+                                Optional.empty(),
+                                Optional.empty()),
+                        new CollectionSourceResult(
+                                SourceId.of(uuid("00000000-0000-0000-0000-000000000703")),
+                                CollectionSourceStatus.EXTRACTION_FAILED,
+                                Optional.empty(),
+                                Optional.empty(),
+                                Optional.of("malformed feed"))));
+
+        recorder.record(result);
+
+        assertEquals(result, history.get(runId));
     }
 
     /**

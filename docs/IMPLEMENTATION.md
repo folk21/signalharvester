@@ -57,15 +57,15 @@ See [`../modules/configuration/README.md`](../modules/configuration/README.md) a
 
 ## Collection module
 
-`modules:collection` owns bounded external-source fetching, explicit collection-run execution, deterministic raw-item identity, `RawItemDiscovered` publication, durable completed-run history, and `/api/v1/admin/collection-runs`.
+`modules:collection` owns bounded external-source fetching, source-type extraction, explicit collection-run execution, deterministic raw-item identity, `RawItemDiscovered` publication, durable completed-run history, and `/api/v1/admin/collection-runs`.
 
 Collection currently publishes no synchronous cross-module Java API. `CollectionRunner`, `CollectionRunHistory`, and their run/result models are internal `collection.run` application boundaries used by collection-owned adapters and tests. Collection reads enabled sources only through `configuration.api`; the Gradle dependency on configuration is therefore an `implementation` dependency.
 
 External HTTP access and Kafka publication remain internal module ports. The generic HTTP path uses Micronaut-managed low-level absolute-URI requests with explicit time, response-size, redirect, connection-pool, and concurrency bounds. Fetch completion is pipelined into terminal publication with backpressure: only the bounded in-flight window may retain raw payload bodies, while final per-source results are reconstructed in configured-source order. Source-level fetch/publication failures are best-effort terminal outcomes and do not cancel unrelated source work.
 
-Successful source payloads are published as versioned `RawItemDiscovered` Protobuf bytes. The collection run id is reused as the event correlation id, while raw-item identity is deterministic over source id, requested URI, and raw payload.
+Successful REST/HTML responses produce one passthrough semantic item; RSS/Atom responses produce one semantic item per bounded feed entry. Extracted metadata populates the existing `RawItemDiscovered` external id, title, URL, content, content type, and publication time fields. The collection run id is reused as the event correlation id. Passthrough raw identity preserves the original source-id + URI + raw-body behavior, while RSS/Atom raw identity uses deterministic per-entry semantic identity material.
 
-PostgreSQL schema `collection` is created by `db/migration/collection/V3__create_collection_run_history.sql` and stores completed runs plus ordered per-source outcomes for operational inspection.
+PostgreSQL schema `collection` is created by `db/migration/collection/V3__create_collection_run_history.sql`; `V5__expand_collection_run_source_statuses.sql` adds feed extraction statuses. The schema stores completed runs plus ordered per-source/item outcomes for operational inspection.
 
 See [`../modules/collection/README.md`](../modules/collection/README.md) and [`../modules/collection/contract.md`](../modules/collection/contract.md) for module-local detail.
 
@@ -116,7 +116,7 @@ Generated Protobuf Java classes are build output and remain transport types at K
 
 Configuration, analysis, collection, and results currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
 
-Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, and so on) unless the Flyway topology is deliberately changed later.
+Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, and so on) unless the Flyway topology is deliberately changed later.
 
 Direct cross-module table access remains forbidden.
 

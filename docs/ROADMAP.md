@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Complete the first useful real-source vertical slice. Terminal Analysis events are materialized and exposed through the Results REST API under [`specs/active/subspecs/backend-results-rest-api.md`](specs/active/subspecs/backend-results-rest-api.md); the next product step is source extraction, starting with RSS/Atom items.
+Complete the first useful real-source vertical slice. Results persistence/REST are verified, and the current backend focus is bounded RSS/Atom item extraction under [`specs/active/subspecs/backend-rss-atom-extraction.md`](specs/active/subspecs/backend-rss-atom-extraction.md). The next major product slice is the real operational Admin UI in the companion `signalharvester-web` repository, followed by browser-level E2E against a running backend.
 
 ## P0 — repository and contract foundation
 
@@ -44,4 +44,4 @@ Complete the first useful real-source vertical slice. Terminal Analysis events a
 - LLM/embedding analysis as a required core dependency.
 
 
-The first operational admin API now provides manual collection execution, durable completed-run inspection, and read-only analysis deduplication inspection. Result read REST/SSE and Event Explorer remain subsequent vertical slices.
+The backend operational/admin APIs now provide source CRUD, manual collection execution, durable run inspection, analysis inspection, and Results reads. The next UI milestone is a real Admin UI over these existing contracts; result SSE and Event Explorer remain subsequent vertical slices.

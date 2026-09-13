@@ -31,7 +31,7 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 
 1. `docker info` preflight for container-backed verification;
 2. optional `git diff --check` when running inside a Git worktree;
-3. `./tools/source-import/run_tests.sh` for deterministic source-import tooling regression coverage;
+3. `./tools/source-import/run_tests.sh` and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
 4. `./gradlew clean check --no-watch-fs`;
 5. `./gradlew integrationTest --no-watch-fs`;
 6. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
@@ -101,14 +101,15 @@ The first implementation foundation contains:
 - `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, configured read timeouts, redirect-limit enforcement, and response-size enforcement against deterministic loopback servers;
 - `MicronautExternalSourceClientTest` for successful/empty responses, transport failure normalization, status mapping, and `Retry-After` preservation with a deterministic clock;
 - `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, backpressure before replacement fetch submission, deterministic source-index reconstruction, empty batches, and best-effort continuation of queued/in-flight work after a source-level failure;
-- `CollectionRunServiceTest` for explicit run identity/correlation, success/partial/failed/empty outcomes, and continued Kafka publication after one publication failure;
+- `CollectionRunServiceTest` for explicit run identity/correlation, success/partial/failed/empty outcomes, multiple RSS item publications, no-items/extraction-failure semantics, and continued Kafka publication after one publication failure;
 - `RawItemIdentityFactoryTest` for stable raw-item identity across fetch timestamps and changed payload identity;
 - `MicronautBlockingExecutorTest` for verification that Micronaut's blocking executor is Virtual-Thread backed on the Java 21 baseline and that the collection bean graph resolves with its qualified UTC clock;
 - `CollectionConfigurationTest` for Jakarta Validation of invalid concurrency configuration;
-- `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping and response charset handling;
+- `RssAtomItemExtractorTest` and `DefaultSourceItemExtractorTest` for secure bounded RSS/Atom parsing, metadata extraction, malformed/DTD rejection, feed-item limits, empty feeds, and non-feed passthrough identity compatibility;
+- `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping including extracted external id, title, and publication time;
 - `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
 - `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
-- `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap, atomic run/source-outcome persistence, enforced application-owned transaction boundaries, restart-safe durable reads, bounded recent-history validation, deterministic ordering, and source-outcome association across multi-run reads;
+- `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap, atomic run/source/item-outcome persistence, extraction-status migration/round-trip, enforced application-owned transaction boundaries, restart-safe durable reads, bounded recent-history validation, deterministic ordering, and outcome association across multi-run reads;
 - `CollectionRunControllerTest` for server-level manual-run/history status mapping, validation/default limits, required JSON response shape, and blocking Virtual Thread execution without external infrastructure;
 - `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, restart-safe provider reads, duplicate-name semantics, and transactional rollback for both create and update settings failures;
 - `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
@@ -142,19 +143,20 @@ raw Kafka input
     -> input offset commit
 ```
 
-The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` now starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes and the public Results REST API now exposes analyzed state without direct database access. The next black-box expansion can therefore terminate at `/api/v1/results` instead of Analysis inspection.
+The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes and the public Results REST API exposes analyzed state without direct database access. The opt-in live-backend verifier now terminates at Results and includes a deterministic two-entry RSS fixture mode; the next automated black-box expansion should bring the same Results assertion into the container-backed integration suite.
 
 ## Python tooling tests
 
-Python is used for independent black-box/data tooling, not as the primary backend test framework. The source-manifest importer owns fast standard-library regression tests under `tools/source-import/tests` and they are part of the canonical `run_checks.sh` gate.
+Python is used for independent black-box/data tooling, not as the primary backend test framework. The source-manifest importer and live-backend verifier own fast standard-library regression tests under `tools/source-import/tests` and `tools/live-backend/tests`; both self-test suites are part of the canonical `run_checks.sh` gate. The live verifier itself is opt-in and is never invoked automatically against a running backend.
 
 Run them directly with:
 
 ```bash
 ./tools/source-import/run_tests.sh
+./tools/live-backend/run_tests.sh
 ```
 
-The importer tests use deterministic fakes and a loopback HTTP server only. They do not require Docker, a running backend, or public network access.
+These tooling tests use deterministic fakes/loopback HTTP only. They do not require Docker, a running backend, or public network access. Actual `tools/live-backend/verify_pipeline.py` execution is a separate manual/live environment check.
 
 
 ## Operational admin API

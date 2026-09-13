@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-results-rest-api.md
+current_focus: subspecs/backend-rss-atom-extraction.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -18,11 +18,11 @@ Backend, infrastructure, observability, persistence, and source-connector implem
 
 ## Active implementation focus
 
-The current technical focus is the Results read REST slice under `subspecs/backend-results-rest-api.md`: bounded frontend-facing browsing and detail queries over Results-owned PostgreSQL state. The Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md` and established module-boundary rules in `subspecs/backend-project-structure.md` remain active supporting specifications. Configuration persistence/REST and the operational administration slice are archived after successful developer verification, alongside the completed collection and analysis slices.
+The current technical focus is RSS/Atom item extraction under `subspecs/backend-rss-atom-extraction.md`: turning one fetched feed document into bounded semantic raw items before Kafka publication. The Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md` and established module-boundary rules in `subspecs/backend-project-structure.md` remain active supporting specifications. Configuration persistence/REST and the operational administration slice are archived after successful developer verification, alongside the completed collection and analysis slices.
 
 SignalHarvester starts with one deployable backend application composed from cohesive Gradle modules. Each functional module owns its behavior and infrastructure details, exposes narrow contracts where collaboration is required, and owns its persistence logically. Kafka remains an explicit asynchronous boundary between selected modules so event flow, replay, retries, lag, and future service extraction remain first-class concerns.
 
-The current backend already contains the runnable Micronaut composition root, PostgreSQL/Flyway-backed source configuration with REST CRUD, versioned raw/analysis Protobuf schemas, the generic collection HTTP transport with bounded Virtual Thread execution, collection-owned `RawItemDiscovered` publication, collection-run orchestration over enabled sources, durable completed-run history, the first analysis consumer with normalization, durable profile-scoped deduplication, deterministic keyword classification, terminal analysis-event publication, read-only operational inspection, Results-owned idempotent persistence of terminal outcomes, and bounded public Results feed/detail REST reads. Persisted monitoring profiles/scheduling, result SSE/live delivery, source-specific extraction, event observation, stronger DB/Kafka consistency, Kubernetes deployment, and production observability remain pending. Repository-owned Docker Compose provides local PostgreSQL and Kafka-compatible Redpanda development dependencies. Frontend-specific technical specifications live in the companion `signalharvester-web` repository.
+The current backend already contains the runnable Micronaut composition root, PostgreSQL/Flyway-backed source configuration with REST CRUD, versioned raw/analysis Protobuf schemas, the generic collection HTTP transport with bounded Virtual Thread execution, collection-owned `RawItemDiscovered` publication, collection-run orchestration over enabled sources, durable completed-run history, the first analysis consumer with normalization, durable profile-scoped deduplication, deterministic keyword classification, terminal analysis-event publication, read-only operational inspection, Results-owned idempotent persistence of terminal outcomes, bounded public Results feed/detail REST reads, and collection-owned RSS/Atom item extraction. Persisted monitoring profiles/scheduling, generic REST/HTML extraction, result SSE/live delivery, event observation, stronger DB/Kafka consistency, Kubernetes deployment, and production observability remain pending. Repository-owned Docker Compose provides local PostgreSQL and Kafka-compatible Redpanda development dependencies. Frontend-specific technical specifications live in the companion `signalharvester-web` repository.
 
 ## Goal
 

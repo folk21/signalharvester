@@ -7,7 +7,7 @@ import io.signalharvester.collection.configuration.CollectionKafkaConfiguration;
 import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationException;
 import io.signalharvester.collection.event.RawItemPublicationResult;
-import io.signalharvester.collection.source.FetchedSourceContent;
+import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.net.URI;
@@ -19,10 +19,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies {@link KafkaRawItemEventPublisher} and {@link RawItemDiscoveredMapper} topic/key selection,
- * event mapping, acknowledged publication behavior, and contextual failure normalization.
+ * Verifies {@link KafkaRawItemEventPublisher} topic/key selection, Protobuf publication, and contextual
+ * failure normalization for collection-owned extracted items.
  *
- * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-event-contracts}.</p>
+ * <p>Related specifications: {@code backend-rss-atom-extraction}, {@code backend-event-contracts}.</p>
  */
 class KafkaRawItemEventPublisherTest {
 
@@ -31,12 +31,10 @@ class KafkaRawItemEventPublisherTest {
     private static final String RUN_ID = "run-1";
     private static final String PROFILE_ID = "profile-1";
     private static final String BROKER_FAILURE_MESSAGE = "broker unavailable";
-    private static final URI JOBS_URI = URI.create("https://example.test/jobs");
-    private static final Instant FETCHED_AT = Instant.parse("2026-09-10T13:00:00Z");
+    private static final URI ITEM_URI = URI.create("https://example.test/jobs/42");
+    private static final Instant DISCOVERED_AT = Instant.parse("2026-09-10T13:00:00Z");
     private static final SourceId SOURCE_ID = SourceId.of(
             UUID.fromString("00000000-0000-0000-0000-000000000301"));
-    private static final SourceId INVALID_CHARSET_SOURCE_ID = SourceId.of(
-            UUID.fromString("00000000-0000-0000-0000-000000000302"));
 
     /**
      * Serialize Protobuf and use raw item id as Kafka key.
@@ -52,10 +50,10 @@ class KafkaRawItemEventPublisherTest {
             payload.set(sentPayload);
         };
         CollectionKafkaConfiguration configuration = () -> "signalharvester.collection.raw-item-discovered.v1";
-        RawItemDiscoveredMapper mapper = new RawItemDiscoveredMapper(UUID::randomUUID);
-        KafkaRawItemEventPublisher publisher = new KafkaRawItemEventPublisher(client, configuration, mapper);
+        KafkaRawItemEventPublisher publisher = new KafkaRawItemEventPublisher(
+                client, configuration, new RawItemDiscoveredMapper(UUID::randomUUID));
 
-        RawItemPublicationResult result = publisher.publish(content(), publicationContext());
+        RawItemPublicationResult result = publisher.publish(item(), publicationContext());
         RawItemDiscovered decoded = RawItemDiscovered.parseFrom(payload.get());
 
         assertEquals(configuration.getRawItemDiscoveredTopic(), topic.get());
@@ -81,7 +79,7 @@ class KafkaRawItemEventPublisherTest {
 
         RawItemPublicationException failure = assertThrows(
                 RawItemPublicationException.class,
-                () -> publisher.publish(content(), publicationContext()));
+                () -> publisher.publish(item(), publicationContext()));
 
         assertEquals(RAW_ITEM_ID, failure.rawItemId());
         assertEquals(RUN_ID, failure.correlationId());
@@ -90,42 +88,38 @@ class KafkaRawItemEventPublisherTest {
     }
 
     /**
-     * Normalize mapping failure to publication exception.
+     * Normalize mapper failure to publication exception.
      */
     @Test
-    void shouldNormalizeMappingFailureToPublicationException() {
-        FetchedSourceContent invalidCharsetContent = new FetchedSourceContent(
-                INVALID_CHARSET_SOURCE_ID,
-                JOBS_URI,
-                200,
-                Optional.of("text/plain; charset=not-a-real-charset"),
-                "payload".getBytes(StandardCharsets.UTF_8),
-                FETCHED_AT);
+    void shouldNormalizeMapperFailureToPublicationException() {
         KafkaRawItemEventPublisher publisher = new KafkaRawItemEventPublisher(
                 (topic, key, payload) -> {
                     throw new AssertionError("Kafka must not be called when mapping fails");
                 },
                 () -> RAW_ITEM_TOPIC,
-                new RawItemDiscoveredMapper(UUID::randomUUID));
+                new RawItemDiscoveredMapper(() -> null));
 
         RawItemPublicationException failure = assertThrows(
                 RawItemPublicationException.class,
-                () -> publisher.publish(invalidCharsetContent, publicationContext()));
+                () -> publisher.publish(item(), publicationContext()));
 
         assertEquals(RAW_ITEM_ID, failure.rawItemId());
         assertEquals(RUN_ID, failure.correlationId());
         assertEquals(RAW_ITEM_TOPIC, failure.topic());
-        assertEquals(java.nio.charset.UnsupportedCharsetException.class, failure.getCause().getClass());
+        assertEquals(NullPointerException.class, failure.getCause().getClass());
     }
 
-    private static FetchedSourceContent content() {
-        return new FetchedSourceContent(
+    private static ExtractedSourceItem item() {
+        return new ExtractedSourceItem(
                 SOURCE_ID,
-                JOBS_URI,
-                200,
-                Optional.of("application/json; charset=UTF-8"),
-                "{\"title\":\"Java Developer\"}".getBytes(StandardCharsets.UTF_8),
-                FETCHED_AT);
+                ITEM_URI,
+                Optional.of("external-42"),
+                Optional.of("Java Developer"),
+                "Java Kafka PostgreSQL",
+                "text/plain; charset=UTF-8",
+                Optional.empty(),
+                DISCOVERED_AT,
+                "identity".getBytes(StandardCharsets.UTF_8));
     }
 
     private static RawItemPublicationContext publicationContext() {

@@ -1,10 +1,10 @@
 package io.signalharvester.collection.run;
 
-/**
- * Describes the terminal outcome for one source requested by a collection run.
- */
+/** Describes one terminal source/item outcome recorded for a collection run. */
 public enum CollectionSourceStatus {
     PUBLISHED,
+    NO_ITEMS,
     FETCH_FAILED,
+    EXTRACTION_FAILED,
     PUBLICATION_FAILED
 }

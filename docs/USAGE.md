@@ -84,7 +84,7 @@ python3 tools/source-import/import_sources.py \
 
 The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
 
-The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, persists the completed run snapshot, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through the public REST API.
+The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. REST/HTML currently produce one passthrough item per response; RSS/Atom produce one item per feed entry up to the configured extraction bound. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through the public REST API.
 
 Start a manual collection run:
 
@@ -107,6 +107,29 @@ curl 'http://localhost:8080/api/v1/admin/analysis/items?limit=20'
 ```
 
 The analysis inspection API exposes durable normalization/deduplication provenance only. User-facing analyzed state belongs to Results.
+
+
+### Live backend pipeline verification
+
+For a separately running backend, use the opt-in black-box verifier instead of manually copying multiple `curl` commands. It can optionally import a source manifest, starts a manual collection run with a unique monitoring-profile id, and waits until analyzed output correlated to that run becomes visible through the public Results API:
+
+```bash
+python3 tools/live-backend/verify_pipeline.py \
+  --base-url http://localhost:8080 \
+  --manifest path/to/sources.real-trial.json \
+  --category GENERAL
+```
+
+For a deterministic RSS extraction check with no public-network dependency, run the backend on the host and use the temporary two-entry loopback feed:
+
+```bash
+python3 tools/live-backend/verify_pipeline.py \
+  --base-url http://localhost:8080 \
+  --local-rss-fixture \
+  --category GENERAL
+```
+
+The live command intentionally does **not** run from `run_checks.sh`: it depends on an already running backend. Only its deterministic self-tests run in the repository gate. See [`../tools/live-backend/README.md`](../tools/live-backend/README.md).
 
 Browse recent analyzed results:
 
