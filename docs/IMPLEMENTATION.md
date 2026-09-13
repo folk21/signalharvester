@@ -47,12 +47,9 @@ The user-facing results projection is not implemented yet, so terminal analysis 
 
 `modules:configuration` owns persisted source configuration and the `/api/v1/sources` REST implementation.
 
-Its published synchronous Java surface is under `io.signalharvester.configuration.api`:
+Its published synchronous Java surface is deliberately narrow: `io.signalharvester.configuration.api.SourceConfigurationProvider` plus the effective configuration types required by that provider. Configuration administration remains an internal application boundary used by the module-owned HTTP adapter.
 
-- `SourceConfigurationProvider` is the narrow effective-source API consumed by collection;
-- `SourceConfigurationOperations` is the administration application API used by the HTTP adapter.
-
-`SourceConfigurationManager` implements both contracts. PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`; writes are transaction-owned by the application use case while JDBC SQL/resource handling stays in persistence adapters.
+`SourceConfigurationManager` implements both the internal administration boundary and the published provider contract. PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`; writes are transaction-owned by the application use case while JDBC SQL/resource handling stays in persistence adapters.
 
 See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md) for module-local detail.
 
@@ -60,7 +57,7 @@ See [`../modules/configuration/README.md`](../modules/configuration/README.md) a
 
 `modules:collection` owns bounded external-source fetching, explicit collection-run execution, deterministic raw-item identity, `RawItemDiscovered` publication, durable completed-run history, and `/api/v1/admin/collection-runs`.
 
-Its published synchronous Java surface is `io.signalharvester.collection.api`, currently centered on `CollectionRunner` and `CollectionRunHistory`. Collection reads enabled sources only through `configuration.api`; the Gradle dependency on configuration is intentionally an `api` dependency because `CollectionSourceResult` exposes the stable `SourceId` contract type.
+Collection currently publishes no synchronous cross-module Java API. `CollectionRunner`, `CollectionRunHistory`, and their run/result models are internal `collection.run` application boundaries used by collection-owned adapters and tests. Collection reads enabled sources only through `configuration.api`; the Gradle dependency on configuration is therefore an `implementation` dependency.
 
 External HTTP access and Kafka publication remain internal module ports. The generic HTTP path uses Micronaut-managed low-level absolute-URI requests with explicit time, response-size, redirect, connection-pool, and concurrency bounds. Fetch completion is pipelined into terminal publication with backpressure: only the bounded in-flight window may retain raw payload bodies, while final per-source results are reconstructed in configured-source order. Source-level fetch/publication failures are best-effort terminal outcomes and do not cancel unrelated source work.
 
@@ -74,7 +71,7 @@ See [`../modules/collection/README.md`](../modules/collection/README.md) and [`.
 
 `modules:analysis` consumes `RawItemDiscovered`, maps transport messages into module-owned models, normalizes content, performs monitoring-profile-scoped durable deduplication, applies deterministic keyword analysis, and publishes terminal `ItemAnalyzed` or `ItemRejected` events.
 
-The raw-item processing path is intentionally event-driven and remains internal. The only published synchronous Java surface is the bounded `AnalysisItemInspectionQuery` under `io.signalharvester.analysis.api`, used by the read-only `/api/v1/admin/analysis/items` adapter.
+The raw-item processing path is intentionally event-driven and remains internal. Analysis currently publishes no synchronous cross-module Java API; the bounded `AnalysisItemInspectionQuery` is an internal application boundary used by the analysis-owned `/api/v1/admin/analysis/items` adapter.
 
 PostgreSQL schema `analysis` is created by `db/migration/analysis/V2__create_normalized_item_claims.sql`. Logical normalized identity excludes monitoring profile id; duplicate claims are scoped by `(monitoringProfileId, normalizedItemId)`.
 

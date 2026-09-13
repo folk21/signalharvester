@@ -3,14 +3,14 @@ type: Specification
 title: SignalHarvester source configuration persistence and REST
 description: Current implementation sub-specification for PostgreSQL-backed source CRUD, Flyway ownership, blocking REST execution, validation, and provider wiring.
 document_role: subspec
-parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+parent: ../../active/spec-signal-harvester-platform.md
+spec_status: completed
 ---
 # SignalHarvester source configuration persistence and REST
 
 ## Status
 
-Implementation complete — verification pending before archival.
+Completed and verified — archived after the relevant unit, server-level, PostgreSQL, and integration test suites passed in the developer environment.
 
 The configuration public Java API and source OpenAPI contract already exist. This slice turns those contracts into a persisted, runnable capability without expanding into monitoring profiles, scheduling, or collection-to-Kafka publication.
 
@@ -53,7 +53,7 @@ Implemented in this slice:
 - runtime PostgreSQL/Hikari/Flyway configuration;
 - PostgreSQL Testcontainers coverage for migration, CRUD/settings/provider behavior, REST status/validation, and blocking Virtual Thread execution.
 
-The specification remains active only until the Gradle/Testcontainers validation matrix is confirmed green in an environment with dependency resolution and Docker support. After that confirmation, stable knowledge already captured in owning docs permits this sub-spec to move to `docs/specs/archive/subspecs/`.
+The implementation and verification gate were completed. Stable current-state knowledge is owned by the configuration module documentation, OpenAPI contract, and test documentation; this archived specification preserves the original implementation intent.
 
 ## Requirements
 

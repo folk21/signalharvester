@@ -1,13 +1,15 @@
-package io.signalharvester.configuration.api;
+package io.signalharvester.configuration.application;
 
+import io.signalharvester.configuration.api.ConfiguredSource;
+import io.signalharvester.configuration.api.SourceId;
 import java.util.List;
 
 /**
- * Primary synchronous application API for administering configured external sources.
+ * Internal application boundary for administering configured external sources.
  *
- * <p>The HTTP adapter uses this contract instead of depending on the concrete application implementation.
- * Other modules should prefer the narrower {@link SourceConfigurationProvider} unless they intentionally
- * own a use case that administers configuration.</p>
+ * <p>Configuration-owned inbound adapters depend on this contract instead of the concrete application
+ * implementation. It is not a published cross-module API; other functional modules consume the narrower
+ * {@code configuration.api} contracts only.</p>
  */
 public interface SourceConfigurationOperations {
 

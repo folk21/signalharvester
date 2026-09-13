@@ -1,6 +1,6 @@
-package io.signalharvester.collection.api;
+package io.signalharvester.collection.run;
 
-/** Primary synchronous application API for executing one explicit collection run. */
+/** Internal application entry point for executing one explicit collection run. */
 public interface CollectionRunner {
 
     /**

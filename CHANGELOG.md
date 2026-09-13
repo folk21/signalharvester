@@ -59,4 +59,6 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-13 — Hardened analysis transaction/event guarantees with transaction-aware deduplication persistence, rollback coverage for failed terminal publication, poison-input offset protection, and focused analysis Kafka mapping/publication tests.
 
+2026-09-13 — Tightened module API semantics so only real synchronous cross-module contracts remain published, reduced the collection-to-configuration dependency to implementation scope, and expanded architecture enforcement for cycles, API purity, adapter layering, and composition-root direction.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

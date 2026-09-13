@@ -24,7 +24,7 @@ Monitoring-profile-owned analysis settings, richer category-specific normalizati
 
 ## Operational inspection
 
-Read-only `/api/v1/admin/analysis/items` endpoints expose durable normalization/deduplication provenance from `analysis.normalized_item_claims`. Classification, score, tags, and user-facing results remain event-only until results persistence is implemented.
+Read-only `/api/v1/admin/analysis/items` endpoints expose durable normalization/deduplication provenance from `analysis.normalized_item_claims`. The query interface behind this controller is an internal application boundary, not a published cross-module Java API. Classification, score, tags, and user-facing results remain event-only until results persistence is implemented.
 
 ## Runtime notes
 

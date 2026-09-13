@@ -5,11 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micronaut.context.ApplicationContext;
-import io.signalharvester.collection.api.CollectionRunHistory;
-import io.signalharvester.collection.api.CollectionRunResult;
-import io.signalharvester.collection.api.CollectionRunStatus;
-import io.signalharvester.collection.api.CollectionSourceResult;
-import io.signalharvester.collection.api.CollectionSourceStatus;
+import io.signalharvester.collection.run.CollectionRunHistory;
+import io.signalharvester.collection.run.CollectionRunResult;
+import io.signalharvester.collection.run.CollectionRunStatus;
+import io.signalharvester.collection.run.CollectionSourceResult;
+import io.signalharvester.collection.run.CollectionSourceStatus;
 import io.signalharvester.collection.run.CollectionRunHistoryRecorder;
 import io.signalharvester.collection.run.CollectionRunHistoryStore;
 import io.signalharvester.configuration.api.SourceId;

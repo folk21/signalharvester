@@ -8,7 +8,7 @@ import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.validation.Validated;
-import io.signalharvester.analysis.api.AnalysisItemInspectionQuery;
+import io.signalharvester.analysis.application.AnalysisItemInspectionQuery;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;

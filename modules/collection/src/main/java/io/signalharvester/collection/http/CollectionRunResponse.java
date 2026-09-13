@@ -2,8 +2,8 @@ package io.signalharvester.collection.http;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.micronaut.serde.annotation.Serdeable;
-import io.signalharvester.collection.api.CollectionRunResult;
-import io.signalharvester.collection.api.CollectionRunStatus;
+import io.signalharvester.collection.run.CollectionRunResult;
+import io.signalharvester.collection.run.CollectionRunStatus;
 import java.time.Instant;
 import java.util.List;
 

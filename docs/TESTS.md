@@ -78,7 +78,7 @@ flowchart TB
 The first implementation foundation contains:
 
 - `ApplicationContextTest` for Micronaut context bootstrap;
-- `ModuleBoundaryArchitectureTest` for enforcing that production cross-module Java dependencies target only the providing module's `api..` package;
+- `ModuleBoundaryArchitectureTest` for enforcing published-API-only cross-module dependencies, an acyclic functional-module graph, framework-free published API packages, no direct HTTP-adapter-to-persistence coupling, and no dependency from functional modules back to the application composition root;
 - `ConfiguredSourceTest` for configuration-boundary invariants;
 - `RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` for Protobuf round trips and unknown additive fields;
 - `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, bounded redirects, and response-size enforcement against deterministic loopback servers;

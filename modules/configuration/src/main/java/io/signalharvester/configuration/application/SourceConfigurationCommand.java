@@ -1,5 +1,8 @@
-package io.signalharvester.configuration.api;
+package io.signalharvester.configuration.application;
 
+import io.signalharvester.configuration.api.ConfiguredSource;
+import io.signalharvester.configuration.api.SourceId;
+import io.signalharvester.configuration.api.SourceType;
 import java.net.URI;
 import java.util.Map;
 import java.util.Objects;

@@ -12,7 +12,7 @@ import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.validation.Validated;
 import io.signalharvester.configuration.api.SourceId;
-import io.signalharvester.configuration.api.SourceConfigurationOperations;
+import io.signalharvester.configuration.application.SourceConfigurationOperations;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;

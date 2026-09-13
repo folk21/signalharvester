@@ -1,4 +1,4 @@
-package io.signalharvester.collection.api;
+package io.signalharvester.collection.run;
 
 import io.signalharvester.configuration.api.SourceId;
 import java.util.Objects;

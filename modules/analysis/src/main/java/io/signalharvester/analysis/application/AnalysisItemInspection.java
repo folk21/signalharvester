@@ -1,4 +1,4 @@
-package io.signalharvester.analysis.api;
+package io.signalharvester.analysis.application;
 
 import java.time.Instant;
 import java.util.Optional;

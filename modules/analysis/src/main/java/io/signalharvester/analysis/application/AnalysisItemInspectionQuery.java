@@ -1,9 +1,9 @@
-package io.signalharvester.analysis.api;
+package io.signalharvester.analysis.application;
 
 import java.util.List;
 import java.util.Optional;
 
-/** Read-only application API for operational inspection of analysis-owned normalized-item claims. */
+/** Internal read-only application boundary for operational inspection of analysis-owned claims. */
 public interface AnalysisItemInspectionQuery {
 
     /** Returns recent durable claims with optional profile and source filters. */

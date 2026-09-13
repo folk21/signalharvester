@@ -1,10 +1,5 @@
 package io.signalharvester.collection.run;
 
-import io.signalharvester.collection.api.CollectionRunRequest;
-import io.signalharvester.collection.api.CollectionRunResult;
-import io.signalharvester.collection.api.CollectionRunStatus;
-import io.signalharvester.collection.api.CollectionSourceResult;
-import io.signalharvester.collection.api.CollectionSourceStatus;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -137,10 +132,11 @@ class CollectionRunServiceTest {
     @Test
     void shouldContinuePublicationAfterOneKafkaFailure() {
         List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
+        SourceId failingSourceId = sources.get(1).id();
         AtomicInteger publication = new AtomicInteger();
         RawItemEventPublisher publisher = (content, context) -> {
             int current = publication.incrementAndGet();
-            if (current == 2) {
+            if (content.sourceId().equals(failingSourceId)) {
                 throw new RawItemPublicationException(
                         context.rawItemId(), context.correlationId(), "raw-items", "synthetic Kafka failure",
                         new IllegalStateException("broker failure"));

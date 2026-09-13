@@ -1,4 +1,4 @@
-package io.signalharvester.collection.api;
+package io.signalharvester.collection.run;
 
 import java.util.List;
 import java.util.UUID;

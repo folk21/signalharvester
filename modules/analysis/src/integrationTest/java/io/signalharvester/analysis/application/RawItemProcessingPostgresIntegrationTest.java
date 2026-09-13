@@ -10,8 +10,6 @@ import com.google.protobuf.Timestamp;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.inject.qualifiers.Qualifiers;
 import io.micronaut.transaction.TransactionOperations;
-import io.signalharvester.analysis.api.AnalysisItemInspection;
-import io.signalharvester.analysis.api.AnalysisItemInspectionQuery;
 import io.signalharvester.analysis.event.AnalysisEventPublisher;
 import io.signalharvester.analysis.event.AnalysisPublicationException;
 import io.signalharvester.analysis.event.AnalysisPublicationResult;

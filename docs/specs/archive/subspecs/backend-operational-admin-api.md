@@ -3,14 +3,14 @@ type: Specification
 title: SignalHarvester operational admin API
 description: Manual collection execution, durable run history, and read-only analysis inspection for the first technical administration UI.
 document_role: subspec
-parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+parent: ../../active/spec-signal-harvester-platform.md
+spec_status: completed
 ---
 # SignalHarvester operational admin API
 
 ## Status
 
-Implementation complete — Gradle/PostgreSQL/Kafka verification pending before archival.
+Completed and verified — archived after the focused module, server-level, PostgreSQL/Kafka, and cross-module integration suites passed in the developer environment.
 
 ## Goal
 
@@ -58,4 +58,4 @@ This slice does not add authentication/authorization, monitoring profiles, sched
 ./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs
 ```
 
-Acceptance requires REST contract validation, PostgreSQL run-history persistence/query coverage, blocking controller wiring, analysis inspection query coverage, and server-level HTTP verification of the operational endpoints. Server-level module tests now cover collection-run and analysis-inspection validation/status/serialization behavior; final acceptance still requires the focused Gradle and container-backed commands above to pass. Container-backed scenarios live in dedicated `src/integrationTest` source sets and must be verified through `integrationTest`; the default `test` lifecycle does not compile or execute those sources.
+Acceptance requires REST contract validation, PostgreSQL run-history persistence/query coverage, blocking controller wiring, analysis inspection query coverage, and server-level HTTP verification of the operational endpoints. Server-level module tests now cover collection-run and analysis-inspection validation/status/serialization behavior; the focused Gradle and container-backed commands above passed before archival. Container-backed scenarios live in dedicated `src/integrationTest` source sets and must be verified through `integrationTest`; the default `test` lifecycle does not compile or execute those sources.

@@ -1,11 +1,5 @@
 package io.signalharvester.collection.run;
 
-import io.signalharvester.collection.api.CollectionRunRequest;
-import io.signalharvester.collection.api.CollectionRunResult;
-import io.signalharvester.collection.api.CollectionRunStatus;
-import io.signalharvester.collection.api.CollectionRunner;
-import io.signalharvester.collection.api.CollectionSourceResult;
-import io.signalharvester.collection.api.CollectionSourceStatus;
 import io.signalharvester.collection.configuration.CollectionClockFactory;
 import io.signalharvester.collection.event.RawItemEventPublisher;
 import io.signalharvester.collection.event.RawItemPublicationContext;
