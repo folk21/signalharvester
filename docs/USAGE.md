@@ -61,6 +61,29 @@ curl http://localhost:8080/api/v1/sources
 
 Source URLs stored through this API are configuration data only. Do not expose source management to untrusted users as an unrestricted collection authorization mechanism until an outbound destination/SSRF policy is implemented.
 
+### Bootstrap sources from a manifest
+
+For repeatable local/trial setup, [`../tools/source-import/`](../tools/source-import/) provides a Python standard-library importer that uses the same `/api/v1/sources` REST boundary rather than writing configuration tables directly.
+
+Preview an import without creating sources:
+
+```bash
+python3 tools/source-import/import_sources.py \
+  --file tools/source-import/sources.example.json \
+  --base-url http://localhost:8080 \
+  --dry-run
+```
+
+Create only source identities that are currently missing:
+
+```bash
+python3 tools/source-import/import_sources.py \
+  --file path/to/sources.json \
+  --base-url http://localhost:8080
+```
+
+The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
+
 The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, persists the completed run snapshot, and publishes successful payloads to Kafka. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results are not persisted or exposed yet.
 
 Start a manual collection run:

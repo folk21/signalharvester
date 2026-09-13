@@ -31,9 +31,10 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 
 1. `docker info` preflight for container-backed verification;
 2. optional `git diff --check` when running inside a Git worktree;
-3. `./gradlew clean check --no-watch-fs`;
-4. `./gradlew integrationTest --no-watch-fs`;
-5. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
+3. `./tools/source-import/run_tests.sh` for deterministic source-import tooling regression coverage;
+4. `./gradlew clean check --no-watch-fs`;
+5. `./gradlew integrationTest --no-watch-fs`;
+6. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
 
 The script prints a final PASS/FAIL summary of every routine verification step that actually ran and lists the relevant test/problems report locations. Use focused Gradle commands during development, but run `./run_checks.sh` before treating a substantial PATCH or branch as functionally verified. Slower coverage/static/dependency analysis and repository-size metrics run through `./run_rare_checks.sh`; quality-tool policy and report ownership are documented in [`QUALITY.md`](QUALITY.md).
 
@@ -137,9 +138,17 @@ raw Kafka input
 
 The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` now starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence/read APIs are still required before a broader product trial can retain and inspect user-facing analyzed outcomes instead of only operational deduplication state.
 
-## Python
+## Python tooling tests
 
-Python may be used later for independent black-box/load/data tooling. It is not the primary backend integration-test framework.
+Python is used for independent black-box/data tooling, not as the primary backend test framework. The source-manifest importer owns fast standard-library regression tests under `tools/source-import/tests` and they are part of the canonical `run_checks.sh` gate.
+
+Run them directly with:
+
+```bash
+./tools/source-import/run_tests.sh
+```
+
+The importer tests use deterministic fakes and a loopback HTTP server only. They do not require Docker, a running backend, or public network access.
 
 
 ## Operational admin API
