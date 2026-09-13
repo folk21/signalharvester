@@ -21,6 +21,8 @@ It currently defines:
 - manual collection-run execution plus bounded durable run-history reads;
 - read-only inspection of analysis-owned normalized-item/deduplication state.
 
-Source names must contain at least one non-whitespace character, and source locations require an absolute HTTP(S) URL with a host and without embedded credentials or fragments so the external contract matches the configuration-module invariant. The corresponding REST adapters are implemented in their owning functional modules; this OpenAPI document remains the authoritative external schema.
+Source names must contain at least one non-whitespace character, and source locations require an absolute HTTP(S) URL with a host and without embedded credentials or fragments so the external contract matches the configuration-module invariant. `SourceUpsertRequest.enabled` is optional and defaults to `false`; omitted `settings` default to an empty object. Response DTOs explicitly preserve schema-required fields even when collections are empty or nullable operational values are unavailable.
+
+The corresponding REST adapters are implemented in their owning functional modules; this OpenAPI document remains the authoritative external schema. Server-level module tests verify request validation, status mapping, default values, required response shape, and blocking execution for the implemented endpoints.
 
 REST contracts remain independent from generated Kafka/Protobuf transport classes.

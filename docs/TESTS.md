@@ -92,12 +92,14 @@ The first implementation foundation contains:
 - `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
 - `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
 - `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap, atomic run/source-outcome persistence, enforced application-owned transaction boundaries, bounded recent-history validation, deterministic ordering, and source-outcome association across multi-run reads;
+- `CollectionRunControllerTest` for server-level manual-run/history status mapping, validation/default limits, required JSON response shape, and blocking Virtual Thread execution without external infrastructure;
 - `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, duplicate-name semantics, and transactional rollback;
 - `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
 - `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`;
 - `DefaultContentNormalizerTest` for deterministic whitespace/URL normalization and stable normalized identity;
 - `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring rules and invalid rule configuration;
 - `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims and discovery counters;
+- `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
 - `RawItemKafkaListenerTest` for explicit offset commit after success and no commit when processing fails;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
@@ -118,4 +120,4 @@ Focused validation for the manual-run/history and analysis-inspection slice:
 ./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs
 ```
 
-Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP coverage currently exists for source CRUD, but equivalent server-level verification for the collection-admin and analysis-inspection endpoints is still part of the operational-admin verification gate.
+Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP coverage now verifies source CRUD plus the collection-admin and analysis-inspection endpoints, including validation/status mapping and blocking Virtual Thread execution. The operational-admin spec remains verification-pending until the focused Gradle and container-backed commands complete successfully in a Docker-capable environment.

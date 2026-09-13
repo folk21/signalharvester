@@ -1,5 +1,6 @@
 package io.signalharvester.configuration.http;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.micronaut.serde.annotation.Serdeable;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceType;
@@ -16,6 +17,7 @@ import java.util.UUID;
  * @param enabled whether collection is enabled
  * @param settings source-specific string settings
  */
+@JsonInclude(JsonInclude.Include.ALWAYS)
 @Serdeable
 public record SourceResponse(
         UUID id,

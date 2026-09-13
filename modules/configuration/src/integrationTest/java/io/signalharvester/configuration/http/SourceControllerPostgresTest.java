@@ -190,6 +190,8 @@ class SourceControllerPostgresTest {
                     """.formatted(type, type, type.toLowerCase()));
 
             assertEquals(201, created.statusCode());
+            assertTrue(created.body().contains("\"enabled\":false"));
+            assertTrue(created.body().contains("\"settings\":{}"));
         }
 
         HttpResponse<String> listed = send("GET", "/api/v1/sources", null);

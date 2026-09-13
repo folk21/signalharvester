@@ -11,7 +11,7 @@ For module ownership, published Java APIs, data ownership, dependency rules, inv
 
 Source configuration is persisted in the configuration-owned PostgreSQL schema through an explicit JDBC repository. `SourceConfigurationManager` owns write transaction boundaries, while the repository owns SQL and JDBC resource handling. Flyway migration `db/migration/configuration/V1__create_source_configuration.sql` creates `configuration.sources` and `configuration.source_settings`.
 
-The OpenAPI source-management contract is implemented under `/api/v1/sources`. HTTP request records are separate from persistence types, Jakarta Validation enforces the input boundary, expected not-found/invalid-configuration failures use centralized Micronaut `ExceptionHandler` beans, and the controller runs on `TaskExecutors.BLOCKING` for JDBC work.
+The OpenAPI source-management contract is implemented under `/api/v1/sources`. HTTP request records are separate from persistence types, Jakarta Validation enforces the input boundary, omitted `enabled` values default to `false`, expected not-found/invalid-configuration failures use centralized Micronaut `ExceptionHandler` beans, and the controller runs on `TaskExecutors.BLOCKING` for JDBC work.
 
 Collection consumes effective source configuration through the published configuration API rather than through persistence. Monitoring profiles, schedules, filters, extraction settings, and analysis settings remain planned configuration capabilities rather than completed persistence surfaces.
 

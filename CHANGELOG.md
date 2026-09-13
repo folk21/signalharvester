@@ -53,4 +53,6 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-13 — Hardened collection run-history persistence with enforced Micronaut transaction participation, atomicity regression coverage, typed UUID lookups, bounded Java API limits, centralized SQL, and defensive row mapping.
 
+2026-09-13 — Reconciled REST/OpenAPI defaults and validation, made required JSON response fields serialization-stable, and added server-level contract coverage for collection and analysis operational endpoints.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.
