@@ -107,6 +107,67 @@ class DeduplicationPostgresIntegrationTest {
     }
 
     @Test
+    void shouldFilterOrderAndLimitInspectionQueries() {
+        DeduplicationClaimRepository repository = context.getBean(DeduplicationClaimRepository.class);
+        @SuppressWarnings("unchecked")
+        TransactionOperations<Connection> transactions = context.getBean(
+                TransactionOperations.class, Qualifiers.byName("default"));
+        Instant base = Instant.parse("2026-09-10T18:00:00Z");
+
+        transactions.executeWrite(status -> {
+            assertTrue(repository.tryClaim(
+                    item(
+                            "profile-a",
+                            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "source-01",
+                            "raw-a",
+                            "event-a"),
+                    base));
+            assertTrue(repository.tryClaim(
+                    item(
+                            "profile-a",
+                            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                            "source-02",
+                            "raw-b",
+                            "event-b"),
+                    base.plusSeconds(30)));
+            assertTrue(repository.tryClaim(
+                    item(
+                            "profile-b",
+                            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                            "source-01",
+                            "raw-c",
+                            "event-c"),
+                    base.plusSeconds(20)));
+            return null;
+        });
+
+        AnalysisItemInspectionQuery inspection = context.getBean(AnalysisItemInspectionQuery.class);
+
+        assertEquals(
+                List.of(
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+                normalizedIds(inspection.recent(2, Optional.empty(), Optional.empty())));
+        assertEquals(
+                List.of(
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                normalizedIds(inspection.recent(10, Optional.of("profile-a"), Optional.empty())));
+        assertEquals(
+                List.of(
+                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                normalizedIds(inspection.recent(10, Optional.empty(), Optional.of("source-01"))));
+        assertEquals(
+                List.of("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+                normalizedIds(inspection.recent(10, Optional.of("profile-b"), Optional.of("source-01"))));
+        assertEquals(
+                List.of("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                normalizedIds(inspection.recent(1, Optional.empty(), Optional.empty())));
+    }
+
+    @Test
     void shouldRejectRepositoryAccessOutsideApplicationOwnedTransaction() {
         DeduplicationClaimRepository repository = context.getBean(DeduplicationClaimRepository.class);
 
@@ -116,14 +177,28 @@ class DeduplicationPostgresIntegrationTest {
     }
 
     private static NormalizedContentItem item(String profileId, String rawItemId, String sourceEventId) {
+        return item(
+                profileId,
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "source-01",
+                rawItemId,
+                sourceEventId);
+    }
+
+    private static NormalizedContentItem item(
+            String profileId,
+            String normalizedItemId,
+            String sourceId,
+            String rawItemId,
+            String sourceEventId) {
         return new NormalizedContentItem(
                 sourceEventId,
                 "run-01",
                 Optional.empty(),
                 Instant.parse("2026-09-10T18:00:00Z"),
                 rawItemId,
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "source-01",
+                normalizedItemId,
+                sourceId,
                 profileId,
                 "JOB",
                 Optional.empty(),
@@ -133,6 +208,10 @@ class DeduplicationPostgresIntegrationTest {
                 "text/plain",
                 Map.of(),
                 Optional.empty());
+    }
+
+    private static List<String> normalizedIds(List<AnalysisItemInspection> items) {
+        return items.stream().map(AnalysisItemInspection::normalizedItemId).toList();
     }
 
     private static void resetDatabase() throws Exception {

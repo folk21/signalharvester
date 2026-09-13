@@ -48,6 +48,23 @@ class AnalysisEventSerializationTest {
         assertTrue(decoded.getUnknownFields().hasField(1000));
     }
 
+    @Test
+    void shouldTolerateUnknownAdditiveFieldsOnRejectedEvent() throws IOException {
+        ItemRejected original = rejectedEvent();
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        bytes.write(original.toByteArray());
+
+        CodedOutputStream codedOutput = CodedOutputStream.newInstance(bytes);
+        codedOutput.writeString(1000, "future-field");
+        codedOutput.flush();
+
+        ItemRejected decoded = ItemRejected.parseFrom(bytes.toByteArray());
+
+        assertEquals(original.getNormalizedItemId(), decoded.getNormalizedItemId());
+        assertEquals(original.getEnvelope().getEventId(), decoded.getEnvelope().getEventId());
+        assertTrue(decoded.getUnknownFields().hasField(1000));
+    }
+
     private static ItemAnalyzed analyzedEvent() {
         Timestamp timestamp = Timestamp.newBuilder().setSeconds(1_725_817_600L).build();
         return ItemAnalyzed.newBuilder()

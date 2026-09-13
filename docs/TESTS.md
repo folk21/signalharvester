@@ -29,12 +29,13 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 
 `run_checks.sh` performs, in order:
 
-1. optional `git diff --check` when running inside a Git worktree;
-2. `./gradlew clean check --no-watch-fs`;
-3. `./gradlew integrationTest --no-watch-fs` after verifying Docker is available;
-4. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
+1. `docker info` preflight for container-backed verification;
+2. optional `git diff --check` when running inside a Git worktree;
+3. `./gradlew clean check --no-watch-fs`;
+4. `./gradlew integrationTest --no-watch-fs`;
+5. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
 
-Use focused Gradle commands during development, but run `./run_checks.sh` before treating a substantial PATCH or branch as fully verified. New repository-wide static-analysis or coverage gates should be wired into Gradle `check` where practical so this entry point remains stable as verification grows.
+The script prints a final PASS/FAIL summary of every verification step that actually ran and lists the standard Gradle test/problems report locations. Use focused Gradle commands during development, but run `./run_checks.sh` before treating a substantial PATCH or branch as fully verified. New repository-wide static-analysis or coverage gates should be wired into Gradle `check` where practical so this entry point remains stable as verification grows.
 
 Fast/default verification compiles and runs only the regular `src/test` source sets:
 
@@ -93,8 +94,8 @@ The first implementation foundation contains:
 - `ApplicationContextTest` for Micronaut context bootstrap;
 - `ModuleBoundaryArchitectureTest` for enforcing published-API-only cross-module dependencies, an acyclic functional-module graph, framework-free published API packages, no direct HTTP-adapter-to-persistence coupling, and no dependency from functional modules back to the application composition root;
 - `ConfiguredSourceTest` for configuration-boundary invariants;
-- `RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` for Protobuf round trips and unknown additive fields;
-- `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, bounded redirects, and response-size enforcement against deterministic loopback servers;
+- `RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` for Protobuf round trips and unknown additive fields on raw, analyzed, and rejected event families;
+- `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, configured read timeouts, redirect-limit enforcement, and response-size enforcement against deterministic loopback servers;
 - `MicronautExternalSourceClientTest` for successful/empty responses, transport failure normalization, status mapping, and `Retry-After` preservation with a deterministic clock;
 - `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, backpressure before replacement fetch submission, deterministic source-index reconstruction, empty batches, and best-effort continuation of queued/in-flight work after a source-level failure;
 - `CollectionRunServiceTest` for explicit run identity/correlation, success/partial/failed/empty outcomes, and continued Kafka publication after one publication failure;
@@ -104,14 +105,14 @@ The first implementation foundation contains:
 - `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping and response charset handling;
 - `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
 - `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
-- `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap, atomic run/source-outcome persistence, enforced application-owned transaction boundaries, bounded recent-history validation, deterministic ordering, and source-outcome association across multi-run reads;
+- `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap, atomic run/source-outcome persistence, enforced application-owned transaction boundaries, restart-safe durable reads, bounded recent-history validation, deterministic ordering, and source-outcome association across multi-run reads;
 - `CollectionRunControllerTest` for server-level manual-run/history status mapping, validation/default limits, required JSON response shape, and blocking Virtual Thread execution without external infrastructure;
-- `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, duplicate-name semantics, and transactional rollback;
+- `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, restart-safe provider reads, duplicate-name semantics, and transactional rollback for both create and update settings failures;
 - `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
 - `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`;
 - `DefaultContentNormalizerTest` for deterministic whitespace/URL normalization and stable normalized identity;
 - `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring rules and invalid rule configuration;
-- `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims, discovery counters, and enforcement of the application-owned JDBC transaction boundary;
+- `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims, discovery counters, real SQL inspection filtering/ordering/limits, and enforcement of the application-owned JDBC transaction boundary;
 - `RawItemProcessingPostgresIntegrationTest` for focused new/irrelevant/duplicate processing, independent cross-profile acceptance, claim/counter rollback, and input-offset retention when terminal publication fails;
 - `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
 - `RawItemKafkaListenerTest` for explicit offset commit after success plus no-commit behavior for processing failure, malformed Protobuf, Kafka key mismatch, and invalid mapped domain data;

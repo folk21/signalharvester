@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.net.httpserver.HttpServer;
 import io.micronaut.context.ApplicationContext;
@@ -19,6 +20,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -165,6 +171,69 @@ class ExternalSourceHttpClientTest {
 
             assertEquals(200, response.code());
             assertArrayEquals("redirected".getBytes(StandardCharsets.UTF_8), response.body());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void shouldFailWhenConfiguredReadTimeoutIsExceeded() throws Exception {
+        CountDownLatch requestArrived = new CountDownLatch(1);
+        CountDownLatch releaseResponse = new CountDownLatch(1);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/slow", exchange -> {
+            requestArrived.countDown();
+            try {
+                releaseResponse.await();
+                byte[] body = "late".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+
+        try (ApplicationContext context = applicationContext(Map.of(
+                        "micronaut.http.client.read-timeout", "100ms",
+                        "micronaut.http.client.request-timeout", "300ms"));
+                ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            ExternalSourceHttpClient client = context.getBean(ExternalSourceHttpClient.class);
+            Future<Throwable> result = executor.submit(() -> {
+                try {
+                    client.fetch(loopbackUri(server, "/slow"));
+                    return null;
+                } catch (Throwable failure) {
+                    return failure;
+                }
+            });
+
+            assertTrue(requestArrived.await(1, TimeUnit.SECONDS));
+            Throwable failure = result.get(2, TimeUnit.SECONDS);
+            assertTrue(failure instanceof HttpClientException, () -> "Unexpected failure: " + failure);
+        } finally {
+            releaseResponse.countDown();
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void shouldRejectRedirectLoopAfterConfiguredMaximum() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/loop", exchange -> {
+            exchange.getResponseHeaders().add(HttpHeaders.LOCATION, "/loop");
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+        });
+        server.start();
+
+        try (ApplicationContext context = applicationContext(Map.of(
+                "micronaut.http.client.max-redirects", 2))) {
+            ExternalSourceHttpClient client = context.getBean(ExternalSourceHttpClient.class);
+
+            assertThrows(HttpClientException.class, () -> client.fetch(loopbackUri(server, "/loop")));
         } finally {
             server.stop(0);
         }

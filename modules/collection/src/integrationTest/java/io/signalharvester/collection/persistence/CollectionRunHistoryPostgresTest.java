@@ -43,14 +43,7 @@ class CollectionRunHistoryPostgresTest {
     @BeforeEach
     void setUp() throws Exception {
         resetDatabase();
-        context = ApplicationContext.run(Map.ofEntries(
-                Map.entry("datasources.default.url", POSTGRES.getJdbcUrl()),
-                Map.entry("datasources.default.username", POSTGRES.getUsername()),
-                Map.entry("datasources.default.password", POSTGRES.getPassword()),
-                Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
-                Map.entry("flyway.datasources.default.enabled", true),
-                Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/collection"),
-                Map.entry("kafka.enabled", false)));
+        context = ApplicationContext.run(databaseProperties());
     }
 
     @AfterEach
@@ -119,6 +112,26 @@ class CollectionRunHistoryPostgresTest {
         recorder.record(recentHigherId);
 
         assertEquals(List.of(recentHigherId, recentLowerId), history.recent(2));
+    }
+
+    @Test
+    void shouldReadPersistedHistoryAfterApplicationContextRestart() {
+        CollectionRunHistoryRecorder recorder = context.getBean(CollectionRunHistoryRecorder.class);
+        UUID runId = UUID.fromString("00000000-0000-0000-0000-000000000601");
+        CollectionRunResult persisted = result(
+                runId.toString(),
+                Instant.parse("2026-09-11T14:00:00Z"),
+                List.of(publishedSource(
+                        "00000000-0000-0000-0000-000000000602",
+                        "raw-restart",
+                        "event-restart")));
+        recorder.record(persisted);
+
+        context.close();
+        context = ApplicationContext.run(databaseProperties());
+
+        CollectionRunHistory history = context.getBean(CollectionRunHistory.class);
+        assertEquals(persisted, history.get(runId));
     }
 
     @Test
@@ -208,6 +221,17 @@ class CollectionRunHistoryPostgresTest {
                 return rows.getLong(1);
             }
         }
+    }
+
+    private static Map<String, Object> databaseProperties() {
+        return Map.ofEntries(
+                Map.entry("datasources.default.url", POSTGRES.getJdbcUrl()),
+                Map.entry("datasources.default.username", POSTGRES.getUsername()),
+                Map.entry("datasources.default.password", POSTGRES.getPassword()),
+                Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
+                Map.entry("flyway.datasources.default.enabled", true),
+                Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/collection"),
+                Map.entry("kafka.enabled", false));
     }
 
     private static void resetDatabase() throws Exception {

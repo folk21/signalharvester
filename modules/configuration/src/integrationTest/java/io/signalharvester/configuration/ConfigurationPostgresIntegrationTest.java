@@ -107,6 +107,23 @@ class ConfigurationPostgresIntegrationTest {
     }
 
     @Test
+    void shouldRollbackSourceCreateWhenSettingsWriteFails() throws Exception {
+        SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
+        rejectSettingValue("reject-me");
+
+        assertThrows(
+                SourcePersistenceException.class,
+                () -> manager.create(command(
+                        "Must Roll Back",
+                        URI.create("https://example.test/create"),
+                        true,
+                        Map.of("query", "reject-me"))));
+
+        assertTrue(manager.list().isEmpty());
+        assertEquals(0, countSourceRows());
+    }
+
+    @Test
     void shouldRollbackSourceUpdateWhenSettingsWriteFails() throws Exception {
         SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
         ConfiguredSource original = manager.create(command(
@@ -115,14 +132,7 @@ class ConfigurationPostgresIntegrationTest {
                 true,
                 Map.of("query", "java")));
 
-        try (Connection connection = DriverManager.getConnection(
-                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-                Statement statement = connection.createStatement()) {
-            statement.execute("""
-                    ALTER TABLE configuration.source_settings
-                    ADD CONSTRAINT test_reject_failed_setting CHECK (setting_value <> 'reject-me')
-                    """);
-        }
+        rejectSettingValue("reject-me");
 
         assertThrows(
                 SourcePersistenceException.class,
@@ -133,6 +143,22 @@ class ConfigurationPostgresIntegrationTest {
                         Map.of("query", "reject-me"))));
 
         assertEquals(original, manager.get(original.id()));
+    }
+
+    @Test
+    void shouldReadPersistedSourceAfterApplicationContextRestart() {
+        SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
+        ConfiguredSource created = manager.create(command(
+                "Persistent Source",
+                URI.create("https://example.test/persistent"),
+                true,
+                Map.of("region", "eu")));
+
+        context.close();
+        context = ApplicationContext.run(databaseProperties());
+
+        SourceConfigurationProvider provider = context.getBean(SourceConfigurationProvider.class);
+        assertEquals(created, provider.findSource(created.id()).orElseThrow());
     }
 
     @Test
@@ -148,6 +174,26 @@ class ConfigurationPostgresIntegrationTest {
                         true,
                         Map.of())));
         assertThrows(SourceNotFoundException.class, () -> manager.delete(missing));
+    }
+
+    private static void rejectSettingValue(String rejectedValue) throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement()) {
+            statement.execute("ALTER TABLE configuration.source_settings "
+                    + "ADD CONSTRAINT test_reject_failed_setting "
+                    + "CHECK (setting_value <> '" + rejectedValue + "')");
+        }
+    }
+
+    private static long countSourceRows() throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM configuration.sources")) {
+            resultSet.next();
+            return resultSet.getLong(1);
+        }
     }
 
     private static SourceConfigurationCommand command(

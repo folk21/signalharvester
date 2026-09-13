@@ -13,6 +13,10 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-13 — Added root `run_checks.sh` as the canonical full verification gate for Gradle checks, Testcontainers integration tests, and FULL-archive validation.
 
+2026-09-13 — Expanded persistence, HTTP-boundary, and Protobuf regression coverage for restart durability, create rollback, analysis inspection queries, HTTP timeout/redirect limits, and rejected-event forward compatibility.
+
+2026-09-13 — Enhanced `run_checks.sh` with an end-of-run verification summary and standard Gradle report locations for faster failure diagnosis.
+
 2026-09-13 — Hardened `archive.sh` so a FULL archive cannot be produced without `gradle-wrapper.jar` and verifies that the wrapper is actually present.
 
 2026-09-13 — Synchronized installation, configuration, usage, testing, infrastructure, and active project-structure documentation with the new runtime/reproducibility workflow.
