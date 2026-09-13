@@ -82,6 +82,8 @@ Consumers must not depend on collection `run`, `source`, `event`, `persistence`,
 - one collection run id is reused as correlation id for raw-item events from that run;
 - raw-item identity is deterministic for equivalent source content;
 - external I/O has explicit timeout, size, redirect, and concurrency bounds;
+- completed fetch payloads are terminally handled with backpressure, so raw response bodies are retained only within the bounded in-flight concurrency window rather than for the full run;
+- terminal source results preserve configured-source order, while Kafka publication follows fetch completion and must not be treated as a source-order guarantee;
 - completed run history is operational state, not an atomic substitute for Kafka delivery guarantees;
 - run-history reads and writes execute inside short application-owned JDBC transactions; persistence adapters require an active transaction and never self-commit.
 

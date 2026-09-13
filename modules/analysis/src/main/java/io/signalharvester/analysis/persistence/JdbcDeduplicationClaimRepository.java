@@ -8,59 +8,60 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
-import javax.sql.DataSource;
 
 /**
  * PostgreSQL adapter that enforces one accepted logical item per monitoring-profile deduplication scope.
+ * Transaction boundaries are owned by analysis application use cases.
  */
 @Singleton
 public final class JdbcDeduplicationClaimRepository implements DeduplicationClaimRepository {
 
-    private final DataSource dataSource;
+    private static final String TRY_CLAIM_SQL = """
+            INSERT INTO analysis.normalized_item_claims (
+                monitoring_profile_id,
+                normalized_item_id,
+                source_id,
+                external_id,
+                source_url,
+                first_raw_item_id,
+                first_source_event_id,
+                first_seen_at,
+                last_raw_item_id,
+                last_source_event_id,
+                last_seen_at,
+                discovery_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ON CONFLICT (monitoring_profile_id, normalized_item_id) DO NOTHING
+            """;
+    private static final String RECORD_DUPLICATE_SQL = """
+            UPDATE analysis.normalized_item_claims
+               SET last_raw_item_id = ?,
+                   last_source_event_id = ?,
+                   last_seen_at = ?,
+                   discovery_count = discovery_count + 1
+             WHERE monitoring_profile_id = ?
+               AND normalized_item_id = ?
+            """;
 
-    public JdbcDeduplicationClaimRepository(@Named("default") DataSource dataSource) {
-        this.dataSource = dataSource;
+    private final Connection connection;
+
+    public JdbcDeduplicationClaimRepository(@Named("default") Connection connection) {
+        this.connection = connection;
     }
 
     @Override
     public boolean tryClaim(NormalizedContentItem item, Instant seenAt) {
-        try (Connection connection = dataSource.getConnection();
-                PreparedStatement statement = connection.prepareStatement("""
-                        INSERT INTO analysis.normalized_item_claims (
-                            monitoring_profile_id,
-                            normalized_item_id,
-                            source_id,
-                            external_id,
-                            source_url,
-                            first_raw_item_id,
-                            first_source_event_id,
-                            first_seen_at,
-                            last_raw_item_id,
-                            last_source_event_id,
-                            last_seen_at,
-                            discovery_count
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                        ON CONFLICT (monitoring_profile_id, normalized_item_id) DO NOTHING
-                        """)) {
+        try (PreparedStatement statement = connection.prepareStatement(TRY_CLAIM_SQL)) {
             bindIdentity(statement, item, seenAt);
             return statement.executeUpdate() == 1;
-        } catch (SQLException exception) {
+        } catch (SQLException | RuntimeException exception) {
             throw new AnalysisPersistenceException("Failed to claim normalized item", exception);
         }
     }
 
     @Override
     public void recordDuplicate(NormalizedContentItem item, Instant seenAt) {
-        try (Connection connection = dataSource.getConnection();
-                PreparedStatement statement = connection.prepareStatement("""
-                        UPDATE analysis.normalized_item_claims
-                           SET last_raw_item_id = ?,
-                               last_source_event_id = ?,
-                               last_seen_at = ?,
-                               discovery_count = discovery_count + 1
-                         WHERE monitoring_profile_id = ?
-                           AND normalized_item_id = ?
-                        """)) {
+        try (PreparedStatement statement = connection.prepareStatement(RECORD_DUPLICATE_SQL)) {
             statement.setString(1, item.rawItemId());
             statement.setString(2, item.sourceEventId());
             statement.setTimestamp(3, Timestamp.from(seenAt));
@@ -71,7 +72,9 @@ public final class JdbcDeduplicationClaimRepository implements DeduplicationClai
                         "Normalized item claim disappeared while recording duplicate",
                         new IllegalStateException("No deduplication claim found"));
             }
-        } catch (SQLException exception) {
+        } catch (AnalysisPersistenceException exception) {
+            throw exception;
+        } catch (SQLException | RuntimeException exception) {
             throw new AnalysisPersistenceException("Failed to record duplicate discovery", exception);
         }
     }

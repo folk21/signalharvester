@@ -62,7 +62,7 @@ See [`../modules/configuration/README.md`](../modules/configuration/README.md) a
 
 Its published synchronous Java surface is `io.signalharvester.collection.api`, currently centered on `CollectionRunner` and `CollectionRunHistory`. Collection reads enabled sources only through `configuration.api`; the Gradle dependency on configuration is intentionally an `api` dependency because `CollectionSourceResult` exposes the stable `SourceId` contract type.
 
-External HTTP access and Kafka publication remain internal module ports. The generic HTTP path uses Micronaut-managed low-level absolute-URI requests with explicit time, response-size, redirect, connection-pool, and concurrency bounds. Source-level fetch/publication failures are best-effort terminal outcomes and do not cancel unrelated source work.
+External HTTP access and Kafka publication remain internal module ports. The generic HTTP path uses Micronaut-managed low-level absolute-URI requests with explicit time, response-size, redirect, connection-pool, and concurrency bounds. Fetch completion is pipelined into terminal publication with backpressure: only the bounded in-flight window may retain raw payload bodies, while final per-source results are reconstructed in configured-source order. Source-level fetch/publication failures are best-effort terminal outcomes and do not cancel unrelated source work.
 
 Successful source payloads are published as versioned `RawItemDiscovered` Protobuf bytes. The collection run id is reused as the event correlation id, while raw-item identity is deterministic over source id, requested URI, and raw payload.
 
@@ -78,7 +78,7 @@ The raw-item processing path is intentionally event-driven and remains internal.
 
 PostgreSQL schema `analysis` is created by `db/migration/analysis/V2__create_normalized_item_claims.sql`. Logical normalized identity excludes monitoring profile id; duplicate claims are scoped by `(monitoringProfileId, normalizedItemId)`.
 
-The listener disables automatic offset commit and commits the raw Kafka offset only after application processing and terminal publication return successfully. Deduplication state changes and acknowledged terminal Kafka publication share the JDBC transaction window for retryability, but this is **not** distributed exactly-once behavior. An acknowledged output followed by database commit failure can still be published again after redelivery, so future results persistence must be idempotent until an outbox or equivalent stronger cross-resource strategy is introduced.
+The listener disables automatic offset commit and commits the raw Kafka offset only after application processing and terminal publication return successfully. Deduplication persistence uses the transaction-aware JDBC connection owned by `RawItemProcessingService`; failed analyzed/rejected publication rolls back the corresponding claim/counter update and leaves the consumed input offset uncommitted. This is **not** distributed exactly-once behavior. An acknowledged output followed by database commit failure can still be published again after redelivery, so future results persistence must be idempotent until an outbox or equivalent stronger cross-resource strategy is introduced.
 
 See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../modules/analysis/contract.md`](../modules/analysis/contract.md) for module-local detail.
 

@@ -1,6 +1,7 @@
 package io.signalharvester.analysis.event.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -12,6 +13,7 @@ import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import io.signalharvester.events.common.v1.EventEnvelope;
 import java.lang.reflect.Proxy;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -52,6 +54,63 @@ class RawItemKafkaListenerTest {
                 listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC, consumer(committed)));
 
         assertNull(committed.get());
+    }
+
+    @Test
+    void shouldLeaveOffsetUncommittedAndSkipProcessingForMalformedProtobuf() {
+        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+        AtomicBoolean processed = new AtomicBoolean();
+        RawItemKafkaListener listener = new RawItemKafkaListener(
+                new RawItemDiscoveredMapper(),
+                rawItem -> {
+                    processed.set(true);
+                    throw new AssertionError("processor must not run for malformed transport data");
+                });
+
+        assertThrows(IllegalArgumentException.class, () ->
+                listener.receive(RAW_ITEM_ID, new byte[] {0x0A, 0x05, 0x01}, 7L, 2, TOPIC, consumer(committed)));
+
+        assertNull(committed.get());
+        assertFalse(processed.get());
+    }
+
+    @Test
+    void shouldLeaveOffsetUncommittedAndSkipProcessingWhenKafkaKeyDoesNotMatchPayload() {
+        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+        AtomicBoolean processed = new AtomicBoolean();
+        RawItemKafkaListener listener = new RawItemKafkaListener(
+                new RawItemDiscoveredMapper(),
+                rawItem -> {
+                    processed.set(true);
+                    throw new AssertionError("processor must not run for key mismatch");
+                });
+
+        assertThrows(IllegalArgumentException.class, () ->
+                listener.receive("different-raw-id", event().toByteArray(), 7L, 2, TOPIC, consumer(committed)));
+
+        assertNull(committed.get());
+        assertFalse(processed.get());
+    }
+
+    @Test
+    void shouldLeaveOffsetUncommittedAndSkipProcessingForInvalidMappedDomainData() {
+        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+        AtomicBoolean processed = new AtomicBoolean();
+        RawItemKafkaListener listener = new RawItemKafkaListener(
+                new RawItemDiscoveredMapper(),
+                rawItem -> {
+                    processed.set(true);
+                    throw new AssertionError("processor must not run for invalid domain data");
+                });
+        RawItemDiscovered invalid = event().toBuilder()
+                .setUrl("ftp://example.test/jobs/1")
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () ->
+                listener.receive(RAW_ITEM_ID, invalid.toByteArray(), 7L, 2, TOPIC, consumer(committed)));
+
+        assertNull(committed.get());
+        assertFalse(processed.get());
     }
 
     private static RawItemDiscovered event() {

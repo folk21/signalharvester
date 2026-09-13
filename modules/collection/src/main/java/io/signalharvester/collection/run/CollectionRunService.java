@@ -65,8 +65,9 @@ public final class CollectionRunService implements CollectionRunner {
     }
 
     /**
-     * Loads enabled sources, fetches them with bounded concurrency, and publishes successful payloads.
-     * The call is synchronous and completes only after all terminal source outcomes are known.
+     * Loads enabled sources and pipelines bounded fetch completion into acknowledged publication.
+     * The call is synchronous and completes only after all terminal source outcomes are known. Large
+     * fetched payloads are released after terminal handling instead of being retained for the whole run.
      *
      * @param request caller-owned run context until monitoring profiles become persistent
      * @return explicit run identity, timing, aggregate status, and per-source outcomes
@@ -79,12 +80,11 @@ public final class CollectionRunService implements CollectionRunner {
         List<ConfiguredSource> sources = List.copyOf(sourceConfigurationProvider.findEnabledSources());
         LOG.info("Starting collection run {} profile={} category={} sources={}",
                 runId, request.monitoringProfileId(), request.informationCategory(), sources.size());
-        List<SourceFetchOutcome> fetched = fetchCoordinator.fetchAll(sources);
-
-        List<CollectionSourceResult> sourceResults = new ArrayList<>(fetched.size());
-        for (SourceFetchOutcome outcome : fetched) {
-            sourceResults.add(toSourceResult(runId, request, outcome));
-        }
+        CollectionSourceResult[] terminalResults = new CollectionSourceResult[sources.size()];
+        fetchCoordinator.fetchEach(
+                sources,
+                (sourceIndex, outcome) -> terminalResults[sourceIndex] = toSourceResult(runId, request, outcome));
+        List<CollectionSourceResult> sourceResults = orderedSourceResults(terminalResults);
 
         Instant finishedAt = clock.instant();
         CollectionRunStatus status = aggregateStatus(sourceResults);
@@ -146,6 +146,16 @@ public final class CollectionRunService implements CollectionRunner {
                     Optional.empty(),
                     Optional.of(failureMessage(failure)));
         }
+    }
+
+    private static List<CollectionSourceResult> orderedSourceResults(CollectionSourceResult[] results) {
+        List<CollectionSourceResult> ordered = new ArrayList<>(results.length);
+        for (int index = 0; index < results.length; index++) {
+            ordered.add(Objects.requireNonNull(
+                    results[index],
+                    "Missing terminal source result at index " + index));
+        }
+        return List.copyOf(ordered);
     }
 
     private static CollectionRunStatus aggregateStatus(List<CollectionSourceResult> sourceResults) {

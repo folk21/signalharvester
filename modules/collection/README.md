@@ -9,7 +9,7 @@ For module ownership, published Java APIs, event boundaries, data ownership, dep
 
 ## Current implementation
 
-The external-source transport path is implemented around a synchronous collection-owned fetch port and a Micronaut-managed HTTP adapter. Dynamic absolute source URLs are executed on Micronaut's blocking executor; on Java 21 that executor uses Virtual Threads. `SourceFetchCoordinator` still bounds concurrency independently of Virtual Thread cost and records source-level failures without cancelling unrelated work.
+The external-source transport path is implemented around a synchronous collection-owned fetch port and a Micronaut-managed HTTP adapter. Dynamic absolute source URLs are executed on Micronaut's blocking executor; on Java 21 that executor uses Virtual Threads. `SourceFetchCoordinator` bounds the in-flight fetch window independently of Virtual Thread cost, applies backpressure while each completed payload is terminally handled, and records source-level failures without cancelling unrelated work. Successful payloads are published as they complete instead of being accumulated until every source fetch finishes, so raw response-body retention is bounded by `signalharvester.collection.max-concurrency` while only small terminal source results grow with the run size. Event publication order therefore follows fetch completion rather than configured-source order; the final run result still restores deterministic configured-source ordering.
 
 The HTTP adapter preserves response status, `Retry-After`, source provenance, response metadata, raw bytes, and fetch timestamps. Tests use deterministic loopback HTTP servers and cover multiple hosts, redirects, response-size limits, scoped filters, and bounded coordination.
 

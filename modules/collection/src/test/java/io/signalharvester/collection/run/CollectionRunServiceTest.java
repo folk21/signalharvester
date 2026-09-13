@@ -29,8 +29,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -60,6 +63,49 @@ class CollectionRunServiceTest {
             assertTrue(publisher.contexts.stream().allMatch(context -> RUN_ID.equals(context.correlationId())));
             assertTrue(publisher.contexts.stream().allMatch(context -> "profile-1".equals(context.monitoringProfileId())));
             assertTrue(publisher.contexts.stream().allMatch(context -> "JOB".equals(context.informationCategory())));
+        }
+    }
+
+    @Test
+    void shouldPublishCompletedPayloadBeforeFetchingBeyondConcurrencyWindow() throws Exception {
+        List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
+        CountDownLatch releaseFirstFetch = new CountDownLatch(1);
+        CountDownLatch thirdFetchStarted = new CountDownLatch(1);
+        CountDownLatch secondPublicationStarted = new CountDownLatch(1);
+        CountDownLatch releaseSecondPublication = new CountDownLatch(1);
+
+        ExternalSourceClient client = source -> {
+            if ("one".equals(source.name())) {
+                await(releaseFirstFetch);
+            } else if ("three".equals(source.name())) {
+                thirdFetchStarted.countDown();
+            }
+            return content(source);
+        };
+        RawItemEventPublisher publisher = (content, context) -> {
+            if (content.requestedUri().getPath().endsWith("/two")) {
+                secondPublicationStarted.countDown();
+                await(releaseSecondPublication);
+            }
+            return new RawItemPublicationResult("event-" + context.rawItemId(), context.rawItemId(), "raw-items");
+        };
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CollectionRunService service = service(sources, client, publisher, executor);
+            CompletableFuture<CollectionRunResult> result = CompletableFuture.supplyAsync(() -> service.run(request()));
+
+            assertTrue(secondPublicationStarted.await(2, TimeUnit.SECONDS));
+            assertTrue(!thirdFetchStarted.await(100, TimeUnit.MILLISECONDS),
+                    "third fetch must wait while the completed payload is being published");
+
+            releaseSecondPublication.countDown();
+            assertTrue(thirdFetchStarted.await(2, TimeUnit.SECONDS));
+            releaseFirstFetch.countDown();
+
+            assertEquals(List.of(sources.get(0).id(), sources.get(1).id(), sources.get(2).id()),
+                    result.get(2, TimeUnit.SECONDS).sources().stream()
+                            .map(CollectionSourceResult::sourceId)
+                            .toList());
         }
     }
 
@@ -176,6 +222,16 @@ class CollectionRunServiceTest {
                 new CollectionRunIdFactory(() -> UUID.fromString(RUN_ID)),
                 new InMemoryHistoryRecorder(),
                 Clock.fixed(RUN_TIME, ZoneOffset.UTC));
+    }
+
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("synthetic test wait interrupted", interrupted);
+        }
     }
 
     private static CollectionRunRequest request() {

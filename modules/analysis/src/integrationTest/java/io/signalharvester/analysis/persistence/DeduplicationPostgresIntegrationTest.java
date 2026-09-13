@@ -1,14 +1,15 @@
 package io.signalharvester.analysis.persistence;
 
-import io.signalharvester.analysis.api.AnalysisItemInspection;
-import io.signalharvester.analysis.api.AnalysisItemInspectionQuery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.inject.qualifiers.Qualifiers;
 import io.micronaut.transaction.TransactionOperations;
+import io.signalharvester.analysis.api.AnalysisItemInspection;
+import io.signalharvester.analysis.api.AnalysisItemInspectionQuery;
 import io.signalharvester.analysis.model.NormalizedContentItem;
 import java.net.URI;
 import java.sql.Connection;
@@ -103,6 +104,15 @@ class DeduplicationPostgresIntegrationTest {
             assertEquals(1, resultSet.getLong("discovery_count"));
             assertFalse(resultSet.next());
         }
+    }
+
+    @Test
+    void shouldRejectRepositoryAccessOutsideApplicationOwnedTransaction() {
+        DeduplicationClaimRepository repository = context.getBean(DeduplicationClaimRepository.class);
+
+        assertThrows(AnalysisPersistenceException.class, () -> repository.tryClaim(
+                item("profile-a", "raw-01", "event-01"),
+                Instant.parse("2026-09-10T18:00:00Z")));
     }
 
     private static NormalizedContentItem item(String profileId, String rawItemId, String sourceEventId) {

@@ -83,7 +83,7 @@ The first implementation foundation contains:
 - `RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` for Protobuf round trips and unknown additive fields;
 - `ExternalSourceHttpClientTest` for Micronaut-managed synchronous absolute-URL calls across different hosts, scoped filter headers, HTTP response-exception handling, query preservation, bounded redirects, and response-size enforcement against deterministic loopback servers;
 - `MicronautExternalSourceClientTest` for successful/empty responses, transport failure normalization, status mapping, and `Retry-After` preservation with a deterministic clock;
-- `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, deterministic result ordering, empty batches, and best-effort continuation of queued/in-flight work after a source-level failure;
+- `SourceFetchCoordinatorTest` for bounded Virtual Thread concurrency, backpressure before replacement fetch submission, deterministic source-index reconstruction, empty batches, and best-effort continuation of queued/in-flight work after a source-level failure;
 - `CollectionRunServiceTest` for explicit run identity/correlation, success/partial/failed/empty outcomes, and continued Kafka publication after one publication failure;
 - `RawItemIdentityFactoryTest` for stable raw-item identity across fetch timestamps and changed payload identity;
 - `MicronautBlockingExecutorTest` for verification that Micronaut's blocking executor is Virtual-Thread backed on the Java 21 baseline and that the collection bean graph resolves with its qualified UTC clock;
@@ -98,13 +98,29 @@ The first implementation foundation contains:
 - `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`;
 - `DefaultContentNormalizerTest` for deterministic whitespace/URL normalization and stable normalized identity;
 - `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring rules and invalid rule configuration;
-- `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims and discovery counters;
+- `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims, discovery counters, and enforcement of the application-owned JDBC transaction boundary;
+- `RawItemProcessingPostgresIntegrationTest` for focused new/irrelevant/duplicate processing, independent cross-profile acceptance, claim/counter rollback, and input-offset retention when terminal publication fails;
 - `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
-- `RawItemKafkaListenerTest` for explicit offset commit after success and no commit when processing fails;
+- `RawItemKafkaListenerTest` for explicit offset commit after success plus no-commit behavior for processing failure, malformed Protobuf, Kafka key mismatch, and invalid mapped domain data;
+- `KafkaAnalysisEventPublisherTest` for analyzed/rejected topic-key mapping, full provenance serialization, and publication-failure normalization;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
 
 PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, and `modules:analysis`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
+
+## Trial-readiness regression gate
+
+Before using real sources for a controlled trial, the backend should keep the following high-risk flow protected:
+
+```text
+raw Kafka input
+    -> analysis claim/update
+    -> terminal publication
+    -> transaction completion
+    -> input offset commit
+```
+
+The analysis module now verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. The remaining high-value system-level gap before a broader trial is an HTTP-driven smoke test that starts from source configuration/manual collection and observes the downstream analysis/result boundary through public interfaces. Results persistence/read APIs are still required before the trial can retain and inspect user-facing analyzed outcomes without reading Kafka directly.
 
 ## Python
 

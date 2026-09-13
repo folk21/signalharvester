@@ -55,4 +55,8 @@ description: Notable project changes organized by release state, with each chang
 
 2026-09-13 — Reconciled REST/OpenAPI defaults and validation, made required JSON response fields serialization-stable, and added server-level contract coverage for collection and analysis operational endpoints.
 
+2026-09-13 — Pipelined collection fetch completion into terminal publication with bounded backpressure so raw source payload retention scales with configured concurrency instead of total run size.
+
+2026-09-13 — Hardened analysis transaction/event guarantees with transaction-aware deduplication persistence, rollback coverage for failed terminal publication, poison-input offset protection, and focused analysis Kafka mapping/publication tests.
+
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.

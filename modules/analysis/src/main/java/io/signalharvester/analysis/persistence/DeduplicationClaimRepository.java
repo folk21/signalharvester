@@ -5,11 +5,12 @@ import java.time.Instant;
 
 /**
  * Analysis-owned persistence boundary for profile-scoped logical item deduplication.
+ * Calls require an active application-owned JDBC transaction.
  */
 public interface DeduplicationClaimRepository {
 
     /**
-     * Atomically claims a normalized item for a monitoring profile.
+     * Claims a normalized item for a monitoring profile inside the caller-owned transaction.
      *
      * @return {@code true} when this transaction created the first accepted claim
      */

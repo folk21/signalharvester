@@ -71,6 +71,8 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 
 - deduplication identity is scoped by monitoring profile;
 - raw Kafka offsets are committed only after successful terminal processing/publication;
+- deduplication writes require an active application-owned JDBC transaction;
+- terminal publication failure rolls back the new claim or duplicate observation and leaves the input offset uncommitted;
 - current DB/Kafka transaction semantics are retryable but not distributed exactly-once;
 - downstream result persistence must remain idempotent.
 

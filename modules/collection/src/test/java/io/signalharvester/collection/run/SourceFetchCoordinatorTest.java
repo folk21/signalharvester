@@ -14,6 +14,7 @@ import io.signalharvester.configuration.api.SourceType;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,14 +32,14 @@ import org.junit.jupiter.api.Test;
 class SourceFetchCoordinatorTest {
 
     @Test
-    void shouldBoundVirtualThreadWorkersAndPreserveInputOrder() throws Exception {
+    void shouldBoundVirtualThreadFetchesAndAllowCallerToReconstructInputOrder() throws Exception {
         ControlledSourceClient client = new ControlledSourceClient();
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
             SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, virtualThreads);
             List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
 
             CompletableFuture<List<SourceFetchOutcome>> result = CompletableFuture.supplyAsync(
-                    () -> coordinator.fetchAll(sources));
+                    () -> collect(coordinator, sources));
 
             assertTrue(client.awaitStarted(2));
             assertEquals(2, client.startedCount());
@@ -61,6 +62,40 @@ class SourceFetchCoordinatorTest {
     }
 
     @Test
+    void shouldApplyBackpressureUntilCompletedPayloadIsHandled() throws Exception {
+        ControlledSourceClient client = new ControlledSourceClient();
+        CountDownLatch handlerStarted = new CountDownLatch(1);
+        CountDownLatch releaseHandler = new CountDownLatch(1);
+
+        try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, virtualThreads);
+            List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
+
+            CompletableFuture<Void> result = CompletableFuture.runAsync(() -> coordinator.fetchEach(
+                    sources,
+                    (sourceIndex, outcome) -> {
+                        if (sourceIndex == 1) {
+                            handlerStarted.countDown();
+                            await(releaseHandler);
+                        }
+                    }));
+
+            assertTrue(client.awaitStarted(2));
+            client.release("two");
+            assertTrue(handlerStarted.await(2, TimeUnit.SECONDS));
+
+            Thread.sleep(50);
+            assertEquals(2, client.startedCount(), "replacement fetch must wait for terminal handling");
+
+            releaseHandler.countDown();
+            assertTrue(client.awaitStarted(3));
+            client.release("one");
+            client.release("three");
+            result.get(2, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     void shouldContinueQueuedWorkAfterSourceFailure() {
         AtomicInteger started = new AtomicInteger();
         ExternalSourceClient client = source -> {
@@ -73,7 +108,7 @@ class SourceFetchCoordinatorTest {
 
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
             SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 1, virtualThreads);
-            List<SourceFetchOutcome> outcomes = coordinator.fetchAll(List.of(
+            List<SourceFetchOutcome> outcomes = collect(coordinator, List.of(
                     source("one"), source("two"), source("three")));
 
             assertEquals(3, started.get());
@@ -118,7 +153,7 @@ class SourceFetchCoordinatorTest {
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
             SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, virtualThreads);
             CompletableFuture<List<SourceFetchOutcome>> result = CompletableFuture.supplyAsync(
-                    () -> coordinator.fetchAll(List.of(source("blocking"), source("failing"), source("queued"))));
+                    () -> collect(coordinator, List.of(source("blocking"), source("failing"), source("queued"))));
 
             assertTrue(blockingStarted.await(2, TimeUnit.SECONDS));
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
@@ -148,7 +183,7 @@ class SourceFetchCoordinatorTest {
 
             IllegalStateException failure = assertThrows(
                     IllegalStateException.class,
-                    () -> coordinator.fetchAll(List.of(source("one"), source("two"))));
+                    () -> coordinator.fetchEach(List.of(source("one"), source("two")), (index, outcome) -> {}));
 
             assertEquals("programming failure", failure.getMessage());
             assertEquals(1, started.get());
@@ -156,8 +191,9 @@ class SourceFetchCoordinatorTest {
     }
 
     @Test
-    void shouldReturnEmptyBatchWithoutSubmittingWork() {
+    void shouldReturnEmptyBatchWithoutSubmittingOrHandlingWork() {
         AtomicInteger started = new AtomicInteger();
+        AtomicInteger handled = new AtomicInteger();
         ExternalSourceClient client = source -> {
             started.incrementAndGet();
             throw new AssertionError("client must not be invoked");
@@ -166,8 +202,32 @@ class SourceFetchCoordinatorTest {
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
             SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 3, virtualThreads);
 
-            assertTrue(coordinator.fetchAll(List.of()).isEmpty());
+            coordinator.fetchEach(List.of(), (index, outcome) -> handled.incrementAndGet());
+
             assertEquals(0, started.get());
+            assertEquals(0, handled.get());
+        }
+    }
+
+    private static List<SourceFetchOutcome> collect(
+            SourceFetchCoordinator coordinator,
+            List<ConfiguredSource> sources) {
+        SourceFetchOutcome[] outcomes = new SourceFetchOutcome[sources.size()];
+        coordinator.fetchEach(sources, (sourceIndex, outcome) -> outcomes[sourceIndex] = outcome);
+
+        List<SourceFetchOutcome> ordered = new ArrayList<>(outcomes.length);
+        for (int index = 0; index < outcomes.length; index++) {
+            ordered.add(outcomes[index]);
+        }
+        return List.copyOf(ordered);
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("synthetic handler interrupted", interrupted);
         }
     }
 
