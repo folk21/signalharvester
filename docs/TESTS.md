@@ -126,12 +126,13 @@ The first implementation foundation contains:
 - `RawItemKafkaListenerTest` for explicit offset commit after success plus no-commit behavior for processing failure, malformed Protobuf, Kafka key mismatch, and invalid mapped domain data;
 - `KafkaAnalysisEventPublisherTest` for analyzed/rejected topic-key mapping, full provenance serialization, and publication-failure normalization;
 - `AnalysisOutcomeKafkaListenerTest` for Results terminal-event mapping, Kafka key validation, poison-input handling, persistence-failure no-commit behavior, and manual offset commit after successful projection;
-- `ResultsKafkaPostgresIntegrationTest` for real Kafka -> Results listener -> PostgreSQL materialization of analyzed/rejected events, including idempotent retry/upsert behavior and transactional replacement of result tags/attributes;
+- `ResultsKafkaPostgresIntegrationTest` for real Kafka -> Results listener -> PostgreSQL materialization of analyzed/rejected events, including idempotent retry/upsert behavior, transactional replacement of result tags/attributes, and live-cursor advancement only for a new analysis-event identity;
 - `ResultControllerTest` for public Results list/detail HTTP defaults, filters, validation/not-found mapping, stable nullable JSON fields, and blocking Virtual Thread execution;
-- `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, newest-first ordering, bounded limits, ordered tags, attributes, and profile-scoped detail reads;
+- `ResultLiveControllerTest` for SSE ready/result framing, `Last-Event-ID` resume behavior, live filters, cursor validation, and JDBC polling on the blocking Virtual Thread executor;
+- `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, newest-first ordering, bounded limits, ordered tags, attributes, profile-scoped detail reads, durable live polling, and duplicate-analysis-event cursor idempotency;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
-- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> source-test/generic JSON extraction and manual collection -> deterministic HTTP source -> Kafka -> Analysis -> durable collection history and analysis inspection. The source-test branch verifies a disabled persisted JSON source through public HTTP and confirms that diagnostics do not create collection-run history.
+- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> source-test/generic JSON extraction and manual collection -> deterministic HTTP source -> Kafka -> Analysis -> Results -> REST/SSE. The source-test branch verifies a disabled persisted JSON source through public HTTP and confirms that diagnostics do not create collection-run history.
 
 PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, and `modules:analysis`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
 
@@ -147,7 +148,7 @@ raw Kafka input
     -> input offset commit
 ```
 
-The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes and the public Results REST API exposes analyzed state without direct database access. The opt-in live-backend verifier now creates temporary persisted profiles when needed, terminates at Results, and includes a deterministic two-entry RSS fixture mode; the next automated black-box expansion should bring the same Results assertion into the container-backed integration suite.
+The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes, the public Results REST API exposes durable state, and the cross-module smoke test now opens Results SSE before collection and observes the committed analyzed result through that stream. The opt-in live-backend verifier creates temporary persisted profiles when needed, terminates at Results REST, and includes a deterministic two-entry RSS fixture mode.
 
 ## Python tooling tests
 
@@ -162,6 +163,18 @@ Run them directly with:
 
 These tooling tests use deterministic fakes/loopback HTTP only. They do not require Docker, a running backend, or public network access. Actual `tools/live-backend/verify_pipeline.py` execution is a separate manual/live environment check.
 
+
+
+## Results SSE live delivery
+
+Focused validation for the live Results slice:
+
+```bash
+./gradlew :modules:results:test :modules:results:integrationTest --no-watch-fs
+./gradlew :testing:integration-tests:integrationTest --no-watch-fs
+```
+
+Results tests cover durable cursor migration/write semantics, filtered polling, duplicate analysis-event idempotency, SSE framing, browser resume by `Last-Event-ID`, and blocking-executor offload. The cross-module HTTP smoke test opens the SSE stream before collection and waits for the same analyzed result through both SSE and the public Results REST feed.
 
 ## Source testing and generic extraction
 

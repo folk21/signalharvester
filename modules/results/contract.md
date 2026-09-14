@@ -1,7 +1,7 @@
 ---
 type: Module Contract
 title: SignalHarvester module contract — Results
-description: Results persistence/read ownership, asynchronous integration surface, public REST boundary, invariants, and extension rules.
+description: Results persistence/read ownership, asynchronous integration surface, public REST/SSE boundaries, invariants, and extension rules.
 ---
 # SignalHarvester module contract — Results
 
@@ -16,7 +16,8 @@ Own durable user-facing analyzed-result projections and their read boundary, whi
 - materialize analyzed results idempotently;
 - retain rejected source-event outcomes without creating duplicate rows on redelivery;
 - own Results JDBC transactions and PostgreSQL schema;
-- expose bounded read-only REST browsing/detail access over analyzed results.
+- expose bounded read-only REST browsing/detail access over analyzed results;
+- expose resumable browser live delivery over committed analyzed projections through SSE.
 
 ## Public integration surface
 
@@ -29,9 +30,10 @@ None. Results currently has no synchronous functional-module consumer, so no `ap
 The authoritative contract is `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`:
 
 - `GET /api/v1/results` — compact newest-first analyzed-result feed with bounded filters;
-- `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` — detailed profile-scoped analyzed result.
+- `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` — detailed profile-scoped analyzed result;
+- `GET /api/v1/results/stream` — filtered resumable SSE updates over committed analyzed projections.
 
-The REST surface exposes Results-owned response DTOs only. It does not expose JDBC rows, persistence adapters, or generated Protobuf classes.
+The REST/SSE surface exposes Results-owned response DTOs only. It does not expose JDBC rows, persistence adapters, or generated Protobuf classes.
 
 ### Events
 
@@ -46,7 +48,8 @@ PostgreSQL schema `results`, created by `db/migration/results/V4__create_result_
 - `results.analyzed_items` — one current projection per monitoring-profile/logical-item identity;
 - `results.analyzed_item_attributes` — normalized result attributes;
 - `results.analyzed_item_tags` — ordered analysis tags;
-- `results.rejected_items` — terminal rejection records keyed by upstream source-event identity.
+- `results.rejected_items` — terminal rejection records keyed by upstream source-event identity;
+- `results.live_result_cursors` plus `results.live_result_event_id_seq` — one durable monotonic live-delivery cursor per current logical analyzed result.
 
 Other modules must not query or mutate these tables directly.
 
@@ -63,6 +66,12 @@ Do not import Analysis implementation/application/persistence types or read the 
 - analyzed result identity is `(monitoringProfileId, normalizedItemId)`;
 - rejection idempotency identity is `sourceEventId`;
 - repeated terminal publication must not create duplicate logical result rows;
+- redelivery of the same `analysisEventId` must not advance the visible live cursor;
+- a new analysis event for an existing logical result advances its live cursor in the same transaction as the projection update;
+- a fresh SSE connection starts after the current cursor; `Last-Event-ID` resumes after a previously delivered cursor;
+- race-free browser bootstrap opens SSE through `ready` before loading the REST snapshot, then merges buffered/live updates by logical result identity;
+- a resume cursor ahead of current durable state is normalized to the current watermark rather than starving future delivery;
+- live delivery exposes current projections, not an append-only history, so multiple disconnected updates to one logical result may collapse to the latest projection;
 - Kafka offsets are committed only after the Results transaction commits successfully;
 - malformed payloads, key mismatches, and persistence failures leave the consumed offset uncommitted;
 - write and read repositories participate in application-owned JDBC transactions;
@@ -73,4 +82,4 @@ Do not import Analysis implementation/application/persistence types or read the 
 
 ## Extension points
 
-Add SSE/live result delivery over the existing Results-owned read model when required. Add rejected-result operational inspection only for a concrete consumer. Create a published Java `api/` package only if a real synchronous cross-module consumer appears.
+Add rejected-result operational inspection only for a concrete consumer. Extend live delivery only when a concrete requirement needs richer replay semantics than the current bounded current-state cursor model. Create a published Java `api/` package only if a real synchronous cross-module consumer appears.

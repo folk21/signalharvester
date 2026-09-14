@@ -83,6 +83,21 @@ public final class JdbcResultProjectionRepository implements ResultProjectionRep
                 monitoring_profile_id, normalized_item_id, tag_ordinal, tag
             ) VALUES (?, ?, ?, ?)
             """;
+    private static final String UPSERT_LIVE_CURSOR_SQL = """
+            INSERT INTO results.live_result_cursors AS existing (
+                monitoring_profile_id,
+                normalized_item_id,
+                analysis_event_id,
+                live_event_id
+            ) VALUES (?, ?, ?, nextval('results.live_result_event_id_seq'))
+            ON CONFLICT (monitoring_profile_id, normalized_item_id) DO UPDATE SET
+                analysis_event_id = EXCLUDED.analysis_event_id,
+                live_event_id = CASE
+                    WHEN existing.analysis_event_id = EXCLUDED.analysis_event_id
+                        THEN existing.live_event_id
+                    ELSE EXCLUDED.live_event_id
+                END
+            """;
     private static final String UPSERT_REJECTED_SQL = """
             INSERT INTO results.rejected_items (
                 source_event_id,
@@ -124,6 +139,7 @@ public final class JdbcResultProjectionRepository implements ResultProjectionRep
             upsertAnalyzedRow(result);
             replaceAttributes(result);
             replaceTags(result);
+            upsertLiveCursor(result);
         } catch (SQLException | RuntimeException exception) {
             throw new ResultsPersistenceException("Failed to persist analyzed result projection", exception);
         }
@@ -177,6 +193,15 @@ public final class JdbcResultProjectionRepository implements ResultProjectionRep
             statement.setTimestamp(19, Timestamp.from(result.analyzedAt()));
             statement.setString(20, result.correlationId());
             setNullableString(statement, 21, result.traceparent().orElse(null));
+            statement.executeUpdate();
+        }
+    }
+
+    private void upsertLiveCursor(AnalyzedResult result) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(UPSERT_LIVE_CURSOR_SQL)) {
+            statement.setString(1, result.monitoringProfileId());
+            statement.setString(2, result.normalizedItemId());
+            statement.setString(3, result.analysisEventId());
             statement.executeUpdate();
         }
     }

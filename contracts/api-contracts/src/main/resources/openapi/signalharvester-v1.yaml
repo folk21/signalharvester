@@ -391,6 +391,62 @@ paths:
                   $ref: '#/components/schemas/ResultSummary'
         '400':
           description: Invalid result query parameters
+  /api/v1/results/stream:
+    get:
+      tags:
+      - Results
+      operationId: streamResults
+      summary: Stream live analyzed-result updates
+      description: >-
+        Server-Sent Events stream. The server emits named `ready`, `result`, and `keepalive`
+        events. Each event has a numeric `id` cursor and a JSON `data` payload matching
+        ResultLiveEvent. Browser EventSource reconnection resumes from the automatically
+        supplied Last-Event-ID header. A connection without Last-Event-ID starts after the
+        current durable cursor; clients should use GET /api/v1/results for initial browsing.
+        The stream represents current result projections rather than an append-only event history,
+        so repeated updates to one logical result while disconnected may collapse to the latest
+        current projection. A resume cursor ahead of the current database watermark is normalized
+        back to that watermark. For a race-free initial page load, establish the stream and receive
+        `ready` before fetching GET /api/v1/results, buffering later `result` events until the REST
+        snapshot has been applied.
+      parameters:
+      - name: monitoringProfileId
+        in: query
+        schema:
+          type: string
+      - name: sourceId
+        in: query
+        schema:
+          type: string
+      - name: informationCategory
+        in: query
+        schema:
+          type: string
+      - name: relevant
+        in: query
+        schema:
+          type: boolean
+      - name: classification
+        in: query
+        schema:
+          type: string
+      - name: Last-Event-ID
+        in: header
+        required: false
+        description: Last numeric SSE cursor received by the client.
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: Resumable live result stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/ResultLiveEvent'
+        '400':
+          description: Invalid filters or Last-Event-ID cursor
   /api/v1/results/{normalizedItemId}:
     parameters:
     - name: normalizedItemId
@@ -867,6 +923,22 @@ components:
         analyzedAt:
           type: string
           format: date-time
+    ResultLiveEvent:
+      type: object
+      required:
+      - cursor
+      - result
+      properties:
+        cursor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Durable cursor also written to the SSE id field.
+        result:
+          description: Present for `result` events and null for `ready` or `keepalive` events.
+          anyOf:
+          - $ref: '#/components/schemas/ResultSummary'
+          - type: 'null'
     ResultDetail:
       type: object
       required:

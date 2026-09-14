@@ -8,7 +8,10 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.runtime.server.EmbeddedServer;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -40,15 +43,16 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * {@link io.signalharvester.configuration.http.SourceController},
  * {@link io.signalharvester.collection.http.SourceTestController},
  * {@link io.signalharvester.collection.http.CollectionRunController}, and
- * {@link io.signalharvester.analysis.http.AnalysisItemInspectionController} over real PostgreSQL and Kafka.
+ * {@link io.signalharvester.analysis.http.AnalysisItemInspectionController}, and
+ * {@link io.signalharvester.results.http.ResultLiveController} over real PostgreSQL and Kafka.
  *
  * <p>The test drives source creation, diagnostic source testing, repeated collection, durable run history,
- * and analysis inspection only through HTTP. Until a Results read API exists, analysis inspection remains
- * the terminal public observable boundary.</p>
+ * analysis inspection, persisted Results browsing, and live Results SSE only through HTTP.</p>
  *
  * <p>Related specifications: {@code backend-configuration-persistence-rest},
  * {@code backend-collection-run-orchestration}, {@code backend-analysis-normalization-deduplication},
- * {@code backend-operational-admin-api}, and {@code backend-source-test-generic-extraction}.</p>
+ * {@code backend-operational-admin-api}, {@code backend-source-test-generic-extraction},
+ * and {@code backend-results-sse-live-delivery}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class HttpPipelineSmokeIntegrationTest {
@@ -57,6 +61,7 @@ class HttpPipelineSmokeIntegrationTest {
     private static final String ANALYZED_TOPIC = "signalharvester.analysis.item-analyzed.v1.http-smoke";
     private static final String REJECTED_TOPIC = "signalharvester.analysis.item-rejected.v1.http-smoke";
     private static final String ANALYSIS_GROUP = "signalharvester-analysis-http-smoke";
+    private static final String RESULTS_GROUP = "signalharvester-results-http-smoke";
     private static final Pattern SOURCE_ID = Pattern.compile("\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private static final Pattern RUN_ID = Pattern.compile("\\\"collectionRunId\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private static final Pattern RAW_ITEM_ID = Pattern.compile("\\\"rawItemId\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
@@ -141,6 +146,12 @@ class HttpPipelineSmokeIntegrationTest {
         String profileId = extract(SOURCE_ID, createdProfile.body(), "monitoring profile id");
         assertEquals(36, profileId.length());
 
+        HttpResponse<InputStream> liveResponse = openResultStream(profileId);
+        assertEquals(200, liveResponse.statusCode());
+        BufferedReader liveReader = new BufferedReader(new InputStreamReader(liveResponse.body(), StandardCharsets.UTF_8));
+        String readyEvent = readSseUntil(liveReader, "ready", Duration.ofSeconds(5));
+        assertTrue(readyEvent.contains("event:"));
+
         HttpResponse<String> firstRun = startRun(profileId);
         HttpResponse<String> secondRun = startRun(profileId);
         assertEquals(201, firstRun.statusCode());
@@ -181,6 +192,17 @@ class HttpPipelineSmokeIntegrationTest {
         assertEquals(200, inspected.statusCode());
         assertTrue(inspected.body().contains(normalizedItemId));
         assertTrue(inspected.body().contains("\"discoveryCount\":2"));
+
+        String liveEvent;
+        try (InputStream ignored = liveResponse.body()) {
+            liveEvent = readSseUntil(liveReader, normalizedItemId, Duration.ofSeconds(20));
+        }
+        assertTrue(liveEvent.contains("event:result") || liveEvent.contains("event: result"));
+        assertTrue(liveEvent.contains("\"monitoringProfileId\":\"" + profileId + "\""));
+        assertTrue(liveEvent.contains("\"sourceId\":\"" + sourceId + "\""));
+
+        String resultsBody = awaitResultsFeed(profileId, normalizedItemId);
+        assertTrue(resultsBody.contains("\"normalizedItemId\":\"" + normalizedItemId + "\""));
     }
 
     /**
@@ -250,6 +272,52 @@ class HttpPipelineSmokeIntegrationTest {
         throw new AssertionError("Analysis state did not reach discoveryCount=" + discoveryCount + ": " + lastBody);
     }
 
+    private HttpResponse<InputStream> openResultStream(String profileId) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(
+                        backend.getURI().resolve("/api/v1/results/stream?monitoringProfileId=" + profileId))
+                .timeout(Duration.ofSeconds(30))
+                .header("Accept", "text/event-stream")
+                .GET()
+                .build();
+        return client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+    }
+
+    private String awaitResultsFeed(String profileId, String normalizedItemId) throws Exception {
+        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
+        String lastBody = "";
+        while (Instant.now().isBefore(deadline)) {
+            HttpResponse<String> response = send(
+                    "GET", "/api/v1/results?limit=10&monitoringProfileId=" + profileId, null);
+            assertEquals(200, response.statusCode());
+            lastBody = response.body();
+            if (lastBody.contains("\"normalizedItemId\":\"" + normalizedItemId + "\"")) {
+                return lastBody;
+            }
+            Thread.sleep(100);
+        }
+        throw new AssertionError("Results feed did not contain " + normalizedItemId + ": " + lastBody);
+    }
+
+    private static String readSseUntil(BufferedReader reader, String target, Duration timeout) throws Exception {
+        Instant deadline = Instant.now().plus(timeout);
+        StringBuilder received = new StringBuilder();
+        while (Instant.now().isBefore(deadline)) {
+            if (!reader.ready()) {
+                Thread.sleep(10);
+                continue;
+            }
+            String line = reader.readLine();
+            if (line == null) {
+                break;
+            }
+            received.append(line).append('\n');
+            if (line.contains(target)) {
+                return received.toString();
+            }
+        }
+        throw new AssertionError("Timed out waiting for SSE content " + target + ": " + received);
+    }
+
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(backend.getURI().resolve(path))
                 .timeout(Duration.ofSeconds(20));
@@ -292,12 +360,20 @@ class HttpPipelineSmokeIntegrationTest {
                         "org.apache.kafka.common.serialization.StringDeserializer"),
                 Map.entry("kafka.consumers." + ANALYSIS_GROUP + ".value.deserializer",
                         "org.apache.kafka.common.serialization.ByteArrayDeserializer"),
+                Map.entry("kafka.consumers." + RESULTS_GROUP + ".key.deserializer",
+                        "org.apache.kafka.common.serialization.StringDeserializer"),
+                Map.entry("kafka.consumers." + RESULTS_GROUP + ".value.deserializer",
+                        "org.apache.kafka.common.serialization.ByteArrayDeserializer"),
                 Map.entry("signalharvester.kafka.raw-item-discovered-topic", RAW_TOPIC),
                 Map.entry("signalharvester.kafka.item-analyzed-topic", ANALYZED_TOPIC),
                 Map.entry("signalharvester.kafka.item-rejected-topic", REJECTED_TOPIC),
                 Map.entry("signalharvester.analysis.enabled", true),
                 Map.entry("signalharvester.analysis.consumer-group", ANALYSIS_GROUP),
-                Map.entry("signalharvester.results.enabled", false),
+                Map.entry("signalharvester.results.enabled", true),
+                Map.entry("signalharvester.results.consumer-group", RESULTS_GROUP),
+                Map.entry("signalharvester.results.sse.poll-interval", "50ms"),
+                Map.entry("signalharvester.results.sse.keepalive-interval", "1s"),
+                Map.entry("signalharvester.results.sse.reconnect-delay", "100ms"),
                 Map.entry("signalharvester.analysis.keyword-rules.keywords", List.of("java", "kafka", "postgresql")),
                 Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1),
                 Map.entry("signalharvester.collection.max-concurrency", 2),

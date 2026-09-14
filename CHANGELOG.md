@@ -7,6 +7,7 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-14 — Added Results-owned resumable SSE live delivery with durable PostgreSQL cursors, `Last-Event-ID` reconnection, keepalives, and cross-module pipeline coverage.
 - 2026-09-14 — Added persisted-source diagnostic testing plus configuration-driven REST/JSON Pointer and HTML CSS-selector extraction with bounded previews and candidate limits.
 - 2026-09-14 — Added profile-driven manual collection and cluster-safe interval scheduling with collection-owned PostgreSQL leases, lease heartbeats, and UUID-only manual-run requests.
 - 2026-09-14 — Added persisted monitoring-profile configuration with ordered source membership, collection intervals, criteria, REST/OpenAPI CRUD, source-reference protection, and focused regression coverage.

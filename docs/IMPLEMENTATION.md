@@ -23,7 +23,7 @@ Dependency and plugin versions are centralized in `gradle/libs.versions.toml`; t
 
 `app/src/main/java/io/signalharvester/Application.java` is the executable composition root. The application uses the Netty runtime, HTTP port `SIGNALHARVESTER_HTTP_PORT` (default `8080`), and a Virtual-Thread-backed Micronaut blocking executor on the Java 21 baseline.
 
-All currently implemented REST controllers are blocking adapters and use `@ExecuteOn(TaskExecutors.BLOCKING)` for JDBC and synchronous collection work. Future true streaming endpoints such as SSE remain reactive rather than being moved to the blocking executor mechanically.
+Synchronous REST controllers that invoke JDBC or blocking collection work use `@ExecuteOn(TaskExecutors.BLOCKING)`. The Results SSE controller is a true streaming `Publisher` boundary and therefore remains reactive; its PostgreSQL polling is submitted explicitly to the blocking executor rather than running JDBC on the Netty event loop.
 
 ## Current implemented flow
 
@@ -43,7 +43,7 @@ flowchart LR
     RES --> DB4[(results schema)]
 ```
 
-Terminal analysis events are materialized by `modules:results` and exposed through the bounded public `/api/v1/results` read API.
+Terminal analysis events are materialized by `modules:results` and exposed through the bounded public `/api/v1/results` REST API plus `/api/v1/results/stream` SSE live delivery.
 
 ## Configuration module
 
@@ -91,7 +91,9 @@ See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../mo
 
 The Results listener disables automatic Kafka commit and commits the consumed offset only after the Results transaction completes. This is an at-least-once/idempotent-consumer model, not distributed exactly-once processing.
 
-`ResultQueryService` owns short read-only JDBC transactions for the public Results API. `GET /api/v1/results` exposes a bounded recent-result feed with profile/source/category/relevance/classification/time filters without returning large normalized content, while `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` returns the detailed content, attributes, tags, and provenance for one profile-scoped logical result. SSE/live delivery remains pending.
+`ResultQueryService` owns short read-only JDBC transactions for the public Results REST API. `GET /api/v1/results` exposes a bounded recent-result feed with profile/source/category/relevance/classification/time filters without returning large normalized content, while `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` returns the detailed content, attributes, tags, and provenance for one profile-scoped logical result.
+
+`GET /api/v1/results/stream` exposes Results-owned Server-Sent Events. `V8` adds one durable live cursor per current logical result. The cursor advances transactionally when a new `analysisEventId` updates the projection and remains unchanged for redelivery of the same analysis event. Fresh SSE connections receive a `ready` cursor and then later changes; browser reconnection resumes from `Last-Event-ID`. The cursor table stores current projections rather than an append-only update history, so disconnected updates to one logical result may collapse to the latest projection. Resume cursors ahead of current durable state are normalized to the current watermark. JDBC polling runs on the blocking executor while the controller remains a streaming `Publisher` boundary. Because the cursor table is shared PostgreSQL state, the Kafka consumer and SSE client may be served by different backend replicas.
 
 See [`../modules/results/README.md`](../modules/results/README.md) and [`../modules/results/contract.md`](../modules/results/contract.md).
 
@@ -101,7 +103,7 @@ See [`../modules/results/README.md`](../modules/results/README.md) and [`../modu
 
 ## External contracts
 
-The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source and monitoring-profile CRUD, diagnostic persisted-source testing, profile-driven manual collection-run/history operations, analysis inspection, and public Results browsing/detail queries.
+The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source and monitoring-profile CRUD, diagnostic persisted-source testing, profile-driven manual collection-run/history operations, analysis inspection, and public Results browsing/detail queries and resumable Results SSE delivery.
 
 The authoritative Kafka schemas are versioned `.proto` files under `contracts/event-contracts/src/main/proto/`:
 
@@ -118,7 +120,7 @@ Generated Protobuf Java classes are build output and remain transport types at K
 
 Configuration, analysis, collection, and results currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
 
-Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, and so on) unless the Flyway topology is deliberately changed later.
+Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, `V6` configuration profiles, `V7` collection scheduling, and `V8` Results live cursors) unless the Flyway topology is deliberately changed later.
 
 Direct cross-module table access remains forbidden.
 
@@ -144,7 +146,6 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 ## Known limitations
 
 - cron/calendar scheduling and missed-interval catch-up are not implemented; interval scheduling is implemented;
-- no result SSE/live-update API;
 - no cursor/full-text result search beyond bounded REST filters;
 - no outbound SSRF/network-destination policy; source management must remain trusted until one is defined;
 - no event-observation persistence/API;
