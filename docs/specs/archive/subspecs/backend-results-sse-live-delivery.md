@@ -3,14 +3,14 @@ type: Specification
 title: Backend Results SSE live delivery
 description: Add cluster-safe, resumable Server-Sent Events delivery over committed Results projections.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend Results SSE live delivery
 
 ## Status
 
-Verification pending — implementation is present and awaits the developer `./run_checks.sh` acceptance run.
+Completed and verified by the developer through the canonical `./run_checks.sh` repository gate.
 
 ## Goal
 

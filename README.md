@@ -99,9 +99,11 @@ The first implementation foundation is present:
 - a first operational admin API for manual collection runs, durable run/source outcome history, and read-only normalized-item inspection;
 - Results-owned PostgreSQL materialization of `ItemAnalyzed` and `ItemRejected` with idempotent at-least-once Kafka consumption;
 - a bounded public Results REST API for recent feed browsing and profile-scoped result detail;
-- Results-owned resumable SSE live delivery backed by durable PostgreSQL cursors and browser `Last-Event-ID` reconnection.
+- Results-owned resumable SSE live delivery backed by durable PostgreSQL cursors and browser `Last-Event-ID` reconnection;
+- event-observation persistence over published raw/analyzed/rejected Kafka events, with bounded diagnostic history plus REST/SSE Event Explorer APIs;
+- bounded collection-run and item processing-flow reconstruction with explicit observed, derived, and unobserved stage evidence.
 
-Event observation, stronger cross-DB/Kafka consistency, Kubernetes deployment, and the production observability stack are still planned work. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
+Stronger cross-DB/Kafka consistency, Kubernetes deployment, and the production observability stack are still planned work. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

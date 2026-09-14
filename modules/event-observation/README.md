@@ -1,21 +1,25 @@
 ---
 type: Module Overview
 title: SignalHarvester event observation module
-description: Developer entry point for the planned technical event-observation capability.
+description: Developer entry point for the bounded technical Event Explorer backend.
 ---
 # SignalHarvester event observation module
 
-For planned ownership, dependency constraints, invariants, and future integration boundaries, read [`contract.md`](contract.md) first.
+Read [`contract.md`](contract.md) first for authoritative ownership and integration boundaries.
 
 ## Current implementation
 
-Only the Gradle/source skeleton exists. Event-history projections, correlation/flow reconstruction, browser-facing diagnostic APIs, and SSE behavior are not implemented yet.
+The module observes the currently published `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` Protobuf event families through its own Kafka consumer group. It records selected decoded metadata in the `event_observation` PostgreSQL schema with event-id idempotency and configurable count/age retention.
 
-Future implementation should consume published event contracts and expose observation-owned projections; it must not become a backdoor into other modules' implementation packages or private tables. The authoritative rule is defined in [`contract.md`](contract.md).
+`GET /api/v1/events` provides bounded history filters for event type, producer, topic, correlation/collection run, item identity, and trace id. `GET /api/v1/events/stream` provides `ready`, `event`, and `keepalive` SSE messages with durable numeric observation cursors and `Last-Event-ID` resume.
+
+The diagnostic projection intentionally excludes large raw and normalized content bodies. It is not a source of truth for business modules and it does not replace distributed tracing or the Kafka log.
+
+`GET /api/v1/flows/collection-runs/{collectionRunId}` reconstructs a bounded run graph, and `/api/v1/flows/collection-runs/{collectionRunId}/items/{itemId}` reconstructs one raw/normalized item branch within that run. Graph stages explicitly mark evidence as observed, Kafka-observed, derived, or not observed. Results persistence is currently shown as `NOT_OBSERVED` rather than inferred as successful.
 
 ## Read next
 
-- [`contract.md`](contract.md) — authoritative module boundary and integration map
+- [`contract.md`](contract.md) — authoritative module boundary and invariants
+- [`../../docs/specs/active/subspecs/backend-processing-flow-reconstruction.md`](../../docs/specs/active/subspecs/backend-processing-flow-reconstruction.md) — active processing-flow acceptance
 - [`../AGENTS.md`](../AGENTS.md) — shared module-development rules
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) — system architecture
-- [`../../docs/specs/active/subspecs/backend-project-structure.md`](../../docs/specs/active/subspecs/backend-project-structure.md) — remaining structural acceptance work

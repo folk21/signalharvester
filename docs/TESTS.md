@@ -33,7 +33,7 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 2. optional `git diff --check` when running inside a Git worktree;
 3. `./tools/source-import/run_tests.sh` and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
 4. `./gradlew clean check --no-watch-fs`;
-5. `./gradlew integrationTest --no-watch-fs`;
+5. `./gradlew integrationTest --no-watch-fs --no-parallel`;
 6. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
 
 The script prints a final PASS/FAIL summary of every routine verification step that actually ran and lists the relevant test/problems report locations. Use focused Gradle commands during development, but run `./run_checks.sh` before treating a substantial PATCH or branch as functionally verified. Slower coverage/static/dependency analysis and repository-size metrics run through `./run_rare_checks.sh`; quality-tool policy and report ownership are documented in [`QUALITY.md`](QUALITY.md).
@@ -49,7 +49,7 @@ Container-backed integration tests live in dedicated `src/integrationTest` sourc
 Run all container-backed and cross-module integration tests explicitly:
 
 ```bash
-./gradlew integrationTest
+./gradlew integrationTest --no-watch-fs --no-parallel
 ```
 
 Focused commands follow the same source-set split:
@@ -75,6 +75,8 @@ When adding integration coverage, place it under `src/integrationTest/java` (and
 ## Integration infrastructure
 
 `modules:configuration` uses PostgreSQL Testcontainers for its persistence/server boundary. `modules:collection` uses Kafka Testcontainers for its producer/consumer transport boundary. `modules:analysis` uses PostgreSQL Testcontainers for durable deduplication. `modules:results` uses PostgreSQL + Kafka Testcontainers for real terminal-event consumption and idempotent projection persistence. `testing:integration-tests` uses PostgreSQL + Kafka Testcontainers together for collection-run and collection-to-analysis flows. Container-backed tests require a supported Docker-compatible runtime.
+
+The repository intentionally disables Gradle project parallelism for the full `integrationTest` suite. Several modules start PostgreSQL and Kafka Testcontainers, and launching those project tasks concurrently can overload developer Docker runtimes and cause container readiness timeouts. This does not disable parallelism for the normal `clean check` phase.
 
 External HTTP sources must be deterministic local/fake servers controlled by tests. Blocking HTTP/controller tests must also verify that work is offloaded from Netty event-loop threads when that execution boundary is implemented.
 
@@ -130,11 +132,17 @@ The first implementation foundation contains:
 - `ResultControllerTest` for public Results list/detail HTTP defaults, filters, validation/not-found mapping, stable nullable JSON fields, and blocking Virtual Thread execution;
 - `ResultLiveControllerTest` for SSE ready/result framing, `Last-Event-ID` resume behavior, live filters, cursor validation, and JDBC polling on the blocking Virtual Thread executor;
 - `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, newest-first ordering, bounded limits, ordered tags, attributes, profile-scoped detail reads, durable live polling, and duplicate-analysis-event cursor idempotency;
+- `EventObservationMapperTest` for decoded human-readable metadata across the current raw/analyzed/rejected Protobuf event families without copying large content bodies;
+- `EventObservationControllerTest` for bounded Event Explorer REST filters, decoded JSON shape, validation, and blocking Virtual Thread execution;
+- `EventObservationLiveControllerTest` for `ready`/`event` SSE framing, `Last-Event-ID` resume, technical filters, cursor validation, and blocking-query offload;
+- `ProcessingFlowServiceTest` for analyzed, duplicate, in-progress, partial-history, and run-scoped item graph reconstruction with explicit evidence levels;
+- `ProcessingFlowControllerTest` for collection-run/item graph routes, stable JSON shape, 404 mapping, and blocking Virtual Thread execution;
+- `EventObservationKafkaPostgresIntegrationTest` for real Kafka -> Event Observation -> PostgreSQL decoding, event-id idempotency, selected diagnostics, and count-bounded retention;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
-- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> source-test/generic JSON extraction and manual collection -> deterministic HTTP source -> Kafka -> Analysis -> Results -> REST/SSE. The source-test branch verifies a disabled persisted JSON source through public HTTP and confirms that diagnostics do not create collection-run history.
+- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> source-test/generic JSON extraction and manual collection -> deterministic HTTP source -> Kafka -> Analysis -> Results -> REST/SSE plus decoded Event Observation history and run-scoped processing-flow reconstruction. The source-test branch verifies a disabled persisted JSON source through public HTTP and confirms that diagnostics do not create collection-run history.
 
-PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, and `modules:analysis`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
+PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, `modules:analysis`, `modules:results`, and `modules:event-observation`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
 
 ## Trial-readiness regression gate
 
@@ -148,7 +156,7 @@ raw Kafka input
     -> input offset commit
 ```
 
-The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes, the public Results REST API exposes durable state, and the cross-module smoke test now opens Results SSE before collection and observes the committed analyzed result through that stream. The opt-in live-backend verifier creates temporary persisted profiles when needed, terminates at Results REST, and includes a deterministic two-entry RSS fixture mode.
+The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes, the public Results REST API exposes durable state, and the cross-module smoke test opens Results SSE before collection and observes the committed analyzed result through that stream. The same smoke test also waits for Event Observation to expose decoded raw and analyzed events through the public technical-history REST API. The opt-in live-backend verifier creates temporary persisted profiles when needed, terminates at Results REST, and includes a deterministic two-entry RSS fixture mode.
 
 ## Python tooling tests
 
@@ -164,6 +172,17 @@ Run them directly with:
 These tooling tests use deterministic fakes/loopback HTTP only. They do not require Docker, a running backend, or public network access. Actual `tools/live-backend/verify_pipeline.py` execution is a separate manual/live environment check.
 
 
+
+## Event Observation and processing flows
+
+Focused validation for bounded technical event history, SSE, and flow reconstruction:
+
+```bash
+./gradlew :modules:event-observation:test :modules:event-observation:integrationTest --no-watch-fs
+./gradlew :testing:integration-tests:integrationTest --no-watch-fs
+```
+
+Event Observation tests cover decoding of every currently published event family, event-id idempotency, age/count retention behavior, REST filters, resumable SSE framing, blocking-query offload, and deterministic processing-flow reconstruction. The cross-module HTTP smoke test verifies that raw and analyzed pipeline events become available through the public decoded history API and can be reconstructed into a run-scoped item flow without browser-side Kafka, Protobuf, or PostgreSQL access.
 
 ## Results SSE live delivery
 
@@ -193,7 +212,7 @@ Focused validation for the manual-run/history and analysis-inspection slice:
 
 ```bash
 ./gradlew :modules:collection:test :modules:analysis:test :app:test --no-watch-fs
-./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs
+./gradlew :modules:collection:integrationTest :modules:analysis:integrationTest :testing:integration-tests:integrationTest --no-watch-fs --no-parallel
 ```
 
 Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP coverage now verifies source CRUD plus the collection-admin and analysis-inspection endpoints, including validation/status mapping and blocking Virtual Thread execution. The operational-admin slice has completed its focused Gradle and container-backed verification and its spec is archived; these commands remain useful targeted regressions.

@@ -23,7 +23,7 @@ Dependency and plugin versions are centralized in `gradle/libs.versions.toml`; t
 
 `app/src/main/java/io/signalharvester/Application.java` is the executable composition root. The application uses the Netty runtime, HTTP port `SIGNALHARVESTER_HTTP_PORT` (default `8080`), and a Virtual-Thread-backed Micronaut blocking executor on the Java 21 baseline.
 
-Synchronous REST controllers that invoke JDBC or blocking collection work use `@ExecuteOn(TaskExecutors.BLOCKING)`. The Results SSE controller is a true streaming `Publisher` boundary and therefore remains reactive; its PostgreSQL polling is submitted explicitly to the blocking executor rather than running JDBC on the Netty event loop.
+Synchronous REST controllers that invoke JDBC or blocking collection work use `@ExecuteOn(TaskExecutors.BLOCKING)`. The Results and Event Observation SSE controllers are true streaming `Publisher` boundaries and therefore remain reactive; their PostgreSQL polling is submitted explicitly to the blocking executor rather than running JDBC on the Netty event loop.
 
 ## Current implemented flow
 
@@ -99,11 +99,17 @@ See [`../modules/results/README.md`](../modules/results/README.md) and [`../modu
 
 ## Event observation
 
-`modules:event-observation` still contains only its module/build skeleton and boundary contract. Durable event observation and Event Explorer backend support are not implemented. See [`../modules/event-observation/contract.md`](../modules/event-observation/contract.md).
+`modules:event-observation` consumes the published `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` topics through its own Kafka consumer group. Generated Protobuf messages remain confined to the Kafka adapter and are decoded into an observation-owned diagnostic model before persistence.
+
+PostgreSQL schema `event_observation` is created by `V9__create_event_observation_history.sql`. `observed_events` stores event/envelope identity, Kafka topic/partition/offset/key, correlation and trace metadata, source/profile/item provenance, and selected human-readable payload diagnostics. Large raw/normalized content bodies are intentionally excluded. Event identity is unique, so Kafka redelivery is idempotent. Retention is enforced by configurable maximum age and maximum row count in the same application transaction as recording.
+
+`GET /api/v1/events` exposes bounded technical history filters. `GET /api/v1/events/stream` exposes durable `ready`, `event`, and `keepalive` SSE cursors with `Last-Event-ID` resume. `GET /api/v1/flows/collection-runs/{collectionRunId}` and the run-scoped item variant reconstruct deterministic processing graphs on read from retained observation rows. Flow nodes state whether evidence is directly observed, derived from current event semantics, or not observed. Raw-to-terminal branches use the published terminal `sourceEventId`, so repeated logical content remains separated by discovery event. Results persistence is currently represented as an expected `NOT_OBSERVED` stage rather than being claimed as completed. Observation state and reconstructed graphs are diagnostic materialization only and are not authoritative for business modules.
+
+See [`../modules/event-observation/README.md`](../modules/event-observation/README.md) and [`../modules/event-observation/contract.md`](../modules/event-observation/contract.md).
 
 ## External contracts
 
-The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source and monitoring-profile CRUD, diagnostic persisted-source testing, profile-driven manual collection-run/history operations, analysis inspection, and public Results browsing/detail queries and resumable Results SSE delivery.
+The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source and monitoring-profile CRUD, diagnostic persisted-source testing, profile-driven manual collection-run/history operations, analysis inspection, public Results browsing/detail queries and resumable Results SSE delivery, plus bounded Event Explorer history, live technical-event SSE, and reconstructed processing-flow graphs.
 
 The authoritative Kafka schemas are versioned `.proto` files under `contracts/event-contracts/src/main/proto/`:
 
@@ -118,9 +124,9 @@ Generated Protobuf Java classes are build output and remain transport types at K
 
 ## Persistence and Flyway
 
-Configuration, analysis, collection, and results currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
+Configuration, analysis, collection, results, and event observation currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
 
-Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, `V6` configuration profiles, `V7` collection scheduling, and `V8` Results live cursors) unless the Flyway topology is deliberately changed later.
+Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, `V6` configuration profiles, `V7` collection scheduling, `V8` Results live cursors, and `V9` event-observation history) unless the Flyway topology is deliberately changed later.
 
 Direct cross-module table access remains forbidden.
 
@@ -148,7 +154,7 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 - cron/calendar scheduling and missed-interval catch-up are not implemented; interval scheduling is implemented;
 - no cursor/full-text result search beyond bounded REST filters;
 - no outbound SSRF/network-destination policy; source management must remain trusted until one is defined;
-- no event-observation persistence/API;
+- processing-flow reconstruction cannot prove Results persistence until an observation signal exists for that stage;
 - no OpenTelemetry instrumentation;
 - no Kubernetes deployment or production observability stack;
 - no cross-resource exactly-once guarantee between PostgreSQL and Kafka;

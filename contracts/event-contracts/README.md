@@ -34,3 +34,7 @@ Gradle generates Java transport classes from these sources. Contract tests verif
 
 - [`AGENTS.md`](AGENTS.md)
 - [`../../docs/specs/active/subspecs/backend-event-contracts.md`](../../docs/specs/active/subspecs/backend-event-contracts.md)
+
+## Event Explorer decoding
+
+`modules:event-observation` consumes the published raw/analyzed/rejected contracts through an independent Kafka group and maps selected fields into browser-facing JSON diagnostics. Generated Protobuf classes remain confined to the Kafka adapter boundary; REST/SSE do not expose them directly.

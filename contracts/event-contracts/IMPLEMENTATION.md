@@ -58,11 +58,10 @@ The module uses the Gradle Protobuf plugin and a pinned `protoc` version from th
 
 `RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` verify representative Protobuf serialization/deserialization and preservation/tolerance of unknown additive fields.
 
-Collection provides the real `RawItemDiscovered` producer adapter. Analysis provides the first real consumer plus `ItemAnalyzed`/`ItemRejected` producers. Kafka/Testcontainers integration coverage exercises the byte-serialized flow across these boundaries.
+Collection provides the real `RawItemDiscovered` producer adapter. Analysis provides the first real consumer plus `ItemAnalyzed`/`ItemRejected` producers. Event Observation consumes all three published event families through an independent Kafka consumer group and decodes them into its own diagnostic read model. Kafka/Testcontainers integration coverage exercises the byte-serialized flow across these boundaries and verifies representative Event Explorer decoding.
 
 ## Current limitations
 
-- event observation does not decode these contracts yet;
 - no Schema Registry is configured;
 - results event schemas are not implemented yet;
 - compatibility fixtures for an evolved published schema are not implemented yet.
