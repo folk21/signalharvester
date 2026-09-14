@@ -9,7 +9,7 @@ set -eu
 # - ./tools/source-import/run_tests.sh
 # - ./tools/live-backend/run_tests.sh
 # - ./gradlew clean check --no-watch-fs
-# - ./gradlew integrationTest --no-watch-fs (container-backed module tests + cross-module HTTP smoke)
+# - ./gradlew integrationTest --no-watch-fs --no-parallel (container-backed module tests + cross-module HTTP smoke)
 # - ./archive.sh <temporary FULL archive>
 # - FULL archive content/cleanliness validation with unzip/grep
 #   Report: build/reports/verification/archive-cleanliness.txt
@@ -165,7 +165,7 @@ fi
 run_step "./tools/source-import/run_tests.sh" ./tools/source-import/run_tests.sh
 run_step "./tools/live-backend/run_tests.sh" ./tools/live-backend/run_tests.sh
 run_step "./gradlew clean check --no-watch-fs" run_gradle clean check --no-watch-fs
-run_step "./gradlew integrationTest --no-watch-fs" run_gradle integrationTest --no-watch-fs
+run_step "./gradlew integrationTest --no-watch-fs --no-parallel" run_gradle integrationTest --no-watch-fs --no-parallel
 
 mkdir -p "$REPORT_DIR"
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/signalharvester-checks.XXXXXX")

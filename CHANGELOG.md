@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-14 — Serialized the repository-wide container-backed `integrationTest` Gradle phase to avoid Docker resource contention and Testcontainers readiness timeouts while keeping normal `clean check` parallelism enabled.
+- 2026-09-14 — Added bounded processing-flow reconstruction for collection runs and run-scoped items, with explicit evidence levels, stable lineage by `sourceEventId`, diagnostic graph metadata, and public REST/OpenAPI coverage.
 - 2026-09-14 — Added bounded event-observation persistence over published raw/analyzed/rejected Kafka events, with decoded diagnostics, retention, REST filtering, and resumable Event Explorer SSE.
 - 2026-09-14 — Added Results-owned resumable SSE live delivery with durable PostgreSQL cursors, `Last-Event-ID` reconnection, keepalives, and cross-module pipeline coverage.
 - 2026-09-14 — Added persisted-source diagnostic testing plus configuration-driven REST/JSON Pointer and HTML CSS-selector extraction with bounded previews and candidate limits.

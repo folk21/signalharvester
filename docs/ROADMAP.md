@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-The first real-source vertical slice including Results REST/SSE is verified. The current backend focus is bounded event observation under [`specs/active/subspecs/backend-event-observation.md`](specs/active/subspecs/backend-event-observation.md). The following slice is processing-flow correlation/reconstruction for the Event Explorer.
+The first real-source vertical slice, Results REST/SSE, and bounded Event Observation are verified. The current backend focus is processing-flow reconstruction under [`specs/active/subspecs/backend-processing-flow-reconstruction.md`](specs/active/subspecs/backend-processing-flow-reconstruction.md). After this slice, the companion UI can consume the complete Event Explorer history/live/graph backend surface in one frontend pass.
 
 ## P0 — repository and contract foundation
 
@@ -44,4 +44,4 @@ The first real-source vertical slice including Results REST/SSE is verified. The
 - LLM/embedding analysis as a required core dependency.
 
 
-The backend now provides source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results REST/SSE, and technical Event Explorer history/SSE. The next backend milestone is processing-flow reconstruction; the companion UI can consume the existing contracts independently.
+The backend now provides source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results REST/SSE, technical Event Explorer history/SSE, and processing-flow reconstruction. The next product milestone is a frontend pass over these accepted backend contracts before deeper deployment/observability work.

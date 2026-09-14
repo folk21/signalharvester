@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: SignalHarvester Backend API
   version: 0.1.0
-  description: Public HTTP contract for SignalHarvester configuration, results, event observation, and operational
+  description: Public HTTP contract for SignalHarvester configuration, results, event observation, processing-flow, and operational
     APIs.
 tags:
 - name: Sources
@@ -17,6 +17,8 @@ tags:
   description: Read-only browsing of durable analyzed results.
 - name: Event Observation
   description: Bounded technical event history and live Event Explorer delivery.
+- name: Processing Flows
+  description: Reconstructed collection-run and item processing graphs for the Event Explorer.
 paths:
   /api/v1/sources:
     get:
@@ -453,6 +455,62 @@ paths:
                 $ref: '#/components/schemas/ObservedEventLiveEvent'
         '400':
           description: Invalid filters or Last-Event-ID cursor
+  /api/v1/flows/collection-runs/{collectionRunId}:
+    get:
+      tags:
+      - Processing Flows
+      operationId: getCollectionRunProcessingFlow
+      summary: Reconstruct a processing graph for one collection run
+      description: >-
+        Builds a bounded diagnostic graph from retained Event Observation history. Each node states whether
+        its evidence is directly observed, derived from a published event, or currently not observed.
+      parameters:
+      - name: collectionRunId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Reconstructed collection-run processing graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessingFlow'
+        '404':
+          description: No retained technical events exist for the collection run
+  /api/v1/flows/collection-runs/{collectionRunId}/items/{itemId}:
+    get:
+      tags:
+      - Processing Flows
+      operationId: getItemProcessingFlow
+      summary: Reconstruct one item branch within a collection run
+      description: >-
+        The item identifier may be a raw or normalized item id. Collection-run scoping prevents repeated
+        logical items from different runs from being merged into one graph.
+      parameters:
+      - name: collectionRunId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Reconstructed item processing graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessingFlow'
+        '404':
+          description: No retained technical events exist for the selected item in the collection run
   /api/v1/results:
     get:
       tags:
@@ -1068,6 +1126,118 @@ components:
           anyOf:
           - $ref: '#/components/schemas/ObservedEvent'
           - type: 'null'
+    ProcessingFlowKafkaMetadata:
+      type: object
+      required: [topic, partition, offset, key]
+      properties:
+        topic: {type: string}
+        partition: {type: integer, minimum: 0}
+        offset: {type: integer, format: int64, minimum: 0}
+        key: {type: string}
+    ProcessingFlowNode:
+      type: object
+      required:
+      - id
+      - branchId
+      - stage
+      - status
+      - evidence
+      - occurredAt
+      - eventId
+      - eventType
+      - producer
+      - traceparent
+      - sourceEventId
+      - rawItemId
+      - normalizedItemId
+      - sourceId
+      - monitoringProfileId
+      - outcome
+      - score
+      - kafka
+      properties:
+        id: {type: string}
+        branchId:
+          type: string
+          description: Published raw discovery event id that owns this item branch.
+        stage:
+          type: string
+          enum: [EXTERNAL_SOURCE, COLLECTION, RAW_KAFKA, NORMALIZATION, DEDUPLICATION, ANALYSIS, TERMINAL_KAFKA, RESULTS_PERSISTENCE]
+        status:
+          type: string
+          enum: [REACHED, COMPLETED, PUBLISHED, PASSED, REJECTED, SKIPPED, UNKNOWN]
+        evidence:
+          type: string
+          enum: [OBSERVED_EVENT, OBSERVED_KAFKA_METADATA, DERIVED_FROM_EVENT, NOT_OBSERVED]
+        occurredAt: {type: [string, 'null'], format: date-time}
+        eventId: {type: [string, 'null']}
+        eventType: {type: [string, 'null']}
+        producer: {type: [string, 'null']}
+        traceparent: {type: [string, 'null']}
+        sourceEventId: {type: [string, 'null']}
+        rawItemId: {type: [string, 'null']}
+        normalizedItemId: {type: [string, 'null']}
+        sourceId: {type: [string, 'null']}
+        monitoringProfileId: {type: [string, 'null']}
+        outcome: {type: [string, 'null']}
+        score: {type: [integer, 'null']}
+        kafka:
+          anyOf:
+          - $ref: '#/components/schemas/ProcessingFlowKafkaMetadata'
+          - type: 'null'
+    ProcessingFlowEdge:
+      type: object
+      required: [from, to, kind, durationMs]
+      properties:
+        from: {type: string}
+        to: {type: string}
+        kind:
+          type: string
+          enum: [PROCESSING, PUBLICATION, ASYNC_PROCESSING, EXPECTED_PERSISTENCE]
+        durationMs:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+    ProcessingFlow:
+      type: object
+      required:
+      - scope
+      - collectionRunId
+      - itemId
+      - state
+      - observedEventCount
+      - traceIds
+      - nodes
+      - edges
+      - limitations
+      properties:
+        scope:
+          type: string
+          enum: [COLLECTION_RUN, ITEM]
+        collectionRunId: {type: string}
+        itemId: {type: [string, 'null']}
+        state:
+          type: string
+          enum: [TERMINAL_EVENT_REACHED, IN_PROGRESS, PARTIAL_HISTORY]
+        observedEventCount:
+          type: integer
+          minimum: 1
+        traceIds:
+          type: array
+          items: {type: string}
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcessingFlowNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcessingFlowEdge'
+        limitations:
+          type: array
+          items:
+            type: string
+            enum: [HISTORY_QUERY_LIMIT_REACHED, MISSING_RAW_DISCOVERY, RESULTS_PERSISTENCE_NOT_OBSERVED]
     ResultSummary:
       type: object
       required:

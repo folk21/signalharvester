@@ -95,7 +95,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-event-observation.md`](active/subspecs/backend-event-observation.md) — bounded decoded technical event history plus Event Explorer REST/SSE delivery.
+- [`active/subspecs/backend-processing-flow-reconstruction.md`](active/subspecs/backend-processing-flow-reconstruction.md) — bounded collection-run and item flow graphs reconstructed from Event Observation evidence.
 
 Active supporting tracks:
 
@@ -104,6 +104,7 @@ Active supporting tracks:
 
 ## Recently completed sub-specifications
 
+- [`archive/subspecs/backend-event-observation.md`](archive/subspecs/backend-event-observation.md) — bounded decoded technical event history plus Event Explorer REST/SSE delivery, verified in the developer environment;
 - [`archive/subspecs/backend-results-sse-live-delivery.md`](archive/subspecs/backend-results-sse-live-delivery.md) — cluster-safe resumable SSE delivery over committed Results projections, verified in the developer environment;
 - [`archive/subspecs/backend-source-test-generic-extraction.md`](archive/subspecs/backend-source-test-generic-extraction.md) — diagnostic persisted-source testing plus configuration-driven REST/JSON and HTML extraction, verified in the developer environment;
 - [`archive/subspecs/backend-profile-driven-scheduling.md`](archive/subspecs/backend-profile-driven-scheduling.md) — profile-owned manual execution and cluster-safe interval scheduling, verified in the developer environment;
@@ -123,7 +124,6 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
-- processing-flow reconstruction for the technical Event Explorer;
 - Kubernetes deployment and observability;
 - integration/system testing hardening.
 

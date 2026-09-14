@@ -201,6 +201,20 @@ curl -N -H 'Accept: text/event-stream' \
 
 A fresh connection receives `ready` and then later `event` updates. `keepalive` events keep idle connections active. Browser reconnection uses `Last-Event-ID`. For a race-free initial Event Explorer load, establish SSE and receive `ready` before loading the REST history snapshot, buffer later `event` messages until that snapshot is applied, and then merge the buffered/live events by `eventId`. Event history is diagnostic and retention-bounded; a cursor older than retained history can recover only events that still exist.
 
+Reconstruct the application-level processing graph for a collection run:
+
+```bash
+curl 'http://localhost:8080/api/v1/flows/collection-runs/<COLLECTION_RUN_ID>'
+```
+
+Reconstruct one raw or normalized item branch inside that run:
+
+```bash
+curl 'http://localhost:8080/api/v1/flows/collection-runs/<COLLECTION_RUN_ID>/items/<ITEM_ID>'
+```
+
+Flow nodes state their evidence level. `OBSERVED_EVENT` and `OBSERVED_KAFKA_METADATA` are backed directly by retained technical events. `DERIVED_FROM_EVENT` is inferred from the current published event semantics. `NOT_OBSERVED` means the backend intentionally cannot prove that stage from Event Observation data. Results persistence currently appears as `NOT_OBSERVED`; the graph does not claim completion merely because a terminal Analysis event was published.
+
 ## Run tests and repository checks
 
 Run the complete repository verification gate with:
@@ -216,6 +230,5 @@ It runs the default Gradle verification, all container-backed integration tests,
 As the first vertical slice grows, this document will add commands for:
 
 - cron/calendar scheduling and historical missed-interval catch-up;
-- visual processing-flow reconstruction.
 
 Do not duplicate UI installation or user-interface instructions here.

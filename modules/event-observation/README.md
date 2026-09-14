@@ -15,11 +15,11 @@ The module observes the currently published `RawItemDiscovered`, `ItemAnalyzed`,
 
 The diagnostic projection intentionally excludes large raw and normalized content bodies. It is not a source of truth for business modules and it does not replace distributed tracing or the Kafka log.
 
-Flow graph reconstruction is the next Event Explorer backend increment.
+`GET /api/v1/flows/collection-runs/{collectionRunId}` reconstructs a bounded run graph, and `/api/v1/flows/collection-runs/{collectionRunId}/items/{itemId}` reconstructs one raw/normalized item branch within that run. Graph stages explicitly mark evidence as observed, Kafka-observed, derived, or not observed. Results persistence is currently shown as `NOT_OBSERVED` rather than inferred as successful.
 
 ## Read next
 
 - [`contract.md`](contract.md) — authoritative module boundary and invariants
-- [`../../docs/specs/active/subspecs/backend-event-observation.md`](../../docs/specs/active/subspecs/backend-event-observation.md) — active implementation acceptance
+- [`../../docs/specs/active/subspecs/backend-processing-flow-reconstruction.md`](../../docs/specs/active/subspecs/backend-processing-flow-reconstruction.md) — active processing-flow acceptance
 - [`../AGENTS.md`](../AGENTS.md) — shared module-development rules
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) — system architecture

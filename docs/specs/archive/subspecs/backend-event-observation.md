@@ -4,13 +4,13 @@ title: SignalHarvester backend event observation
 description: Durable bounded technical event history plus REST/SSE support for the Event Explorer.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # SignalHarvester backend event observation
 
 ## Status
 
-Verification pending — implementation is present; developer `./run_checks.sh` acceptance is still required.
+Completed and verified by the developer through the canonical `./run_checks.sh` repository gate.
 
 ## Goal
 

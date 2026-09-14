@@ -64,7 +64,7 @@ Results also owns the public read-only `/api/v1/results` REST boundary. Feed que
 
 Event Observation consumes selected published Kafka events through a consumer group that is independent from business consumers. It never reads another module's private tables. The module materializes event/envelope identity, Kafka transport metadata, correlation/trace identifiers, and selected decoded payload fields into its own bounded PostgreSQL schema. Large content bodies are intentionally excluded.
 
-The observation projection is diagnostic state, not an authoritative replacement for Kafka or another module's domain data. Retention is bounded explicitly by age and count. The public `/api/v1/events` REST history and `/api/v1/events/stream` SSE stream expose JSON suitable for the browser; the browser never decodes Protobuf or connects directly to Kafka. Durable observation ids serve as SSE resume cursors across backend replicas.
+The observation projection is diagnostic state, not an authoritative replacement for Kafka or another module's domain data. Retention is bounded explicitly by age and count. The public `/api/v1/events` REST history and `/api/v1/events/stream` SSE stream expose JSON suitable for the browser; the browser never decodes Protobuf or connects directly to Kafka. Durable observation ids serve as SSE resume cursors across backend replicas. Processing-flow REST views are reconstructed on read from the same bounded projection. They keep raw-to-terminal lineage by published source-event identity and explicitly distinguish observed evidence, derived stages, and stages that the current event model cannot prove.
 
 ## HTTP server execution boundary
 

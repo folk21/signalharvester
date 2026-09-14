@@ -7,7 +7,7 @@ description: Public integration surface, ownership, invariants, and dependency r
 
 ## Purpose
 
-Own the application-level technical projection of selected published events for bounded history, live Event Explorer delivery, and later flow reconstruction.
+Own the application-level technical projection of selected published events for bounded history, live Event Explorer delivery, and processing-flow reconstruction.
 
 ## Owned responsibilities
 
@@ -16,7 +16,8 @@ Own the application-level technical projection of selected published events for 
 - persist bounded, idempotent technical event history;
 - expose bounded REST history queries;
 - expose resumable browser-facing SSE technical-event updates;
-- preserve correlation, trace, Kafka, source, profile, and item provenance needed for later flow reconstruction.
+- preserve correlation, trace, Kafka, source, profile, and item provenance needed for flow reconstruction;
+- reconstruct bounded collection-run and run-scoped item graphs on read from retained observation evidence.
 
 ## Public integration surface
 
@@ -29,7 +30,9 @@ None. No external functional module currently calls event observation synchronou
 The authoritative browser contract is `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`:
 
 - `GET /api/v1/events` — bounded recent technical event history;
-- `GET /api/v1/events/stream` — resumable SSE live event delivery.
+- `GET /api/v1/events/stream` — resumable SSE live event delivery;
+- `GET /api/v1/flows/collection-runs/{collectionRunId}` — reconstructed collection-run processing graph;
+- `GET /api/v1/flows/collection-runs/{collectionRunId}/items/{itemId}` — reconstructed run-scoped item graph.
 
 ### Events
 
@@ -57,8 +60,11 @@ The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, and
 - retention is explicitly bounded by age and count;
 - current collection-run correlation uses the event `correlation_id`;
 - REST/SSE expose decoded JSON, not generated Protobuf types;
-- an SSE resume cursor may have fallen behind retention and clients must tolerate missing expired diagnostic rows.
+- an SSE resume cursor may have fallen behind retention and clients must tolerate missing expired diagnostic rows;
+- flow lineage links terminal events to raw discoveries by published `sourceEventId`;
+- reconstructed stages explicitly identify observed, derived, and currently unobserved evidence;
+- Results persistence is not claimed as completed until an observation signal proves it.
 
 ## Extension points
 
-Flow reconstruction may later derive stage/edge views from this module's owned projection. Additional published event families can be observed by adding explicit decoders and tests without changing business-module ownership.
+Additional published event families may enrich the current stage/edge reconstruction when they have value beyond visualization alone. Distributed-trace lookup may later augment, but must not replace, the application-level evidence model.
