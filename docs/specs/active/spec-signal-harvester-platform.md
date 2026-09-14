@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-rss-atom-extraction.md
+current_focus: subspecs/backend-monitoring-profile-configuration.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -18,7 +18,7 @@ Backend, infrastructure, observability, persistence, and source-connector implem
 
 ## Active implementation focus
 
-The current technical focus is RSS/Atom item extraction under `subspecs/backend-rss-atom-extraction.md`: turning one fetched feed document into bounded semantic raw items before Kafka publication. The Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md` and established module-boundary rules in `subspecs/backend-project-structure.md` remain active supporting specifications. Configuration persistence/REST and the operational administration slice are archived after successful developer verification, alongside the completed collection and analysis slices.
+The current technical focus is persisted monitoring-profile configuration under `subspecs/backend-monitoring-profile-configuration.md`. RSS/Atom item extraction remains verification-pending under `subspecs/backend-rss-atom-extraction.md`. The Kafka/Protocol Buffers contract model in `subspecs/backend-event-contracts.md` and established module-boundary rules in `subspecs/backend-project-structure.md` remain active supporting specifications. Configuration persistence/REST and the operational administration slice are archived after successful developer verification, alongside the completed collection and analysis slices.
 
 SignalHarvester starts with one deployable backend application composed from cohesive Gradle modules. Each functional module owns its behavior and infrastructure details, exposes narrow contracts where collaboration is required, and owns its persistence logically. Kafka remains an explicit asynchronous boundary between selected modules so event flow, replay, retries, lag, and future service extraction remain first-class concerns.
 

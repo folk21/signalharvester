@@ -85,7 +85,7 @@ The first implementation foundation is present:
 
 - a runnable Micronaut composition root in `app`;
 - centralized dependency/plugin versions through `gradle/libs.versions.toml`, with the Micronaut Platform version exposed as the Gradle plugin-compatible `micronautVersion` property;
-- the configuration-module Java API plus PostgreSQL/Flyway-backed source persistence;
+- the configuration-module Java API plus PostgreSQL/Flyway-backed source and monitoring-profile persistence;
 - the source REST/OpenAPI CRUD contract implemented under `/api/v1/sources`;
 - versioned Protobuf `EventEnvelope`, `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` Kafka schemas;
 - JUnit contract tests plus PostgreSQL and Kafka Testcontainers coverage for the implemented persistence/event boundaries;
@@ -98,7 +98,7 @@ The first implementation foundation is present:
 - Results-owned PostgreSQL materialization of `ItemAnalyzed` and `ItemRejected` with idempotent at-least-once Kafka consumption;
 - a bounded public Results REST API for recent feed browsing and profile-scoped result detail.
 
-Monitoring profiles/scheduling, generic configurable REST/HTML extraction, result SSE/live delivery, event observation, stronger cross-DB/Kafka consistency, Kubernetes deployment, and the production observability stack are still planned work. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
+Profile-driven scheduling, generic configurable REST/HTML extraction, result SSE/live delivery, event observation, stronger cross-DB/Kafka consistency, Kubernetes deployment, and the production observability stack are still planned work. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

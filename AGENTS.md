@@ -218,6 +218,8 @@ Keep tests readable as executable specifications:
 
 Validation commands and the current command matrix are owned by `docs/TESTS.md`; quality-tool policy and report ownership are in `docs/QUALITY.md`. Use the Gradle wrapper when it exists. Run focused tests first, then broader validation appropriate to the change. `./run_checks.sh` is the canonical routine repository gate for default checks, container-backed integration tests, and FULL-archive reproducibility. `./run_rare_checks.sh` is the broader periodic gate for coverage, static analysis, dependency analysis, and project-size metrics; it runs `run_checks.sh` first.
 
+When adding a new repository-wide test, static-analysis rule, coverage gate, or other verification step, wire it into the canonical verification workflow that owns it. Routine checks belong in `run_checks.sh`; periodic or expensive quality checks belong in `run_rare_checks.sh`. Update `docs/TESTS.md` or `docs/QUALITY.md` when the command matrix or quality workflow changes.
+
 Never claim a test/build passed unless it was actually run successfully.
 
 ## Documentation Ownership
@@ -256,6 +258,23 @@ Keep specification lifecycle state unambiguous:
 Do not update broad documentation or CHANGELOG for trivial local refactors that do not change behavior, contracts, architecture, validation workflow, or contributor-facing knowledge.
 
 CHANGELOG entries begin with the date in `YYYY-MM-DD` format; time is omitted.
+
+### Documentation Writing Style
+
+Repository documentation is working context for both developers and coding agents. Optimize it for precise interpretation and efficient retrieval rather than stylistic formality.
+
+- Use clear, direct, modern English. Prefer simple sentence structure over bureaucratic or academic prose.
+- Preserve technical precision. Simplify the language, not the architecture, contracts, invariants, or domain model.
+- Use stable terminology. Use the same term for the same concept throughout the project. Do not introduce synonyms only for stylistic variety.
+- Avoid noun piles, unnecessary jargon, and dense sentences that contain several independent assertions.
+- Prefer short sentences with one primary assertion. Keep a condition and its consequence together when separating them would make the rule less precise.
+- State ownership, dependency direction, invariants, ordering, failure semantics, and compatibility rules explicitly when they affect implementation.
+- Use normative words consistently in specifications: `must`, `must not`, `should`, and `may`.
+- Separate processing sequences from logical rules. Describe pipelines as ordered steps. Describe invariants, validation rules, and failure semantics separately.
+- Use bullets and small sections when they make requirements easier to scan and retrieve.
+- Clearly distinguish current implemented behavior from technical debt, planned work, and other future enhancements. Never describe planned behavior as if it already exists.
+- Prefer concrete references to modules, APIs, schemas, events, configuration keys, and persistence owners over abstract descriptions.
+- Keep important requirement identifiers and established domain terms stable across specifications, documentation, tests, and code.
 
 ## Always / Ask First / Never
 

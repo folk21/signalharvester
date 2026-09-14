@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Complete the first useful real-source vertical slice. Results persistence/REST are verified, and the current backend focus is bounded RSS/Atom item extraction under [`specs/active/subspecs/backend-rss-atom-extraction.md`](specs/active/subspecs/backend-rss-atom-extraction.md). The next major product slice is the real operational Admin UI in the companion `signalharvester-web` repository, followed by browser-level E2E against a running backend.
+Complete the first useful real-source vertical slice. Results persistence/REST are verified. RSS/Atom item extraction is implemented and awaiting developer acceptance. The current backend focus is persisted monitoring-profile configuration under [`specs/active/subspecs/backend-monitoring-profile-configuration.md`](specs/active/subspecs/backend-monitoring-profile-configuration.md). The next backend slices are profile-driven scheduling and source-test/generic extraction before the next broader frontend integration pass.
 
 ## P0 — repository and contract foundation
 

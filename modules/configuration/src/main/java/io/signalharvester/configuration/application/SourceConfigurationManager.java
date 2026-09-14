@@ -4,6 +4,7 @@ import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import io.signalharvester.configuration.api.SourceId;
+import io.signalharvester.configuration.persistence.MonitoringProfileRepository;
 import io.signalharvester.configuration.persistence.SourceRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -19,12 +20,15 @@ import java.util.UUID;
 public final class SourceConfigurationManager implements SourceConfigurationOperations, SourceConfigurationProvider {
 
     private final SourceRepository repository;
+    private final MonitoringProfileRepository monitoringProfiles;
     private final TransactionOperations<Connection> transactions;
 
     public SourceConfigurationManager(
             SourceRepository repository,
+            MonitoringProfileRepository monitoringProfiles,
             @Named("default") TransactionOperations<Connection> transactions) {
         this.repository = repository;
+        this.monitoringProfiles = monitoringProfiles;
         this.transactions = transactions;
     }
 
@@ -92,6 +96,9 @@ public final class SourceConfigurationManager implements SourceConfigurationOper
     @Override
     public void delete(SourceId sourceId) {
         transactions.executeWrite(status -> {
+            if (monitoringProfiles.referencesSource(sourceId)) {
+                throw new SourceInUseException(sourceId);
+            }
             if (!repository.delete(sourceId)) {
                 throw new SourceNotFoundException(sourceId);
             }

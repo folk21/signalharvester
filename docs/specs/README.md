@@ -95,10 +95,11 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-rss-atom-extraction.md`](active/subspecs/backend-rss-atom-extraction.md) — bounded collection-owned extraction of RSS/Atom documents into individual raw items.
+- [`active/subspecs/backend-monitoring-profile-configuration.md`](active/subspecs/backend-monitoring-profile-configuration.md) — persisted monitoring profiles, source membership, intervals, and matching criteria.
 
 Active supporting tracks:
 
+- [`active/subspecs/backend-rss-atom-extraction.md`](active/subspecs/backend-rss-atom-extraction.md) — implemented RSS/Atom extraction awaiting developer acceptance verification;
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith boundaries, published API rules, and architecture-test guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
 

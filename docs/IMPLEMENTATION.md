@@ -141,8 +141,8 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 
 ## Known limitations
 
-- no source parsing/extraction into multiple external items;
-- no persisted monitoring profiles, profile-to-source membership, or scheduling;
+- no generic configurable REST/HTML extraction;
+- monitoring profiles are persisted, but profile-driven collection and automatic scheduling are not implemented yet;
 - no result SSE/live-update API;
 - no cursor/full-text result search beyond bounded REST filters;
 - no outbound SSRF/network-destination policy; source management must remain trusted until one is defined;
