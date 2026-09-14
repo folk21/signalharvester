@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.inject.qualifiers.Qualifiers;
 import io.micronaut.scheduling.TaskExecutors;
+import io.micronaut.scheduling.TaskScheduler;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +35,19 @@ class MicronautBlockingExecutorTest {
                     .get(2, TimeUnit.SECONDS);
 
             assertTrue(virtual);
+        }
+    }
+
+    /** Resolve the framework scheduling boundary used by collection background work. */
+    @Test
+    void shouldExposeNamedTaskSchedulerForBackgroundWork() {
+        try (ApplicationContext context = ApplicationContext.run(Map.of(
+                "micronaut.executors.blocking.virtual", true,
+                "kafka.enabled", false))) {
+            TaskScheduler scheduler = context.getBean(
+                    TaskScheduler.class, Qualifiers.byName(TaskExecutors.SCHEDULED));
+
+            assertNotNull(scheduler);
         }
     }
 

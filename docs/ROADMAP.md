@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Complete the first useful real-source vertical slice. Results persistence/REST, RSS/Atom extraction, persisted monitoring-profile configuration, and profile-driven cluster-safe scheduling are verified. The current backend focus is source testing plus generic REST/JSON and HTML extraction under [`specs/active/subspecs/backend-source-test-generic-extraction.md`](specs/active/subspecs/backend-source-test-generic-extraction.md). The next backend slice is Results SSE/live delivery, followed by event observation.
+Complete the first useful real-source vertical slice. Results persistence/REST, RSS/Atom extraction, persisted monitoring-profile configuration, profile-driven cluster-safe scheduling, source testing, and generic REST/JSON/HTML extraction are verified. The current backend focus is Results SSE/live delivery under [`specs/active/subspecs/backend-results-sse-live-delivery.md`](specs/active/subspecs/backend-results-sse-live-delivery.md). The next backend slice is event observation.
 
 ## P0 — repository and contract foundation
 
@@ -44,4 +44,4 @@ Complete the first useful real-source vertical slice. Results persistence/REST, 
 - LLM/embedding analysis as a required core dependency.
 
 
-The backend operational/admin APIs now provide source CRUD, manual collection execution, durable run inspection, analysis inspection, and Results reads. The next UI milestone is a real Admin UI over these existing contracts; result SSE and Event Explorer remain subsequent vertical slices.
+The backend operational/admin APIs now provide source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results reads, and live Results SSE. The next backend milestone is event observation for the Event Explorer; the companion UI can consume the existing REST/SSE contracts independently.

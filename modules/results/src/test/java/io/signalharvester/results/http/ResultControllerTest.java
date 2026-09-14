@@ -110,7 +110,7 @@ class ResultControllerTest {
 
         assertEquals(400, send("/api/v1/results?limit=0").statusCode());
         assertEquals(400, send("/api/v1/results?limit=201").statusCode());
-        assertEquals(400, send("/api/v1/results/not-a-hash?monitoringProfileId=" + PROFILE_ID).statusCode());
+        assertEquals(404, send("/api/v1/results/not-a-hash?monitoringProfileId=" + PROFILE_ID).statusCode());
 
         String blankProfile = URLEncoder.encode("   ", StandardCharsets.UTF_8);
         assertEquals(400, send(

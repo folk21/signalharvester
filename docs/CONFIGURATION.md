@@ -42,6 +42,10 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_ANALYSIS_CONSUMER_GROUP` | `signalharvester-analysis-v1` | Consumer group for the analysis raw-item listener. |
 | `SIGNALHARVESTER_RESULTS_ENABLED` | `true` | Enables Results consumption/materialization of terminal Analysis events. |
 | `SIGNALHARVESTER_RESULTS_CONSUMER_GROUP` | `signalharvester-results-v1` | Consumer group for the Results terminal-analysis listeners. |
+| `SIGNALHARVESTER_RESULTS_SSE_POLL_INTERVAL` | `1s` | Delay between durable Results live-cursor polls for an open SSE subscription. |
+| `SIGNALHARVESTER_RESULTS_SSE_KEEPALIVE_INTERVAL` | `15s` | Maximum idle period before a `keepalive` SSE event is emitted. |
+| `SIGNALHARVESTER_RESULTS_SSE_RECONNECT_DELAY` | `2s` | Browser reconnect delay written to SSE `retry` on ready/result events. |
+| `SIGNALHARVESTER_RESULTS_SSE_BATCH_SIZE` | `100` | Maximum live result updates read per poll; bounded to 200. |
 | `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` | `1` | Minimum configured keyword matches required for relevance. |
 | `SIGNALHARVESTER_COLLECTION_MAX_CONCURRENCY` | `8` | Maximum concurrently active source-fetch workers. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_CONNECT_TIMEOUT` | `3s` | External HTTP connection timeout. |
@@ -53,7 +57,7 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_COLLECTION_HTTP_MAX_PENDING_ACQUIRES` | `64` | Maximum pending connection-pool acquisitions. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_POOL_ACQUIRE_TIMEOUT` | `2s` | Maximum wait for a pooled connection. |
 
-`micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. The current source, collection-admin, and analysis-inspection controllers use this executor for JDBC and synchronous collection workflows rather than running blocking work on a Netty event loop.
+`micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. The current source, collection-admin, analysis-inspection, and Results REST controllers use this executor for JDBC and synchronous workflows rather than running blocking work on a Netty event loop. Results SSE remains a reactive streaming controller; its JDBC polling is submitted to the same blocking executor by the stream implementation.
 
 Collection concurrency is validated as positive. RSS/Atom and generic JSON/HTML extraction validate positive maximum item counts capped at 10,000. Source-test preview cardinality is capped at 50 items and preview content at 5,000 characters per item. These bounds sit behind the existing HTTP maximum-response-size limit. Micronaut may surface non-success HTTP statuses as `HttpClientResponseException`; the collection adapter normalizes that transport behavior into `SourceFetchException` while preserving status and raw `Retry-After` metadata. Redirect following is enabled but bounded. Automatic decompression is enabled, connection pooling is explicit, and `allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
 
@@ -92,7 +96,7 @@ The local `.env` file is ignored by Git and excluded from FULL archives.
 
 ## Persisted application configuration
 
-The configuration module owns source and monitoring-profile persistence in PostgreSQL. Its Flyway migrations under `db/migration/configuration` create source configuration plus monitoring profiles, ordered source membership, and profile criteria. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history and monitoring-profile schedule state under `db/migration/collection` and schema `collection`; Results owns analyzed/rejected projections under `db/migration/results` and schema `results`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider`; they must not read configuration tables directly.
+The configuration module owns source and monitoring-profile persistence in PostgreSQL. Its Flyway migrations under `db/migration/configuration` create source configuration plus monitoring profiles, ordered source membership, and profile criteria. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history and monitoring-profile schedule state under `db/migration/collection` and schema `collection`; Results owns analyzed/rejected projections and durable live-result cursors under `db/migration/results` and schema `results`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider`; they must not read configuration tables directly.
 
 A monitoring profile stores a positive collection interval, at least one existing source id, and string criteria. Enabled profiles are polled by Collection scheduling. Scheduler state remains collection-owned and is not stored in configuration tables. Disabling a profile prevents new automatic claims; manual execution may still target an existing profile explicitly.
 

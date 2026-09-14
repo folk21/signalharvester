@@ -1,6 +1,8 @@
 package io.signalharvester.results.persistence;
 
 import io.signalharvester.results.application.ResultDetail;
+import io.signalharvester.results.application.ResultLiveCriteria;
+import io.signalharvester.results.application.ResultLiveUpdate;
 import io.signalharvester.results.application.ResultQueryCriteria;
 import io.signalharvester.results.application.ResultSummary;
 import jakarta.inject.Named;
@@ -23,7 +25,7 @@ import java.util.Optional;
  * The injected connection participates in the application-owned Micronaut transaction.
  */
 @Singleton
-public final class JdbcResultQueryRepository implements ResultQueryRepository {
+public final class JdbcResultQueryRepository implements ResultQueryRepository, ResultLiveQueryRepository {
 
     private static final String SUMMARY_SELECT = """
             SELECT ai.monitoring_profile_id,
@@ -63,6 +65,57 @@ public final class JdbcResultQueryRepository implements ResultQueryRepository {
                    ai.analyzed_at
               FROM results.analyzed_items ai
              WHERE 1 = 1
+            """;
+
+    private static final String LIVE_SUMMARY_SELECT = """
+            SELECT live.live_event_id,
+                   ai.monitoring_profile_id,
+                   ai.normalized_item_id,
+                   ai.source_id,
+                   ai.information_category,
+                   ai.external_id,
+                   ai.title,
+                   ai.url,
+                   ai.relevant,
+                   ai.classification,
+                   ai.score,
+                   COALESCE(ARRAY(
+                       SELECT attribute.attribute_key
+                         FROM results.analyzed_item_attributes attribute
+                        WHERE attribute.monitoring_profile_id = ai.monitoring_profile_id
+                          AND attribute.normalized_item_id = ai.normalized_item_id
+                        ORDER BY attribute.attribute_key
+                   ), ARRAY[]::text[]) AS attribute_keys,
+                   COALESCE(ARRAY(
+                       SELECT attribute.attribute_value
+                         FROM results.analyzed_item_attributes attribute
+                        WHERE attribute.monitoring_profile_id = ai.monitoring_profile_id
+                          AND attribute.normalized_item_id = ai.normalized_item_id
+                        ORDER BY attribute.attribute_key
+                   ), ARRAY[]::text[]) AS attribute_values,
+                   COALESCE(ARRAY(
+                       SELECT tag.tag
+                         FROM results.analyzed_item_tags tag
+                        WHERE tag.monitoring_profile_id = ai.monitoring_profile_id
+                          AND tag.normalized_item_id = ai.normalized_item_id
+                        ORDER BY tag.tag_ordinal
+                   ), ARRAY[]::text[]) AS tags,
+                   ai.explanation,
+                   ai.analyzer,
+                   ai.published_at,
+                   ai.analyzed_at
+              FROM results.live_result_cursors live
+              JOIN results.analyzed_items ai
+                ON ai.monitoring_profile_id = live.monitoring_profile_id
+               AND ai.normalized_item_id = live.normalized_item_id
+               AND ai.analysis_event_id = live.analysis_event_id
+             WHERE live.live_event_id > ?
+               AND live.live_event_id <= ?
+            """;
+
+    private static final String CURRENT_LIVE_CURSOR_SQL = """
+            SELECT COALESCE(MAX(live_event_id), 0)
+              FROM results.live_result_cursors
             """;
 
     private static final String DETAIL_SQL = """
@@ -148,6 +201,51 @@ public final class JdbcResultQueryRepository implements ResultQueryRepository {
             }
         } catch (SQLException | RuntimeException exception) {
             throw new ResultsPersistenceException("Failed to list analyzed results", exception);
+        }
+    }
+
+    @Override
+    public long currentCursor() {
+        try (PreparedStatement statement = connection.prepareStatement(CURRENT_LIVE_CURSOR_SQL);
+                ResultSet row = statement.executeQuery()) {
+            if (!row.next()) {
+                throw new SQLException("Live-result cursor query returned no row");
+            }
+            return row.getLong(1);
+        } catch (SQLException | RuntimeException exception) {
+            throw new ResultsPersistenceException("Failed to read current live-result cursor", exception);
+        }
+    }
+
+    @Override
+    public List<ResultLiveUpdate> findUpdatesAfter(
+            long cursor, long throughCursor, ResultLiveCriteria criteria, int limit) {
+        StringBuilder sql = new StringBuilder(LIVE_SUMMARY_SELECT);
+        List<Object> parameters = new ArrayList<>();
+        parameters.add(cursor);
+        parameters.add(throughCursor);
+        appendTextFilter(sql, parameters, "ai.monitoring_profile_id", criteria.monitoringProfileId());
+        appendTextFilter(sql, parameters, "ai.source_id", criteria.sourceId());
+        appendTextFilter(sql, parameters, "ai.information_category", criteria.informationCategory());
+        criteria.relevant().ifPresent(value -> {
+            sql.append(" AND ai.relevant = ?\n");
+            parameters.add(value);
+        });
+        appendTextFilter(sql, parameters, "ai.classification", criteria.classification());
+        sql.append(" ORDER BY live.live_event_id ASC LIMIT ?");
+        parameters.add(limit);
+
+        try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+            bind(statement, parameters);
+            try (ResultSet rows = statement.executeQuery()) {
+                List<ResultLiveUpdate> updates = new ArrayList<>();
+                while (rows.next()) {
+                    updates.add(new ResultLiveUpdate(rows.getLong("live_event_id"), mapSummary(rows)));
+                }
+                return List.copyOf(updates);
+            }
+        } catch (SQLException | RuntimeException exception) {
+            throw new ResultsPersistenceException("Failed to read live analyzed-result updates", exception);
         }
     }
 
@@ -266,6 +364,8 @@ public final class JdbcResultQueryRepository implements ResultQueryRepository {
                 statement.setTimestamp(parameterIndex, Timestamp.from(instant));
             } else if (value instanceof Integer integer) {
                 statement.setInt(parameterIndex, integer);
+            } else if (value instanceof Long longValue) {
+                statement.setLong(parameterIndex, longValue);
             } else {
                 throw new IllegalArgumentException("Unsupported SQL parameter type: " + value.getClass().getName());
             }

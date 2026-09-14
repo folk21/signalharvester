@@ -101,13 +101,21 @@ class ResultsKafkaPostgresIntegrationTest {
      */
     @Test
     void shouldMaterializeAnalyzedEventsIdempotently() throws Exception {
-        send(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, analyzedEvent("analysis-event-01", 75, List.of("java", "kafka")));
+        ItemAnalyzed firstEvent = analyzedEvent("analysis-event-01", 75, List.of("java", "kafka"));
+        send(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, firstEvent);
         awaitSqlValue("SELECT count(*) FROM results.analyzed_items", 1L);
+        awaitSqlValue("SELECT count(*) FROM results.live_result_cursors", 1L);
+        long firstLiveCursor = sqlLong("SELECT live_event_id FROM results.live_result_cursors");
         assertEquals(2L, sqlLong("SELECT count(*) FROM results.analyzed_item_tags"));
         assertEquals("MATCHED_KEYWORDS", sqlString("SELECT classification FROM results.analyzed_items"));
 
+        send(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, analyzedEvent("analysis-event-01", 76, List.of("java", "kafka")));
+        awaitSqlValue("SELECT score FROM results.analyzed_items", 76L);
+        assertEquals(firstLiveCursor, sqlLong("SELECT live_event_id FROM results.live_result_cursors"));
+
         send(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, analyzedEvent("analysis-event-02", 90, List.of("java")));
         awaitSqlValue("SELECT score FROM results.analyzed_items", 90L);
+        assertTrue(sqlLong("SELECT live_event_id FROM results.live_result_cursors") > firstLiveCursor);
 
         assertEquals(1L, sqlLong("SELECT count(*) FROM results.analyzed_items"));
         assertEquals("analysis-event-02", sqlString("SELECT analysis_event_id FROM results.analyzed_items"));

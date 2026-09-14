@@ -1,7 +1,7 @@
 ---
 type: Module Overview
 title: SignalHarvester results module
-description: Durable analyzed-result projection, terminal-analysis-event consumption, and public result queries.
+description: Durable analyzed-result projection, terminal-analysis-event consumption, and public REST/SSE reads.
 ---
 # SignalHarvester results module
 
@@ -22,6 +22,8 @@ The Kafka listener disables automatic offset commit and commits only after durab
 
 The feed intentionally omits `normalizedContent` so a bounded list query does not return every potentially large payload; normalized attributes remain available for browsing. Detailed content is loaded only for a point lookup. Feed tag retrieval is performed in the same bounded SQL query rather than through per-result N+1 reads.
 
+`GET /api/v1/results/stream` exposes resumable Server-Sent Events. `results.live_result_cursors` stores one current monotonic cursor per logical analyzed result. Cursor advancement happens in the same transaction as projection updates and does not advance when the same `analysisEventId` is redelivered. Fresh connections receive `ready`, then later `result` events; idle connections receive `keepalive`. Browser `Last-Event-ID` resumes durable polling after the last received cursor. The stream represents current projections rather than an append-only event history, so several updates to one logical result while a client is disconnected may collapse to the latest projection. A resume cursor ahead of current durable state is normalized to the current watermark. Race-free browser bootstrap opens SSE through `ready` before loading the REST snapshot, then merges buffered/live updates by `(monitoringProfileId, normalizedItemId)`. JDBC polling runs on the blocking executor, while the HTTP controller remains a streaming `Publisher` boundary.
+
 ## Runtime configuration
 
 The runnable application enables Results event consumption by default with:
@@ -29,6 +31,10 @@ The runnable application enables Results event consumption by default with:
 ```text
 SIGNALHARVESTER_RESULTS_ENABLED=true
 SIGNALHARVESTER_RESULTS_CONSUMER_GROUP=signalharvester-results-v1
+SIGNALHARVESTER_RESULTS_SSE_POLL_INTERVAL=1s
+SIGNALHARVESTER_RESULTS_SSE_KEEPALIVE_INTERVAL=15s
+SIGNALHARVESTER_RESULTS_SSE_RECONNECT_DELAY=2s
+SIGNALHARVESTER_RESULTS_SSE_BATCH_SIZE=100
 ```
 
 The consumed topics are the existing `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC` and `SIGNALHARVESTER_KAFKA_ITEM_REJECTED_TOPIC` settings. The read REST API is available independently of the consumer toggle when the application serves HTTP.
@@ -37,7 +43,6 @@ The consumed topics are the existing `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC`
 
 - result browsing uses a bounded recent-result limit rather than cursor pagination;
 - no full-text search;
-- no Results SSE/live publication yet;
 - rejected-result persistence remains internal operational state and is not exposed by this product API;
 - no transactional outbox/exactly-once cross-resource guarantee;
 - no bounded retry/DLQ policy yet, so a poison terminal event can repeatedly fail its partition.
@@ -46,5 +51,6 @@ The consumed topics are the existing `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC`
 
 - [`contract.md`](contract.md)
 - [`../AGENTS.md`](../AGENTS.md)
+- [`../../docs/specs/active/subspecs/backend-results-sse-live-delivery.md`](../../docs/specs/active/subspecs/backend-results-sse-live-delivery.md)
 - [`../../docs/specs/archive/subspecs/backend-results-rest-api.md`](../../docs/specs/archive/subspecs/backend-results-rest-api.md)
 - [`../../docs/IMPLEMENTATION.md`](../../docs/IMPLEMENTATION.md)

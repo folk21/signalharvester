@@ -57,7 +57,7 @@ public class ResultController {
     }
 
     /** Returns one profile-scoped analyzed result including content, attributes, and provenance. */
-    @Get("/{normalizedItemId}")
+    @Get("/{normalizedItemId:[0-9a-f]+}")
     public HttpResponse<ResultDetailResponse> get(
             @PathVariable @Pattern(regexp = "[0-9a-f]{64}") String normalizedItemId,
             @QueryValue @NotBlank String monitoringProfileId) {

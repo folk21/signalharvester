@@ -3,14 +3,14 @@ type: Specification
 title: Backend source testing and generic extraction
 description: Add bounded diagnostic source testing plus configuration-driven REST/JSON and HTML extraction on the existing Collection boundary.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend source testing and generic extraction
 
 ## Status
 
-Verification pending — implementation is present and awaits the developer `./run_checks.sh` acceptance run.
+Completed and verified by the developer through the canonical `./run_checks.sh` repository gate.
 
 ## Goal
 

@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.micronaut.context.ApplicationContext;
 import io.signalharvester.results.application.AnalysisOutcomeProjector;
 import io.signalharvester.results.application.ResultDetail;
+import io.signalharvester.results.application.ResultLiveBatch;
+import io.signalharvester.results.application.ResultLiveCriteria;
+import io.signalharvester.results.application.ResultLiveQuery;
 import io.signalharvester.results.application.ResultQuery;
 import io.signalharvester.results.application.ResultQueryCriteria;
 import io.signalharvester.results.application.ResultSummary;
@@ -114,6 +117,46 @@ class ResultQueryPostgresIntegrationTest {
         List<ResultSummary> results = query.recent(criteria);
 
         assertEquals(List.of(ITEM_C, ITEM_B), results.stream().map(ResultSummary::normalizedItemId).toList());
+    }
+
+    /**
+     * Resume live polling from a durable cursor and do not advance it for redelivery of the same analysis event.
+     */
+    @Test
+    void shouldPollLiveUpdatesAndKeepDuplicateAnalysisEventIdempotent() {
+        ResultLiveQuery live = context.getBean(ResultLiveQuery.class);
+        AnalysisOutcomeProjector projector = context.getBean(AnalysisOutcomeProjector.class);
+        long initialCursor = live.currentCursor();
+
+        AnalyzedResult updated = result(
+                "analysis-a-2", "source-event-a-2", "raw-a-2", ITEM_A, SOURCE_A, PROFILE_A, "JOB", true, "MATCHED", 95,
+                Instant.parse("2026-09-13T11:10:00Z"), List.of("java", "kafka", "postgresql"),
+                Map.of("location", "Remote"), "run-a-2");
+        projector.projectAnalyzed(updated);
+
+        ResultLiveBatch batch = live.pollAfter(
+                initialCursor,
+                new ResultLiveCriteria(
+                        Optional.of(PROFILE_A),
+                        Optional.of(SOURCE_A),
+                        Optional.of("JOB"),
+                        Optional.of(true),
+                        Optional.of("MATCHED")),
+                10);
+
+        assertEquals(1, batch.updates().size());
+        assertEquals(ITEM_A, batch.updates().getFirst().result().normalizedItemId());
+        assertEquals(95, batch.updates().getFirst().result().score());
+        assertTrue(batch.nextCursor() > initialCursor);
+
+        long deliveredCursor = batch.nextCursor();
+        projector.projectAnalyzed(updated);
+
+        assertEquals(deliveredCursor, live.currentCursor());
+        ResultLiveCriteria noFilters = new ResultLiveCriteria(
+                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+        assertTrue(live.pollAfter(deliveredCursor, noFilters, 10).updates().isEmpty());
+        assertEquals(deliveredCursor, live.pollAfter(Long.MAX_VALUE, noFilters, 10).nextCursor());
     }
 
     /**

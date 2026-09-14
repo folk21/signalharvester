@@ -2,6 +2,7 @@ package io.signalharvester.collection.scheduling;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.scheduling.TaskExecutors;
+import io.micronaut.scheduling.TaskScheduler;
 import io.micronaut.scheduling.annotation.Scheduled;
 import io.signalharvester.collection.configuration.CollectionClockFactory;
 import io.signalharvester.collection.configuration.CollectionSchedulerConfiguration;
@@ -17,9 +18,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +33,7 @@ public final class MonitoringProfileScheduler {
     private final CollectionRunner runner;
     private final CollectionSchedulerConfiguration configuration;
     private final ExecutorService blockingExecutor;
-    private final ScheduledExecutorService scheduledExecutor;
+    private final TaskScheduler taskScheduler;
     private final Clock clock;
 
     public MonitoringProfileScheduler(
@@ -43,14 +42,14 @@ public final class MonitoringProfileScheduler {
             CollectionRunner runner,
             CollectionSchedulerConfiguration configuration,
             @Named(TaskExecutors.BLOCKING) ExecutorService blockingExecutor,
-            @Named(TaskExecutors.SCHEDULED) ScheduledExecutorService scheduledExecutor,
+            @Named(TaskExecutors.SCHEDULED) TaskScheduler taskScheduler,
             @Named(CollectionClockFactory.COLLECTION_CLOCK) Clock clock) {
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.schedules = Objects.requireNonNull(schedules, "schedules");
         this.runner = Objects.requireNonNull(runner, "runner");
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.blockingExecutor = Objects.requireNonNull(blockingExecutor, "blockingExecutor");
-        this.scheduledExecutor = Objects.requireNonNull(scheduledExecutor, "scheduledExecutor");
+        this.taskScheduler = Objects.requireNonNull(taskScheduler, "taskScheduler");
         this.clock = Objects.requireNonNull(clock, "clock");
         validateDurations(configuration.getLeaseDuration(), configuration.getHeartbeatInterval());
     }
@@ -72,9 +71,9 @@ public final class MonitoringProfileScheduler {
     }
 
     private void execute(ProfileScheduleLease lease) {
-        long heartbeatMillis = configuration.getHeartbeatInterval().toMillis();
-        ScheduledFuture<?> heartbeat = scheduledExecutor.scheduleAtFixedRate(
-                () -> renew(lease), heartbeatMillis, heartbeatMillis, TimeUnit.MILLISECONDS);
+        Duration heartbeatInterval = configuration.getHeartbeatInterval();
+        ScheduledFuture<?> heartbeat = taskScheduler.scheduleAtFixedRate(
+                heartbeatInterval, heartbeatInterval, () -> renew(lease));
         try {
             runner.run(new CollectionRunRequest(lease.profileId(), Optional.empty()));
         } catch (RuntimeException failure) {

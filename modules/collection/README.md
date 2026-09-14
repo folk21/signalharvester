@@ -35,5 +35,5 @@ Persisted source URLs are not outbound authorization. Until an explicit configur
 - [`../AGENTS.md`](../AGENTS.md) — shared module-development rules
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) — system architecture
 - [`../../docs/specs/archive/subspecs/backend-collection-run-orchestration.md`](../../docs/specs/archive/subspecs/backend-collection-run-orchestration.md) — completed run-orchestration history
-- [`../../docs/specs/active/subspecs/backend-source-test-generic-extraction.md`](../../docs/specs/active/subspecs/backend-source-test-generic-extraction.md) — current source-test and generic-extraction slice
+- [`../../docs/specs/archive/subspecs/backend-source-test-generic-extraction.md`](../../docs/specs/archive/subspecs/backend-source-test-generic-extraction.md) — completed source-test and generic-extraction slice
 - [`../../docs/specs/active/subspecs/backend-event-contracts.md`](../../docs/specs/active/subspecs/backend-event-contracts.md) — active event-contract work

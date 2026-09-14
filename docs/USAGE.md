@@ -105,7 +105,7 @@ python3 tools/source-import/import_sources.py \
 
 The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
 
-The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. RSS/Atom produce one item per feed entry up to the configured bound. REST sources may extract candidate objects through persisted `json.*` JSON Pointer settings, and HTML sources may extract candidate elements through persisted `html.*` CSS selector settings. REST/HTML sources without those settings still produce one passthrough item per response. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through the public REST API.
+The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. RSS/Atom produce one item per feed entry up to the configured bound. REST sources may extract candidate objects through persisted `json.*` JSON Pointer settings, and HTML sources may extract candidate elements through persisted `html.*` CSS selector settings. REST/HTML sources without those settings still produce one passthrough item per response. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST plus resumable SSE live delivery.
 
 Start a manual collection run for an existing monitoring-profile UUID:
 
@@ -170,6 +170,17 @@ curl 'http://localhost:8080/api/v1/results/<NORMALIZED_ITEM_ID>?monitoringProfil
 
 The detail response includes normalized content, attributes, ordered tags, analysis metadata, and event/correlation provenance. Browser clients must use this REST boundary rather than Results tables directly.
 
+Stream later result changes with SSE:
+
+```bash
+curl -N -H 'Accept: text/event-stream' \
+  'http://localhost:8080/api/v1/results/stream?monitoringProfileId=real-trial'
+```
+
+A fresh connection receives a named `ready` event with the current numeric cursor and then only later updates. Named `result` events carry the compact `ResultSummary` payload. `keepalive` events keep idle connections active. Browser `EventSource` automatically reconnects with the last SSE `id` as `Last-Event-ID`, so the backend resumes after the last committed cursor. The stream represents current projections rather than an append-only event history; several updates to one logical result while disconnected may collapse to the latest projection.
+
+For a race-free browser bootstrap, open SSE first and wait for `ready`. Then load the regular Results REST feed while buffering later `result` events. Apply the REST snapshot and then merge the buffered/live updates by `(monitoringProfileId, normalizedItemId)`. Do not load REST first and open SSE afterward, because a result committed between those operations could be missed. SSE is incremental delivery, not a duplicate initial snapshot.
+
 ## Run tests and repository checks
 
 Run the complete repository verification gate with:
@@ -185,7 +196,6 @@ It runs the default Gradle verification, all container-backed integration tests,
 As the first vertical slice grows, this document will add commands for:
 
 - cron/calendar scheduling and historical missed-interval catch-up;
-- result REST/SSE streams;
 - event-flow inspection.
 
 Do not duplicate UI installation or user-interface instructions here.
