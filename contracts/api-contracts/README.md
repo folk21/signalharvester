@@ -18,11 +18,12 @@ The initial OpenAPI 3.1 contract is [`src/main/resources/openapi/signalharvester
 It currently defines:
 
 - CRUD operations and schemas for configurable external sources;
+- persisted-source diagnostic testing with bounded extraction previews and explicit fetch/extraction outcomes;
 - manual collection-run execution plus bounded durable run-history reads;
 - read-only inspection of analysis-owned normalized-item/deduplication state;
 - bounded public Results feed and profile-scoped result-detail reads.
 
-Source names must contain at least one non-whitespace character, and source locations require an absolute HTTP(S) URL with a host and without embedded credentials or fragments so the external contract matches the configuration-module invariant. `SourceUpsertRequest.enabled` is optional and defaults to `false`; omitted `settings` default to an empty object. Response DTOs explicitly preserve schema-required fields even when collections are empty or nullable operational values are unavailable.
+Source names must contain at least one non-whitespace character, and source locations require an absolute HTTP(S) URL with a host and without embedded credentials or fragments so the external contract matches the configuration-module invariant. Source-test responses keep nullable diagnostic fields explicit and never expose the full fetched response body. `SourceUpsertRequest.enabled` is optional and defaults to `false`; omitted `settings` default to an empty object. Response DTOs explicitly preserve schema-required fields even when collections are empty or nullable operational values are unavailable.
 
 The corresponding REST adapters are implemented in their owning functional modules; this OpenAPI document remains the authoritative external schema. Server-level module tests verify request validation, status mapping, default values, required response shape, and blocking execution for the implemented endpoints.
 

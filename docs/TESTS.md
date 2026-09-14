@@ -106,6 +106,9 @@ The first implementation foundation contains:
 - `MicronautBlockingExecutorTest` for verification that Micronaut's blocking executor is Virtual-Thread backed on the Java 21 baseline and that the collection bean graph resolves with its qualified UTC clock;
 - `CollectionConfigurationTest` for Jakarta Validation of invalid concurrency configuration;
 - `RssAtomItemExtractorTest` and `DefaultSourceItemExtractorTest` for secure bounded RSS/Atom parsing, metadata extraction, malformed/DTD rejection, feed-item limits, empty feeds, and non-feed passthrough identity compatibility;
+- `JsonSourceItemExtractorTest` and `HtmlSourceItemExtractorTest` for configuration-driven JSON Pointer/CSS-selector extraction, semantic metadata, relative URLs, malformed configuration, and generic candidate-item bounds;
+- `GenericExtractionConfigurationTest`, `SourceTestConfigurationTest`, and `SourceTestServiceTest` for fail-fast extraction/preview limits plus disabled-source diagnostics, fetch/extraction failures, missing sources, and bounded previews;
+- `SourceTestControllerTest` for server-level source-test response mapping, missing/invalid identity handling, and blocking Virtual Thread execution;
 - `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping including extracted external id, title, and publication time;
 - `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
 - `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
@@ -128,7 +131,7 @@ The first implementation foundation contains:
 - `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, newest-first ordering, bounded limits, ordered tags, attributes, and profile-scoped detail reads;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
-- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> manual collection -> deterministic HTTP source -> Kafka -> Analysis -> durable collection history and analysis inspection, including equivalent rediscovery observed through public HTTP APIs only.
+- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> source-test/generic JSON extraction and manual collection -> deterministic HTTP source -> Kafka -> Analysis -> durable collection history and analysis inspection. The source-test branch verifies a disabled persisted JSON source through public HTTP and confirms that diagnostics do not create collection-run history.
 
 PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, and `modules:analysis`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
 
@@ -159,6 +162,17 @@ Run them directly with:
 
 These tooling tests use deterministic fakes/loopback HTTP only. They do not require Docker, a running backend, or public network access. Actual `tools/live-backend/verify_pipeline.py` execution is a separate manual/live environment check.
 
+
+## Source testing and generic extraction
+
+Focused validation for the configuration-driven extraction/source-test slice:
+
+```bash
+./gradlew :modules:collection:test --no-watch-fs
+./gradlew :testing:integration-tests:integrationTest --no-watch-fs
+```
+
+Collection unit/server tests cover JSON Pointer extraction, HTML CSS selectors, item and preview bounds, diagnostic failures, source-test 404 behavior, and blocking-executor offload. The cross-module HTTP smoke test persists a disabled REST/JSON source, invokes `/api/v1/sources/{sourceId}/test`, checks the extracted preview, and verifies that no collection-run history was created by the diagnostic operation.
 
 ## Operational admin API
 

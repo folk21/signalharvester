@@ -43,7 +43,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies the configuration, analysis, collection, and Results migrations at startup. The backend exposes source CRUD under `/api/v1/sources`, monitoring-profile CRUD under `/api/v1/monitoring-profiles`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
+Flyway applies the configuration, analysis, collection, and Results migrations at startup. The backend exposes source CRUD and diagnostic source testing under `/api/v1/sources`, monitoring-profile CRUD under `/api/v1/monitoring-profiles`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
 
 Example source creation:
 
@@ -57,6 +57,27 @@ List persisted sources:
 
 ```bash
 curl http://localhost:8080/api/v1/sources
+```
+
+Test a persisted source without publishing Kafka events or creating collection-run history:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/sources/<SOURCE_UUID>/test
+```
+
+A source may remain `enabled=false` while it is being tested. Fetch and extraction problems are returned in the diagnostic JSON payload with `FETCH_FAILED` or `EXTRACTION_FAILED`; the endpoint itself returns HTTP 200 when the persisted source exists. See [`CONFIGURATION.md`](CONFIGURATION.md) for `json.*` and `html.*` extraction settings.
+
+Example REST/JSON settings for an API that returns `{ "jobs": [...] }`:
+
+```json
+{
+  "json.itemsPointer": "/jobs",
+  "json.externalIdPointer": "/id",
+  "json.titlePointer": "/title",
+  "json.urlPointer": "/url",
+  "json.contentPointer": "/description",
+  "json.publishedAtPointer": "/publishedAt"
+}
 ```
 
 Source URLs stored through this API are configuration data only. Do not expose source management to untrusted users as an unrestricted collection authorization mechanism until an outbound destination/SSRF policy is implemented.
@@ -84,7 +105,7 @@ python3 tools/source-import/import_sources.py \
 
 The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
 
-The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. REST/HTML currently produce one passthrough item per response; RSS/Atom produce one item per feed entry up to the configured extraction bound. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through the public REST API.
+The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. RSS/Atom produce one item per feed entry up to the configured bound. REST sources may extract candidate objects through persisted `json.*` JSON Pointer settings, and HTML sources may extract candidate elements through persisted `html.*` CSS selector settings. REST/HTML sources without those settings still produce one passthrough item per response. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through the public REST API.
 
 Start a manual collection run for an existing monitoring-profile UUID:
 

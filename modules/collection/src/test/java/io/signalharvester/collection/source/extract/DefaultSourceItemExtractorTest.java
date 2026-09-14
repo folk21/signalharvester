@@ -20,10 +20,11 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies {@link DefaultSourceItemExtractor} routing and backward-compatible one-item passthrough
- * behavior for non-feed source types.
+ * Verifies {@link DefaultSourceItemExtractor} routing across RSS, generic extraction, and
+ * backward-compatible passthrough behavior.
  *
- * <p>Related specification: {@code backend-rss-atom-extraction}.</p>
+ * <p>Related specifications: {@code backend-rss-atom-extraction} and
+ * {@code backend-source-test-generic-extraction}.</p>
  */
 class DefaultSourceItemExtractorTest {
 
@@ -76,7 +77,59 @@ class DefaultSourceItemExtractorTest {
         assertThrows(SourceItemExtractionException.class, () -> extractor().extract(source, fetched));
     }
 
+    /**
+     * Route REST sources with json settings through configured JSON extraction.
+     */
+    @Test
+    void shouldRouteConfiguredRestJsonExtraction() {
+        ConfiguredSource source = new ConfiguredSource(
+                SOURCE_ID,
+                "REST JSON",
+                SourceType.REST,
+                SOURCE_URI,
+                true,
+                Map.of("json.contentPointer", "/content"));
+        FetchedSourceContent fetched = new FetchedSourceContent(
+                SOURCE_ID,
+                SOURCE_URI,
+                200,
+                Optional.of("application/json"),
+                "{\"content\":\"semantic\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                FETCHED_AT);
+
+        List<ExtractedSourceItem> items = extractor().extract(source, fetched);
+
+        assertEquals(1, items.size());
+        assertEquals("semantic", items.getFirst().content());
+    }
+
+    /**
+     * Reject extraction settings that belong to another reusable source type.
+     */
+    @Test
+    void shouldRejectIncompatibleExtractionSettings() {
+        ConfiguredSource source = new ConfiguredSource(
+                SOURCE_ID,
+                "REST",
+                SourceType.REST,
+                SOURCE_URI,
+                true,
+                Map.of("html.itemSelector", "article"));
+        FetchedSourceContent fetched = new FetchedSourceContent(
+                SOURCE_ID,
+                SOURCE_URI,
+                200,
+                Optional.of("text/html"),
+                "<article>one</article>".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                FETCHED_AT);
+
+        assertThrows(SourceItemExtractionException.class, () -> extractor().extract(source, fetched));
+    }
+
     private static DefaultSourceItemExtractor extractor() {
-        return new DefaultSourceItemExtractor(new RssAtomItemExtractor(() -> 500));
+        return new DefaultSourceItemExtractor(
+                new RssAtomItemExtractor(() -> 500),
+                new JsonSourceItemExtractor(() -> 500),
+                new HtmlSourceItemExtractor(() -> 500));
     }
 }

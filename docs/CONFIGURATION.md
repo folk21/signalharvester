@@ -27,6 +27,9 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_DB_MAX_POOL_SIZE` | `10` | Maximum Hikari connections for the default datasource. |
 | `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka bootstrap servers used by Micronaut Kafka clients. |
 | `SIGNALHARVESTER_COLLECTION_RSS_MAX_ITEMS_PER_SOURCE` | `500` | Maximum RSS/Atom entries accepted from one fetched response; values above the bound fail extraction explicitly. |
+| `SIGNALHARVESTER_COLLECTION_EXTRACTION_MAX_ITEMS_PER_SOURCE` | `500` | Maximum candidate items accepted from one configuration-driven REST/JSON or HTML response. |
+| `SIGNALHARVESTER_COLLECTION_SOURCE_TEST_MAX_PREVIEW_ITEMS` | `5` | Maximum extracted items included in one diagnostic source-test response. |
+| `SIGNALHARVESTER_COLLECTION_SOURCE_TEST_MAX_PREVIEW_CONTENT_CHARS` | `500` | Maximum content characters included for each diagnostic preview item. |
 | `SIGNALHARVESTER_COLLECTION_SCHEDULER_ENABLED` | `true` | Enables automatic polling of persisted enabled monitoring profiles. |
 | `SIGNALHARVESTER_COLLECTION_SCHEDULER_POLL_INTERVAL` | `10s` | Delay between scheduler polls. |
 | `SIGNALHARVESTER_COLLECTION_SCHEDULER_INITIAL_DELAY` | `10s` | Delay before the first scheduler poll after startup. |
@@ -52,7 +55,7 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 
 `micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. The current source, collection-admin, and analysis-inspection controllers use this executor for JDBC and synchronous collection workflows rather than running blocking work on a Netty event loop.
 
-Collection concurrency is validated as positive. RSS/Atom extraction also validates a positive maximum entry count (capped at 10,000) so one fetched XML response cannot create unbounded item cardinality. Micronaut may surface non-success HTTP statuses as `HttpClientResponseException`; the collection adapter normalizes that transport behavior into `SourceFetchException` while preserving status and raw `Retry-After` metadata. Redirect following is enabled but bounded. Automatic decompression is enabled, connection pooling is explicit, and `allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
+Collection concurrency is validated as positive. RSS/Atom and generic JSON/HTML extraction validate positive maximum item counts capped at 10,000. Source-test preview cardinality is capped at 50 items and preview content at 5,000 characters per item. These bounds sit behind the existing HTTP maximum-response-size limit. Micronaut may surface non-success HTTP statuses as `HttpClientResponseException`; the collection adapter normalizes that transport behavior into `SourceFetchException` while preserving status and raw `Retry-After` metadata. Redirect following is enabled but bounded. Automatic decompression is enabled, connection pooling is explicit, and `allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
 
 Configured source URLs are domain values: they must be absolute HTTP/HTTPS locations with a host, without embedded user-info credentials and without URI fragments. Secrets should be modeled separately rather than embedded into URLs.
 
@@ -94,6 +97,37 @@ The configuration module owns source and monitoring-profile persistence in Postg
 A monitoring profile stores a positive collection interval, at least one existing source id, and string criteria. Enabled profiles are polled by Collection scheduling. Scheduler state remains collection-owned and is not stored in configuration tables. Disabling a profile prevents new automatic claims; manual execution may still target an existing profile explicitly.
 
 Source names are not globally unique. The stable `SourceId` is the identity boundary, so two sources may intentionally share a display name while retaining different identifiers, locations, and settings.
+
+### Persisted source extraction settings
+
+`source_settings` stores string values. Collection interprets the following additive keys. A REST or HTML source with no matching extraction prefix keeps the original one-response passthrough behavior. Unknown settings outside these prefixes remain opaque to Collection.
+
+REST JSON extraction is enabled when any `json.*` key is present:
+
+| Setting | Required | Meaning |
+|---|---|---|
+| `json.itemsPointer` | no | RFC 6901 JSON Pointer to the candidate array or object. Empty/root is the default. |
+| `json.contentPointer` | yes when JSON extraction is enabled | Pointer relative to each candidate for semantic content. |
+| `json.externalIdPointer` | no | Optional scalar external identity. |
+| `json.titlePointer` | no | Optional scalar title. |
+| `json.urlPointer` | no | Optional scalar absolute or relative HTTP(S) item URL. |
+| `json.publishedAtPointer` | no | Optional scalar ISO/RFC-compatible publication timestamp. |
+
+HTML extraction is enabled when any `html.*` key is present:
+
+| Setting | Required | Meaning |
+|---|---|---|
+| `html.itemSelector` | yes when HTML extraction is enabled | CSS selector for repeated candidate elements. |
+| `html.contentSelector` | no | Selector relative to the candidate; candidate text is used when omitted. |
+| `html.titleSelector` | no | Optional title selector. |
+| `html.externalIdSelector` | no | Optional identity selector relative to the candidate. |
+| `html.externalIdAttribute` | no | Attribute to read for identity; when no selector is supplied the candidate element is used. |
+| `html.urlSelector` | no | Optional link selector relative to the candidate. |
+| `html.urlAttribute` | no | URL attribute, default `href`. |
+| `html.publishedAtSelector` | no | Optional publication-time selector. |
+| `html.publishedAtAttribute` | no | Attribute containing publication time; text is used when omitted. |
+
+Malformed pointers/selectors, invalid extracted URLs/timestamps, missing required mappings, and candidate sets above the configured bound are explicit extraction failures. Use the source-test API before enabling a new source to validate these settings against a real response.
 
 Persisting a source URL does not authorize collection from that destination. A configurable outbound destination/SSRF policy is still required before source management can be treated as safe for untrusted users.
 
