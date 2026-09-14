@@ -92,13 +92,14 @@ The first implementation foundation is present:
 - repository-level JaCoCo coverage, SpotBugs static-analysis, and dependency-health reporting integrated into the canonical verification workflow;
 - the first collection HTTP transport using Micronaut-managed HTTP infrastructure with bounded Virtual Thread orchestration and deterministic loopback tests;
 - collection-owned source extraction with one-item REST/HTML passthrough plus bounded RSS/Atom entry extraction, followed by acknowledged `RawItemDiscovered` Protobuf publication with explicit correlation and event identity;
-- the first explicit collection-run use case over persisted enabled sources, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results;
+- profile-driven collection execution over persisted monitoring-profile source membership, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results;
+- collection-owned PostgreSQL interval scheduling with cluster-safe leases and lease heartbeats across backend replicas;
 - the first analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual Kafka offset commit, and `ItemAnalyzed`/`ItemRejected` publication;
 - a first operational admin API for manual collection runs, durable run/source outcome history, and read-only normalized-item inspection;
 - Results-owned PostgreSQL materialization of `ItemAnalyzed` and `ItemRejected` with idempotent at-least-once Kafka consumption;
 - a bounded public Results REST API for recent feed browsing and profile-scoped result detail.
 
-Profile-driven scheduling, generic configurable REST/HTML extraction, result SSE/live delivery, event observation, stronger cross-DB/Kafka consistency, Kubernetes deployment, and the production observability stack are still planned work. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
+Generic configurable REST/HTML extraction, result SSE/live delivery, event observation, stronger cross-DB/Kafka consistency, Kubernetes deployment, and the production observability stack are still planned work. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

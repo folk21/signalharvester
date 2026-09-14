@@ -3,14 +3,14 @@ type: Specification
 title: Backend RSS/Atom item extraction
 description: Collection-owned extraction of RSS and Atom responses into bounded semantic raw items before Kafka publication.
 document_role: subspec
-spec_status: verification-pending
+spec_status: archived
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend RSS/Atom item extraction
 
 ## Status
 
-Verification pending — implementation is complete and awaits the developer `./run_checks.sh` acceptance run.
+Accepted — developer `./run_checks.sh` completed successfully with the implemented RSS/Atom extraction slice.
 
 ## Goal
 

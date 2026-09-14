@@ -27,6 +27,11 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_DB_MAX_POOL_SIZE` | `10` | Maximum Hikari connections for the default datasource. |
 | `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka bootstrap servers used by Micronaut Kafka clients. |
 | `SIGNALHARVESTER_COLLECTION_RSS_MAX_ITEMS_PER_SOURCE` | `500` | Maximum RSS/Atom entries accepted from one fetched response; values above the bound fail extraction explicitly. |
+| `SIGNALHARVESTER_COLLECTION_SCHEDULER_ENABLED` | `true` | Enables automatic polling of persisted enabled monitoring profiles. |
+| `SIGNALHARVESTER_COLLECTION_SCHEDULER_POLL_INTERVAL` | `10s` | Delay between scheduler polls. |
+| `SIGNALHARVESTER_COLLECTION_SCHEDULER_INITIAL_DELAY` | `10s` | Delay before the first scheduler poll after startup. |
+| `SIGNALHARVESTER_COLLECTION_SCHEDULER_LEASE_DURATION` | `2m` | PostgreSQL lease duration for one scheduled profile run. |
+| `SIGNALHARVESTER_COLLECTION_SCHEDULER_HEARTBEAT_INTERVAL` | `30s` | Renewal interval for an active schedule lease; must be shorter than the lease duration. |
 | `SIGNALHARVESTER_KAFKA_RAW_ITEM_DISCOVERED_TOPIC` | `signalharvester.collection.raw-item-discovered.v1` | Versioned topic for collection raw-item events. |
 | `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC` | `signalharvester.analysis.item-analyzed.v1` | Versioned topic for accepted analyzed items. |
 | `SIGNALHARVESTER_KAFKA_ITEM_REJECTED_TOPIC` | `signalharvester.analysis.item-rejected.v1` | Versioned topic for analysis rejection outcomes such as duplicates. |
@@ -84,9 +89,9 @@ The local `.env` file is ignored by Git and excluded from FULL archives.
 
 ## Persisted application configuration
 
-The configuration module owns source and monitoring-profile persistence in PostgreSQL. Its Flyway migrations under `db/migration/configuration` create source configuration plus monitoring profiles, ordered source membership, and profile criteria. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history under `db/migration/collection` and schema `collection`; Results owns analyzed/rejected projections under `db/migration/results` and schema `results`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider`; they must not read configuration tables directly.
+The configuration module owns source and monitoring-profile persistence in PostgreSQL. Its Flyway migrations under `db/migration/configuration` create source configuration plus monitoring profiles, ordered source membership, and profile criteria. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history and monitoring-profile schedule state under `db/migration/collection` and schema `collection`; Results owns analyzed/rejected projections under `db/migration/results` and schema `results`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider`; they must not read configuration tables directly.
 
-A monitoring profile stores a positive collection interval, at least one existing source id, and string criteria. The interval is persisted configuration for the upcoming scheduler; persistence alone does not start scheduled runs.
+A monitoring profile stores a positive collection interval, at least one existing source id, and string criteria. Enabled profiles are polled by Collection scheduling. Scheduler state remains collection-owned and is not stored in configuration tables. Disabling a profile prevents new automatic claims; manual execution may still target an existing profile explicitly.
 
 Source names are not globally unique. The stable `SourceId` is the identity boundary, so two sources may intentionally share a display name while retaining different identifiers, locations, and settings.
 

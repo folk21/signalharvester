@@ -12,8 +12,11 @@ import io.signalharvester.collection.run.CollectionRunResult;
 import io.signalharvester.collection.run.CollectionRunner;
 import io.signalharvester.collection.run.CollectionRunStatus;
 import io.signalharvester.collection.run.CollectionSourceStatus;
+import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceType;
+import io.signalharvester.configuration.application.MonitoringProfileConfigurationCommand;
+import io.signalharvester.configuration.application.MonitoringProfileConfigurationOperations;
 import io.signalharvester.configuration.application.SourceConfigurationCommand;
 import io.signalharvester.configuration.application.SourceConfigurationOperations;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
@@ -60,7 +63,6 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 class CollectionRunIntegrationTest {
 
     private static final String TOPIC = "signalharvester.collection.raw-item-discovered.v1.run-test";
-    private static final String PROFILE_ID = "profile-integration";
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -92,6 +94,7 @@ class CollectionRunIntegrationTest {
                 Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
                 Map.entry("flyway.datasources.default.enabled", true),
                 Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/configuration"),
+                Map.entry("flyway.datasources.default.locations[1]", "classpath:db/migration/collection"),
                 Map.entry("kafka.enabled", true),
                 Map.entry("kafka.bootstrap.servers", KAFKA.getBootstrapServers()),
                 Map.entry("kafka.producers.collection-raw-items.key.serializer",
@@ -103,7 +106,8 @@ class CollectionRunIntegrationTest {
                 Map.entry("signalharvester.kafka.raw-item-discovered-topic", TOPIC),
                 Map.entry("signalharvester.analysis.enabled", false),
                 Map.entry("signalharvester.results.enabled", false),
-                Map.entry("signalharvester.collection.max-concurrency", 2)));
+                Map.entry("signalharvester.collection.max-concurrency", 2),
+                Map.entry("signalharvester.collection.scheduler.enabled", false)));
     }
 
     @AfterEach
@@ -125,10 +129,18 @@ class CollectionRunIntegrationTest {
         ConfiguredSource alpha = configuration.create(command("A success", "/a-success", true));
         ConfiguredSource failing = configuration.create(command("B failure", "/b-failure", true));
         ConfiguredSource charlie = configuration.create(command("C success", "/c-success", true));
-        configuration.create(command("D disabled", "/a-success", false));
+        ConfiguredSource disabled = configuration.create(command("D disabled", "/a-success", false));
+        MonitoringProfileConfigurationOperations profiles = context.getBean(MonitoringProfileConfigurationOperations.class);
+        ConfiguredMonitoringProfile profile = profiles.create(new MonitoringProfileConfigurationCommand(
+                "Integration profile",
+                "JOB",
+                true,
+                5,
+                List.of(alpha.id(), failing.id(), charlie.id(), disabled.id()),
+                Map.of()));
 
         CollectionRunResult result = context.getBean(CollectionRunner.class).run(
-                new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty()));
+                new CollectionRunRequest(profile.id(), Optional.empty()));
 
         assertEquals(CollectionRunStatus.PARTIALLY_SUCCEEDED, result.status());
         assertEquals(2, result.publishedCount());
@@ -150,7 +162,7 @@ class CollectionRunIntegrationTest {
             assertEquals(TOPIC, record.topic());
             assertEquals(record.key(), event.getRawItemId());
             assertEquals(result.collectionRunId(), event.getEnvelope().getCorrelationId());
-            assertEquals(PROFILE_ID, event.getMonitoringProfileId());
+            assertEquals(profile.id().value().toString(), event.getMonitoringProfileId());
             assertEquals("JOB", event.getInformationCategory());
             publishedSourceIds.add(event.getSourceId());
             rawItemIds.add(event.getRawItemId());
@@ -219,6 +231,7 @@ class CollectionRunIntegrationTest {
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA IF EXISTS configuration CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS collection CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
         }
     }

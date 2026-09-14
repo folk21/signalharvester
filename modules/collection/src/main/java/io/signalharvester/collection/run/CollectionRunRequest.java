@@ -1,33 +1,26 @@
 package io.signalharvester.collection.run;
 
+import io.signalharvester.configuration.api.MonitoringProfileId;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Supplies caller-owned context for one explicit collection run.
+ * Identifies one persisted monitoring profile to collect.
  *
- * <p>Monitoring profiles are not persisted yet, so the first run slice receives profile/category
- * metadata explicitly while still loading the globally enabled sources through configuration.</p>
- *
- * @param monitoringProfileId logical profile that initiated the run
- * @param informationCategory product-level information category such as JOB or TOPIC
+ * @param monitoringProfileId persisted profile that owns category and source membership
  * @param traceparent W3C traceparent when an upstream tracing boundary supplies one
  */
 public record CollectionRunRequest(
-        String monitoringProfileId,
-        String informationCategory,
+        MonitoringProfileId monitoringProfileId,
         Optional<String> traceparent) {
 
     public CollectionRunRequest {
-        requireNonBlank(monitoringProfileId, "monitoringProfileId");
-        requireNonBlank(informationCategory, "informationCategory");
+        Objects.requireNonNull(monitoringProfileId, "monitoringProfileId");
         Objects.requireNonNull(traceparent, "traceparent");
-        traceparent.ifPresent(value -> requireNonBlank(value, "traceparent"));
-    }
-
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
+        traceparent.ifPresent(value -> {
+            if (value.isBlank()) {
+                throw new IllegalArgumentException("traceparent must not be blank");
+            }
+        });
     }
 }

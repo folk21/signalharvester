@@ -92,7 +92,6 @@ def run_importer(manifest: Path, base_url: str, timeout: float) -> None:
 def run_trial(
     client: HttpClient,
     profile_id: str,
-    information_category: str,
     result_wait_seconds: float,
     preview_limit: int,
     require_all_sources: bool,
@@ -107,10 +106,7 @@ def run_trial(
     print(f"Enabled sources: {len(enabled_sources)}")
     run = client.post_json(
         "/api/v1/admin/collection-runs",
-        {
-            "monitoringProfileId": profile_id,
-            "informationCategory": information_category,
-        },
+        {"monitoringProfileId": profile_id},
     )
     run_id = required_string(run, "collectionRunId")
     published_count = required_int(run, "publishedCount")
@@ -200,6 +196,31 @@ def results_for_run(
 
 
 @contextlib.contextmanager
+def temporary_profile(client: HttpClient, source_ids: list[str], information_category: str):
+    """Create a temporary persisted monitoring profile and remove it after the trial."""
+
+    profile = client.post_json(
+        "/api/v1/monitoring-profiles",
+        {
+            "name": f"Live trial {uuid.uuid4().hex[:8]}",
+            "informationCategory": information_category,
+            "enabled": True,
+            "collectionIntervalMinutes": 60,
+            "sourceIds": source_ids,
+            "criteria": {},
+        },
+    )
+    profile_id = required_string(profile, "id")
+    try:
+        yield profile_id
+    finally:
+        try:
+            client.delete(f"/api/v1/monitoring-profiles/{profile_id}")
+        except TrialError as failure:
+            print(f"WARNING: failed to delete temporary monitoring profile: {failure}", file=sys.stderr)
+
+
+@contextlib.contextmanager
 def local_rss_fixture(client: HttpClient):
     """Expose a deterministic two-entry RSS feed and register it as a temporary backend source."""
 
@@ -284,7 +305,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         default=None,
-        help="monitoring profile id; defaults to a unique live-trial id to avoid dedup from earlier runs",
+        help="existing monitoring profile UUID; when omitted, the trial creates and removes a temporary profile",
     )
     parser.add_argument("--category", default="GENERAL", help="collection information category")
     parser.add_argument("--timeout", type=float, default=10.0, help="HTTP timeout in seconds")
@@ -308,7 +329,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.timeout <= 0 or args.result_wait <= 0 or args.preview_limit < 0:
         print("ERROR: timeout/result-wait must be positive and preview-limit non-negative", file=sys.stderr)
         return 2
-    profile_id = args.profile or f"live-trial-{uuid.uuid4().hex[:12]}"
     try:
         if args.manifest:
             run_importer(args.manifest, args.base_url, args.timeout)
@@ -316,25 +336,48 @@ def main(argv: list[str] | None = None) -> int:
         if args.local_rss_fixture:
             with local_rss_fixture(client) as (source_id, location):
                 print(f"Local RSS fixture: source={source_id} location={location}")
-                run_trial(
-                    client,
-                    profile_id,
-                    args.category,
-                    args.result_wait,
-                    args.preview_limit,
-                    args.require_all_sources,
-                    expected_source_id=source_id,
-                    expected_source_results=2,
-                )
-        else:
+                if args.profile:
+                    run_trial(
+                        client,
+                        args.profile,
+                        args.result_wait,
+                        args.preview_limit,
+                        args.require_all_sources,
+                        expected_source_id=source_id,
+                        expected_source_results=2,
+                    )
+                else:
+                    with temporary_profile(client, [source_id], args.category) as profile_id:
+                        run_trial(
+                            client,
+                            profile_id,
+                            args.result_wait,
+                            args.preview_limit,
+                            args.require_all_sources,
+                            expected_source_id=source_id,
+                            expected_source_results=2,
+                        )
+        elif args.profile:
             run_trial(
                 client,
-                profile_id,
-                args.category,
+                args.profile,
                 args.result_wait,
                 args.preview_limit,
                 args.require_all_sources,
             )
+        else:
+            sources = client.get_json("/api/v1/sources")
+            source_ids = [required_string(source, "id") for source in sources if source.get("enabled") is True]
+            if not source_ids:
+                raise TrialError("backend has no enabled sources to collect")
+            with temporary_profile(client, source_ids, args.category) as profile_id:
+                run_trial(
+                    client,
+                    profile_id,
+                    args.result_wait,
+                    args.preview_limit,
+                    args.require_all_sources,
+                )
     except TrialError as failure:
         print(f"ERROR: {failure}", file=sys.stderr)
         return 1

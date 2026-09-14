@@ -10,7 +10,10 @@ import io.micronaut.context.ApplicationContext;
 import io.signalharvester.collection.run.CollectionRunRequest;
 import io.signalharvester.collection.run.CollectionRunResult;
 import io.signalharvester.collection.run.CollectionRunner;
+import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
 import io.signalharvester.configuration.api.SourceType;
+import io.signalharvester.configuration.application.MonitoringProfileConfigurationCommand;
+import io.signalharvester.configuration.application.MonitoringProfileConfigurationOperations;
 import io.signalharvester.configuration.application.SourceConfigurationCommand;
 import io.signalharvester.configuration.application.SourceConfigurationOperations;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
@@ -62,7 +65,7 @@ class CollectionAnalysisIntegrationTest {
     private static final String ANALYZED_TOPIC = "signalharvester.analysis.item-analyzed.v1.test";
     private static final String REJECTED_TOPIC = "signalharvester.analysis.item-rejected.v1.test";
     private static final String ANALYSIS_GROUP = "signalharvester-analysis-integration-test";
-    private static final String PROFILE_ID = "profile-analysis";
+    private static String profileId;
     private static final String NORMALIZED_CONTENT = "Java backend Kafka";
 
     @Container
@@ -95,6 +98,7 @@ class CollectionAnalysisIntegrationTest {
                 Map.entry("flyway.datasources.default.enabled", true),
                 Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/configuration"),
                 Map.entry("flyway.datasources.default.locations[1]", "classpath:db/migration/analysis"),
+                Map.entry("flyway.datasources.default.locations[2]", "classpath:db/migration/collection"),
                 Map.entry("kafka.enabled", true),
                 Map.entry("kafka.bootstrap.servers", KAFKA.getBootstrapServers()),
                 Map.entry("kafka.producers.collection-raw-items.key.serializer",
@@ -122,7 +126,8 @@ class CollectionAnalysisIntegrationTest {
                         "signalharvester.analysis.keyword-rules.keywords",
                         List.of("java", "kafka", "postgresql")),
                 Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1),
-                Map.entry("signalharvester.collection.max-concurrency", 2)));
+                Map.entry("signalharvester.collection.max-concurrency", 2),
+                Map.entry("signalharvester.collection.scheduler.enabled", false)));
     }
 
     @AfterEach
@@ -143,18 +148,27 @@ class CollectionAnalysisIntegrationTest {
     void shouldNormalizeAnalyzeAndRejectEquivalentRediscoveryAsDuplicate() throws Exception {
         SourceConfigurationOperations configuration = context.getBean(SourceConfigurationOperations.class);
         URI sourceUri = URI.create("http://127.0.0.1:" + sourceServer.getAddress().getPort() + "/jobs");
-        configuration.create(new SourceConfigurationCommand(
+        var source = configuration.create(new SourceConfigurationCommand(
                 "Jobs",
                 SourceType.REST,
                 sourceUri,
                 true,
                 Map.of()));
+        MonitoringProfileConfigurationOperations profiles = context.getBean(MonitoringProfileConfigurationOperations.class);
+        ConfiguredMonitoringProfile profile = profiles.create(new MonitoringProfileConfigurationCommand(
+                "Analysis profile",
+                "JOB",
+                true,
+                5,
+                List.of(source.id()),
+                Map.of()));
+        profileId = profile.id().value().toString();
 
         CollectionRunner collection = context.getBean(CollectionRunner.class);
         CollectionRunResult firstRun = collection.run(
-                new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty()));
+                new CollectionRunRequest(profile.id(), Optional.empty()));
         CollectionRunResult secondRun = collection.run(
-                new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty()));
+                new CollectionRunRequest(profile.id(), Optional.empty()));
 
         assertNotEquals(firstRun.collectionRunId(), secondRun.collectionRunId());
         assertNotEquals(
@@ -234,7 +248,7 @@ class CollectionAnalysisIntegrationTest {
                           FROM analysis.normalized_item_claims
                         """)) {
             assertTrue(resultSet.next());
-            assertEquals(PROFILE_ID, resultSet.getString("monitoring_profile_id"));
+            assertEquals(profileId, resultSet.getString("monitoring_profile_id"));
             assertEquals(normalizedItemId, resultSet.getString("normalized_item_id"));
             assertEquals(2, resultSet.getLong("discovery_count"));
             assertTrue(!resultSet.next());
@@ -265,6 +279,7 @@ class CollectionAnalysisIntegrationTest {
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA IF EXISTS configuration CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS analysis CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS collection CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
         }
     }

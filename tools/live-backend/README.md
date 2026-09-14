@@ -12,13 +12,14 @@ The workflow is:
 ```text
 optional source manifest import
     -> GET /api/v1/sources
+    -> create/reuse persisted monitoring profile
     -> POST /api/v1/admin/collection-runs
     -> Kafka / Analysis / Results internally
     -> GET /api/v1/results
     -> profile-scoped result detail
 ```
 
-By default the tool creates a unique `live-trial-...` monitoring-profile id. This avoids previous Analysis deduplication state turning a repeated real-source trial into rejected duplicates instead of fresh analyzed Results.
+By default the tool creates a temporary persisted monitoring profile over the enabled sources, uses its UUID for the manual run, and removes it afterward. This avoids previous Analysis deduplication state turning a repeated real-source trial into rejected duplicates instead of fresh analyzed Results. Pass `--profile <UUID>` to reuse an existing persisted profile instead.
 
 Run against already configured enabled sources:
 
@@ -37,7 +38,7 @@ python3 tools/live-backend/verify_pipeline.py \
   --category GENERAL
 ```
 
-This mode starts a temporary loopback RSS server with two entries, creates one temporary RSS source through the public REST API, requires two distinct published source outcomes and two materialized Results, then deletes the temporary source. Other already-enabled sources may still participate in the same collection run; use a clean local database for the most isolated signal. Because the backend must reach the loopback fixture, this mode targets a backend process running on the same host rather than inside an isolated container network.
+This mode starts a temporary loopback RSS server with two entries, creates one temporary RSS source and one temporary monitoring profile through the public REST API, requires two distinct published source outcomes and two materialized Results, then deletes the profile before deleting the source. The temporary profile references only the fixture source, so unrelated enabled sources do not participate. Because the backend must reach the loopback fixture, this mode targets a backend process running on the same host rather than inside an isolated container network.
 
 Import a manifest first:
 

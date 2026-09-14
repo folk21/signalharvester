@@ -234,6 +234,8 @@ paths:
                 $ref: '#/components/schemas/CollectionRun'
         '400':
           description: Invalid run request
+        '404':
+          description: Monitoring profile not found
   /api/v1/admin/collection-runs/{collectionRunId}:
     parameters:
     - name: collectionRunId
@@ -558,16 +560,10 @@ components:
       type: object
       required:
       - monitoringProfileId
-      - informationCategory
       properties:
         monitoringProfileId:
           type: string
-          minLength: 1
-          pattern: .*\S.*
-        informationCategory:
-          type: string
-          minLength: 1
-          pattern: .*\S.*
+          format: uuid
     CollectionSourceRun:
       type: object
       description: One terminal source/item outcome. RSS/Atom sources may contribute multiple outcomes with the same sourceId.

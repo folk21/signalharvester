@@ -43,7 +43,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies the configuration, analysis, collection, and Results migrations at startup. The backend exposes source configuration CRUD under `/api/v1/sources`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
+Flyway applies the configuration, analysis, collection, and Results migrations at startup. The backend exposes source CRUD under `/api/v1/sources`, monitoring-profile CRUD under `/api/v1/monitoring-profiles`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
 
 Example source creation:
 
@@ -84,15 +84,17 @@ python3 tools/source-import/import_sources.py \
 
 The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
 
-The collection run workflow reads enabled sources through the configuration module API, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. REST/HTML currently produce one passthrough item per response; RSS/Atom produce one item per feed entry up to the configured extraction bound. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through the public REST API.
+The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. REST/HTML currently produce one passthrough item per response; RSS/Atom produce one item per feed entry up to the configured extraction bound. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through the public REST API.
 
-Start a manual collection run:
+Start a manual collection run for an existing monitoring-profile UUID:
 
 ```bash
 curl -i -X POST http://localhost:8080/api/v1/admin/collection-runs \
   -H 'Content-Type: application/json' \
-  -d '{"monitoringProfileId":"manual-admin","informationCategory":"JOB"}'
+  -d '{"monitoringProfileId":"<MONITORING_PROFILE_UUID>"}'
 ```
+
+The category and source membership come from the persisted profile and cannot be overridden by this request.
 
 Inspect recent runs:
 
@@ -111,7 +113,7 @@ The analysis inspection API exposes durable normalization/deduplication provenan
 
 ### Live backend pipeline verification
 
-For a separately running backend, use the opt-in black-box verifier instead of manually copying multiple `curl` commands. It can optionally import a source manifest, starts a manual collection run with a unique monitoring-profile id, and waits until analyzed output correlated to that run becomes visible through the public Results API:
+For a separately running backend, use the opt-in black-box verifier instead of manually copying multiple `curl` commands. It can optionally import a source manifest. When `--profile` is omitted it creates a temporary persisted monitoring profile over the enabled sources, starts a manual collection run, waits until correlated output becomes visible through the public Results API, and removes the temporary profile afterward:
 
 ```bash
 python3 tools/live-backend/verify_pipeline.py \
@@ -161,7 +163,7 @@ It runs the default Gradle verification, all container-backed integration tests,
 
 As the first vertical slice grows, this document will add commands for:
 
-- monitoring-profile scheduling;
+- cron/calendar scheduling and historical missed-interval catch-up;
 - result REST/SSE streams;
 - event-flow inspection.
 

@@ -3,14 +3,14 @@ type: Specification
 title: Backend monitoring profile configuration
 description: Persist monitoring profiles, source membership, intervals, and matching criteria behind configuration-owned APIs and REST.
 document_role: subspec
-spec_status: verification-pending
+spec_status: archived
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend monitoring profile configuration
 
 ## Status
 
-Verification pending — implementation is present in the current patch, but repository checks could not run in this environment because Docker is unavailable and the Gradle distribution is not cached.
+Accepted — developer `./run_checks.sh` completed successfully after the compile-fix patch.
 
 ## Goal
 

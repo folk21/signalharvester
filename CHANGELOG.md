@@ -5,6 +5,7 @@ description: Notable project changes organized by release state, with each chang
 ---
 # Changelog
 
+- 2026-09-14 — Added profile-driven manual collection and cluster-safe interval scheduling with collection-owned PostgreSQL leases, lease heartbeats, and UUID-only manual-run requests.
 ## Unreleased
 
 - 2026-09-14 — Added persisted monitoring-profile configuration with ordered source membership, collection intervals, criteria, REST/OpenAPI CRUD, source-reference protection, and focused regression coverage.

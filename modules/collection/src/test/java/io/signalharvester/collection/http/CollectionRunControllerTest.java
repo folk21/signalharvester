@@ -8,6 +8,7 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Replaces;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.runtime.server.EmbeddedServer;
+import io.signalharvester.collection.run.CollectionProfileNotFoundException;
 import io.signalharvester.collection.run.CollectionRunHistory;
 import io.signalharvester.collection.run.CollectionRunRequest;
 import io.signalharvester.collection.run.CollectionRunResult;
@@ -18,6 +19,7 @@ import io.signalharvester.collection.run.CollectionSourceStatus;
 import io.signalharvester.collection.run.CollectionRunHistoryQuery;
 import io.signalharvester.collection.run.CollectionRunNotFoundException;
 import io.signalharvester.collection.run.CollectionRunService;
+import io.signalharvester.configuration.api.MonitoringProfileId;
 import io.signalharvester.configuration.api.SourceId;
 import jakarta.inject.Singleton;
 import java.net.http.HttpClient;
@@ -46,7 +48,8 @@ class CollectionRunControllerTest {
     private static final UUID RUN_ID = UUID.fromString("00000000-0000-0000-0000-000000000101");
     private static final UUID SOURCE_ID = UUID.fromString("00000000-0000-0000-0000-000000000201");
     private static final UUID MISSING_RUN_ID = UUID.fromString("00000000-0000-0000-0000-000000000999");
-    private static final String PROFILE_ID = "profile-a";
+    private static final UUID MISSING_PROFILE_ID = UUID.fromString("00000000-0000-0000-0000-000000000998");
+    private static final UUID PROFILE_ID = UUID.fromString("00000000-0000-0000-0000-000000000301");
     private static final String RAW_ITEM_ID = "raw-1";
     private static final String EVENT_ID = "event-1";
 
@@ -73,8 +76,7 @@ class CollectionRunControllerTest {
     void shouldServeManualRunAndHistoryThroughBlockingHttpBoundary() throws Exception {
         HttpResponse<String> started = send("POST", "/api/v1/admin/collection-runs", """
                 {
-                  "monitoringProfileId": "%s",
-                  "informationCategory": "JOB"
+                  "monitoringProfileId": "%s"
                 }
                 """.formatted(PROFILE_ID));
         assertEquals(201, started.statusCode());
@@ -84,8 +86,7 @@ class CollectionRunControllerTest {
         assertTrue(started.body().contains("\"failureMessage\":null"));
 
         TestCollectionRunner runner = server.getApplicationContext().getBean(TestCollectionRunner.class);
-        assertEquals(PROFILE_ID, runner.lastRequest().monitoringProfileId());
-        assertEquals("JOB", runner.lastRequest().informationCategory());
+        assertEquals(MonitoringProfileId.of(PROFILE_ID), runner.lastRequest().monitoringProfileId());
         assertTrue(runner.lastThread().isVirtual());
         assertFalse(runner.lastThread().getName().contains("EventLoop"));
 
@@ -110,11 +111,17 @@ class CollectionRunControllerTest {
     void shouldValidateRunRequestAndHistoryBoundsAndMapMissingRun() throws Exception {
         HttpResponse<String> invalidRequest = send("POST", "/api/v1/admin/collection-runs", """
                 {
-                  "monitoringProfileId": "   ",
-                  "informationCategory": "JOB"
+                  "monitoringProfileId": "not-a-uuid"
                 }
                 """);
         assertEquals(400, invalidRequest.statusCode());
+
+        HttpResponse<String> missingProfile = send("POST", "/api/v1/admin/collection-runs", """
+                {
+                  "monitoringProfileId": "%s"
+                }
+                """.formatted(MISSING_PROFILE_ID));
+        assertEquals(404, missingProfile.statusCode());
 
         assertEquals(400, send("GET", "/api/v1/admin/collection-runs?limit=0", null).statusCode());
         assertEquals(400, send("GET", "/api/v1/admin/collection-runs?limit=201", null).statusCode());
@@ -140,13 +147,14 @@ class CollectionRunControllerTest {
         return Map.ofEntries(
                 Map.entry("spec.name", SPEC_NAME),
                 Map.entry("micronaut.server.port", -1),
-                Map.entry("micronaut.executors.blocking.virtual", true));
+                Map.entry("micronaut.executors.blocking.virtual", true),
+                Map.entry("signalharvester.collection.scheduler.enabled", false));
     }
 
     private static CollectionRunResult runResult() {
         return new CollectionRunResult(
                 RUN_ID.toString(),
-                PROFILE_ID,
+                PROFILE_ID.toString(),
                 "JOB",
                 Instant.parse("2026-09-12T10:00:00Z"),
                 Instant.parse("2026-09-12T10:00:01Z"),
@@ -170,6 +178,9 @@ class CollectionRunControllerTest {
         public CollectionRunResult run(CollectionRunRequest request) {
             lastRequest.set(request);
             lastThread.set(Thread.currentThread());
+            if (MonitoringProfileId.of(MISSING_PROFILE_ID).equals(request.monitoringProfileId())) {
+                throw new CollectionProfileNotFoundException(request.monitoringProfileId());
+            }
             return runResult();
         }
 
