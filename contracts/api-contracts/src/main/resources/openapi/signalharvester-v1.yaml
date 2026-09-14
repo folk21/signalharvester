@@ -102,6 +102,24 @@ paths:
           description: Source not found
         '409':
           description: Source is referenced by a monitoring profile
+  /api/v1/sources/{sourceId}/test:
+    parameters:
+    - $ref: '#/components/parameters/SourceId'
+    post:
+      tags:
+      - Sources
+      operationId: testSource
+      summary: Test one persisted external source configuration
+      description: Uses the normal collection fetch and extraction boundary without publishing Kafka events or collection-run history. Disabled sources may be tested before activation.
+      responses:
+        '200':
+          description: Diagnostic source-test result, including fetch or extraction failures
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceTestResult'
+        '404':
+          description: Source not found
   /api/v1/monitoring-profiles:
     get:
       tags:
@@ -450,8 +468,7 @@ components:
           type: boolean
         settings:
           type: object
-          description: Source-type-specific string configuration interpreted by the
-            owning collector.
+          description: Source-type-specific string configuration interpreted by the owning collector. REST JSON extraction uses json.* JSON Pointer settings; HTML extraction uses html.* CSS selector settings.
           additionalProperties:
             type: string
     SourceUpsertRequest:
@@ -480,10 +497,100 @@ components:
         settings:
           type: object
           default: {}
-          description: Source-type-specific string configuration interpreted by the
-            owning collector.
+          description: Source-type-specific string configuration interpreted by the owning collector. REST JSON extraction uses json.* JSON Pointer settings; HTML extraction uses html.* CSS selector settings.
           additionalProperties:
             type: string
+    SourceTestStatus:
+      type: string
+      enum:
+      - SUCCEEDED
+      - FETCH_FAILED
+      - EXTRACTION_FAILED
+    SourceTestPreviewItem:
+      type: object
+      required:
+      - externalId
+      - title
+      - url
+      - contentPreview
+      - contentType
+      - publishedAt
+      - contentTruncated
+      properties:
+        externalId:
+          type:
+          - string
+          - 'null'
+        title:
+          type:
+          - string
+          - 'null'
+        url:
+          type: string
+          format: uri
+        contentPreview:
+          type: string
+          description: Bounded prefix of extracted semantic content.
+        contentType:
+          type: string
+        publishedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        contentTruncated:
+          type: boolean
+    SourceTestResult:
+      type: object
+      required:
+      - sourceId
+      - status
+      - httpStatus
+      - responseContentType
+      - responseBytes
+      - fetchDurationMs
+      - extractionDurationMs
+      - candidateItemCount
+      - preview
+      - failureMessage
+      properties:
+        sourceId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/SourceTestStatus'
+        httpStatus:
+          type:
+          - integer
+          - 'null'
+          minimum: 100
+          maximum: 599
+        responseContentType:
+          type:
+          - string
+          - 'null'
+        responseBytes:
+          type: integer
+          minimum: 0
+        fetchDurationMs:
+          type: integer
+          format: int64
+          minimum: 0
+        extractionDurationMs:
+          type: integer
+          format: int64
+          minimum: 0
+        candidateItemCount:
+          type: integer
+          minimum: 0
+        preview:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceTestPreviewItem'
+        failureMessage:
+          type:
+          - string
+          - 'null'
     MonitoringProfile:
       type: object
       required:

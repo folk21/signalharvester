@@ -5,9 +5,10 @@ description: Notable project changes organized by release state, with each chang
 ---
 # Changelog
 
-- 2026-09-14 — Added profile-driven manual collection and cluster-safe interval scheduling with collection-owned PostgreSQL leases, lease heartbeats, and UUID-only manual-run requests.
 ## Unreleased
 
+- 2026-09-14 — Added persisted-source diagnostic testing plus configuration-driven REST/JSON Pointer and HTML CSS-selector extraction with bounded previews and candidate limits.
+- 2026-09-14 — Added profile-driven manual collection and cluster-safe interval scheduling with collection-owned PostgreSQL leases, lease heartbeats, and UUID-only manual-run requests.
 - 2026-09-14 — Added persisted monitoring-profile configuration with ordered source membership, collection intervals, criteria, REST/OpenAPI CRUD, source-reference protection, and focused regression coverage.
 - 2026-09-13 — Added bounded collection-owned RSS/Atom entry extraction, per-item raw-event publication, extraction-aware run history statuses, and opt-in live-backend verification including a deterministic local two-entry RSS fixture.
 - 2026-09-13 — Added the public Results REST API with bounded feed filters, compact list responses, profile-scoped detail reads, and PostgreSQL/controller regression coverage.

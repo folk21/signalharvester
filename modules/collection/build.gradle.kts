@@ -38,6 +38,8 @@ dependencies {
 
     // The Micronaut-managed Netty client registry requires a JSON mapper in the application context.
     implementation("io.micronaut.serde:micronaut-serde-jackson")
+    implementation("com.fasterxml.jackson.core:jackson-databind")
+    implementation(libs.jsoup)
 
     implementation("io.micronaut.validation:micronaut-validation")
 

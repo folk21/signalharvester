@@ -8,6 +8,7 @@ testcontainers = "2.0.5"
 archunit = "1.5.0"
 jacoco = "0.8.15"
 spotbugs-gradle-plugin = "6.5.11"
+jsoup = "1.23.2"
 dependency-analysis-gradle-plugin = "3.19.1"
 
 [libraries]
@@ -18,6 +19,7 @@ testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgr
 testcontainers-kafka = { module = "org.testcontainers:testcontainers-kafka", version.ref = "testcontainers" }
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 
 [plugins]

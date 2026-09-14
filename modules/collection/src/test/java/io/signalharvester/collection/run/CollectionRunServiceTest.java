@@ -11,6 +11,8 @@ import io.signalharvester.collection.source.ExternalSourceClient;
 import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.collection.source.FetchedSourceContent;
 import io.signalharvester.collection.source.extract.DefaultSourceItemExtractor;
+import io.signalharvester.collection.source.extract.HtmlSourceItemExtractor;
+import io.signalharvester.collection.source.extract.JsonSourceItemExtractor;
 import io.signalharvester.collection.source.extract.RssAtomItemExtractor;
 import io.signalharvester.collection.source.extract.SourceItemExtractor;
 import io.signalharvester.collection.source.SourceFetchException;
@@ -372,7 +374,10 @@ class CollectionRunServiceTest {
     }
 
     private static SourceItemExtractor defaultExtractor() {
-        return new DefaultSourceItemExtractor(new RssAtomItemExtractor(() -> 500));
+        return new DefaultSourceItemExtractor(
+                new RssAtomItemExtractor(() -> 500),
+                new JsonSourceItemExtractor(() -> 500),
+                new HtmlSourceItemExtractor(() -> 500));
     }
 
     private static void await(CountDownLatch latch) {

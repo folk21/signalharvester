@@ -3,14 +3,14 @@ type: Specification
 title: Backend profile-driven scheduling
 description: Drive manual and automatic collection from persisted monitoring profiles with cluster-safe PostgreSQL scheduling leases.
 document_role: subspec
-spec_status: verification-pending
+spec_status: archived
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend profile-driven scheduling
 
 ## Status
 
-Verification pending — implementation is present and awaits the developer `./run_checks.sh` acceptance run.
+Accepted — developer `./run_checks.sh` completed successfully with profile-driven collection and cluster-safe scheduling.
 
 ## Goal
 

@@ -11,14 +11,21 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-/** Routes fetched responses to type-specific extraction while preserving one-item REST/HTML behavior. */
+/** Routes fetched responses to the configured type-specific extraction strategy. */
 @Singleton
 public final class DefaultSourceItemExtractor implements SourceItemExtractor {
 
     private final RssAtomItemExtractor rssAtomItemExtractor;
+    private final JsonSourceItemExtractor jsonSourceItemExtractor;
+    private final HtmlSourceItemExtractor htmlSourceItemExtractor;
 
-    public DefaultSourceItemExtractor(RssAtomItemExtractor rssAtomItemExtractor) {
+    public DefaultSourceItemExtractor(
+            RssAtomItemExtractor rssAtomItemExtractor,
+            JsonSourceItemExtractor jsonSourceItemExtractor,
+            HtmlSourceItemExtractor htmlSourceItemExtractor) {
         this.rssAtomItemExtractor = Objects.requireNonNull(rssAtomItemExtractor, "rssAtomItemExtractor");
+        this.jsonSourceItemExtractor = Objects.requireNonNull(jsonSourceItemExtractor, "jsonSourceItemExtractor");
+        this.htmlSourceItemExtractor = Objects.requireNonNull(htmlSourceItemExtractor, "htmlSourceItemExtractor");
     }
 
     @Override
@@ -30,9 +37,36 @@ public final class DefaultSourceItemExtractor implements SourceItemExtractor {
                     source.id(), "Fetched content source id does not match configured source id");
         }
 
-        return source.type() == SourceType.RSS
-                ? rssAtomItemExtractor.extract(source, fetchedContent)
+        boolean jsonConfigured = jsonSourceItemExtractor.isConfigured(source);
+        boolean htmlConfigured = htmlSourceItemExtractor.isConfigured(source);
+        if (source.type() == SourceType.RSS) {
+            rejectIncompatibleGenericSettings(source, jsonConfigured, htmlConfigured);
+            return rssAtomItemExtractor.extract(source, fetchedContent);
+        }
+        if (source.type() == SourceType.REST) {
+            if (htmlConfigured) {
+                throw new SourceItemExtractionException(
+                        source.id(), "html.* extraction settings require source type HTML");
+            }
+            return jsonConfigured
+                    ? jsonSourceItemExtractor.extract(source, fetchedContent)
+                    : List.of(passthrough(fetchedContent));
+        }
+        if (jsonConfigured) {
+            throw new SourceItemExtractionException(
+                    source.id(), "json.* extraction settings require source type REST");
+        }
+        return htmlConfigured
+                ? htmlSourceItemExtractor.extract(source, fetchedContent)
                 : List.of(passthrough(fetchedContent));
+    }
+
+    private static void rejectIncompatibleGenericSettings(
+            ConfiguredSource source, boolean jsonConfigured, boolean htmlConfigured) {
+        if (jsonConfigured || htmlConfigured) {
+            throw new SourceItemExtractionException(
+                    source.id(), "json.* and html.* extraction settings are not valid for source type RSS");
+        }
     }
 
     private static ExtractedSourceItem passthrough(FetchedSourceContent fetchedContent) {

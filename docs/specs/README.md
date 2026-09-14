@@ -95,7 +95,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-profile-driven-scheduling.md`](active/subspecs/backend-profile-driven-scheduling.md) — profile-owned manual execution plus cluster-safe interval scheduling.
+- [`active/subspecs/backend-source-test-generic-extraction.md`](active/subspecs/backend-source-test-generic-extraction.md) — diagnostic persisted-source testing plus configuration-driven REST/JSON and HTML extraction.
 
 Active supporting tracks:
 
@@ -104,6 +104,7 @@ Active supporting tracks:
 
 ## Recently completed sub-specifications
 
+- [`archive/subspecs/backend-profile-driven-scheduling.md`](archive/subspecs/backend-profile-driven-scheduling.md) — profile-owned manual execution and cluster-safe interval scheduling, verified in the developer environment;
 - [`archive/subspecs/backend-monitoring-profile-configuration.md`](archive/subspecs/backend-monitoring-profile-configuration.md) — persisted monitoring profiles, ordered source membership, intervals, criteria, and REST/OpenAPI CRUD, verified in the developer environment;
 - [`archive/subspecs/backend-rss-atom-extraction.md`](archive/subspecs/backend-rss-atom-extraction.md) — bounded RSS/Atom entry extraction and per-item publication, verified in the developer environment;
 - [`archive/subspecs/backend-results-rest-api.md`](archive/subspecs/backend-results-rest-api.md) — public Results feed/detail REST reads over Results-owned projections, verified in the developer environment;

@@ -38,15 +38,17 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 /**
  * Black-box smoke coverage for the public backend surface implemented by
  * {@link io.signalharvester.configuration.http.SourceController},
+ * {@link io.signalharvester.collection.http.SourceTestController},
  * {@link io.signalharvester.collection.http.CollectionRunController}, and
  * {@link io.signalharvester.analysis.http.AnalysisItemInspectionController} over real PostgreSQL and Kafka.
  *
- * <p>The test drives source creation, repeated collection, durable run history, and analysis inspection only
- * through HTTP. Until a Results read API exists, analysis inspection remains the terminal public observable boundary.</p>
+ * <p>The test drives source creation, diagnostic source testing, repeated collection, durable run history,
+ * and analysis inspection only through HTTP. Until a Results read API exists, analysis inspection remains
+ * the terminal public observable boundary.</p>
  *
  * <p>Related specifications: {@code backend-configuration-persistence-rest},
  * {@code backend-collection-run-orchestration}, {@code backend-analysis-normalization-deduplication},
- * {@code backend-operational-admin-api}.</p>
+ * {@code backend-operational-admin-api}, and {@code backend-source-test-generic-extraction}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class HttpPipelineSmokeIntegrationTest {
@@ -83,6 +85,7 @@ class HttpPipelineSmokeIntegrationTest {
 
         sourceServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         sourceServer.createContext("/jobs", this::respondWithSourceContent);
+        sourceServer.createContext("/json", this::respondWithJsonSourceContent);
         sourceServer.start();
 
         backend = ApplicationContext.run(EmbeddedServer.class, backendProperties(), "test");
@@ -180,6 +183,45 @@ class HttpPipelineSmokeIntegrationTest {
         assertTrue(inspected.body().contains("\"discoveryCount\":2"));
     }
 
+    /**
+     * Test persisted JSON extraction through the public source-test API without creating collection history.
+     */
+    @Test
+    void shouldTestConfiguredJsonSourceWithoutPublishingCollectionRun() throws Exception {
+        String sourceUrl = "http://127.0.0.1:" + sourceServer.getAddress().getPort() + "/json";
+        HttpResponse<String> created = send("POST", "/api/v1/sources", """
+                {
+                  "name": "JSON source test",
+                  "type": "REST",
+                  "location": "%s",
+                  "enabled": false,
+                  "settings": {
+                    "json.itemsPointer": "/items",
+                    "json.externalIdPointer": "/id",
+                    "json.titlePointer": "/title",
+                    "json.urlPointer": "/url",
+                    "json.contentPointer": "/content"
+                  }
+                }
+                """.formatted(sourceUrl));
+        assertEquals(201, created.statusCode());
+        String sourceId = extract(SOURCE_ID, created.body(), "source id");
+
+        HttpResponse<String> tested = send("POST", "/api/v1/sources/" + sourceId + "/test", null);
+
+        assertEquals(200, tested.statusCode());
+        assertTrue(tested.body().contains("\"status\":\"SUCCEEDED\""));
+        assertTrue(tested.body().contains("\"candidateItemCount\":2"));
+        assertTrue(tested.body().contains("\"externalId\":\"job-1\""));
+        assertTrue(tested.body().contains("\"title\":\"Java Engineer\""));
+        assertTrue(tested.body().contains("\"url\":\"" + sourceUrl.replace("/json", "/jobs/1") + "\""));
+        assertEquals(1, sourceRequests.get());
+
+        HttpResponse<String> runs = send("GET", "/api/v1/admin/collection-runs", null);
+        assertEquals(200, runs.statusCode());
+        assertEquals("[]", runs.body());
+    }
+
     private HttpResponse<String> startRun(String profileId) throws Exception {
         return send("POST", "/api/v1/admin/collection-runs", """
                 {
@@ -272,6 +314,33 @@ class HttpPipelineSmokeIntegrationTest {
         }
     }
 
+    private void respondWithJsonSourceContent(HttpExchange exchange) throws IOException {
+        sourceRequests.incrementAndGet();
+        byte[] payload = """
+                {
+                  "items": [
+                    {
+                      "id": "job-1",
+                      "title": "Java Engineer",
+                      "url": "/jobs/1",
+                      "content": "Java Kafka PostgreSQL"
+                    },
+                    {
+                      "id": "job-2",
+                      "title": "Backend Engineer",
+                      "url": "/jobs/2",
+                      "content": "Distributed systems"
+                    }
+                  ]
+                }
+                """.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+        exchange.sendResponseHeaders(200, payload.length);
+        try (var response = exchange.getResponseBody()) {
+            response.write(payload);
+        }
+    }
+
     private static String extract(Pattern pattern, String body, String description) {
         Matcher matcher = pattern.matcher(body);
         if (!matcher.find()) {
@@ -301,6 +370,7 @@ class HttpPipelineSmokeIntegrationTest {
             statement.execute("DROP SCHEMA IF EXISTS configuration CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS analysis CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS collection CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS results CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
         }
     }

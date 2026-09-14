@@ -14,11 +14,12 @@ Own collection-run orchestration, bounded external-source access, and publicatio
 - explicit profile-driven collection-run lifecycle;
 - interval scheduling with collection-owned cluster-safe lease state;
 - external source fetching and bounded concurrency;
-- collection-owned source extraction, including bounded RSS/Atom entry parsing;
+- collection-owned source extraction, including bounded RSS/Atom parsing, REST/JSON Pointer extraction, and HTML CSS-selector extraction;
+- bounded persisted-source diagnostic testing through the same fetch/extraction ports used by collection runs;
 - raw-item identity generation;
 - `RawItemDiscovered` publication;
 - durable operational collection-run history;
-- manual collection-run REST implementation.
+- manual collection-run and diagnostic source-test REST implementations.
 
 ## Public integration surface
 
@@ -36,7 +37,7 @@ Authoritative schema: `contracts/api-contracts/`.
 
 Implementation adapter: `src/main/java/io/signalharvester/collection/http/`.
 
-The controller depends on the internal `CollectionRunner` and `CollectionRunHistory` application boundaries; controller classes and those internal ports are not cross-module Java APIs.
+Collection HTTP adapters depend on internal application boundaries such as `CollectionRunner`, `CollectionRunHistory`, and `SourceTester`; controller classes and those internal ports are not cross-module Java APIs.
 
 ### Events
 
@@ -62,7 +63,7 @@ Asynchronous downstream processing uses Kafka event contracts rather than direct
 
 Collection must not access configuration-owned tables or configuration implementation packages.
 
-Other functional modules must not depend on collection `run`, `source`, `event`, `persistence`, `configuration`, or `http` packages. Internal application ports are not cross-module APIs merely because they are Java interfaces.
+Other functional modules must not depend on collection `run`, `source`, `sourcetest`, `event`, `persistence`, `configuration`, or `http` packages. Internal application ports are not cross-module APIs merely because they are Java interfaces.
 
 ## Important invariants
 
@@ -72,7 +73,9 @@ Other functional modules must not depend on collection `run`, `source`, `event`,
 - source/item-level failures are best-effort and do not cancel unrelated source work;
 - one collection run id is reused as correlation id for raw-item events from that run;
 - raw-item identity is deterministic for equivalent source content;
-- external I/O has explicit timeout, size, redirect, and concurrency bounds; RSS/Atom extraction has an explicit item-count bound and disables DTD/external-entity processing;
+- external I/O has explicit timeout, size, redirect, and concurrency bounds; RSS/Atom and generic extraction have explicit item-count bounds, and RSS/Atom disables DTD/external-entity processing;
+- source testing uses the normal source fetch/extraction ports but never publishes Kafka events or creates collection-run history;
+- REST/HTML sources retain passthrough behavior when their respective `json.*` / `html.*` extraction settings are absent;
 - completed fetch payloads are terminally handled with backpressure, so raw response bodies are retained only within the bounded in-flight concurrency window rather than for the full run;
 - terminal run outcomes preserve configured-source order and per-source item order, while Kafka publication follows fetch completion and must not be treated as a global source-order guarantee;
 - completed run history is operational state, not an atomic substitute for Kafka delivery guarantees;

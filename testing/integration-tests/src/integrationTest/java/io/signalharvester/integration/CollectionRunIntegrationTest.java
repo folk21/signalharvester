@@ -232,6 +232,7 @@ class CollectionRunIntegrationTest {
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA IF EXISTS configuration CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS collection CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS results CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
         }
     }
