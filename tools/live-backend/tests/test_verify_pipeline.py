@@ -102,7 +102,6 @@ class VerifyPipelineTest(unittest.TestCase):
         run = MODULE.run_trial(
             self.client,
             "profile-test",
-            "GENERAL",
             result_wait_seconds=2.0,
             preview_limit=1,
             require_all_sources=False,
@@ -122,7 +121,6 @@ class VerifyPipelineTest(unittest.TestCase):
             MODULE.run_trial(
                 NoSourceClient(),
                 "profile-test",
-                "GENERAL",
                 result_wait_seconds=1.0,
                 preview_limit=1,
                 require_all_sources=False,
@@ -130,7 +128,7 @@ class VerifyPipelineTest(unittest.TestCase):
 
     def test_main_verifies_local_rss_fixture_end_to_end(self) -> None:
         """Drive the local RSS fixture mode through a loopback backend and observe two Results."""
-        state = {"source": None, "deleted": False}
+        state = {"source": None, "source_deleted": False, "profile_deleted": False}
         run_id = "00000000-0000-0000-0000-000000000903"
         source_id = "00000000-0000-0000-0000-000000000904"
         result_ids = ["b" * 64, "c" * 64]
@@ -167,6 +165,9 @@ class VerifyPipelineTest(unittest.TestCase):
                     state["source"] = {"id": source_id, **payload}
                     self._json(state["source"], status=201)
                     return
+                if self.path == "/api/v1/monitoring-profiles":
+                    self._json({"id": "00000000-0000-0000-0000-000000000905", **payload}, status=201)
+                    return
                 if self.path == "/api/v1/admin/collection-runs":
                     with urlopen(state["source"]["location"], timeout=2) as response:
                         feed = response.read().decode("utf-8")
@@ -185,8 +186,13 @@ class VerifyPipelineTest(unittest.TestCase):
                 self.send_error(404)
 
             def do_DELETE(self):  # noqa: N802
+                if self.path == "/api/v1/monitoring-profiles/00000000-0000-0000-0000-000000000905":
+                    state["profile_deleted"] = True
+                    self.send_response(204)
+                    self.end_headers()
+                    return
                 if self.path == f"/api/v1/sources/{source_id}":
-                    state["deleted"] = True
+                    state["source_deleted"] = True
                     state["source"] = None
                     self.send_response(204)
                     self.end_headers()
@@ -212,7 +218,6 @@ class VerifyPipelineTest(unittest.TestCase):
         try:
             exit_code = MODULE.main([
                 "--base-url", f"http://{host}:{port}",
-                "--profile", "profile-rss-fixture",
                 "--local-rss-fixture",
                 "--result-wait", "2",
                 "--preview-limit", "0",
@@ -223,7 +228,8 @@ class VerifyPipelineTest(unittest.TestCase):
             thread.join(timeout=2)
 
         self.assertEqual(0, exit_code)
-        self.assertTrue(state["deleted"])
+        self.assertTrue(state["profile_deleted"])
+        self.assertTrue(state["source_deleted"])
 
     def test_local_rss_fixture_registers_two_entry_feed_and_cleans_up(self) -> None:
         """Expose a deterministic feed through a temporary source and delete it afterward."""

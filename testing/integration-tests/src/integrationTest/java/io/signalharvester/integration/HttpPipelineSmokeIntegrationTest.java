@@ -55,7 +55,6 @@ class HttpPipelineSmokeIntegrationTest {
     private static final String ANALYZED_TOPIC = "signalharvester.analysis.item-analyzed.v1.http-smoke";
     private static final String REJECTED_TOPIC = "signalharvester.analysis.item-rejected.v1.http-smoke";
     private static final String ANALYSIS_GROUP = "signalharvester-analysis-http-smoke";
-    private static final String PROFILE_ID = "profile-http-smoke";
     private static final Pattern SOURCE_ID = Pattern.compile("\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private static final Pattern RUN_ID = Pattern.compile("\\\"collectionRunId\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private static final Pattern RAW_ITEM_ID = Pattern.compile("\\\"rawItemId\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
@@ -125,8 +124,22 @@ class HttpPipelineSmokeIntegrationTest {
         assertTrue(listedSources.body().contains(sourceId));
         assertTrue(listedSources.body().contains("HTTP smoke source"));
 
-        HttpResponse<String> firstRun = startRun();
-        HttpResponse<String> secondRun = startRun();
+        HttpResponse<String> createdProfile = send("POST", "/api/v1/monitoring-profiles", """
+                {
+                  "name": "HTTP smoke profile",
+                  "informationCategory": "JOB",
+                  "enabled": true,
+                  "collectionIntervalMinutes": 5,
+                  "sourceIds": ["%s"],
+                  "criteria": {}
+                }
+                """.formatted(sourceId));
+        assertEquals(201, createdProfile.statusCode());
+        String profileId = extract(SOURCE_ID, createdProfile.body(), "monitoring profile id");
+        assertEquals(36, profileId.length());
+
+        HttpResponse<String> firstRun = startRun(profileId);
+        HttpResponse<String> secondRun = startRun(profileId);
         assertEquals(201, firstRun.statusCode());
         assertEquals(201, secondRun.statusCode());
 
@@ -150,9 +163,9 @@ class HttpPipelineSmokeIntegrationTest {
         assertTrue(durableRun.body().contains(secondRawItemId));
         assertTrue(durableRun.body().contains(sourceId));
 
-        String analysisBody = awaitAnalysisState(sourceId, firstRawItemId, 2);
+        String analysisBody = awaitAnalysisState(profileId, sourceId, firstRawItemId, 2);
         String normalizedItemId = extract(NORMALIZED_ITEM_ID, analysisBody, "normalized item id");
-        assertTrue(analysisBody.contains("\"monitoringProfileId\":\"" + PROFILE_ID + "\""));
+        assertTrue(analysisBody.contains("\"monitoringProfileId\":\"" + profileId + "\""));
         assertTrue(analysisBody.contains("\"sourceId\":\"" + sourceId + "\""));
         assertTrue(analysisBody.contains("\"firstRawItemId\":\"" + firstRawItemId + "\""));
         assertTrue(analysisBody.contains("\"lastRawItemId\":\"" + secondRawItemId + "\""));
@@ -160,29 +173,29 @@ class HttpPipelineSmokeIntegrationTest {
 
         HttpResponse<String> inspected = send(
                 "GET",
-                "/api/v1/admin/analysis/items/" + normalizedItemId + "?monitoringProfileId=" + PROFILE_ID,
+                "/api/v1/admin/analysis/items/" + normalizedItemId + "?monitoringProfileId=" + profileId,
                 null);
         assertEquals(200, inspected.statusCode());
         assertTrue(inspected.body().contains(normalizedItemId));
         assertTrue(inspected.body().contains("\"discoveryCount\":2"));
     }
 
-    private HttpResponse<String> startRun() throws Exception {
+    private HttpResponse<String> startRun(String profileId) throws Exception {
         return send("POST", "/api/v1/admin/collection-runs", """
                 {
-                  "monitoringProfileId": "%s",
-                  "informationCategory": "JOB"
+                  "monitoringProfileId": "%s"
                 }
-                """.formatted(PROFILE_ID));
+                """.formatted(profileId));
     }
 
-    private String awaitAnalysisState(String sourceId, String rawItemId, long discoveryCount) throws Exception {
+    private String awaitAnalysisState(
+            String profileId, String sourceId, String rawItemId, long discoveryCount) throws Exception {
         Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
         String lastBody = "";
         while (Instant.now().isBefore(deadline)) {
             HttpResponse<String> response = send(
                     "GET",
-                    "/api/v1/admin/analysis/items?limit=10&monitoringProfileId=" + PROFILE_ID + "&sourceId=" + sourceId,
+                    "/api/v1/admin/analysis/items?limit=10&monitoringProfileId=" + profileId + "&sourceId=" + sourceId,
                     null);
             assertEquals(200, response.statusCode());
             lastBody = response.body();
@@ -245,7 +258,8 @@ class HttpPipelineSmokeIntegrationTest {
                 Map.entry("signalharvester.results.enabled", false),
                 Map.entry("signalharvester.analysis.keyword-rules.keywords", List.of("java", "kafka", "postgresql")),
                 Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1),
-                Map.entry("signalharvester.collection.max-concurrency", 2));
+                Map.entry("signalharvester.collection.max-concurrency", 2),
+                Map.entry("signalharvester.collection.scheduler.enabled", false));
     }
 
     private void respondWithSourceContent(HttpExchange exchange) throws IOException {

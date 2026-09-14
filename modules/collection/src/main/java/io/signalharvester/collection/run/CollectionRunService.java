@@ -8,7 +8,9 @@ import io.signalharvester.collection.event.RawItemPublicationResult;
 import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.collection.source.extract.SourceItemExtractionException;
 import io.signalharvester.collection.source.extract.SourceItemExtractor;
+import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
 import io.signalharvester.configuration.api.ConfiguredSource;
+import io.signalharvester.configuration.api.MonitoringProfileConfigurationProvider;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -22,7 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Executes explicit best-effort collection runs across all currently enabled sources.
+ * Executes best-effort collection runs for one persisted monitoring profile.
  *
  * <p>One fetched source response may produce multiple semantic items. RSS/Atom feeds therefore emit
  * one raw event per extracted entry, while REST/HTML retain their one-response-per-item behavior.
@@ -33,6 +35,7 @@ public final class CollectionRunService implements CollectionRunner {
 
     private static final Logger LOG = LoggerFactory.getLogger(CollectionRunService.class);
 
+    private final MonitoringProfileConfigurationProvider monitoringProfileConfigurationProvider;
     private final SourceConfigurationProvider sourceConfigurationProvider;
     private final SourceFetchCoordinator fetchCoordinator;
     private final SourceItemExtractor itemExtractor;
@@ -43,6 +46,7 @@ public final class CollectionRunService implements CollectionRunner {
     private final Clock clock;
 
     public CollectionRunService(
+            MonitoringProfileConfigurationProvider monitoringProfileConfigurationProvider,
             SourceConfigurationProvider sourceConfigurationProvider,
             SourceFetchCoordinator fetchCoordinator,
             SourceItemExtractor itemExtractor,
@@ -51,6 +55,8 @@ public final class CollectionRunService implements CollectionRunner {
             CollectionRunIdFactory runIdFactory,
             CollectionRunHistoryRecorder historyRecorder,
             @Named(CollectionClockFactory.COLLECTION_CLOCK) Clock clock) {
+        this.monitoringProfileConfigurationProvider = Objects.requireNonNull(
+                monitoringProfileConfigurationProvider, "monitoringProfileConfigurationProvider");
         this.sourceConfigurationProvider = Objects.requireNonNull(
                 sourceConfigurationProvider, "sourceConfigurationProvider");
         this.fetchCoordinator = Objects.requireNonNull(fetchCoordinator, "fetchCoordinator");
@@ -63,23 +69,32 @@ public final class CollectionRunService implements CollectionRunner {
     }
 
     /**
-     * Loads enabled sources and pipelines bounded fetch completion into extraction and publication.
-     * The call is synchronous and completes only after all terminal source/item outcomes are known.
+     * Loads the persisted profile and its enabled member sources, then pipelines bounded fetch
+     * completion into extraction and publication. The call is synchronous and completes only after
+     * all terminal source/item outcomes are known.
      */
     @Override
     public CollectionRunResult run(CollectionRunRequest request) {
         Objects.requireNonNull(request, "request");
+        ConfiguredMonitoringProfile profile = monitoringProfileConfigurationProvider
+                .findProfile(request.monitoringProfileId())
+                .orElseThrow(() -> new CollectionProfileNotFoundException(request.monitoringProfileId()));
         String runId = runIdFactory.nextId();
         Instant startedAt = clock.instant();
-        List<ConfiguredSource> sources = List.copyOf(sourceConfigurationProvider.findEnabledSources());
+        List<ConfiguredSource> sources = profile.sourceIds().stream()
+                .map(sourceId -> sourceConfigurationProvider.findSource(sourceId)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Monitoring profile references missing source: " + sourceId.value())))
+                .filter(ConfiguredSource::enabled)
+                .toList();
         LOG.info("Starting collection run {} profile={} category={} sources={}",
-                runId, request.monitoringProfileId(), request.informationCategory(), sources.size());
+                runId, profile.id().value(), profile.informationCategory(), sources.size());
 
         @SuppressWarnings("unchecked")
         List<CollectionSourceResult>[] terminalResults = new List[sources.size()];
         fetchCoordinator.fetchEach(
                 sources,
-                (sourceIndex, outcome) -> terminalResults[sourceIndex] = toSourceResults(runId, request, outcome));
+                (sourceIndex, outcome) -> terminalResults[sourceIndex] = toSourceResults(runId, request, profile, outcome));
         List<CollectionSourceResult> sourceResults = orderedResults(terminalResults);
 
         Instant finishedAt = clock.instant();
@@ -92,8 +107,8 @@ public final class CollectionRunService implements CollectionRunner {
                 runId, status, published, failed);
         CollectionRunResult result = new CollectionRunResult(
                 runId,
-                request.monitoringProfileId(),
-                request.informationCategory(),
+                profile.id().value().toString(),
+                profile.informationCategory(),
                 startedAt,
                 finishedAt,
                 status,
@@ -105,6 +120,7 @@ public final class CollectionRunService implements CollectionRunner {
     private List<CollectionSourceResult> toSourceResults(
             String runId,
             CollectionRunRequest request,
+            ConfiguredMonitoringProfile profile,
             SourceFetchOutcome outcome) {
         if (outcome instanceof SourceFetchOutcome.Failure failure) {
             LOG.warn("Collection run {} source {} fetch failed: {}",
@@ -144,7 +160,7 @@ public final class CollectionRunService implements CollectionRunner {
 
         List<CollectionSourceResult> results = new ArrayList<>(items.size());
         for (ExtractedSourceItem item : items) {
-            results.add(publishItem(runId, request, item));
+            results.add(publishItem(runId, request, profile, item));
         }
         return List.copyOf(results);
     }
@@ -152,13 +168,14 @@ public final class CollectionRunService implements CollectionRunner {
     private CollectionSourceResult publishItem(
             String runId,
             CollectionRunRequest request,
+            ConfiguredMonitoringProfile profile,
             ExtractedSourceItem item) {
         String rawItemId = rawItemIdentityFactory.identityFor(item);
         RawItemPublicationContext publicationContext = new RawItemPublicationContext(
                 rawItemId,
                 runId,
-                request.monitoringProfileId(),
-                request.informationCategory(),
+                profile.id().value().toString(),
+                profile.informationCategory(),
                 request.traceparent());
         try {
             RawItemPublicationResult publication = eventPublisher.publish(item, publicationContext);

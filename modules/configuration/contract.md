@@ -7,11 +7,12 @@ description: Public integration surface, ownership, invariants, and dependency r
 
 ## Purpose
 
-Own persisted configuration and expose effective source configuration without leaking persistence or HTTP implementation details.
+Own persisted source and monitoring-profile configuration without leaking persistence or HTTP implementation details.
 
 ## Owned responsibilities
 
 - source configuration lifecycle and validation;
+- monitoring-profile lifecycle, source membership, interval, and criteria configuration;
 - configuration-owned PostgreSQL schema and migrations;
 - effective source configuration consumed by collection;
 - source-management REST implementation.
@@ -26,13 +27,16 @@ Authoritative published package:
 
 Published cross-module interface:
 
-- `SourceConfigurationProvider` — narrow read API consumed by collection.
+- `SourceConfigurationProvider` — narrow source read API consumed by collection;
+- `MonitoringProfileConfigurationProvider` — narrow monitoring-profile read API for scheduling and profile-scoped execution.
 
 Published contract data remains in the same package because it is part of the provider surface:
 
 - `SourceId`;
 - `SourceType`;
-- `ConfiguredSource`.
+- `ConfiguredSource`;
+- `MonitoringProfileId`;
+- `ConfiguredMonitoringProfile`.
 
 Configuration administration is an internal application boundary under `configuration.application`; its command/interface types are intentionally not published to other functional modules. Consumers should read the Java files above rather than relying on duplicated method signatures in this document.
 
@@ -51,7 +55,7 @@ No configuration event contract is currently implemented.
 ## Owned data
 
 - PostgreSQL schema `configuration`;
-- source and source-settings tables created by configuration-owned Flyway migrations.
+- source/source-settings tables and monitoring-profile membership/criteria tables created by configuration-owned Flyway migrations.
 
 Other modules must not query or mutate these tables directly.
 
@@ -70,6 +74,8 @@ Do not expose repository, JDBC, Micronaut HTTP, or persistence types through the
 ## Important invariants
 
 - `SourceId` is the stable source identity;
+- `MonitoringProfileId` is the stable monitoring-profile identity;
+- a monitoring profile references at least one existing source;
 - source names are not unique identities;
 - configured-source writes are transactional;
 - persisted source URLs do not imply outbound network authorization.
@@ -78,4 +84,4 @@ Do not expose repository, JDBC, Micronaut HTTP, or persistence types through the
 
 Add new synchronous module capabilities only when another adapter/module has a concrete need. Prefer extending an existing focused API over exposing implementation classes.
 
-When monitoring profiles or schedules are implemented, expose only the minimal effective configuration needed by consumers rather than persistence models.
+Scheduling should consume `MonitoringProfileConfigurationProvider` and must not query configuration tables directly. Keep scheduler-specific state outside the persisted profile contract.

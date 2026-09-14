@@ -47,9 +47,9 @@ Terminal analysis events are materialized by `modules:results` and exposed throu
 
 ## Configuration module
 
-`modules:configuration` owns persisted source configuration and the `/api/v1/sources` REST implementation.
+`modules:configuration` owns persisted source and monitoring-profile configuration plus their REST implementations.
 
-Its published synchronous Java surface is deliberately narrow: `io.signalharvester.configuration.api.SourceConfigurationProvider` plus the effective configuration types required by that provider. Configuration administration remains an internal application boundary used by the module-owned HTTP adapter.
+Its published synchronous Java surface is deliberately narrow: `io.signalharvester.configuration.api.SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider` plus the effective configuration types required by those providers. Configuration administration remains an internal application boundary used by the module-owned HTTP adapters.
 
 `SourceConfigurationManager` implements both the internal administration boundary and the published provider contract. PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`; writes are transaction-owned by the application use case while JDBC SQL/resource handling stays in persistence adapters.
 
@@ -57,15 +57,15 @@ See [`../modules/configuration/README.md`](../modules/configuration/README.md) a
 
 ## Collection module
 
-`modules:collection` owns bounded external-source fetching, source-type extraction, explicit collection-run execution, deterministic raw-item identity, `RawItemDiscovered` publication, durable completed-run history, and `/api/v1/admin/collection-runs`.
+`modules:collection` owns bounded external-source fetching, source-type extraction, profile-driven collection-run execution, interval scheduling, deterministic raw-item identity, `RawItemDiscovered` publication, durable completed-run history, and `/api/v1/admin/collection-runs`.
 
-Collection currently publishes no synchronous cross-module Java API. `CollectionRunner`, `CollectionRunHistory`, and their run/result models are internal `collection.run` application boundaries used by collection-owned adapters and tests. Collection reads enabled sources only through `configuration.api`; the Gradle dependency on configuration is therefore an `implementation` dependency.
+Collection currently publishes no synchronous cross-module Java API. `CollectionRunner`, `CollectionRunHistory`, and their run/result models are internal `collection.run` application boundaries used by collection-owned adapters, scheduling, and tests. Collection resolves monitoring profiles and source configuration only through `configuration.api`; the Gradle dependency on configuration is therefore an `implementation` dependency. Manual collection requests provide only the persisted monitoring-profile UUID. The profile supplies information category and ordered source membership; disabled member sources are skipped.
 
 External HTTP access and Kafka publication remain internal module ports. The generic HTTP path uses Micronaut-managed low-level absolute-URI requests with explicit time, response-size, redirect, connection-pool, and concurrency bounds. Fetch completion is pipelined into terminal publication with backpressure: only the bounded in-flight window may retain raw payload bodies, while final per-source results are reconstructed in configured-source order. Source-level fetch/publication failures are best-effort terminal outcomes and do not cancel unrelated source work.
 
 Successful REST/HTML responses produce one passthrough semantic item; RSS/Atom responses produce one semantic item per bounded feed entry. Extracted metadata populates the existing `RawItemDiscovered` external id, title, URL, content, content type, and publication time fields. The collection run id is reused as the event correlation id. Passthrough raw identity preserves the original source-id + URI + raw-body behavior, while RSS/Atom raw identity uses deterministic per-entry semantic identity material.
 
-PostgreSQL schema `collection` is created by `db/migration/collection/V3__create_collection_run_history.sql`; `V5__expand_collection_run_source_statuses.sql` adds feed extraction statuses. The schema stores completed runs plus ordered per-source/item outcomes for operational inspection.
+PostgreSQL schema `collection` is created by `db/migration/collection/V3__create_collection_run_history.sql`; `V5__expand_collection_run_source_statuses.sql` adds feed extraction statuses and `V7__create_monitoring_profile_schedule_state.sql` adds collection-owned scheduler state. Scheduling polls enabled profiles and uses short transactional PostgreSQL claims with renewable lease tokens. External fetch/Kafka work runs outside the claim transaction. A profile is first due one configured interval after it is observed, and completion schedules the next run from terminal completion.
 
 See [`../modules/collection/README.md`](../modules/collection/README.md) and [`../modules/collection/contract.md`](../modules/collection/contract.md) for module-local detail.
 
@@ -99,7 +99,7 @@ See [`../modules/results/README.md`](../modules/results/README.md) and [`../modu
 
 ## External contracts
 
-The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source CRUD, manual collection-run/history operations, analysis inspection, and public Results browsing/detail queries.
+The authoritative REST contract is [`../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`](../contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml). It currently describes source and monitoring-profile CRUD, profile-driven manual collection-run/history operations, analysis inspection, and public Results browsing/detail queries.
 
 The authoritative Kafka schemas are versioned `.proto` files under `contracts/event-contracts/src/main/proto/`:
 
@@ -141,8 +141,8 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 
 ## Known limitations
 
-- no source parsing/extraction into multiple external items;
-- no persisted monitoring profiles, profile-to-source membership, or scheduling;
+- no generic configurable REST/HTML extraction;
+- cron/calendar scheduling and missed-interval catch-up are not implemented; interval scheduling is implemented;
 - no result SSE/live-update API;
 - no cursor/full-text result search beyond bounded REST filters;
 - no outbound SSRF/network-destination policy; source management must remain trusted until one is defined;

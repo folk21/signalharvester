@@ -7,6 +7,8 @@ info:
 tags:
 - name: Sources
   description: External source configuration.
+- name: Monitoring Profiles
+  description: Persisted monitoring-profile configuration.
 - name: Collection Runs
   description: Manual collection execution and operational run history.
 - name: Analysis Inspection
@@ -98,6 +100,97 @@ paths:
           description: Source deleted
         '404':
           description: Source not found
+        '409':
+          description: Source is referenced by a monitoring profile
+  /api/v1/monitoring-profiles:
+    get:
+      tags:
+      - Monitoring Profiles
+      operationId: listMonitoringProfiles
+      summary: List monitoring profiles
+      responses:
+        '200':
+          description: Persisted monitoring profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonitoringProfile'
+    post:
+      tags:
+      - Monitoring Profiles
+      operationId: createMonitoringProfile
+      summary: Create a monitoring profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitoringProfileUpsertRequest'
+      responses:
+        '201':
+          description: Monitoring profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringProfile'
+        '400':
+          description: Invalid monitoring profile configuration
+  /api/v1/monitoring-profiles/{profileId}:
+    parameters:
+    - name: profileId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+      - Monitoring Profiles
+      operationId: getMonitoringProfile
+      summary: Get a monitoring profile
+      responses:
+        '200':
+          description: Persisted monitoring profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringProfile'
+        '404':
+          description: Monitoring profile not found
+    put:
+      tags:
+      - Monitoring Profiles
+      operationId: updateMonitoringProfile
+      summary: Replace a monitoring profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitoringProfileUpsertRequest'
+      responses:
+        '200':
+          description: Monitoring profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringProfile'
+        '400':
+          description: Invalid monitoring profile configuration
+        '404':
+          description: Monitoring profile not found
+    delete:
+      tags:
+      - Monitoring Profiles
+      operationId: deleteMonitoringProfile
+      summary: Delete a monitoring profile
+      responses:
+        '204':
+          description: Monitoring profile deleted
+        '404':
+          description: Monitoring profile not found
   /api/v1/admin/collection-runs:
     get:
       tags:
@@ -141,6 +234,8 @@ paths:
                 $ref: '#/components/schemas/CollectionRun'
         '400':
           description: Invalid run request
+        '404':
+          description: Monitoring profile not found
   /api/v1/admin/collection-runs/{collectionRunId}:
     parameters:
     - name: collectionRunId
@@ -389,13 +484,21 @@ components:
             owning collector.
           additionalProperties:
             type: string
-    CollectionRunRequest:
+    MonitoringProfile:
       type: object
       required:
-      - monitoringProfileId
+      - id
+      - name
       - informationCategory
+      - enabled
+      - collectionIntervalMinutes
+      - sourceIds
+      - criteria
       properties:
-        monitoringProfileId:
+        id:
+          type: string
+          format: uuid
+        name:
           type: string
           minLength: 1
           pattern: .*\S.*
@@ -403,6 +506,64 @@ components:
           type: string
           minLength: 1
           pattern: .*\S.*
+        enabled:
+          type: boolean
+        collectionIntervalMinutes:
+          type: integer
+          minimum: 1
+        sourceIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        criteria:
+          type: object
+          additionalProperties:
+            type: string
+    MonitoringProfileUpsertRequest:
+      type: object
+      required:
+      - name
+      - informationCategory
+      - collectionIntervalMinutes
+      - sourceIds
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: .*\S.*
+        informationCategory:
+          type: string
+          minLength: 1
+          pattern: .*\S.*
+        enabled:
+          type: boolean
+          default: false
+        collectionIntervalMinutes:
+          type: integer
+          minimum: 1
+        sourceIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        criteria:
+          type: object
+          default: {}
+          additionalProperties:
+            type: string
+    CollectionRunRequest:
+      type: object
+      required:
+      - monitoringProfileId
+      properties:
+        monitoringProfileId:
+          type: string
+          format: uuid
     CollectionSourceRun:
       type: object
       description: One terminal source/item outcome. RSS/Atom sources may contribute multiple outcomes with the same sourceId.

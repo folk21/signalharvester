@@ -110,6 +110,7 @@ The first implementation foundation contains:
 - `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
 - `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
 - `CollectionRunHistoryPostgresTest` for collection-owned Flyway bootstrap, atomic run/source/item-outcome persistence, extraction-status migration/round-trip, enforced application-owned transaction boundaries, restart-safe durable reads, bounded recent-history validation, deterministic ordering, and outcome association across multi-run reads;
+- `ProfileSchedulePostgresTest` for persisted interval state, interval-change rescheduling, and exclusive due-work lease claims across two application contexts sharing PostgreSQL;
 - `CollectionRunControllerTest` for server-level manual-run/history status mapping, validation/default limits, required JSON response shape, and blocking Virtual Thread execution without external infrastructure;
 - `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, restart-safe provider reads, duplicate-name semantics, and transactional rollback for both create and update settings failures;
 - `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
@@ -143,7 +144,7 @@ raw Kafka input
     -> input offset commit
 ```
 
-The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source configuration/manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes and the public Results REST API exposes analyzed state without direct database access. The opt-in live-backend verifier now terminates at Results and includes a deterministic two-entry RSS fixture mode; the next automated black-box expansion should bring the same Results assertion into the container-backed integration suite.
+The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes and the public Results REST API exposes analyzed state without direct database access. The opt-in live-backend verifier now creates temporary persisted profiles when needed, terminates at Results, and includes a deterministic two-entry RSS fixture mode; the next automated black-box expansion should bring the same Results assertion into the container-backed integration suite.
 
 ## Python tooling tests
 

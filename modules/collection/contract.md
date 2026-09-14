@@ -11,7 +11,8 @@ Own collection-run orchestration, bounded external-source access, and publicatio
 
 ## Owned responsibilities
 
-- explicit collection-run lifecycle;
+- explicit profile-driven collection-run lifecycle;
+- interval scheduling with collection-owned cluster-safe lease state;
 - external source fetching and bounded concurrency;
 - collection-owned source extraction, including bounded RSS/Atom entry parsing;
 - raw-item identity generation;
@@ -46,13 +47,14 @@ Generated Protobuf classes are transport contract output, not collection domain/
 ## Owned data
 
 - PostgreSQL schema `collection`;
-- durable collection-run and ordered source-outcome history.
+- durable collection-run and ordered source-outcome history;
+- monitoring-profile schedule due/lease state.
 
 ## Dependencies
 
 Synchronous functional-module dependency:
 
-- `configuration.api..` for effective enabled-source configuration and the stable `SourceId` contract type used internally by Collection. The Gradle dependency is an `implementation` dependency because Collection currently publishes no Java API of its own.
+- `configuration.api..` for persisted monitoring profiles, effective source configuration, and stable profile/source identity types used internally by Collection. The Gradle dependency is an `implementation` dependency because Collection currently publishes no Java API of its own.
 
 Asynchronous downstream processing uses Kafka event contracts rather than direct calls to analysis/results.
 
@@ -64,6 +66,9 @@ Other functional modules must not depend on collection `run`, `source`, `event`,
 
 ## Important invariants
 
+- a run derives information category and ordered source membership from the persisted monitoring profile; callers cannot override them;
+- automatic scheduling considers only enabled profiles and fetches only enabled member sources;
+- scheduler due-work claims and lease updates use short collection-owned PostgreSQL transactions; external HTTP/Kafka work runs outside those transactions;
 - source/item-level failures are best-effort and do not cancel unrelated source work;
 - one collection run id is reused as correlation id for raw-item events from that run;
 - raw-item identity is deterministic for equivalent source content;

@@ -14,7 +14,10 @@ import io.signalharvester.collection.source.extract.DefaultSourceItemExtractor;
 import io.signalharvester.collection.source.extract.RssAtomItemExtractor;
 import io.signalharvester.collection.source.extract.SourceItemExtractor;
 import io.signalharvester.collection.source.SourceFetchException;
+import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
 import io.signalharvester.configuration.api.ConfiguredSource;
+import io.signalharvester.configuration.api.MonitoringProfileConfigurationProvider;
+import io.signalharvester.configuration.api.MonitoringProfileId;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.api.SourceType;
@@ -46,7 +49,8 @@ class CollectionRunServiceTest {
 
     private static final String RUN_ID = "00000000-0000-0000-0000-000000000601";
     private static final Instant RUN_TIME = Instant.parse("2026-09-10T18:00:00Z");
-    private static final String PROFILE_ID = "profile-1";
+    private static final MonitoringProfileId PROFILE_ID = MonitoringProfileId.of(
+            UUID.fromString("00000000-0000-0000-0000-000000000501"));
     private static final String RAW_ITEM_TOPIC = "raw-items";
     private static final String EVENT_ID_PREFIX = "event-";
 
@@ -72,7 +76,7 @@ class CollectionRunServiceTest {
                     .toList());
             assertEquals(2, publisher.contexts.size());
             assertTrue(publisher.contexts.stream().allMatch(context -> RUN_ID.equals(context.correlationId())));
-            assertTrue(publisher.contexts.stream().allMatch(context -> PROFILE_ID.equals(context.monitoringProfileId())));
+            assertTrue(publisher.contexts.stream().allMatch(context -> PROFILE_ID.value().toString().equals(context.monitoringProfileId())));
             assertTrue(publisher.contexts.stream().allMatch(context -> "JOB".equals(context.informationCategory())));
         }
     }
@@ -307,7 +311,7 @@ class CollectionRunServiceTest {
     void shouldSucceedWithoutWorkWhenNoSourcesAreEnabled() {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             CollectionRunService service = service(
-                    List.of(),
+                    List.of(source("disabled", false)),
                     source -> { throw new AssertionError("fetch must not run"); },
                     (content, context) -> { throw new AssertionError("publish must not run"); },
                     executor);
@@ -335,8 +339,28 @@ class CollectionRunServiceTest {
                 return sources;
             }
         };
+        ConfiguredMonitoringProfile profile = new ConfiguredMonitoringProfile(
+                PROFILE_ID,
+                "Test profile",
+                "JOB",
+                true,
+                5,
+                sources.stream().map(ConfiguredSource::id).toList(),
+                Map.of());
+        MonitoringProfileConfigurationProvider profileProvider = new MonitoringProfileConfigurationProvider() {
+            @Override
+            public Optional<ConfiguredMonitoringProfile> findProfile(MonitoringProfileId profileId) {
+                return PROFILE_ID.equals(profileId) ? Optional.of(profile) : Optional.empty();
+            }
+
+            @Override
+            public List<ConfiguredMonitoringProfile> findEnabledProfiles() {
+                return List.of(profile);
+            }
+        };
         SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, executor);
         return new CollectionRunService(
+                profileProvider,
                 provider,
                 coordinator,
                 defaultExtractor(),
@@ -361,16 +385,20 @@ class CollectionRunServiceTest {
     }
 
     private static CollectionRunRequest request() {
-        return new CollectionRunRequest(PROFILE_ID, "JOB", Optional.empty());
+        return new CollectionRunRequest(PROFILE_ID, Optional.empty());
     }
 
     private static ConfiguredSource source(String name) {
+        return source(name, true);
+    }
+
+    private static ConfiguredSource source(String name, boolean enabled) {
         return new ConfiguredSource(
                 SourceId.of(UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8))),
                 name,
                 SourceType.REST,
                 URI.create("https://example.test/" + name),
-                true,
+                enabled,
                 Map.of());
     }
 
