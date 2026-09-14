@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Complete the first useful real-source vertical slice. Results persistence/REST, RSS/Atom extraction, persisted monitoring-profile configuration, profile-driven cluster-safe scheduling, source testing, and generic REST/JSON/HTML extraction are verified. The current backend focus is Results SSE/live delivery under [`specs/active/subspecs/backend-results-sse-live-delivery.md`](specs/active/subspecs/backend-results-sse-live-delivery.md). The next backend slice is event observation.
+The first real-source vertical slice including Results REST/SSE is verified. The current backend focus is bounded event observation under [`specs/active/subspecs/backend-event-observation.md`](specs/active/subspecs/backend-event-observation.md). The following slice is processing-flow correlation/reconstruction for the Event Explorer.
 
 ## P0 — repository and contract foundation
 
@@ -26,9 +26,9 @@ Complete the first useful real-source vertical slice. Results persistence/REST, 
 
 ## P1 — event visibility
 
-- event-observation pipeline;
-- correlation/event history;
-- backend support for UI Event Explorer and flow reconstruction.
+- event-observation pipeline and bounded correlation/event history;
+- backend support for UI Event Explorer live/history views;
+- processing-flow reconstruction.
 
 ## P2 — deployment and observability
 
@@ -44,4 +44,4 @@ Complete the first useful real-source vertical slice. Results persistence/REST, 
 - LLM/embedding analysis as a required core dependency.
 
 
-The backend operational/admin APIs now provide source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results reads, and live Results SSE. The next backend milestone is event observation for the Event Explorer; the companion UI can consume the existing REST/SSE contracts independently.
+The backend now provides source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results REST/SSE, and technical Event Explorer history/SSE. The next backend milestone is processing-flow reconstruction; the companion UI can consume the existing contracts independently.

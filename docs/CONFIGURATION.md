@@ -46,6 +46,14 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_RESULTS_SSE_KEEPALIVE_INTERVAL` | `15s` | Maximum idle period before a `keepalive` SSE event is emitted. |
 | `SIGNALHARVESTER_RESULTS_SSE_RECONNECT_DELAY` | `2s` | Browser reconnect delay written to SSE `retry` on ready/result events. |
 | `SIGNALHARVESTER_RESULTS_SSE_BATCH_SIZE` | `100` | Maximum live result updates read per poll; bounded to 200. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_ENABLED` | `true` | Enables the independent technical event-observation Kafka consumer. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_CONSUMER_GROUP` | `signalharvester-event-observation-v1` | Consumer group used only by Event Observation. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_MAX_EVENTS` | `10000` | Maximum retained diagnostic event rows. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_MAX_AGE` | `24h` | Maximum age of retained diagnostic event rows. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_POLL_INTERVAL` | `1s` | Delay between durable event-history polls for an open Event Explorer SSE subscription. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_KEEPALIVE_INTERVAL` | `15s` | Maximum idle period before an Event Explorer `keepalive` SSE event. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_RECONNECT_DELAY` | `2s` | Browser reconnect delay written to Event Explorer SSE `retry`. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_BATCH_SIZE` | `200` | Maximum observed events read per live poll; bounded to 500. |
 | `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` | `1` | Minimum configured keyword matches required for relevance. |
 | `SIGNALHARVESTER_COLLECTION_MAX_CONCURRENCY` | `8` | Maximum concurrently active source-fetch workers. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_CONNECT_TIMEOUT` | `3s` | External HTTP connection timeout. |
@@ -57,13 +65,13 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_COLLECTION_HTTP_MAX_PENDING_ACQUIRES` | `64` | Maximum pending connection-pool acquisitions. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_POOL_ACQUIRE_TIMEOUT` | `2s` | Maximum wait for a pooled connection. |
 
-`micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. The current source, collection-admin, analysis-inspection, and Results REST controllers use this executor for JDBC and synchronous workflows rather than running blocking work on a Netty event loop. Results SSE remains a reactive streaming controller; its JDBC polling is submitted to the same blocking executor by the stream implementation.
+`micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. The current source, collection-admin, analysis-inspection, Results REST, and Event Observation history controllers use this executor for JDBC and synchronous workflows rather than running blocking work on a Netty event loop. Results and Event Observation SSE remain reactive streaming controllers; their JDBC polling is submitted to the same blocking executor by the stream implementation.
 
 Collection concurrency is validated as positive. RSS/Atom and generic JSON/HTML extraction validate positive maximum item counts capped at 10,000. Source-test preview cardinality is capped at 50 items and preview content at 5,000 characters per item. These bounds sit behind the existing HTTP maximum-response-size limit. Micronaut may surface non-success HTTP statuses as `HttpClientResponseException`; the collection adapter normalizes that transport behavior into `SourceFetchException` while preserving status and raw `Retry-After` metadata. Redirect following is enabled but bounded. Automatic decompression is enabled, connection pooling is explicit, and `allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
 
 Configured source URLs are domain values: they must be absolute HTTP/HTTPS locations with a host, without embedded user-info credentials and without URI fragments. Secrets should be modeled separately rather than embedded into URLs.
 
-Collection and analysis producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They wait for acknowledgements with `acks=all` and enable Kafka producer idempotence. Analysis and Results consume String-keyed byte-array payloads with explicit offset commit only after their durable application processing succeeds. These transport settings do not replace application-level replay/idempotency rules.
+Collection and analysis producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They wait for acknowledgements with `acks=all` and enable Kafka producer idempotence. Analysis, Results, and Event Observation consume String-keyed byte-array payloads with explicit offset commit only after their durable application processing succeeds. Event Observation uses its own consumer group and therefore does not compete with business consumers. These transport settings do not replace application-level replay/idempotency rules.
 
 The first analyzer uses a small global keyword list in `application.properties` and `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` for the threshold. This is temporary runtime configuration until monitoring profiles own analysis rules. The threshold must be positive and cannot exceed the number of unique configured keywords.
 

@@ -44,15 +44,16 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * {@link io.signalharvester.collection.http.SourceTestController},
  * {@link io.signalharvester.collection.http.CollectionRunController}, and
  * {@link io.signalharvester.analysis.http.AnalysisItemInspectionController}, and
- * {@link io.signalharvester.results.http.ResultLiveController} over real PostgreSQL and Kafka.
+ * {@link io.signalharvester.results.http.ResultLiveController}, and
+ * {@link io.signalharvester.eventobservation.http.EventObservationController} over real PostgreSQL and Kafka.
  *
  * <p>The test drives source creation, diagnostic source testing, repeated collection, durable run history,
- * analysis inspection, persisted Results browsing, and live Results SSE only through HTTP.</p>
+ * analysis inspection, persisted Results browsing, live Results SSE, and technical event history only through HTTP.</p>
  *
  * <p>Related specifications: {@code backend-configuration-persistence-rest},
  * {@code backend-collection-run-orchestration}, {@code backend-analysis-normalization-deduplication},
  * {@code backend-operational-admin-api}, {@code backend-source-test-generic-extraction},
- * and {@code backend-results-sse-live-delivery}.</p>
+ * {@code backend-results-sse-live-delivery}, and {@code backend-event-observation}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class HttpPipelineSmokeIntegrationTest {
@@ -62,6 +63,7 @@ class HttpPipelineSmokeIntegrationTest {
     private static final String REJECTED_TOPIC = "signalharvester.analysis.item-rejected.v1.http-smoke";
     private static final String ANALYSIS_GROUP = "signalharvester-analysis-http-smoke";
     private static final String RESULTS_GROUP = "signalharvester-results-http-smoke";
+    private static final String OBSERVATION_GROUP = "signalharvester-event-observation-http-smoke";
     private static final Pattern SOURCE_ID = Pattern.compile("\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private static final Pattern RUN_ID = Pattern.compile("\\\"collectionRunId\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
     private static final Pattern RAW_ITEM_ID = Pattern.compile("\\\"rawItemId\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
@@ -203,6 +205,11 @@ class HttpPipelineSmokeIntegrationTest {
 
         String resultsBody = awaitResultsFeed(profileId, normalizedItemId);
         assertTrue(resultsBody.contains("\"normalizedItemId\":\"" + normalizedItemId + "\""));
+
+        String eventHistory = awaitEventHistory(normalizedItemId);
+        assertTrue(eventHistory.contains("\"eventType\":\"collection.raw-item-discovered.v1\""));
+        assertTrue(eventHistory.contains("\"eventType\":\"analysis.item-analyzed.v1\""));
+        assertTrue(eventHistory.contains("\"topic\":\"" + ANALYZED_TOPIC + "\""));
     }
 
     /**
@@ -270,6 +277,23 @@ class HttpPipelineSmokeIntegrationTest {
             Thread.sleep(100);
         }
         throw new AssertionError("Analysis state did not reach discoveryCount=" + discoveryCount + ": " + lastBody);
+    }
+
+
+    private String awaitEventHistory(String normalizedItemId) throws Exception {
+        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
+        String lastBody = "";
+        while (Instant.now().isBefore(deadline)) {
+            HttpResponse<String> response = send(
+                    "GET", "/api/v1/events?limit=20", null);
+            assertEquals(200, response.statusCode());
+            lastBody = response.body();
+            if (lastBody.contains("\"normalizedItemId\":\"" + normalizedItemId + "\"")) {
+                return lastBody;
+            }
+            Thread.sleep(100);
+        }
+        throw new AssertionError("Event observation did not contain normalized item " + normalizedItemId + ": " + lastBody);
     }
 
     private HttpResponse<InputStream> openResultStream(String profileId) throws Exception {
@@ -364,6 +388,10 @@ class HttpPipelineSmokeIntegrationTest {
                         "org.apache.kafka.common.serialization.StringDeserializer"),
                 Map.entry("kafka.consumers." + RESULTS_GROUP + ".value.deserializer",
                         "org.apache.kafka.common.serialization.ByteArrayDeserializer"),
+                Map.entry("kafka.consumers." + OBSERVATION_GROUP + ".key.deserializer",
+                        "org.apache.kafka.common.serialization.StringDeserializer"),
+                Map.entry("kafka.consumers." + OBSERVATION_GROUP + ".value.deserializer",
+                        "org.apache.kafka.common.serialization.ByteArrayDeserializer"),
                 Map.entry("signalharvester.kafka.raw-item-discovered-topic", RAW_TOPIC),
                 Map.entry("signalharvester.kafka.item-analyzed-topic", ANALYZED_TOPIC),
                 Map.entry("signalharvester.kafka.item-rejected-topic", REJECTED_TOPIC),
@@ -371,6 +399,9 @@ class HttpPipelineSmokeIntegrationTest {
                 Map.entry("signalharvester.analysis.consumer-group", ANALYSIS_GROUP),
                 Map.entry("signalharvester.results.enabled", true),
                 Map.entry("signalharvester.results.consumer-group", RESULTS_GROUP),
+                Map.entry("signalharvester.event-observation.enabled", true),
+                Map.entry("signalharvester.event-observation.consumer-group", OBSERVATION_GROUP),
+                Map.entry("signalharvester.event-observation.sse.poll-interval", "50ms"),
                 Map.entry("signalharvester.results.sse.poll-interval", "50ms"),
                 Map.entry("signalharvester.results.sse.keepalive-interval", "1s"),
                 Map.entry("signalharvester.results.sse.reconnect-delay", "100ms"),
@@ -447,6 +478,7 @@ class HttpPipelineSmokeIntegrationTest {
             statement.execute("DROP SCHEMA IF EXISTS analysis CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS collection CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS results CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS event_observation CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
         }
     }

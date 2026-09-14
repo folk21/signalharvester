@@ -130,11 +130,15 @@ The first implementation foundation contains:
 - `ResultControllerTest` for public Results list/detail HTTP defaults, filters, validation/not-found mapping, stable nullable JSON fields, and blocking Virtual Thread execution;
 - `ResultLiveControllerTest` for SSE ready/result framing, `Last-Event-ID` resume behavior, live filters, cursor validation, and JDBC polling on the blocking Virtual Thread executor;
 - `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, newest-first ordering, bounded limits, ordered tags, attributes, profile-scoped detail reads, durable live polling, and duplicate-analysis-event cursor idempotency;
+- `EventObservationMapperTest` for decoded human-readable metadata across the current raw/analyzed/rejected Protobuf event families without copying large content bodies;
+- `EventObservationControllerTest` for bounded Event Explorer REST filters, decoded JSON shape, validation, and blocking Virtual Thread execution;
+- `EventObservationLiveControllerTest` for `ready`/`event` SSE framing, `Last-Event-ID` resume, technical filters, cursor validation, and blocking-query offload;
+- `EventObservationKafkaPostgresIntegrationTest` for real Kafka -> Event Observation -> PostgreSQL decoding, event-id idempotency, selected diagnostics, and count-bounded retention;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
-- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> source-test/generic JSON extraction and manual collection -> deterministic HTTP source -> Kafka -> Analysis -> Results -> REST/SSE. The source-test branch verifies a disabled persisted JSON source through public HTTP and confirms that diagnostics do not create collection-run history.
+- `HttpPipelineSmokeIntegrationTest` for black-box REST source configuration -> source-test/generic JSON extraction and manual collection -> deterministic HTTP source -> Kafka -> Analysis -> Results -> REST/SSE plus decoded Event Observation history. The source-test branch verifies a disabled persisted JSON source through public HTTP and confirms that diagnostics do not create collection-run history.
 
-PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, and `modules:analysis`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
+PostgreSQL Testcontainers tests are implemented in `modules:configuration`, `modules:collection`, `modules:analysis`, `modules:results`, and `modules:event-observation`; Kafka producer round-trip coverage is also implemented in `modules:collection`. Cross-module scenarios under `testing:integration-tests` verify both collection-run assembly and the first real consumer chain through normalized deduplication and terminal analysis events.
 
 ## Trial-readiness regression gate
 
@@ -148,7 +152,7 @@ raw Kafka input
     -> input offset commit
 ```
 
-The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes, the public Results REST API exposes durable state, and the cross-module smoke test now opens Results SSE before collection and observes the committed analyzed result through that stream. The opt-in live-backend verifier creates temporary persisted profiles when needed, terminates at Results REST, and includes a deterministic two-entry RSS fixture mode.
+The analysis module verifies rollback/no-commit behavior for terminal publication failure and poison-input no-commit behavior. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes, the public Results REST API exposes durable state, and the cross-module smoke test opens Results SSE before collection and observes the committed analyzed result through that stream. The same smoke test also waits for Event Observation to expose decoded raw and analyzed events through the public technical-history REST API. The opt-in live-backend verifier creates temporary persisted profiles when needed, terminates at Results REST, and includes a deterministic two-entry RSS fixture mode.
 
 ## Python tooling tests
 
@@ -164,6 +168,17 @@ Run them directly with:
 These tooling tests use deterministic fakes/loopback HTTP only. They do not require Docker, a running backend, or public network access. Actual `tools/live-backend/verify_pipeline.py` execution is a separate manual/live environment check.
 
 
+
+## Event Observation
+
+Focused validation for the bounded technical event-history slice:
+
+```bash
+./gradlew :modules:event-observation:test :modules:event-observation:integrationTest --no-watch-fs
+./gradlew :testing:integration-tests:integrationTest --no-watch-fs
+```
+
+Event Observation tests cover decoding of every currently published event family, event-id idempotency, age/count retention behavior, REST filters, resumable SSE framing, and blocking-query offload. The cross-module HTTP smoke test verifies that raw and analyzed pipeline events become available through the public decoded history API without browser-side Kafka or Protobuf access.
 
 ## Results SSE live delivery
 

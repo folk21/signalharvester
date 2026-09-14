@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: SignalHarvester Backend API
   version: 0.1.0
-  description: Public HTTP contract for SignalHarvester configuration, results, and operational
+  description: Public HTTP contract for SignalHarvester configuration, results, event observation, and operational
     APIs.
 tags:
 - name: Sources
@@ -15,6 +15,8 @@ tags:
   description: Read-only operational inspection of analysis deduplication state.
 - name: Results
   description: Read-only browsing of durable analyzed results.
+- name: Event Observation
+  description: Bounded technical event history and live Event Explorer delivery.
 paths:
   /api/v1/sources:
     get:
@@ -336,6 +338,121 @@ paths:
                 $ref: '#/components/schemas/AnalysisItemInspection'
         '404':
           description: Analysis item not found
+  /api/v1/events:
+    get:
+      tags:
+      - Event Observation
+      operationId: listObservedEvents
+      summary: List recent technical processing events
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+      - name: eventType
+        in: query
+        schema:
+          type: string
+      - name: producer
+        in: query
+        schema:
+          type: string
+      - name: topic
+        in: query
+        schema:
+          type: string
+      - name: correlationId
+        in: query
+        schema:
+          type: string
+      - name: collectionRunId
+        in: query
+        description: Alias for the current pipeline correlation identifier.
+        schema:
+          type: string
+      - name: itemId
+        in: query
+        description: Matches either rawItemId or normalizedItemId.
+        schema:
+          type: string
+      - name: traceId
+        in: query
+        description: W3C trace id matched inside traceparent when present.
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Recent observed events matching the supplied filters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ObservedEvent'
+        '400':
+          description: Invalid event-observation query parameters
+  /api/v1/events/stream:
+    get:
+      tags:
+      - Event Observation
+      operationId: streamObservedEvents
+      summary: Stream live technical processing events
+      description: >-
+        Server-Sent Events stream over the bounded persisted Event Explorer history. The server emits
+        named `ready`, `event`, and `keepalive` events with numeric durable cursors. Browser reconnection
+        may resume with Last-Event-ID. A fresh connection starts after the current cursor; use
+        GET /api/v1/events for an initial bounded history snapshot. For a race-free browser bootstrap,
+        establish the stream and receive `ready` before fetching GET /api/v1/events, buffering later `event`
+        messages until the REST snapshot has been applied. History retention is bounded, so a reconnect
+        cursor older than retained records resumes with the oldest still-retained matching events.
+      parameters:
+      - name: eventType
+        in: query
+        schema:
+          type: string
+      - name: producer
+        in: query
+        schema:
+          type: string
+      - name: topic
+        in: query
+        schema:
+          type: string
+      - name: correlationId
+        in: query
+        schema:
+          type: string
+      - name: collectionRunId
+        in: query
+        schema:
+          type: string
+      - name: itemId
+        in: query
+        schema:
+          type: string
+      - name: traceId
+        in: query
+        schema:
+          type: string
+      - name: Last-Event-ID
+        in: header
+        required: false
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: Resumable live technical-event stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/ObservedEventLiveEvent'
+        '400':
+          description: Invalid filters or Last-Event-ID cursor
   /api/v1/results:
     get:
       tags:
@@ -855,6 +972,102 @@ components:
           format: int64
           minimum: 1
 
+    ObservedKafkaMetadata:
+      type: object
+      required: [topic, partition, offset, key]
+      properties:
+        topic:
+          type: string
+        partition:
+          type: integer
+          minimum: 0
+        offset:
+          type: integer
+          format: int64
+          minimum: 0
+        key:
+          type: string
+    ObservedEventPayload:
+      type: object
+      required:
+      - type
+      - sourceEventId
+      - rawItemId
+      - normalizedItemId
+      - sourceId
+      - monitoringProfileId
+      - informationCategory
+      - externalId
+      - title
+      - url
+      - contentType
+      - relevant
+      - classification
+      - score
+      - analyzer
+      - reasonCode
+      - explanation
+      properties:
+        type: {type: string}
+        sourceEventId: {type: [string, 'null']}
+        rawItemId: {type: [string, 'null']}
+        normalizedItemId: {type: [string, 'null']}
+        sourceId: {type: [string, 'null']}
+        monitoringProfileId: {type: [string, 'null']}
+        informationCategory: {type: [string, 'null']}
+        externalId: {type: [string, 'null']}
+        title: {type: [string, 'null']}
+        url: {type: [string, 'null']}
+        contentType: {type: [string, 'null']}
+        relevant: {type: [boolean, 'null']}
+        classification: {type: [string, 'null']}
+        score: {type: [integer, 'null']}
+        analyzer: {type: [string, 'null']}
+        reasonCode: {type: [string, 'null']}
+        explanation: {type: [string, 'null']}
+    ObservedEvent:
+      type: object
+      required:
+      - cursor
+      - eventId
+      - eventType
+      - occurredAt
+      - observedAt
+      - correlationId
+      - traceparent
+      - producer
+      - schemaVersion
+      - kafka
+      - payload
+      properties:
+        cursor:
+          type: integer
+          format: int64
+          minimum: 1
+        eventId: {type: string}
+        eventType: {type: string}
+        occurredAt: {type: string, format: date-time}
+        observedAt: {type: string, format: date-time}
+        correlationId: {type: string}
+        traceparent: {type: [string, 'null']}
+        producer: {type: string}
+        schemaVersion: {type: string}
+        kafka:
+          $ref: '#/components/schemas/ObservedKafkaMetadata'
+        payload:
+          $ref: '#/components/schemas/ObservedEventPayload'
+    ObservedEventLiveEvent:
+      type: object
+      required: [cursor, event]
+      properties:
+        cursor:
+          type: integer
+          format: int64
+          minimum: 0
+        event:
+          anyOf:
+          - $ref: '#/components/schemas/ObservedEvent'
+          - type: 'null'
     ResultSummary:
       type: object
       required:
