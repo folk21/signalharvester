@@ -40,7 +40,7 @@ public final class AnalysisEventMapper {
         this.idSupplier = Objects.requireNonNull(idSupplier, "idSupplier");
     }
 
-    ItemAnalyzed mapAnalyzed(AnalyzedItem analyzedItem) {
+    public ItemAnalyzed mapAnalyzed(AnalyzedItem analyzedItem) {
         NormalizedContentItem item = analyzedItem.item();
         var decision = analyzedItem.decision();
         ItemAnalyzed.Builder builder = ItemAnalyzed.newBuilder()
@@ -67,7 +67,7 @@ public final class AnalysisEventMapper {
         return builder.build();
     }
 
-    ItemRejected mapRejected(RejectedItem rejectedItem) {
+    public ItemRejected mapRejected(RejectedItem rejectedItem) {
         NormalizedContentItem item = rejectedItem.item();
         return ItemRejected.newBuilder()
                 .setEnvelope(envelope(item, REJECTED_EVENT_TYPE))

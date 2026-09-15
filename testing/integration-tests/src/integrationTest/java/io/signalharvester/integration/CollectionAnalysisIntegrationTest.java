@@ -127,6 +127,7 @@ class CollectionAnalysisIntegrationTest {
                 Map.entry("signalharvester.kafka.item-analyzed-topic", ANALYZED_TOPIC),
                 Map.entry("signalharvester.kafka.item-rejected-topic", REJECTED_TOPIC),
                 Map.entry("signalharvester.analysis.consumer-group", ANALYSIS_GROUP),
+                Map.entry("signalharvester.analysis.outbox.poll-interval", "50ms"),
                 Map.entry("signalharvester.results.enabled", false),
                 Map.entry(
                         "signalharvester.analysis.keyword-rules.keywords",

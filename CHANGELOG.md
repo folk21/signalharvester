@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-15 — Added an Analysis-owned transactional outbox with atomic deduplication/event staging, lease-based multi-replica Kafka dispatch, stable replay identity, and publication retry metadata.
+- 2026-09-15 — Accepted bounded Kafka retry/DLQ handling and processing-flow reconstruction after the developer repository checks passed.
 - 2026-09-15 — Added bounded retry and versioned dead-letter handling for Analysis, Results, and Event Observation Kafka consumers, with poison-record partition recovery and offset commits only after successful processing or acknowledged DLQ publication.
 - 2026-09-14 — Serialized the repository-wide container-backed `integrationTest` Gradle phase to avoid Docker resource contention and Testcontainers readiness timeouts while keeping normal `clean check` parallelism enabled.
 - 2026-09-14 — Added bounded processing-flow reconstruction for collection runs and run-scoped items, with explicit evidence levels, stable lineage by `sourceEventId`, diagnostic graph metadata, and public REST/OpenAPI coverage.

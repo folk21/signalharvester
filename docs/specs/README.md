@@ -95,17 +95,18 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-reliability-failure-handling.md`](active/subspecs/backend-reliability-failure-handling.md) — bounded Kafka retries, poison-record dead-letter handling, and terminal offset-commit guarantees.
+- [`active/subspecs/backend-db-kafka-consistency.md`](active/subspecs/backend-db-kafka-consistency.md) — transactional Analysis outbox and lease-based at-least-once Kafka delivery.
 
 Active supporting tracks:
 
-- [`active/subspecs/backend-processing-flow-reconstruction.md`](active/subspecs/backend-processing-flow-reconstruction.md) — implementation complete; developer acceptance remains verification-pending;
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith boundaries, published API rules, and architecture-test guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules;
 - [`active/subspecs/backend-authentication-authorization.md`](active/subspecs/backend-authentication-authorization.md) — stateless JWT authentication, persisted additive roles, backend RBAC, and REST/SSE browser credential policy for the later security stage.
 
 ## Recently completed sub-specifications
 
+- [`archive/subspecs/backend-reliability-failure-handling.md`](archive/subspecs/backend-reliability-failure-handling.md) — bounded Kafka retries, poison-record dead-letter handling, and terminal offset-commit guarantees, verified in the developer environment;
+- [`archive/subspecs/backend-processing-flow-reconstruction.md`](archive/subspecs/backend-processing-flow-reconstruction.md) — bounded collection-run and item flow graphs reconstructed from Event Observation evidence, verified in the developer environment;
 - [`archive/subspecs/backend-event-observation.md`](archive/subspecs/backend-event-observation.md) — bounded decoded technical event history plus Event Explorer REST/SSE delivery, verified in the developer environment;
 - [`archive/subspecs/backend-results-sse-live-delivery.md`](archive/subspecs/backend-results-sse-live-delivery.md) — cluster-safe resumable SSE delivery over committed Results projections, verified in the developer environment;
 - [`archive/subspecs/backend-source-test-generic-extraction.md`](archive/subspecs/backend-source-test-generic-extraction.md) — diagnostic persisted-source testing plus configuration-driven REST/JSON and HTML extraction, verified in the developer environment;
@@ -126,7 +127,6 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
-- PostgreSQL/Kafka consistency through transactional outbox or equivalent;
 - application OpenTelemetry instrumentation;
 - Kubernetes deployment and infrastructure observability;
 - integration/system resilience acceptance.

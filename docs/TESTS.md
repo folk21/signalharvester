@@ -124,10 +124,10 @@ The first implementation foundation contains:
 - `DefaultContentNormalizerTest` for deterministic whitespace/URL normalization and stable normalized identity;
 - `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring rules and invalid rule configuration;
 - `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims, discovery counters, real SQL inspection filtering/ordering/limits, and enforcement of the application-owned JDBC transaction boundary;
-- `RawItemProcessingPostgresIntegrationTest` for focused new/irrelevant/duplicate processing, independent cross-profile acceptance, and claim/counter rollback when terminal publication fails;
+- `RawItemProcessingPostgresIntegrationTest` for focused new/irrelevant/duplicate processing, independent cross-profile acceptance, atomic deduplication/outbox commit, outbox retry metadata, and claim/counter rollback when outbox staging fails;
 - `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
 - `RawItemKafkaListenerTest` for Analysis bounded retry recovery, immediate poison/key failure dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
-- `KafkaAnalysisEventPublisherTest` for analyzed/rejected topic-key mapping, full provenance serialization, and publication-failure normalization;
+- `TransactionalAnalysisOutboxTest` for analyzed/rejected final topic-key mapping, stable terminal-event serialization, provenance, and outbox staging metadata;
 - `AnalysisOutcomeKafkaListenerTest` for Results terminal-event mapping, bounded projection retry, poison-input dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
 - `ResultsKafkaPostgresIntegrationTest` for real Kafka -> Results listener -> PostgreSQL materialization, including idempotent retry/upsert behavior, transactional replacement of result tags/attributes, live-cursor advancement only for a new analysis-event identity, and poison-record DLQ handling followed by same-partition progress;
 - `ResultControllerTest` for public Results list/detail HTTP defaults, filters, validation/not-found mapping, stable nullable JSON fields, and blocking Virtual Thread execution;
@@ -152,13 +152,14 @@ Before using real sources for a controlled trial, the backend should keep the fo
 
 ```text
 raw Kafka input
-    -> analysis claim/update
-    -> terminal publication
-    -> transaction completion
+    -> analysis claim/update + serialized outbox append
+    -> PostgreSQL transaction commit
     -> input offset commit
+    -> lease-based outbox publication
+    -> publication marker / retry metadata
 ```
 
-The analysis module verifies transaction rollback when terminal publication fails, while listener tests verify bounded retry and terminal DLQ behavior. Results integration coverage proves a poison record can be dead-lettered and a following record on the same partition still reaches PostgreSQL. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes, the public Results REST API exposes durable state, and the cross-module smoke test opens Results SSE before collection and observes the committed analyzed result through that stream. The same smoke test also waits for Event Observation to expose decoded raw and analyzed events through the public technical-history REST API. The opt-in live-backend verifier creates temporary persisted profiles when needed, terminates at Results REST, and includes a deterministic two-entry RSS fixture mode.
+The analysis module verifies atomic claim/outbox persistence, rollback when outbox staging fails, and lease-driven publication retry state, while listener tests verify bounded input retry and terminal DLQ behavior. Results integration coverage proves a poison record can be dead-lettered and a following record on the same partition still reaches PostgreSQL. `HttpPipelineSmokeIntegrationTest` starts from source and monitoring-profile configuration plus manual collection REST endpoints and observes durable collection history plus analysis inspection through public HTTP APIs while PostgreSQL, Kafka, and the deterministic external source stay behind the backend boundary. Results persistence retains terminal analyzed/rejected outcomes, the public Results REST API exposes durable state, and the cross-module smoke test opens Results SSE before collection and observes the committed analyzed result through that stream. The same smoke test also waits for Event Observation to expose decoded raw and analyzed events through the public technical-history REST API. The opt-in live-backend verifier creates temporary persisted profiles when needed, terminates at Results REST, and includes a deterministic two-entry RSS fixture mode.
 
 ## Python tooling tests
 

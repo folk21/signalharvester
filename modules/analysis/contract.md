@@ -26,7 +26,7 @@ No synchronous cross-module Java API is currently published by Analysis.
 
 `AnalysisItemInspectionQuery` and `AnalysisItemInspection` live under `analysis.application` as an internal read-only application boundary used by the analysis-owned HTTP adapter and tests. The raw-item processing path is also intentionally internal and event-driven.
 
-`RawItemProcessor`, `ContentAnalyzer`, `ContentNormalizer`, `AnalysisEventPublisher`, inspection queries, and repository interfaces are internal ports used to structure the module implementation, not published module contracts.
+`RawItemProcessor`, `ContentAnalyzer`, `ContentNormalizer`, `AnalysisOutbox`, inspection queries, and repository interfaces are internal ports used to structure the module implementation, not published module contracts.
 
 ### REST API
 
@@ -45,7 +45,8 @@ Kafka/Protobuf adapters remain internal implementation details.
 ## Owned data
 
 - PostgreSQL schema `analysis`;
-- normalized-item/deduplication claim state.
+- normalized-item/deduplication claim state;
+- transactional terminal-event outbox rows and dispatcher lease/publication metadata.
 
 Other modules must not query analysis tables directly.
 
@@ -57,20 +58,21 @@ Collection-to-analysis processing is asynchronous through Kafka contracts.
 
 ## Forbidden access
 
-Consumers must not import analysis `application`, `normalization`, `rules`, `event`, `persistence`, `configuration`, or `http` packages.
+Consumers must not import analysis `application`, `normalization`, `rules`, `event`, `outbox`, `persistence`, `configuration`, or `http` packages.
 
 Do not turn internal strategy/repository interfaces into published APIs solely because they are interfaces.
 
 ## Important invariants
 
 - deduplication identity is scoped by monitoring profile;
-- raw Kafka offsets are committed only after successful terminal processing/publication or acknowledged Analysis dead-letter publication;
+- raw Kafka offsets are committed only after the Analysis state/outbox transaction commits or acknowledged Analysis dead-letter publication;
 - deterministic decode/key/mapping failures are dead-lettered without retry, while application failures use a bounded retry policy;
 - DLQ publication failure leaves the source offset uncommitted;
 - deduplication writes require an active application-owned JDBC transaction;
-- each failed terminal-publication attempt rolls back its claim/observation transaction; an exhausted record advances only after acknowledged Analysis dead-letter publication;
-- current DB/Kafka transaction semantics are retryable but not distributed exactly-once;
-- downstream result persistence must remain idempotent.
+- a successful raw-item transaction commits the deduplication claim/update and exact serialized terminal event outbox row atomically before the source offset is committed;
+- Kafka publication happens outside JDBC transactions through bounded expiring outbox leases;
+- a post-ack publication-marker failure may republish the same event id/payload, so downstream persistence remains idempotent;
+- terminal input failures advance only after acknowledged Analysis dead-letter publication.
 
 ## Extension points
 

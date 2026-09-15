@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-Processing-flow reconstruction is implemented and remains developer-verification pending. The current backend focus is bounded Kafka retry and dead-letter failure handling under [`specs/active/subspecs/backend-reliability-failure-handling.md`](specs/active/subspecs/backend-reliability-failure-handling.md). PostgreSQL/Kafka consistency is the next reliability stage after this slice.
+Processing-flow reconstruction and bounded Kafka retry/dead-letter handling are accepted after developer verification. The current backend focus is PostgreSQL/Kafka consistency under [`specs/active/subspecs/backend-db-kafka-consistency.md`](specs/active/subspecs/backend-db-kafka-consistency.md). The implemented slice replaces the Analysis publish-inside-transaction gap with a transactional outbox and remains verification-pending.
 
 ## P0 — repository and contract foundation
 
@@ -32,8 +32,8 @@ Processing-flow reconstruction is implemented and remains developer-verification
 
 ## P2 — reliability, observability, and security
 
-- bounded retry, poison-event handling, DLQ/failure inspection, and idempotency hardening;
-- PostgreSQL/Kafka consistency through transactional outbox or equivalent;
+- bounded retry, poison-event handling, DLQ/failure inspection, and idempotency hardening — accepted;
+- PostgreSQL/Kafka consistency through the Analysis transactional outbox — implemented, verification pending;
 - OpenTelemetry application instrumentation and health/readiness;
 - stateless JWT authentication with persisted additive roles and backend-enforced RBAC;
 - explicit `VIEWER` result access versus `ADMIN` operational/diagnostic access.
@@ -53,4 +53,4 @@ Processing-flow reconstruction is implemented and remains developer-verification
 - LLM/embedding analysis as a required core dependency.
 
 
-The backend now provides source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results REST/SSE, technical Event Explorer history/SSE, processing-flow reconstruction, and implemented bounded Kafka retry/DLQ handling pending developer verification. The next backend milestones are PostgreSQL/Kafka consistency, application observability, and authentication/RBAC before production-style Kubernetes/system acceptance. When frontend work resumes, the companion frontend specification should add a dedicated consumer-facing `VIEWER` result experience over the accepted backend security and Results contracts.
+The backend now provides source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results REST/SSE, technical Event Explorer history/SSE, processing-flow reconstruction, and accepted bounded Kafka retry/DLQ handling. Analysis now also stages terminal events through a PostgreSQL transactional outbox; developer verification of that consistency slice is pending. The next backend milestones after acceptance are application observability and authentication/RBAC before production-style Kubernetes/system acceptance. When frontend work resumes, the companion frontend specification should add a dedicated consumer-facing `VIEWER` result experience over the accepted backend security and Results contracts.

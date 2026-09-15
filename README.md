@@ -104,7 +104,7 @@ The first implementation foundation is present:
 - bounded collection-run and item processing-flow reconstruction with explicit observed, derived, and unobserved stage evidence;
 - bounded Kafka consumer retry and versioned dead-letter handling for Analysis, Results, and Event Observation poison/failure paths.
 
-Stronger cross-DB/Kafka consistency, Kubernetes deployment, authentication/authorization, and the production observability stack are still planned work. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
+Application observability, Kubernetes deployment, authentication/authorization, and the production observability stack are still planned work; the Analysis authoritative-state/Kafka consistency gap is now addressed through a transactional outbox pending developer verification. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

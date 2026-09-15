@@ -451,6 +451,7 @@ class HttpPipelineSmokeIntegrationTest {
                 Map.entry("signalharvester.kafka.item-rejected-topic", REJECTED_TOPIC),
                 Map.entry("signalharvester.analysis.enabled", true),
                 Map.entry("signalharvester.analysis.consumer-group", ANALYSIS_GROUP),
+                Map.entry("signalharvester.analysis.outbox.poll-interval", "50ms"),
                 Map.entry("signalharvester.results.enabled", true),
                 Map.entry("signalharvester.results.consumer-group", RESULTS_GROUP),
                 Map.entry("signalharvester.event-observation.enabled", true),
