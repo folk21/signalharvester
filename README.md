@@ -42,6 +42,7 @@ Backend [`docs/INSTALLATION.md`](docs/INSTALLATION.md) and [`docs/USAGE.md`](doc
 |---|---|
 | Repository development rules | [`AGENTS.md`](AGENTS.md) |
 | Product/system target and active work | [`docs/specs/README.md`](docs/specs/README.md) |
+| Stable feature vocabulary | [`docs/FEATURES.md`](docs/FEATURES.md) |
 | Stable architecture boundaries | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | Current implementation state | [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) |
 | Backend setup prerequisites | [`docs/INSTALLATION.md`](docs/INSTALLATION.md) |
@@ -95,7 +96,7 @@ The first implementation foundation is present:
 - diagnostic persisted-source testing through the normal fetch/extraction boundary without publishing test data into Kafka or collection-run history;
 - profile-driven collection execution over persisted monitoring-profile source membership, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results;
 - collection-owned PostgreSQL interval scheduling with cluster-safe leases and lease heartbeats across backend replicas;
-- the first analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual Kafka offset commit, and `ItemAnalyzed`/`ItemRejected` publication;
+- the Analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual source-offset commit after durable processing, and transactional-outbox staging of `ItemAnalyzed`/`ItemRejected`;
 - a first operational admin API for manual collection runs, durable run/source outcome history, and read-only normalized-item inspection;
 - Results-owned PostgreSQL materialization of `ItemAnalyzed` and `ItemRejected` with idempotent at-least-once Kafka consumption;
 - a bounded public Results REST API for recent feed browsing and profile-scoped result detail;
@@ -104,7 +105,7 @@ The first implementation foundation is present:
 - bounded collection-run and item processing-flow reconstruction with explicit observed, derived, and unobserved stage evidence;
 - bounded Kafka consumer retry and versioned dead-letter handling for Analysis, Results, and Event Observation poison/failure paths.
 
-Application observability, Kubernetes deployment, authentication/authorization, and the production observability stack are still planned work; the Analysis authoritative-state/Kafka consistency gap is now addressed through a transactional outbox pending developer verification. Repository-owned Docker Compose now provides local PostgreSQL and Kafka infrastructure.
+Application observability, Kubernetes deployment, authentication/authorization, and the production observability stack are still planned work. The Analysis authoritative-state/Kafka consistency gap is addressed by the accepted transactional outbox. Repository-owned Docker Compose provides local PostgreSQL and Kafka infrastructure.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 
@@ -119,6 +120,8 @@ For local overrides, copy `infra/docker-compose/.env.example` to `infra/docker-c
 ## Documentation model
 
 Documentation uses minimal YAML frontmatter (`type`, `title`, `description`) to make purpose searchable for humans and LLMs. Active specifications add relationship/workflow metadata defined by [`docs/specs/README.md`](docs/specs/README.md).
+
+Stable capability names live in [`docs/FEATURES.md`](docs/FEATURES.md). Feature IDs are long-lived cross-references; requirement IDs remain local to their specifications, and completed implementation specs are archived.
 
 Current-state documentation and active specs have different roles: specs define intended changes; architecture/implementation/configuration/usage docs describe the accepted current system.
 

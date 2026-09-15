@@ -4,13 +4,20 @@ title: SignalHarvester backend database and Kafka consistency
 description: Transactional Analysis outbox with lease-based Kafka delivery and stable event identity across publication retries.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # SignalHarvester backend database and Kafka consistency
 
 ## Status
 
-Implementation complete. Developer `./run_checks.sh` verification pending.
+Completed and accepted on 2026-09-15 after developer `./run_checks.sh` verification passed.
+
+## Feature scope
+
+- `ANALYSIS.OUTBOX` — transactional terminal-event staging and lease-based at-least-once Kafka dispatch.
+- `RELIABILITY.IDEMPOTENCY` — stable event identity makes post-ack replay safe for downstream consumers.
+
+Feature identifiers are defined in [`../../../FEATURES.md`](../../../FEATURES.md).
 
 ## Goal
 

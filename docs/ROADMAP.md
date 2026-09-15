@@ -5,52 +5,74 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 ---
 # Roadmap
 
-## Current implementation focus
+## Current position
 
-Processing-flow reconstruction and bounded Kafka retry/dead-letter handling are accepted after developer verification. The current backend focus is PostgreSQL/Kafka consistency under [`specs/active/subspecs/backend-db-kafka-consistency.md`](specs/active/subspecs/backend-db-kafka-consistency.md). The implemented slice replaces the Analysis publish-inside-transaction gap with a transactional outbox and remains verification-pending.
+The main functional backend pipeline is implemented and verified through `ANALYSIS.OUTBOX`.
+
+Accepted P2 reliability work includes:
+
+- `RELIABILITY.KAFKA_RETRY`;
+- `RELIABILITY.DEAD_LETTER`;
+- `RELIABILITY.IDEMPOTENCY` protections used by current consumers;
+- `ANALYSIS.OUTBOX` for PostgreSQL/Kafka consistency in Analysis.
+
+No implementation sub-spec is currently selected as `current_focus` while the documentation vocabulary/readability cleanup is applied. The next planned implementation stage is `OBSERVABILITY.APPLICATION`. The active authentication/authorization sub-spec follows it before production-style Kubernetes/system acceptance.
+
+Stable feature identifiers are defined in [`FEATURES.md`](FEATURES.md).
 
 ## P0 — repository and contract foundation
 
-- stabilize modular-monolith ownership and documentation;
-- establish Gradle/Micronaut runnable composition root;
-- define first OpenAPI and Protobuf contracts;
-- establish PostgreSQL/Flyway ownership and integration-test baseline.
+Accepted foundation:
 
-## P1 — first functional vertical slice
+- `PLATFORM.MODULAR_MONOLITH` — Gradle/Micronaut modular-monolith ownership;
+- `CONTRACTS.HTTP` — REST/OpenAPI and SSE/JSON application boundaries;
+- `CONTRACTS.KAFKA_PROTOBUF` — versioned Kafka/Protobuf integration contracts;
+- PostgreSQL/Flyway module-local persistence ownership;
+- deterministic unit/integration verification and repository quality gates.
 
-- persisted source/profile configuration;
-- scheduled collection from a deterministic and at least one real supported source type;
-- Kafka/Protobuf event flow;
-- normalization/deduplication/basic analysis;
-- persisted results exposed through REST and SSE.
+## P1 — functional product pipeline
 
-## P1 — event visibility
+Accepted backend capabilities:
 
-- event-observation pipeline and bounded correlation/event history;
-- backend support for UI Event Explorer live/history views;
-- processing-flow reconstruction.
+- `CONFIGURATION.SOURCES` and `CONFIGURATION.MONITORING_PROFILES`;
+- `COLLECTION.SOURCE_TEST`, `COLLECTION.RUNS`, `COLLECTION.SCHEDULING`, and `COLLECTION.ADAPTERS`;
+- `EVENTING.PIPELINE` and `EVENTING.CORRELATION`;
+- `ANALYSIS.NORMALIZATION`, `ANALYSIS.DEDUPLICATION`, and deterministic `ANALYSIS.CLASSIFICATION`;
+- `RESULTS.MATERIALIZATION`, `RESULTS.BROWSING`, and `RESULTS.LIVE`;
+- `DIAGNOSTICS.EVENT_OBSERVATION` and `DIAGNOSTICS.PROCESSING_FLOW`.
 
 ## P2 — reliability, observability, and security
 
-- bounded retry, poison-event handling, DLQ/failure inspection, and idempotency hardening — accepted;
-- PostgreSQL/Kafka consistency through the Analysis transactional outbox — implemented, verification pending;
-- OpenTelemetry application instrumentation and health/readiness;
-- stateless JWT authentication with persisted additive roles and backend-enforced RBAC;
-- explicit `VIEWER` result access versus `ADMIN` operational/diagnostic access.
+Accepted:
+
+- `RELIABILITY.KAFKA_RETRY` and `RELIABILITY.DEAD_LETTER`;
+- `ANALYSIS.OUTBOX`.
+
+Next:
+
+1. `OBSERVABILITY.APPLICATION` — OpenTelemetry instrumentation plus health/readiness.
+2. `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` — stateless JWT authentication and backend-enforced RBAC.
+3. `PRESENTATION.VIEWER_RESULTS` — frontend-owned consumer result experience after the backend security contract is accepted.
+
+The VIEWER UI belongs to `signalharvester-web`; its detailed layout/routing behavior must be defined there when frontend development resumes.
 
 ## P2 — deployment and system acceptance
 
-- Kubernetes deployment;
-- Prometheus, Loki, Tempo, Grafana infrastructure observability;
-- controlled failure/restart/lag and authorization-boundary demonstrations;
-- one production-style local system acceptance pass before lower-priority product refinements.
+After application observability and security:
+
+- implement `DEPLOYMENT.KUBERNETES`;
+- implement `OBSERVABILITY.INFRASTRUCTURE` with Prometheus/Loki/Tempo/Grafana-oriented views;
+- run controlled restart, lag, slow-source, retry/DLQ, outbox-recovery, and authorization-boundary scenarios;
+- complete one production-style local system acceptance pass.
+
+That acceptance point is the intended logical milestone before lower-priority product refinements.
 
 ## Deferred until justified
 
 - independently deployed backend microservices;
 - gRPC service boundaries;
 - Schema Registry;
-- LLM/embedding analysis as a required core dependency.
-
-
-The backend now provides source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results REST/SSE, technical Event Explorer history/SSE, processing-flow reconstruction, and accepted bounded Kafka retry/DLQ handling. Analysis now also stages terminal events through a PostgreSQL transactional outbox; developer verification of that consistency slice is pending. The next backend milestones after acceptance are application observability and authentication/RBAC before production-style Kubernetes/system acceptance. When frontend work resumes, the companion frontend specification should add a dedicated consumer-facing `VIEWER` result experience over the accepted backend security and Results contracts.
+- LLM/embedding analysis as a required core dependency;
+- automatic DLQ replay UI/workflows;
+- KEDA-driven autoscaling;
+- richer scheduling and search capabilities that are not required for the system milestone.

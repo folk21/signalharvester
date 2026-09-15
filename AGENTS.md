@@ -210,7 +210,7 @@ Never disable or weaken a failing test merely to make the build green.
 
 Keep tests readable as executable specifications:
 
-- Give every test class a concise but informative class-level Javadoc that names the behavior/boundary it protects and links to the primary tested production type with `{@link ...}` when practical. Reference an existing stable feature/spec identifier when it improves navigation; never invent ad-hoc feature codes.
+- Give every test class a concise but informative class-level Javadoc that names the behavior/boundary it protects and links to the primary tested production type with `{@link ...}` when practical. Prefer a stable feature ID from `docs/FEATURES.md` when it improves navigation. Use a specification identifier only when the test protects that specific change contract. Never invent ad-hoc feature codes.
 - Put a concise Javadoc-style purpose comment (`/** ... */`, normally one line, at most two) immediately before every test method annotation. Describe only the scenario/guarantee; do not prefix it with labels such as `Test purpose:`.
 - Name opaque or semantically meaningful fixture values (IDs, hashes, correlation values, profile/source identifiers, fixed timestamps) with constants when the name makes the scenario clearer, especially when reused. Do not extract trivial one-off literals mechanically.
 - Prefer parameterized JUnit tests when the same behavior/assertions are exercised over a list of input values; do not use parameterization to hide materially different scenarios.
@@ -238,6 +238,7 @@ Each topic should have one authoritative owner:
 | Test strategy and commands | `docs/TESTS.md` |
 | Coverage and code-quality tooling | `docs/QUALITY.md` |
 | Future work | `docs/ROADMAP.md` |
+| Stable feature vocabulary | `docs/FEATURES.md` |
 | Completed project changes | `CHANGELOG.md` |
 | Specification workflow/navigation | `docs/specs/README.md` |
 | Intended significant changes | active specifications |
@@ -254,6 +255,14 @@ Keep specification lifecycle state unambiguous:
 - archival is a move, not a duplicated copy;
 - umbrella `current_focus`, `docs/specs/README.md`, and the active spec tree must agree;
 - an implemented-but-unverified slice may remain active with `verification-pending`, but accepted behavior belongs in current-state documentation rather than being maintained twice in the spec.
+
+Keep specifications synchronized with the stable feature vocabulary in `docs/FEATURES.md`:
+
+- when creating a specification, identify the existing feature IDs that own its scope and reference them explicitly;
+- when a specification introduces a genuinely new long-lived capability, add its feature ID to `docs/FEATURES.md` before using that ID elsewhere;
+- when changing a specification's feature scope, update the catalog and affected cross-references in the same change when needed;
+- do not create a new feature ID merely because a new specification, implementation stage, or refactor exists; reuse the stable capability ID when the work changes an existing feature;
+- never rename or remove a published feature ID from one specification in isolation. Treat such changes as vocabulary migrations and update all repository references coherently.
 
 Do not update broad documentation or CHANGELOG for trivial local refactors that do not change behavior, contracts, architecture, validation workflow, or contributor-facing knowledge.
 
@@ -275,6 +284,7 @@ Repository documentation is working context for both developers and coding agent
 - Clearly distinguish current implemented behavior from technical debt, planned work, and other future enhancements. Never describe planned behavior as if it already exists.
 - Prefer concrete references to modules, APIs, schemas, events, configuration keys, and persistence owners over abstract descriptions.
 - Keep important requirement identifiers and established domain terms stable across specifications, documentation, tests, and code.
+- Use stable feature IDs from `docs/FEATURES.md` for cross-document capability references. Feature IDs use uppercase ASCII hierarchy such as `RESULTS.LIVE`; do not invent or rename them locally.
 
 ## Always / Ask First / Never
 

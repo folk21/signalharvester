@@ -10,9 +10,18 @@ spec_status: active
 
 ## Status
 
-Active supporting technical sub-specification — raw and analysis schemas, generation workflow, collection/analysis Kafka adapters, explicit byte serialization, and Testcontainers round trips exist. Event Explorer decoding of the currently published raw/analyzed/rejected families is implemented. The shared `failure/v1/DeadLetterEvent` contract now captures terminal Kafka-consumer failures for bounded retry/DLQ handling. Compatibility fixtures for evolved published schemas and later event families remain pending.
+Active supporting specification for Kafka/Protobuf contract guardrails.
 
-This specification refines the umbrella event-driven requirements and the backend modular-monolith structure. It defines how Kafka integration events are represented without turning Protocol Buffers into a universal internal application model.
+Published raw, Analysis, and dead-letter event families already use these rules. Compatibility fixtures for later schema evolution and future event families remain unresolved work.
+
+## Feature scope
+
+- `CONTRACTS.KAFKA_PROTOBUF` — versioned Kafka wire contracts and compatibility rules.
+- `EVENTING.CORRELATION` — stable event/correlation/trace metadata carried by integration events.
+- `DIAGNOSTICS.EVENT_OBSERVATION` — human-readable decoding of observed event families.
+- `RELIABILITY.DEAD_LETTER` — versioned terminal failure event contract.
+
+Feature identifiers are defined in [`../../../FEATURES.md`](../../../FEATURES.md).
 
 ## Goal
 
@@ -47,9 +56,23 @@ contracts/event-contracts/
 
 Generated Java sources belong under Gradle build output and must not be committed or manually edited as authoritative event DTOs.
 
+## Requirement map
+
+| Requirement | Feature ID | Purpose |
+|---|---|---|
+| R1-R2 | `CONTRACTS.KAFKA_PROTOBUF` | Protobuf source/version ownership |
+| R3 | `CONTRACTS.KAFKA_PROTOBUF`, `EVENTING.CORRELATION` | Envelope and correlation metadata |
+| R4-R7 | `CONTRACTS.KAFKA_PROTOBUF` | Generated-type, compatibility, and serialization rules |
+| R8 | `DIAGNOSTICS.EVENT_OBSERVATION` | Human-readable event decoding |
+| R9 | `CONTRACTS.HTTP` | REST/SSE stay JSON-facing |
+| R10 | `PLATFORM.MODULAR_MONOLITH` | In-process calls stay Java APIs |
+| R11 | `CONTRACTS.KAFKA_PROTOBUF` | Contract verification |
+
 ## Requirements
 
 ### R1 — `.proto` is the source of truth
+
+Feature: `CONTRACTS.KAFKA_PROTOBUF`.
 
 Every Kafka integration-event payload must be defined by a versioned `.proto` schema before producer and consumer implementations depend on it.
 
@@ -57,11 +80,15 @@ No handwritten Java event DTO may silently become a competing wire-contract defi
 
 ### R2 — contract packages are versioned
 
+Feature: `CONTRACTS.KAFKA_PROTOBUF`.
+
 Protocol Buffers package structure must include an explicit contract version, initially `v1`.
 
 Versioning is a compatibility boundary, not a release-number mirror. Additive compatible changes remain in the same contract version. A new package version is introduced only when an intentional incompatible contract is required.
 
 ### R3 — common envelope metadata is intentional
+
+Feature: `CONTRACTS.KAFKA_PROTOBUF`, `EVENTING.CORRELATION`.
 
 A common event envelope or equivalent shared metadata must carry the information required for reliable observation and correlation, including at least:
 
@@ -76,6 +103,8 @@ Envelope design must not force arbitrary domain payloads into opaque untyped byt
 
 ### R4 — generated Protobuf classes are transport types
 
+Feature: `CONTRACTS.KAFKA_PROTOBUF`.
+
 Generated classes may be used directly at Kafka producer/consumer adapters and contract mapping boundaries.
 
 They must not become the canonical domain model of `configuration`, `collection`, `analysis`, or `results` merely because they are shareable.
@@ -83,6 +112,8 @@ They must not become the canonical domain model of `configuration`, `collection`
 Modules may map between generated messages and module-owned models when this protects module independence or domain semantics.
 
 ### R5 — field-number compatibility is mandatory
+
+Feature: `CONTRACTS.KAFKA_PROTOBUF`.
 
 Published field numbers are stable contract identifiers.
 
@@ -94,11 +125,15 @@ Additive optional fields are preferred for compatible evolution.
 
 ### R6 — unknown-field tolerance is expected
 
+Feature: `CONTRACTS.KAFKA_PROTOBUF`.
+
 Consumers must be designed with normal Protobuf forward/backward compatibility in mind. An older consumer should tolerate additive fields it does not understand unless explicit validation rules require otherwise.
 
 Business validation must distinguish between an unknown additive field and a genuinely invalid event.
 
 ### R7 — Kafka serialization is explicit
+
+Feature: `CONTRACTS.KAFKA_PROTOBUF`.
 
 Kafka producer and consumer configuration must use an explicit Protobuf serialization strategy.
 
@@ -108,11 +143,15 @@ The application-level contract remains the `.proto` schema regardless of whether
 
 ### R8 — Event Explorer must remain human-readable
 
+Feature: `DIAGNOSTICS.EVENT_OBSERVATION`.
+
 The technical event-observation path must be able to present meaningful decoded event metadata and selected payload fields even though Kafka stores binary Protobuf payloads.
 
 The browser must receive a diagnostic JSON representation from the backend. The browser must not decode Kafka Protobuf records directly.
 
 ### R9 — REST and SSE do not inherit Kafka serialization
+
+Feature: `CONTRACTS.HTTP`.
 
 REST controllers use JSON request/response contracts described through OpenAPI.
 
@@ -122,11 +161,15 @@ A Kafka/Protobuf contract may be mapped into an HTTP/SSE representation, but the
 
 ### R10 — in-process module calls remain normal Java calls
 
+Feature: `PLATFORM.MODULAR_MONOLITH`.
+
 When one module synchronously invokes another module inside the modular monolith, it uses a narrow Java module API.
 
 Serialization to Protobuf and immediate deserialization inside the same JVM is forbidden unless a concrete test or migration requirement explicitly justifies simulating a remote boundary.
 
 ### R11 — contract tests validate schema behavior
+
+Feature: `CONTRACTS.KAFKA_PROTOBUF`.
 
 Automated tests must cover at least:
 

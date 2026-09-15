@@ -10,29 +10,68 @@ spec_status: active
 
 ## Status
 
-Active supporting specification — intended security contract for a later backend implementation stage. Processing-flow reconstruction remains the current implementation focus until its lifecycle is resolved.
+Active supporting specification for the later security implementation stage.
+
+It is not the current implementation focus. The next planned backend implementation slice is `OBSERVABILITY.APPLICATION`; authentication/authorization follows it before production-style Kubernetes/system acceptance.
+
+## Feature scope
+
+- `SECURITY.IDENTITY_ROLES` — persisted identities and explicit additive roles.
+- `SECURITY.AUTHENTICATION` — stateless signed-JWT authentication.
+- `SECURITY.AUTHORIZATION` — backend-enforced access control for REST/SSE capabilities.
+- `PRESENTATION.VIEWER_RESULTS` — frontend-owned consumer experience that depends on the accepted backend security contract.
+
+Feature identifiers are defined in [`../../../FEATURES.md`](../../../FEATURES.md).
 
 ## Goal
 
-Introduce a small, explicit authentication and authorization model before SignalHarvester is treated as a shared or publicly exposed application.
+Add a small, explicit security model before SignalHarvester is treated as a shared or publicly exposed application.
 
-The backend must persist identities and role assignments, authenticate requests with signed JWT credentials, remain stateless with respect to login sessions, and enforce role-based access independently of frontend route visibility. The contract must also support the existing REST and native Server-Sent Events browser boundaries.
+The backend must:
+
+- persist identities and role assignments;
+- authenticate requests with signed JWT credentials;
+- remain stateless with respect to login sessions;
+- enforce authorization independently of frontend route visibility;
+- support both REST and native Server-Sent Events browser boundaries.
 
 ## Relationship to the umbrella specification
 
-This slice implements umbrella requirements R31 and the backend-owned portion of R32. It also closes the authentication/authorization part of the trusted-environment limitation that currently applies to the companion frontend.
+This slice implements umbrella R31 and the backend-owned portion of R32. It also closes the authentication/authorization part of the trusted-environment limitation that currently applies to the companion frontend.
 
 Detailed `VIEWER` UI behavior remains owned by `signalharvester-web`. When frontend development resumes, that repository must add a bounded UI specification that consumes the accepted authentication/RBAC contract rather than inventing a frontend-only access model.
 
 ## Current state
 
-The backend currently exposes configuration, collection operations, Results, Event Observation, and Processing Flow endpoints without authentication. The companion frontend is intentionally documented as trusted-environment software.
+The backend currently exposes configuration, collection operations, Results, Event Observation, and Processing Flow endpoints without authentication. The companion frontend is therefore still a trusted-environment application.
 
-There is no persisted user account model, no JWT issuer/validator owned by the application, no backend RBAC policy, and no authentication boundary for REST or SSE.
+Missing security boundaries are explicit:
+
+- no persisted user account model;
+- no application-owned JWT issuer/validator;
+- no backend RBAC policy;
+- no authentication boundary for REST or SSE.
+
+## Requirement map
+
+| Requirement | Feature ID | Purpose |
+|---|---|---|
+| A1 | `SECURITY.IDENTITY_ROLES` | Persisted identities and additive roles |
+| A2 | `SECURITY.AUTHENTICATION` | Stateless JWT validation |
+| A3 | `SECURITY.AUTHENTICATION` | REST/native-SSE credential transport |
+| A4 | `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION` | CSRF and CORS policy |
+| A5 | `SECURITY.AUTHORIZATION` | Backend-enforced endpoint access |
+| A6 | `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION` | Disablement and role-change semantics |
+| A7 | `SECURITY.AUTHENTICATION`, `CONTRACTS.HTTP` | Browser-facing auth API |
+| A8 | `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHORIZATION` | User administration and bootstrap |
+| A9 | `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION` | Audit-safe security logging |
+| A10 | `SECURITY.AUTHORIZATION`, `PRESENTATION.VIEWER_RESULTS` | Presentation-independent VIEWER contract |
 
 ## Requirements
 
 ### A1 — persisted identities and explicit roles
+
+Feature: `SECURITY.IDENTITY_ROLES`.
 
 The backend must persist application identities with at least:
 
@@ -55,6 +94,8 @@ A non-human identity may have `BOT` without `USER`.
 
 ### A2 — stateless signed JWT authentication
 
+Feature: `SECURITY.AUTHENTICATION`.
+
 Successful authentication must produce a signed, time-bounded JWT that contains the stable principal identity and explicit assigned roles needed for authorization.
 
 The backend must not persist login sessions or JWT session records in PostgreSQL. Each request is authenticated from the presented credential plus persistent account state required by the chosen validation policy.
@@ -71,6 +112,8 @@ Token lifetime and signing-key configuration must be externalized. Signing secre
 
 ### A3 — browser transport supports REST and native SSE
 
+Feature: `SECURITY.AUTHENTICATION`.
+
 The browser authentication design must work for ordinary REST requests and the existing native `EventSource` SSE clients.
 
 JWT credentials must not be placed in query parameters or other URLs.
@@ -81,11 +124,15 @@ If a different transport is selected during implementation, it must preserve nat
 
 ### A4 — CSRF and cross-origin policy
 
+Feature: `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION`.
+
 If browser authentication uses cookies, state-changing requests must have an explicit CSRF defense appropriate to the deployment model. SameSite policy alone must not be treated as an undocumented substitute for the chosen CSRF model.
 
 The backend must define an explicit CORS policy for separately hosted frontend builds. Wildcard credentialed CORS is not acceptable. The preferred production deployment should keep the browser frontend and backend behind one controlled application origin unless deployment requirements justify otherwise.
 
 ### A5 — backend-enforced authorization
+
+Feature: `SECURITY.AUTHORIZATION`.
 
 Authorization must be enforced at backend HTTP/SSE boundaries. Frontend route hiding is only a user-experience concern.
 
@@ -100,11 +147,15 @@ The implementation stage must maintain an explicit endpoint/role matrix in this 
 
 ### A6 — account disablement and role changes
 
+Feature: `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`.
+
 Disabling an account must prevent future authentication. The implementation must define how already issued short-lived JWTs behave after account disablement or role removal.
 
 The initial design should prefer short access-token lifetime and simple stateless validation over a persistent revocation/session store. If immediate revocation is required, that requirement must be added explicitly rather than introducing a hidden session table.
 
 ### A7 — authentication API surface
+
+Feature: `SECURITY.AUTHENTICATION`, `CONTRACTS.HTTP`.
 
 The backend must expose an explicit, versioned browser-facing authentication contract sufficient for at least:
 
@@ -116,6 +167,8 @@ The implementation stage must update the authoritative OpenAPI contract together
 
 ### A8 — user administration
 
+Feature: `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHORIZATION`.
+
 User creation, enable/disable state, and role assignment must be manageable through an authenticated administrative boundary. The initial implementation may expose this through backend APIs before a dedicated frontend screen exists.
 
 Administrative APIs must not return password hashes, signing material, or JWT credentials.
@@ -124,11 +177,15 @@ The initial bootstrap mechanism for the first `ADMIN` account must be determinis
 
 ### A9 — audit-safe security logging
 
+Feature: `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION`.
+
 Authentication and authorization outcomes must be observable without logging secrets or complete JWTs.
 
 Useful security logs should include stable principal identity where known, request/correlation context, and denial reason at an appropriate level. Passwords, password hashes, signing keys, bearer/cookie token contents, and sensitive source credentials must never be logged.
 
 ### A10 — VIEWER contract remains presentation-independent
+
+Feature: `SECURITY.AUTHORIZATION`, `PRESENTATION.VIEWER_RESULTS`.
 
 The backend must authorize `VIEWER` access by API capability, not by knowledge of React routes or components. Existing Results REST/SSE contracts should be reused where they already satisfy the consumer-facing experience.
 
