@@ -1,18 +1,25 @@
 package io.signalharvester.results.event.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.Timestamp;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import io.signalharvester.events.analysis.v1.ItemRejected;
 import io.signalharvester.events.common.v1.EventEnvelope;
 import io.signalharvester.results.application.AnalysisOutcomeProjector;
+import io.signalharvester.results.configuration.ResultsKafkaReliabilityConfiguration;
 import io.signalharvester.results.model.AnalyzedResult;
 import io.signalharvester.results.model.RejectedResult;
 import java.lang.reflect.Proxy;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -20,10 +27,10 @@ import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies {@link AnalysisOutcomeKafkaListener} transport validation, Results projection dispatch,
- * and manual Kafka offset commit semantics for analyzed and rejected terminal events.
+ * Verifies {@link AnalysisOutcomeKafkaListener} projection dispatch, bounded retry, dead-letter handling,
+ * and manual offset commits for analyzed and rejected terminal events.
  *
- * <p>Related specification: {@code backend-results-persistence}.</p>
+ * <p>Related specification: {@code backend-reliability-failure-handling}.</p>
  */
 class AnalysisOutcomeKafkaListenerTest {
 
@@ -33,13 +40,12 @@ class AnalysisOutcomeKafkaListenerTest {
     private static final String ANALYZED_TOPIC = "analyzed-items";
     private static final String REJECTED_TOPIC = "rejected-items";
 
-    /**
-     * Persist an analyzed event before committing the consumed offset.
-     */
+    /** Persist an analyzed event before committing the consumed offset. */
     @Test
     void shouldProjectAnalyzedBeforeCommittingOffset() {
         RecordingProjector projector = new RecordingProjector();
-        AnalysisOutcomeKafkaListener listener = listener(projector);
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        AnalysisOutcomeKafkaListener listener = listener(projector, deadLetters, 3);
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
         listener.receiveAnalyzed(
@@ -52,15 +58,15 @@ class AnalysisOutcomeKafkaListenerTest {
 
         assertEquals(NORMALIZED_ITEM_ID, projector.analyzed().get().normalizedItemId());
         assertEquals(new OffsetAndMetadata(8L), committed.get().get(new TopicPartition(ANALYZED_TOPIC, 2)));
+        assertTrue(deadLetters.failures.isEmpty());
     }
 
-    /**
-     * Persist a rejected event before committing the consumed offset.
-     */
+    /** Persist a rejected event before committing the consumed offset. */
     @Test
     void shouldProjectRejectedBeforeCommittingOffset() {
         RecordingProjector projector = new RecordingProjector();
-        AnalysisOutcomeKafkaListener listener = listener(projector);
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        AnalysisOutcomeKafkaListener listener = listener(projector, deadLetters, 3);
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
         listener.receiveRejected(
@@ -75,76 +81,43 @@ class AnalysisOutcomeKafkaListenerTest {
         assertEquals(new OffsetAndMetadata(12L), committed.get().get(new TopicPartition(REJECTED_TOPIC, 1)));
     }
 
-    /**
-     * Reject a mismatched Kafka key without projecting or committing the event.
-     */
+    /** Retry transient projection failures and commit after the projection recovers. */
     @Test
-    void shouldRejectMismatchedKafkaKeyWithoutCommit() {
-        RecordingProjector projector = new RecordingProjector();
-        AnalysisOutcomeKafkaListener listener = listener(projector);
+    void shouldRetryProjectionFailureAndCommitAfterRecovery() {
+        AtomicInteger attempts = new AtomicInteger();
+        AnalysisOutcomeProjector projector = new AnalysisOutcomeProjector() {
+            @Override
+            public void projectAnalyzed(AnalyzedResult result) {
+                if (attempts.incrementAndGet() < 3) {
+                    throw new IllegalStateException("database temporarily unavailable");
+                }
+            }
+
+            @Override
+            public void projectRejected(RejectedResult result) {
+                throw new AssertionError("unexpected rejected projection");
+            }
+        };
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        AnalysisOutcomeKafkaListener listener = listener(projector, deadLetters, 3);
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
-        assertThrows(IllegalArgumentException.class, () -> listener.receiveAnalyzed(
-                "wrong-key",
+        listener.receiveAnalyzed(
+                NORMALIZED_ITEM_ID,
                 analyzedEvent().toByteArray(),
-                3L,
+                5L,
                 0,
                 ANALYZED_TOPIC,
-                consumer(committed)));
+                consumer(committed));
 
-        assertNull(projector.analyzed().get());
-        assertNull(committed.get());
+        assertEquals(3, attempts.get());
+        assertEquals(new OffsetAndMetadata(6L), committed.get().get(new TopicPartition(ANALYZED_TOPIC, 0)));
+        assertTrue(deadLetters.failures.isEmpty());
     }
 
-    /**
-     * Reject malformed Protobuf bytes without projecting or committing the event.
-     */
+    /** Dead-letter an exhausted projection failure and then commit past the failed record. */
     @Test
-    void shouldRejectMalformedPayloadWithoutCommit() {
-        RecordingProjector projector = new RecordingProjector();
-        AnalysisOutcomeKafkaListener listener = listener(projector);
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
-
-        assertThrows(IllegalArgumentException.class, () -> listener.receiveRejected(
-                NORMALIZED_ITEM_ID,
-                new byte[] {(byte) 0x80},
-                4L,
-                0,
-                REJECTED_TOPIC,
-                consumer(committed)));
-
-        assertNull(projector.rejected().get());
-        assertNull(committed.get());
-    }
-
-
-    /**
-     * Reject semantically invalid analyzed data without projecting or committing the event.
-     */
-    @Test
-    void shouldRejectInvalidMappedDomainDataWithoutCommit() {
-        RecordingProjector projector = new RecordingProjector();
-        AnalysisOutcomeKafkaListener listener = listener(projector);
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
-        ItemAnalyzed invalid = analyzedEvent().toBuilder().clearSourceId().build();
-
-        assertThrows(IllegalArgumentException.class, () -> listener.receiveAnalyzed(
-                NORMALIZED_ITEM_ID,
-                invalid.toByteArray(),
-                6L,
-                0,
-                ANALYZED_TOPIC,
-                consumer(committed)));
-
-        assertNull(projector.analyzed().get());
-        assertNull(committed.get());
-    }
-
-    /**
-     * Leave the offset uncommitted when durable projection fails.
-     */
-    @Test
-    void shouldLeaveOffsetUncommittedWhenProjectionFails() {
+    void shouldDeadLetterExhaustedProjectionFailureBeforeCommit() {
         AnalysisOutcomeProjector projector = new AnalysisOutcomeProjector() {
             @Override
             public void projectAnalyzed(AnalyzedResult result) {
@@ -156,7 +129,86 @@ class AnalysisOutcomeKafkaListenerTest {
                 throw new AssertionError("unexpected rejected projection");
             }
         };
-        AnalysisOutcomeKafkaListener listener = listener(projector);
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        AnalysisOutcomeKafkaListener listener = listener(projector, deadLetters, 2);
+        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+
+        listener.receiveAnalyzed(
+                NORMALIZED_ITEM_ID,
+                analyzedEvent().toByteArray(),
+                5L,
+                0,
+                ANALYZED_TOPIC,
+                consumer(committed));
+
+        assertEquals(new OffsetAndMetadata(6L), committed.get().get(new TopicPartition(ANALYZED_TOPIC, 0)));
+        Failure failure = deadLetters.failures.getFirst();
+        assertEquals(2, failure.attempts());
+        assertTrue(failure.retryable());
+    }
+
+    /** Dead-letter a mismatched Kafka key immediately without projecting the event. */
+    @Test
+    void shouldDeadLetterMismatchedKafkaKeyWithoutRetry() {
+        RecordingProjector projector = new RecordingProjector();
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        AnalysisOutcomeKafkaListener listener = listener(projector, deadLetters, 3);
+        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+
+        listener.receiveAnalyzed(
+                "wrong-key",
+                analyzedEvent().toByteArray(),
+                3L,
+                0,
+                ANALYZED_TOPIC,
+                consumer(committed));
+
+        assertNull(projector.analyzed().get());
+        assertEquals(new OffsetAndMetadata(4L), committed.get().get(new TopicPartition(ANALYZED_TOPIC, 0)));
+        assertEquals(1, deadLetters.failures.getFirst().attempts());
+        assertFalse(deadLetters.failures.getFirst().retryable());
+    }
+
+    /** Dead-letter malformed Protobuf immediately without projecting the event. */
+    @Test
+    void shouldDeadLetterMalformedPayloadWithoutRetry() {
+        RecordingProjector projector = new RecordingProjector();
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        AnalysisOutcomeKafkaListener listener = listener(projector, deadLetters, 3);
+        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+
+        listener.receiveRejected(
+                NORMALIZED_ITEM_ID,
+                new byte[] {(byte) 0x80},
+                4L,
+                0,
+                REJECTED_TOPIC,
+                consumer(committed));
+
+        assertNull(projector.rejected().get());
+        assertEquals(new OffsetAndMetadata(5L), committed.get().get(new TopicPartition(REJECTED_TOPIC, 0)));
+        assertEquals(1, deadLetters.failures.getFirst().attempts());
+    }
+
+    /** Leave the source offset uncommitted when dead-letter publication fails. */
+    @Test
+    void shouldLeaveOffsetUncommittedWhenDeadLetterPublicationFails() {
+        AnalysisOutcomeProjector projector = new AnalysisOutcomeProjector() {
+            @Override
+            public void projectAnalyzed(AnalyzedResult result) {
+                throw new IllegalStateException("database unavailable");
+            }
+
+            @Override
+            public void projectRejected(RejectedResult result) {
+                throw new AssertionError("unexpected rejected projection");
+            }
+        };
+        ResultsDeadLetterPublisher deadLetters = (sourceTopic, sourcePartition, sourceOffset, sourceKey,
+                sourcePayload, failure, attempts, retryable) -> {
+            throw new IllegalStateException("DLQ unavailable");
+        };
+        AnalysisOutcomeKafkaListener listener = listener(projector, deadLetters, 1);
         AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
         assertThrows(IllegalStateException.class, () -> listener.receiveAnalyzed(
@@ -170,8 +222,40 @@ class AnalysisOutcomeKafkaListenerTest {
         assertNull(committed.get());
     }
 
-    private static AnalysisOutcomeKafkaListener listener(AnalysisOutcomeProjector projector) {
-        return new AnalysisOutcomeKafkaListener(new AnalysisOutcomeMapper(), projector);
+
+    /** Reject retry backoff that exceeds the bounded listener policy. */
+    @Test
+    void shouldRejectRetryBackoffLongerThanFiveSeconds() {
+        RecordingProjector projector = new RecordingProjector();
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+
+        assertThrows(IllegalArgumentException.class, () -> listener(projector, deadLetters, 3, Duration.ofSeconds(6)));
+    }
+
+    private static AnalysisOutcomeKafkaListener listener(
+            AnalysisOutcomeProjector projector, ResultsDeadLetterPublisher deadLetters, int maxAttempts) {
+        return listener(projector, deadLetters, maxAttempts, Duration.ZERO);
+    }
+
+    private static AnalysisOutcomeKafkaListener listener(
+            AnalysisOutcomeProjector projector, ResultsDeadLetterPublisher deadLetters, int maxAttempts, Duration backoff) {
+        ResultsKafkaReliabilityConfiguration configuration = new ResultsKafkaReliabilityConfiguration() {
+            @Override
+            public int getMaxAttempts() {
+                return maxAttempts;
+            }
+
+            @Override
+            public Duration getRetryBackoff() {
+                return backoff;
+            }
+
+            @Override
+            public String getDeadLetterTopic() {
+                return "results-dlq";
+            }
+        };
+        return new AnalysisOutcomeKafkaListener(new AnalysisOutcomeMapper(), projector, configuration, deadLetters);
     }
 
     private static ItemAnalyzed analyzedEvent() {
@@ -265,5 +349,25 @@ class AnalysisOutcomeKafkaListenerTest {
         AtomicReference<RejectedResult> rejected() {
             return rejected;
         }
+    }
+
+    private static final class RecordingDeadLetterPublisher implements ResultsDeadLetterPublisher {
+        private final List<Failure> failures = new ArrayList<>();
+
+        @Override
+        public void publish(
+                String sourceTopic,
+                int sourcePartition,
+                long sourceOffset,
+                String sourceKey,
+                byte[] sourcePayload,
+                RuntimeException failure,
+                int attempts,
+                boolean retryable) {
+            failures.add(new Failure(failure, attempts, retryable));
+        }
+    }
+
+    private record Failure(RuntimeException failure, int attempts, boolean retryable) {
     }
 }

@@ -2,11 +2,9 @@ package io.signalharvester.analysis.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.protobuf.Timestamp;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.inject.qualifiers.Qualifiers;
 import io.micronaut.transaction.TransactionOperations;
@@ -15,14 +13,9 @@ import io.signalharvester.analysis.event.AnalysisPublicationException;
 import io.signalharvester.analysis.event.AnalysisPublicationResult;
 import io.signalharvester.analysis.event.AnalyzedItem;
 import io.signalharvester.analysis.event.RejectedItem;
-import io.signalharvester.analysis.event.kafka.RawItemDiscoveredMapper;
-import io.signalharvester.analysis.event.kafka.RawItemKafkaListener;
 import io.signalharvester.analysis.model.DiscoveredRawItem;
 import io.signalharvester.analysis.normalization.ContentNormalizer;
 import io.signalharvester.analysis.persistence.DeduplicationClaimRepository;
-import io.signalharvester.events.collection.v1.RawItemDiscovered;
-import io.signalharvester.events.common.v1.EventEnvelope;
-import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -35,9 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,7 +37,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Verifies {@link RawItemProcessingService} transaction guarantees against real PostgreSQL, including
- * deduplication rollback when terminal event publication fails and retryable Kafka offset behavior.
+ * deduplication rollback when terminal event publication fails.
  *
  * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>
  */
@@ -62,7 +52,6 @@ class RawItemProcessingPostgresIntegrationTest {
     private static final String PROFILE_B = "profile-b";
     private static final String SOURCE_ID = "source-01";
     private static final String RUN_ID = "run-01";
-    private static final String RAW_ITEMS_TOPIC = "raw-items";
     private static final String TEST_ANALYZER = "test-analyzer";
     private static final String RAW_ITEM_1 = "raw-01";
     private static final String RAW_ITEM_2 = "raw-02";
@@ -211,30 +200,18 @@ class RawItemProcessingPostgresIntegrationTest {
         assertTrue(inspection.find(PROFILE_B, secondResult.normalizedItemId()).isPresent());
     }
 
-    /**
-     * Rollback new claim and leave input offset uncommitted when analyzed publication fails.
-     */
+    /** Roll back a new deduplication claim when terminal analyzed publication fails. */
     @Test
-    void shouldRollbackNewClaimAndLeaveInputOffsetUncommittedWhenAnalyzedPublicationFails() {
+    void shouldRollbackNewClaimWhenAnalyzedPublicationFails() {
         RecordingPublisher publisher = new RecordingPublisher();
         publisher.failAnalyzed();
         RawItemProcessingService service = service(matchingAnalyzer(), publisher);
-        RawItemKafkaListener listener = new RawItemKafkaListener(new RawItemDiscoveredMapper(), service);
         DiscoveredRawItem rawItem = rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka");
-        RawItemDiscovered event = event(rawItem);
         String normalizedItemId = normalizer.normalize(rawItem).normalizedItemId();
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
-        assertThrows(AnalysisPublicationException.class, () -> listener.receive(
-                rawItem.rawItemId(),
-                event.toByteArray(),
-                9L,
-                0,
-                RAW_ITEMS_TOPIC,
-                consumer(committed)));
+        assertThrows(AnalysisPublicationException.class, () -> service.process(rawItem));
 
         assertTrue(inspection.find(DEFAULT_PROFILE_ID, normalizedItemId).isEmpty());
-        assertNull(committed.get());
     }
 
     /**
@@ -277,59 +254,6 @@ class RawItemProcessingPostgresIntegrationTest {
                 List.of("java", "kafka"),
                 "Matched test keywords",
                 TEST_ANALYZER);
-    }
-
-    private static RawItemDiscovered event(DiscoveredRawItem rawItem) {
-        RawItemDiscovered.Builder builder = RawItemDiscovered.newBuilder()
-                .setEnvelope(EventEnvelope.newBuilder()
-                        .setEventId(rawItem.sourceEventId())
-                        .setEventType("collection.raw-item-discovered.v1")
-                        .setOccurredAt(timestamp(rawItem.discoveredAt()))
-                        .setCorrelationId(rawItem.correlationId())
-                        .setTraceparent(rawItem.traceparent().orElse(""))
-                        .setProducer("collection")
-                        .setSchemaVersion("v1")
-                        .build())
-                .setRawItemId(rawItem.rawItemId())
-                .setSourceId(rawItem.sourceId())
-                .setMonitoringProfileId(rawItem.monitoringProfileId())
-                .setInformationCategory(rawItem.informationCategory())
-                .setUrl(rawItem.url().toString())
-                .setContent(rawItem.content())
-                .setContentType(rawItem.contentType());
-        rawItem.externalId().ifPresent(builder::setExternalId);
-        rawItem.title().ifPresent(builder::setTitle);
-        rawItem.publishedAt().map(RawItemProcessingPostgresIntegrationTest::timestamp).ifPresent(builder::setPublishedAt);
-        return builder.build();
-    }
-
-    private static Timestamp timestamp(Instant instant) {
-        return Timestamp.newBuilder()
-                .setSeconds(instant.getEpochSecond())
-                .setNanos(instant.getNano())
-                .build();
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Consumer<?, ?> consumer(AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed) {
-        return (Consumer<?, ?>) Proxy.newProxyInstance(
-                RawItemProcessingPostgresIntegrationTest.class.getClassLoader(),
-                new Class<?>[] {Consumer.class},
-                (proxy, method, args) -> {
-                    if (method.getName().equals("commitSync") && args != null && args.length == 1) {
-                        committed.set((Map<TopicPartition, OffsetAndMetadata>) args[0]);
-                        return null;
-                    }
-                    if (method.getDeclaringClass() == Object.class) {
-                        return switch (method.getName()) {
-                            case "toString" -> "RecordingKafkaConsumer";
-                            case "hashCode" -> System.identityHashCode(proxy);
-                            case "equals" -> proxy == args[0];
-                            default -> throw new UnsupportedOperationException(method.getName());
-                        };
-                    }
-                    throw new UnsupportedOperationException(method.getName());
-                });
     }
 
     private static DiscoveredRawItem rawItem(String rawItemId, String sourceEventId, String content) {

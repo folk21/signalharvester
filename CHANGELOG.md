@@ -7,6 +7,7 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-15 — Added bounded retry and versioned dead-letter handling for Analysis, Results, and Event Observation Kafka consumers, with poison-record partition recovery and offset commits only after successful processing or acknowledged DLQ publication.
 - 2026-09-14 — Serialized the repository-wide container-backed `integrationTest` Gradle phase to avoid Docker resource contention and Testcontainers readiness timeouts while keeping normal `clean check` parallelism enabled.
 - 2026-09-14 — Added bounded processing-flow reconstruction for collection runs and run-scoped items, with explicit evidence levels, stable lineage by `sourceEventId`, diagnostic graph metadata, and public REST/OpenAPI coverage.
 - 2026-09-14 — Added bounded event-observation persistence over published raw/analyzed/rejected Kafka events, with decoded diagnostics, retention, REST filtering, and resumable Event Explorer SSE.

@@ -20,6 +20,7 @@ common/v1/event-envelope.proto
 collection/v1/raw-item-discovered.proto
 analysis/v1/item-analyzed.proto
 analysis/v1/item-rejected.proto
+failure/v1/dead-letter-event.proto
 ```
 
 The `results/v1` directory remains reserved for later result-domain events.
@@ -50,13 +51,17 @@ This is a Kafka transport contract, not the collection or analysis domain model.
 
 These are Kafka transport contracts. Analysis core logic maps to and from module-owned Java models at the adapter boundary.
 
+## Dead-letter event
+
+`DeadLetterEvent` captures terminal consumer failures for Analysis, Results, and Event Observation. It carries a deterministic dead-letter identity derived from consumer group and source Kafka position, the complete source topic/partition/offset/key/value needed for deliberate replay, bounded failure diagnostics, attempt count, and whether the exhausted path was retryable. Keeping the original serialized value preserves event correlation and trace metadata whenever the source event was decodable, while malformed source bytes remain inspectable without inventing missing metadata.
+
 ## Gradle generation
 
 The module uses the Gradle Protobuf plugin and a pinned `protoc` version from the root version catalog. Generated Java belongs under Gradle build output and is never authoritative source.
 
 ## Contract tests
 
-`RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` verify representative Protobuf serialization/deserialization and preservation/tolerance of unknown additive fields.
+`RawItemDiscoveredSerializationTest`, `AnalysisEventSerializationTest`, and `DeadLetterEventSerializationTest` verify representative Protobuf serialization/deserialization. The published business-event tests also cover preservation/tolerance of unknown additive fields.
 
 Collection provides the real `RawItemDiscovered` producer adapter. Analysis provides the first real consumer plus `ItemAnalyzed`/`ItemRejected` producers. Event Observation consumes all three published event families through an independent Kafka consumer group and decodes them into its own diagnostic read model. Kafka/Testcontainers integration coverage exercises the byte-serialized flow across these boundaries and verifies representative Event Explorer decoding.
 
@@ -64,4 +69,5 @@ Collection provides the real `RawItemDiscovered` producer adapter. Analysis prov
 
 - no Schema Registry is configured;
 - results event schemas are not implemented yet;
+- automatic dead-letter replay is intentionally not implemented;
 - compatibility fixtures for an evolved published schema are not implemented yet.

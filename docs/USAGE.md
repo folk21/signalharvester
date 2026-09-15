@@ -107,6 +107,20 @@ The importer matches by source type plus normalized location, skips existing ide
 
 The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. RSS/Atom produce one item per feed entry up to the configured bound. REST sources may extract candidate objects through persisted `json.*` JSON Pointer settings, and HTML sources may extract candidate elements through persisted `html.*` CSS selector settings. REST/HTML sources without those settings still produce one passthrough item per response. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST plus resumable SSE live delivery.
 
+## Kafka retry and dead-letter operation
+
+Analysis, Results, and Event Observation use bounded retries for validated records and dedicated dead-letter topics for deterministic poison records or retry exhaustion. The default topics are:
+
+```text
+signalharvester.analysis.raw-item-dead-letter.v1
+signalharvester.results.analysis-outcome-dead-letter.v1
+signalharvester.event-observation.dead-letter.v1
+```
+
+Each DLQ value is a versioned `failure/v1/DeadLetterEvent` defined at `contracts/event-contracts/src/main/proto/io/signalharvester/events/failure/v1/dead-letter-event.proto`. It preserves a deterministic dead-letter identity, the original topic/partition/offset/key/value, consumer identity, failure type/message, attempt count, and retryable classification. Local Redpanda runs with topic auto-creation, so these topics appear on first terminal failure.
+
+A source offset advances only after normal processing or acknowledged DLQ publication. If a DLQ producer is unavailable, the source record remains uncommitted and remains recoverable by Kafka redelivery rather than being silently skipped. There is intentionally no automatic replay command yet; correct the underlying problem before performing any controlled replay with Kafka tooling.
+
 Start a manual collection run for an existing monitoring-profile UUID:
 
 ```bash
