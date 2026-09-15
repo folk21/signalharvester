@@ -21,6 +21,10 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | Variable | Default | Purpose |
 |---|---:|---|
 | `SIGNALHARVESTER_HTTP_PORT` | `8080` | Backend HTTP server port. |
+| `SIGNALHARVESTER_METRICS_ENABLED` | `true` | Enables Micrometer application/runtime metrics. |
+| `SIGNALHARVESTER_PROMETHEUS_ENABLED` | `true` | Enables the Prometheus registry and `/prometheus` scrape endpoint. |
+| `SIGNALHARVESTER_OTEL_TRACES_EXPORTER` | `none` | OpenTelemetry trace exporter; use `otlp` when an OTLP collector is available. |
+| `SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | OTLP endpoint used when an OTLP exporter is enabled. |
 | `SIGNALHARVESTER_DB_URL` | `jdbc:postgresql://localhost:5432/signalharvester` | JDBC URL for the application PostgreSQL database. |
 | `SIGNALHARVESTER_DB_USERNAME` | `signalharvester` | Local-development PostgreSQL username. |
 | `SIGNALHARVESTER_DB_PASSWORD` | `signalharvester` | Local-development PostgreSQL password; override outside local development. |
@@ -78,6 +82,10 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_COLLECTION_HTTP_MAX_CONNECTIONS` | `32` | Maximum pooled HTTP client connections. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_MAX_PENDING_ACQUIRES` | `64` | Maximum pending connection-pool acquisitions. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_POOL_ACQUIRE_TIMEOUT` | `2s` | Maximum wait for a pooled connection. |
+
+Health endpoints `/health`, `/health/liveness`, and `/health/readiness` and the `/prometheus` endpoint are enabled by the application composition root. OpenTelemetry traces use the standard `tracecontext,baggage` propagators. `otel.traces.exporter` defaults to `none`, so a local OTLP collector is not a startup dependency. Set `SIGNALHARVESTER_OTEL_TRACES_EXPORTER=otlp` and `SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT` to export traces. Health and Prometheus paths are excluded from normal HTTP trace noise.
+
+Application metrics deliberately use bounded status/outcome labels rather than source/profile/run/item/event identifiers or URLs. This keeps Prometheus cardinality independent from harvested entity count.
 
 `micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. The current source, collection-admin, analysis-inspection, Results REST, and Event Observation history controllers use this executor for JDBC and synchronous workflows rather than running blocking work on a Netty event loop. Results and Event Observation SSE remain reactive streaming controllers; their JDBC polling is submitted to the same blocking executor by the stream implementation.
 

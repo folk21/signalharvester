@@ -7,6 +7,7 @@ import io.signalharvester.collection.event.RawItemEventPublisher;
 import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationException;
 import io.signalharvester.collection.event.RawItemPublicationResult;
+import io.signalharvester.collection.observability.CollectionObservability;
 import io.signalharvester.collection.source.ExternalSourceClient;
 import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.collection.source.FetchedSourceContent;
@@ -360,7 +361,8 @@ class CollectionRunServiceTest {
                 return List.of(profile);
             }
         };
-        SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, executor);
+        CollectionObservability observability = new CollectionObservability(Optional.empty(), Optional.empty());
+        SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, observability, executor);
         return new CollectionRunService(
                 profileProvider,
                 provider,
@@ -370,6 +372,7 @@ class CollectionRunServiceTest {
                 new RawItemIdentityFactory(),
                 new CollectionRunIdFactory(() -> UUID.fromString(RUN_ID)),
                 new InMemoryHistoryRecorder(),
+                observability,
                 Clock.fixed(RUN_TIME, ZoneOffset.UTC));
     }
 

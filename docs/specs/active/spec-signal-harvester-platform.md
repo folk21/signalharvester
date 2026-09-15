@@ -4,6 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
+current_focus: subspecs/backend-application-observability.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -11,7 +12,7 @@ spec_status: active
 
 Active umbrella specification for the initial SignalHarvester product target.
 
-The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, and `ANALYSIS.OUTBOX`. The next planned implementation slice is `OBSERVABILITY.APPLICATION`. No active sub-spec is selected as `current_focus` during this documentation-maintenance stage.
+The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, and `ANALYSIS.OUTBOX`. The current implementation focus is [`backend-application-observability.md`](subspecs/backend-application-observability.md) for `OBSERVABILITY.APPLICATION`; implementation is complete and developer verification is pending.
 
 `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` remain active supporting work for the later security stage. Detailed `PRESENTATION.VIEWER_RESULTS` implementation belongs to the `signalharvester-web` specification tree.
 

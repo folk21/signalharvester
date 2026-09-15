@@ -8,6 +8,7 @@ import io.signalharvester.analysis.event.AnalyzedItem;
 import io.signalharvester.analysis.event.RejectedItem;
 import io.signalharvester.analysis.event.kafka.AnalysisEventMapper;
 import io.signalharvester.analysis.model.NormalizedContentItem;
+import io.signalharvester.analysis.observability.AnalysisObservability;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import io.signalharvester.events.analysis.v1.ItemRejected;
 import java.net.URI;
@@ -44,6 +45,7 @@ class TransactionalAnalysisOutboxTest {
         assertEquals(ANALYZED_TOPIC, entry.topic());
         assertEquals(item.normalizedItemId(), entry.eventKey());
         assertEquals(EVENT_TIME, entry.createdAt());
+        assertEquals(item.traceparent(), entry.traceparent());
         ItemAnalyzed event = ItemAnalyzed.parseFrom(entry.payload());
         assertEquals(result.eventId(), event.getEnvelope().getEventId());
         assertEquals(item.sourceEventId(), event.getSourceEventId());
@@ -79,7 +81,8 @@ class TransactionalAnalysisOutboxTest {
             }
         };
         AnalysisEventMapper mapper = new AnalysisEventMapper(Clock.fixed(EVENT_TIME, ZoneOffset.UTC));
-        return new TransactionalAnalysisOutbox(store, configuration, mapper);
+        return new TransactionalAnalysisOutbox(
+                store, configuration, mapper, new AnalysisObservability(Optional.empty(), Optional.empty()));
     }
 
     private static NormalizedContentItem item() {

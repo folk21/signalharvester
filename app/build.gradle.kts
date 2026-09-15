@@ -31,6 +31,16 @@ dependencies {
     implementation(project(":modules:event-observation"))
 
     implementation("io.micronaut:micronaut-runtime")
+    implementation("io.micronaut:micronaut-management")
+    implementation("io.micronaut.micrometer:micronaut-micrometer-core")
+    implementation("io.micronaut.micrometer:micronaut-micrometer-registry-prometheus")
+    implementation("io.micronaut.tracing:micronaut-tracing-opentelemetry")
+    implementation("io.micronaut.tracing:micronaut-tracing-opentelemetry-http")
+    implementation("io.micronaut.tracing:micronaut-tracing-opentelemetry-jdbc")
+    implementation("io.micronaut.tracing:micronaut-tracing-opentelemetry-kafka")
+
+    runtimeOnly("io.opentelemetry:opentelemetry-exporter-otlp")
+    runtimeOnly("io.opentelemetry.instrumentation:opentelemetry-logback-mdc-1.0")
 
     runtimeOnly("ch.qos.logback:logback-classic")
 

@@ -5,6 +5,7 @@ import io.signalharvester.collection.event.RawItemEventPublisher;
 import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationException;
 import io.signalharvester.collection.event.RawItemPublicationResult;
+import io.signalharvester.collection.observability.CollectionObservability;
 import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.collection.source.extract.SourceItemExtractionException;
 import io.signalharvester.collection.source.extract.SourceItemExtractor;
@@ -15,6 +16,7 @@ import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +45,7 @@ public final class CollectionRunService implements CollectionRunner {
     private final RawItemIdentityFactory rawItemIdentityFactory;
     private final CollectionRunIdFactory runIdFactory;
     private final CollectionRunHistoryRecorder historyRecorder;
+    private final CollectionObservability observability;
     private final Clock clock;
 
     public CollectionRunService(
@@ -54,6 +57,7 @@ public final class CollectionRunService implements CollectionRunner {
             RawItemIdentityFactory rawItemIdentityFactory,
             CollectionRunIdFactory runIdFactory,
             CollectionRunHistoryRecorder historyRecorder,
+            CollectionObservability observability,
             @Named(CollectionClockFactory.COLLECTION_CLOCK) Clock clock) {
         this.monitoringProfileConfigurationProvider = Objects.requireNonNull(
                 monitoringProfileConfigurationProvider, "monitoringProfileConfigurationProvider");
@@ -65,6 +69,7 @@ public final class CollectionRunService implements CollectionRunner {
         this.rawItemIdentityFactory = Objects.requireNonNull(rawItemIdentityFactory, "rawItemIdentityFactory");
         this.runIdFactory = Objects.requireNonNull(runIdFactory, "runIdFactory");
         this.historyRecorder = Objects.requireNonNull(historyRecorder, "historyRecorder");
+        this.observability = Objects.requireNonNull(observability, "observability");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -76,6 +81,26 @@ public final class CollectionRunService implements CollectionRunner {
     @Override
     public CollectionRunResult run(CollectionRunRequest request) {
         Objects.requireNonNull(request, "request");
+        String profileId = request.monitoringProfileId().value().toString();
+        long observedStartNanos = System.nanoTime();
+        try (CollectionObservability.RunSpan runSpan = observability.startRun(profileId)) {
+            CollectionRunRequest tracedRequest = request.traceparent().isPresent()
+                    ? request
+                    : new CollectionRunRequest(request.monitoringProfileId(), observability.currentTraceparent());
+            try {
+                CollectionRunResult result = executeRun(tracedRequest);
+                observability.recordRun(
+                        result.status().name(), Duration.ofNanos(System.nanoTime() - observedStartNanos));
+                return result;
+            } catch (RuntimeException | Error failure) {
+                runSpan.recordFailure(failure);
+                observability.recordRun("FAILED_EXCEPTION", Duration.ofNanos(System.nanoTime() - observedStartNanos));
+                throw failure;
+            }
+        }
+    }
+
+    private CollectionRunResult executeRun(CollectionRunRequest request) {
         ConfiguredMonitoringProfile profile = monitoringProfileConfigurationProvider
                 .findProfile(request.monitoringProfileId())
                 .orElseThrow(() -> new CollectionProfileNotFoundException(request.monitoringProfileId()));
@@ -94,7 +119,8 @@ public final class CollectionRunService implements CollectionRunner {
         List<CollectionSourceResult>[] terminalResults = new List[sources.size()];
         fetchCoordinator.fetchEach(
                 sources,
-                (sourceIndex, outcome) -> terminalResults[sourceIndex] = toSourceResults(runId, request, profile, outcome));
+                (sourceIndex, outcome) ->
+                        terminalResults[sourceIndex] = toSourceResults(runId, request, profile, outcome));
         List<CollectionSourceResult> sourceResults = orderedResults(terminalResults);
 
         Instant finishedAt = clock.instant();

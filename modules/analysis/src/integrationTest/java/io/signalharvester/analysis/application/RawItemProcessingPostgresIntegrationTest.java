@@ -18,6 +18,7 @@ import io.signalharvester.analysis.event.kafka.AnalysisKafkaClient;
 import io.signalharvester.analysis.event.AnalyzedItem;
 import io.signalharvester.analysis.event.RejectedItem;
 import io.signalharvester.analysis.model.DiscoveredRawItem;
+import io.signalharvester.analysis.observability.AnalysisObservability;
 import io.signalharvester.analysis.normalization.ContentNormalizer;
 import io.signalharvester.analysis.persistence.DeduplicationClaimRepository;
 import java.net.URI;
@@ -216,6 +217,7 @@ class RawItemProcessingPostgresIntegrationTest {
 
         assertEquals(1, outboxRowCount());
         assertEquals(result.eventId(), outboxEventId());
+        assertEquals(TRACEPARENT, outboxTraceparent());
         assertTrue(inspection.find(DEFAULT_PROFILE_ID, result.normalizedItemId()).isPresent());
     }
 
@@ -329,6 +331,7 @@ class RawItemProcessingPostgresIntegrationTest {
                 analyzer,
                 outbox,
                 transactions,
+                new AnalysisObservability(Optional.empty(), Optional.empty()),
                 Clock.fixed(PROCESSING_TIME, ZoneOffset.UTC));
     }
 
@@ -371,6 +374,7 @@ class RawItemProcessingPostgresIntegrationTest {
                 client,
                 context.getBean(AnalysisOutboxConfiguration.class),
                 transactions,
+                new AnalysisObservability(Optional.empty(), Optional.empty()),
                 Clock.fixed(now, ZoneOffset.UTC));
     }
 
@@ -392,6 +396,10 @@ class RawItemProcessingPostgresIntegrationTest {
             rows.next();
             return rows.getString(1);
         }
+    }
+
+    private String outboxTraceparent() throws Exception {
+        return outboxScalar("SELECT traceparent FROM analysis.event_outbox", String.class);
     }
 
     private boolean outboxPublished() throws Exception {

@@ -1,19 +1,24 @@
 package io.signalharvester.collection.run;
 
+import io.micronaut.core.propagation.PropagatedContext;
 import io.micronaut.scheduling.TaskExecutors;
+import io.opentelemetry.context.Context;
 import io.signalharvester.collection.configuration.CollectionConfiguration;
+import io.signalharvester.collection.observability.CollectionObservability;
 import io.signalharvester.collection.source.ExternalSourceClient;
 import io.signalharvester.collection.source.FetchedSourceContent;
 import io.signalharvester.collection.source.SourceFetchException;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.function.BiConsumer;
@@ -32,14 +37,17 @@ public final class SourceFetchCoordinator {
 
     private final ExternalSourceClient sourceClient;
     private final CollectionConfiguration configuration;
+    private final CollectionObservability observability;
     private final ExecutorService blockingExecutor;
 
     public SourceFetchCoordinator(
             ExternalSourceClient sourceClient,
             CollectionConfiguration configuration,
+            CollectionObservability observability,
             @Named(TaskExecutors.BLOCKING) ExecutorService blockingExecutor) {
         this.sourceClient = Objects.requireNonNull(sourceClient, "sourceClient");
         this.configuration = Objects.requireNonNull(configuration, "configuration");
+        this.observability = Objects.requireNonNull(observability, "observability");
         this.blockingExecutor = Objects.requireNonNull(blockingExecutor, "blockingExecutor");
     }
 
@@ -109,16 +117,21 @@ public final class SourceFetchCoordinator {
             ExecutorCompletionService<IndexedSourceFetchOutcome> completions,
             List<ConfiguredSource> sources,
             int index) {
-        return completions.submit(() -> new IndexedSourceFetchOutcome(index, fetch(sources.get(index))));
+        Callable<IndexedSourceFetchOutcome> task =
+                () -> new IndexedSourceFetchOutcome(index, fetch(sources.get(index)));
+        return completions.submit(PropagatedContext.wrapCurrent(Context.current().wrap(task)));
     }
 
     private SourceFetchOutcome fetch(ConfiguredSource source) {
+        long startedAtNanos = System.nanoTime();
         try {
             FetchedSourceContent content = Objects.requireNonNull(
                     sourceClient.fetch(source),
                     "ExternalSourceClient returned null content");
+            observability.recordSourceFetch("success", Duration.ofNanos(System.nanoTime() - startedAtNanos));
             return new SourceFetchOutcome.Success(source, content);
         } catch (SourceFetchException failure) {
+            observability.recordSourceFetch("failure", Duration.ofNanos(System.nanoTime() - startedAtNanos));
             return new SourceFetchOutcome.Failure(source, failure);
         }
     }

@@ -9,11 +9,13 @@ import io.signalharvester.analysis.event.RejectedItem;
 import io.signalharvester.analysis.model.DiscoveredRawItem;
 import io.signalharvester.analysis.model.NormalizedContentItem;
 import io.signalharvester.analysis.normalization.ContentNormalizer;
+import io.signalharvester.analysis.observability.AnalysisObservability;
 import io.signalharvester.analysis.persistence.DeduplicationClaimRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.Connection;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -39,6 +41,7 @@ public final class RawItemProcessingService implements RawItemProcessor {
     private final ContentAnalyzer analyzer;
     private final AnalysisOutbox outbox;
     private final TransactionOperations<Connection> transactions;
+    private final AnalysisObservability observability;
     private final Clock clock;
 
     public RawItemProcessingService(
@@ -47,20 +50,31 @@ public final class RawItemProcessingService implements RawItemProcessor {
             ContentAnalyzer analyzer,
             AnalysisOutbox outbox,
             @Named("default") TransactionOperations<Connection> transactions,
+            AnalysisObservability observability,
             @Named(AnalysisClockFactory.ANALYSIS_CLOCK) Clock clock) {
         this.normalizer = Objects.requireNonNull(normalizer, "normalizer");
         this.deduplicationRepository = Objects.requireNonNull(deduplicationRepository, "deduplicationRepository");
         this.analyzer = Objects.requireNonNull(analyzer, "analyzer");
         this.outbox = Objects.requireNonNull(outbox, "outbox");
         this.transactions = Objects.requireNonNull(transactions, "transactions");
+        this.observability = Objects.requireNonNull(observability, "observability");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
     public RawItemProcessingResult process(DiscoveredRawItem rawItem) {
         Objects.requireNonNull(rawItem, "rawItem");
-        NormalizedContentItem normalized = normalizer.normalize(rawItem);
-        return transactions.executeWrite(status -> processInTransaction(normalized));
+        long startedAtNanos = System.nanoTime();
+        try {
+            NormalizedContentItem normalized = normalizer.normalize(rawItem);
+            RawItemProcessingResult result = transactions.executeWrite(status -> processInTransaction(normalized));
+            observability.recordProcessing(
+                    result.status().name(), Duration.ofNanos(System.nanoTime() - startedAtNanos));
+            return result;
+        } catch (RuntimeException | Error failure) {
+            observability.recordProcessing("FAILED_EXCEPTION", Duration.ofNanos(System.nanoTime() - startedAtNanos));
+            throw failure;
+        }
     }
 
     private RawItemProcessingResult processInTransaction(NormalizedContentItem item) {

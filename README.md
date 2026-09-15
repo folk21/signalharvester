@@ -103,9 +103,10 @@ The first implementation foundation is present:
 - Results-owned resumable SSE live delivery backed by durable PostgreSQL cursors and browser `Last-Event-ID` reconnection;
 - event-observation persistence over published raw/analyzed/rejected Kafka events, with bounded diagnostic history plus REST/SSE Event Explorer APIs;
 - bounded collection-run and item processing-flow reconstruction with explicit observed, derived, and unobserved stage evidence;
-- bounded Kafka consumer retry and versioned dead-letter handling for Analysis, Results, and Event Observation poison/failure paths.
+- bounded Kafka consumer retry and versioned dead-letter handling for Analysis, Results, and Event Observation poison/failure paths;
+- application observability through health/readiness endpoints, Prometheus metrics, OpenTelemetry HTTP/Kafka/JDBC tracing, trace-correlated console logs, and preserved trace context across Collection fan-out and the Analysis outbox.
 
-Application observability, Kubernetes deployment, authentication/authorization, and the production observability stack are still planned work. The Analysis authoritative-state/Kafka consistency gap is addressed by the accepted transactional outbox. Repository-owned Docker Compose provides local PostgreSQL and Kafka infrastructure.
+Kubernetes deployment, authentication/authorization, and the production observability stack are still planned work. The Analysis authoritative-state/Kafka consistency gap is addressed by the accepted transactional outbox. Repository-owned Docker Compose provides local PostgreSQL and Kafka infrastructure.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

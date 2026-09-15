@@ -18,8 +18,8 @@ public final class JdbcAnalysisOutboxStore implements AnalysisOutboxStore {
 
     private static final String INSERT_SQL = """
             INSERT INTO analysis.event_outbox (
-                event_id, topic, event_key, payload, created_at, publication_attempts
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                event_id, topic, event_key, payload, traceparent, created_at, publication_attempts
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String CLAIM_SQL = """
             WITH candidates AS (
@@ -41,6 +41,7 @@ public final class JdbcAnalysisOutboxStore implements AnalysisOutboxStore {
                       outbox.topic,
                       outbox.event_key,
                       outbox.payload,
+                      outbox.traceparent,
                       outbox.created_at,
                       outbox.publication_attempts
             """;
@@ -77,8 +78,9 @@ public final class JdbcAnalysisOutboxStore implements AnalysisOutboxStore {
             statement.setString(2, entry.topic());
             statement.setString(3, entry.eventKey());
             statement.setBytes(4, entry.payload());
-            statement.setTimestamp(5, Timestamp.from(entry.createdAt()));
-            statement.setInt(6, entry.publicationAttempts());
+            statement.setString(5, entry.traceparent().orElse(null));
+            statement.setTimestamp(6, Timestamp.from(entry.createdAt()));
+            statement.setInt(7, entry.publicationAttempts());
             statement.executeUpdate();
         } catch (SQLException | RuntimeException exception) {
             throw new AnalysisOutboxPersistenceException("Failed to append Analysis outbox event", exception);
@@ -101,6 +103,7 @@ public final class JdbcAnalysisOutboxStore implements AnalysisOutboxStore {
                             rows.getString("topic"),
                             rows.getString("event_key"),
                             rows.getBytes("payload"),
+                            java.util.Optional.ofNullable(rows.getString("traceparent")),
                             rows.getTimestamp("created_at").toInstant(),
                             rows.getInt("publication_attempts")));
                 }
