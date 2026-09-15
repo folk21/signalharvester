@@ -256,6 +256,14 @@ Keep specification lifecycle state unambiguous:
 - umbrella `current_focus`, `docs/specs/README.md`, and the active spec tree must agree;
 - an implemented-but-unverified slice may remain active with `verification-pending`, but accepted behavior belongs in current-state documentation rather than being maintained twice in the spec.
 
+Keep specifications synchronized with the stable feature vocabulary in `docs/FEATURES.md`:
+
+- when creating a specification, identify the existing feature IDs that own its scope and reference them explicitly;
+- when a specification introduces a genuinely new long-lived capability, add its feature ID to `docs/FEATURES.md` before using that ID elsewhere;
+- when changing a specification's feature scope, update the catalog and affected cross-references in the same change when needed;
+- do not create a new feature ID merely because a new specification, implementation stage, or refactor exists; reuse the stable capability ID when the work changes an existing feature;
+- never rename or remove a published feature ID from one specification in isolation. Treat such changes as vocabulary migrations and update all repository references coherently.
+
 Do not update broad documentation or CHANGELOG for trivial local refactors that do not change behavior, contracts, architecture, validation workflow, or contributor-facing knowledge.
 
 CHANGELOG entries begin with the date in `YYYY-MM-DD` format; time is omitted.
