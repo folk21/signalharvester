@@ -100,7 +100,8 @@ Current implementation focus:
 Active supporting tracks:
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith boundaries, published API rules, and architecture-test guardrails;
-- [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules.
+- [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules;
+- [`active/subspecs/backend-authentication-authorization.md`](active/subspecs/backend-authentication-authorization.md) — stateless JWT authentication, persisted additive roles, backend RBAC, and REST/SSE browser credential policy for the later security stage.
 
 ## Recently completed sub-specifications
 
@@ -124,7 +125,10 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
-- Kubernetes deployment and observability;
-- integration/system testing hardening.
+- bounded retry, poison-event handling, and DLQ/failure inspection;
+- PostgreSQL/Kafka consistency through transactional outbox or equivalent;
+- application OpenTelemetry instrumentation;
+- Kubernetes deployment and infrastructure observability;
+- integration/system resilience acceptance.
 
 Frontend architecture/live-UI specs belong to `signalharvester-web`, not this backend repository.

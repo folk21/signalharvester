@@ -22,7 +22,7 @@ The current technical focus is processing-flow reconstruction under `subspecs/ba
 
 SignalHarvester starts with one deployable backend application composed from cohesive Gradle modules. Each functional module owns its behavior and infrastructure details, exposes narrow contracts where collaboration is required, and owns its persistence logically. Kafka remains an explicit asynchronous boundary between selected modules so event flow, replay, retries, lag, and future service extraction remain first-class concerns.
 
-The current backend already contains the runnable Micronaut composition root, PostgreSQL/Flyway-backed source and monitoring-profile configuration with REST CRUD, versioned raw/analysis Protobuf schemas, the generic collection HTTP transport with bounded Virtual Thread execution, collection-owned `RawItemDiscovered` publication, profile-driven manual collection, cluster-safe interval scheduling, durable completed-run history, collection-owned RSS/Atom plus configurable REST/JSON and HTML extraction, diagnostic persisted-source testing, the first analysis consumer with normalization, durable profile-scoped deduplication, deterministic keyword classification, terminal analysis-event publication, read-only operational inspection, Results-owned idempotent persistence of terminal outcomes, and bounded public Results feed/detail REST reads. Results SSE/live delivery and bounded Event Observation history/SSE are accepted. Processing-flow reconstruction is the active implementation slice; stronger DB/Kafka consistency, Kubernetes deployment, and production observability remain pending. Repository-owned Docker Compose provides local PostgreSQL and Kafka-compatible Redpanda development dependencies. Frontend-specific technical specifications live in the companion `signalharvester-web` repository.
+The current backend already contains the runnable Micronaut composition root, PostgreSQL/Flyway-backed source and monitoring-profile configuration with REST CRUD, versioned raw/analysis Protobuf schemas, the generic collection HTTP transport with bounded Virtual Thread execution, collection-owned `RawItemDiscovered` publication, profile-driven manual collection, cluster-safe interval scheduling, durable completed-run history, collection-owned RSS/Atom plus configurable REST/JSON and HTML extraction, diagnostic persisted-source testing, the first analysis consumer with normalization, durable profile-scoped deduplication, deterministic keyword classification, terminal analysis-event publication, read-only operational inspection, Results-owned idempotent persistence of terminal outcomes, and bounded public Results feed/detail REST reads. Results SSE/live delivery and bounded Event Observation history/SSE are accepted. Processing-flow reconstruction is the active implementation slice; stronger failure handling, DB/Kafka consistency, application observability, authentication/authorization, Kubernetes deployment, and production observability remain pending. The authentication/security increment is specified in `subspecs/backend-authentication-authorization.md` as a supporting active track so its contracts can be designed before the later deployment and system-acceptance stages. Repository-owned Docker Compose provides local PostgreSQL and Kafka-compatible Redpanda development dependencies. Frontend-specific technical specifications live in the companion `signalharvester-web` repository.
 
 ## Goal
 
@@ -34,6 +34,7 @@ Deliver an observable event-driven information collection and analysis platform 
 - move collected items through an asynchronous processing pipeline;
 - normalize, deduplicate, analyze, score, classify, and persist collected information;
 - present newly discovered and analyzed information in a browser UI that updates automatically without manual page refresh;
+- separate expert/administrative workflows from a future consumer-facing result experience through explicit authenticated roles and backend authorization;
 - make the movement of events through the system visually inspectable;
 - make important persistence and processing outcomes visible without exposing the frontend directly to Kafka or PostgreSQL protocols;
 - provide production-style technical observability through metrics, logs, distributed traces, and health information;
@@ -488,6 +489,35 @@ The configuration model must distinguish ordinary user-editable source configura
 
 Collection must use explicit timeouts and bounded concurrency. The system must not intentionally bypass external access controls, authentication restrictions, robots policies, rate limits, or terms that prohibit automated access.
 
+### R31 — authenticated identities and additive role-based authorization
+
+The backend must authenticate access to protected application APIs and authorize operations from explicit roles carried by the authenticated principal.
+
+User accounts are persisted application identities. A human user must receive the `USER` role by default when created. Additional roles are additive and explicit rather than implied by a hidden hierarchy. The initial role vocabulary must include at least:
+
+- `USER` — human application identity and baseline authenticated access;
+- `VIEWER` — read-only access to the consumer-facing result experience and the backend result APIs required by it;
+- `ADMIN` — access to configuration, operational administration, and technical diagnostic capabilities;
+- `BOT` — non-human/system identity for machine-oriented access where required.
+
+A system identity may have `BOT` without `USER`. An administrator who also needs the consumer-facing result experience may be assigned both `ADMIN` and `VIEWER`; authorization must not rely on an implicit `ADMIN > VIEWER > USER` role hierarchy.
+
+Authentication must use signed, time-bounded JWT credentials and must remain stateless on the backend. PostgreSQL must not contain server-side login-session records. User identity, enabled/disabled state, and assigned roles may be persisted, but possession and validation of the current JWT determine the authenticated request context.
+
+JWT validation must cover signature, expiry, issuer/audience expectations, and the principal/role claims required by the authorization model. Browser transport must support both REST and existing native SSE clients without exposing JWTs in URLs. Cross-origin, cookie, and CSRF policy must be defined by the authentication sub-specification before public/shared deployment.
+
+Backend authorization is the security boundary. Hiding routes or navigation in the frontend is not sufficient protection.
+
+### R32 — role-specific browser experience
+
+The product must distinguish the expert/administrative application experience from the normal result-consumption experience.
+
+Users with `ADMIN` may access the existing configuration, collection-operation, analysis-inspection, Event Explorer, Processing Flow, and other administrative/diagnostic workflows allowed by backend policy. Users with `VIEWER` must have a consumer-facing interface for comfortably browsing and inspecting relevant Results without exposing internal operational or infrastructure-oriented details that are not part of the viewer experience.
+
+The consumer-facing interface should reuse the same backend Results contracts where those contracts already provide the required data. A separate duplicate Results API must not be introduced merely to support a different presentation. Backend authorization must nevertheless ensure that a `VIEWER` cannot call protected admin or diagnostic endpoints directly.
+
+Detailed React routing, layout, presentation, and component behavior for the `VIEWER` experience belong to the `signalharvester-web` specification tree. When frontend work resumes, its active specification must be extended with a bounded VIEWER-UI sub-specification based on the backend authentication/authorization contract.
+
 ## Scenarios
 
 ### S1 — configure and collect Java backend vacancies
@@ -574,12 +604,20 @@ The user selects a slow or failed item in the Event Explorer and obtains its tra
 
 The application-level view explains the logical processing stages, while the observability platform allows the same operation to be inspected in detailed distributed traces, logs, and service metrics.
 
+### S13 — authenticate and separate viewer/admin access
+
+A persisted human account authenticates and receives a signed JWT representing its stable identity and explicit assigned roles. No server-side login session is inserted into PostgreSQL.
+
+A principal with `USER` and `VIEWER` can open the consumer-facing result experience and use the Results read/live contracts required by that experience, but direct requests to administrative configuration or technical diagnostic endpoints are rejected by backend authorization.
+
+A principal with `USER`, `VIEWER`, and `ADMIN` can use both the consumer-facing result experience and the authorized administrative workflows. A machine identity may instead authenticate with `BOT` without being treated as an interactive human user.
+
 ## Non-goals
 
 The initial product does not require:
 
 - a public multi-tenant SaaS platform;
-- user registration, organizations, billing, or subscription plans;
+- public self-service user registration, organizations, billing, or subscription plans;
 - mobile applications;
 - native desktop applications;
 - direct browser access to Kafka or PostgreSQL;
@@ -663,7 +701,8 @@ Initial umbrella acceptance requires a working end-to-end deployment in which:
 15. at least one asynchronous failure scenario demonstrates bounded retry and explicit terminal failure handling;
 16. backend tests exercise deterministic collection fixtures plus PostgreSQL/Kafka integration where appropriate;
 17. frontend tests cover critical configuration and live-update behavior at an appropriate level;
-18. repository documentation explains how to start the local environment and observe one complete collection flow.
+18. authenticated requests demonstrate backend-enforced separation between `VIEWER` result access and `ADMIN` operational/diagnostic access without server-side login sessions;
+19. repository documentation explains how to start the local environment and observe one complete collection flow.
 
 Performance is not defined by a production-scale numerical SLA in the initial product. Instead, the implementation must support a repeatable demonstration in which concurrent collection and Kafka backlog behavior can be observed and reasoned about.
 
@@ -680,10 +719,12 @@ Recommended sequence:
 5. Add the technical event observer and live Event Explorer.
 6. Add correlated processing-flow visualization for collection runs and individual items.
 7. Add the first generic configuration-driven source adapter and source-test workflow.
-8. Add OpenTelemetry instrumentation and the Prometheus/Loki/Tempo/Grafana stack.
-9. Run the complete application in local Kubernetes.
-10. Add explicit retry, dead-letter, and idempotent-consumer behavior.
-11. Add the database/event consistency mechanism, preferably transactional outbox.
-12. Add controlled workload and failure demonstrations for Kafka lag, pod restart, slow source, retry, and recovery.
-13. Add horizontal worker scaling and optionally KEDA-based lag-driven autoscaling.
-14. Complete umbrella acceptance, move stable implementation truth into architecture/implementation documentation, and archive completed sub-specifications according to the specification lifecycle.
+8. Add explicit bounded retry, terminal failure/DLQ handling, and complete idempotent-consumer behavior.
+9. Add the database/event consistency mechanism, preferably transactional outbox.
+10. Add OpenTelemetry application instrumentation and health/readiness behavior.
+11. Add stateless JWT authentication, persisted user/role management, and backend-enforced RBAC for `VIEWER`, `ADMIN`, `BOT`, and baseline `USER` identities.
+12. Extend the companion frontend specification with a consumer-facing `VIEWER` result experience and integrate it with the accepted authentication/RBAC contract.
+13. Run the complete application in local Kubernetes and add the Prometheus/Loki/Tempo/Grafana observability stack.
+14. Add controlled workload and failure demonstrations for Kafka lag, pod restart, slow source, retry, authorization boundaries, and recovery.
+15. Add horizontal worker scaling and optionally KEDA-based lag-driven autoscaling.
+16. Complete umbrella acceptance, move stable implementation truth into architecture/implementation documentation, and archive completed sub-specifications according to the specification lifecycle.
