@@ -107,6 +107,34 @@ The importer matches by source type plus normalized location, skips existing ide
 
 The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. RSS/Atom produce one item per feed entry up to the configured bound. REST sources may extract candidate objects through persisted `json.*` JSON Pointer settings, and HTML sources may extract candidate elements through persisted `html.*` CSS selector settings. REST/HTML sources without those settings still produce one passthrough item per response. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and atomically stages `ItemAnalyzed` or `ItemRejected` bytes in the Analysis PostgreSQL outbox. The outbox dispatcher publishes those committed records to Kafka. Results consumes the terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST plus resumable SSE live delivery.
 
+## Inspect application observability
+
+Check aggregate health and Kubernetes-style probe endpoints:
+
+```bash
+curl -s http://localhost:8080/health
+curl -s http://localhost:8080/health/liveness
+curl -s http://localhost:8080/health/readiness
+```
+
+Inspect Prometheus-format runtime and application metrics:
+
+```bash
+curl -s http://localhost:8080/prometheus
+```
+
+Application metrics include Collection Run/source-fetch outcomes and durations plus Analysis processing/outbox publication outcomes. Their labels are intentionally low-cardinality. Event Explorer and Processing Flow remain the better tools for inspecting one concrete run/item/event.
+
+Trace export is disabled by default. When an OTLP collector is available, enable it for the backend process:
+
+```bash
+SIGNALHARVESTER_OTEL_TRACES_EXPORTER=otlp \
+SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+./gradlew :app:run --no-watch-fs
+```
+
+Console logs include `trace_id` and `span_id` fields when a valid OpenTelemetry span is active. The backend still writes application logs to stdout/stderr; use shell redirection or the deployment logging stack for file/storage collection.
+
 ## Kafka retry and dead-letter operation
 
 Analysis, Results, and Event Observation use bounded retries for validated records and dedicated dead-letter topics for deterministic poison records or retry exhaustion. The default topics are:

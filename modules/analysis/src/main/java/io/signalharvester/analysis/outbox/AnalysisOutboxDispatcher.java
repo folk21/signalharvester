@@ -6,6 +6,7 @@ import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.analysis.configuration.AnalysisClockFactory;
 import io.signalharvester.analysis.configuration.AnalysisOutboxConfiguration;
 import io.signalharvester.analysis.event.kafka.AnalysisKafkaClient;
+import io.signalharvester.analysis.observability.AnalysisObservability;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.Connection;
@@ -34,6 +35,7 @@ public final class AnalysisOutboxDispatcher {
     private final AnalysisKafkaClient kafkaClient;
     private final AnalysisOutboxConfiguration configuration;
     private final TransactionOperations<Connection> transactions;
+    private final AnalysisObservability observability;
     private final Clock clock;
 
     public AnalysisOutboxDispatcher(
@@ -41,11 +43,13 @@ public final class AnalysisOutboxDispatcher {
             AnalysisKafkaClient kafkaClient,
             AnalysisOutboxConfiguration configuration,
             @Named("default") TransactionOperations<Connection> transactions,
+            AnalysisObservability observability,
             @Named(AnalysisClockFactory.ANALYSIS_CLOCK) Clock clock) {
         this.store = Objects.requireNonNull(store, "store");
         this.kafkaClient = Objects.requireNonNull(kafkaClient, "kafkaClient");
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.transactions = Objects.requireNonNull(transactions, "transactions");
+        this.observability = Objects.requireNonNull(observability, "observability");
         this.clock = Objects.requireNonNull(clock, "clock");
         requireDuration(configuration.getPollInterval(), Duration.ofMillis(10), Duration.ofMinutes(1), "pollInterval");
         requireDuration(configuration.getLeaseDuration(), Duration.ofMillis(1), MAX_LEASE_DURATION, "leaseDuration");
@@ -69,12 +73,15 @@ public final class AnalysisOutboxDispatcher {
 
     private void publishOne(AnalysisOutboxEntry entry, UUID leaseToken) {
         try {
-            kafkaClient.send(entry.topic(), entry.eventKey(), entry.payload());
+            observability.withTraceparent(
+                    entry.traceparent(),
+                    () -> kafkaClient.send(entry.topic(), entry.eventKey(), entry.payload()));
             Instant publishedAt = clock.instant();
             transactions.executeWrite(status -> {
                 store.markPublished(entry.eventId(), leaseToken, publishedAt);
                 return null;
             });
+            observability.recordOutboxPublication("published");
             LOG.debug(
                     "Published Analysis outbox event {} topic={} attempts={}",
                     entry.eventId(), entry.topic(), entry.publicationAttempts());
@@ -89,6 +96,7 @@ public final class AnalysisOutboxDispatcher {
             } catch (RuntimeException persistenceFailure) {
                 failure.addSuppressed(persistenceFailure);
             }
+            observability.recordOutboxPublication("failed");
             LOG.warn(
                     "Analysis outbox publication failed eventId={} topic={} attempts={}; event remains pending",
                     entry.eventId(), entry.topic(), entry.publicationAttempts(), failure);
@@ -97,7 +105,8 @@ public final class AnalysisOutboxDispatcher {
 
     private static String boundedMessage(RuntimeException failure) {
         String message = failure.getMessage();
-        String value = failure.getClass().getSimpleName() + (message == null || message.isBlank() ? "" : ": " + message);
+        String value = failure.getClass().getSimpleName()
+                + (message == null || message.isBlank() ? "" : ": " + message);
         return value.length() <= MAX_ERROR_CHARS ? value : value.substring(0, MAX_ERROR_CHARS);
     }
 

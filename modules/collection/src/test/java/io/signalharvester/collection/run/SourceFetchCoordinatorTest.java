@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.micronaut.core.propagation.PropagatedContext;
+import io.micronaut.core.propagation.PropagatedContextElement;
+import io.signalharvester.collection.observability.CollectionObservability;
 import io.signalharvester.collection.source.ExternalSourceClient;
 import io.signalharvester.collection.source.FetchedSourceContent;
 import io.signalharvester.collection.source.SourceFetchException;
@@ -44,7 +47,8 @@ class SourceFetchCoordinatorTest {
     void shouldBoundVirtualThreadFetchesAndAllowCallerToReconstructInputOrder() throws Exception {
         ControlledSourceClient client = new ControlledSourceClient();
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
-            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, virtualThreads);
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 2, observability(), virtualThreads);
             List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
 
             CompletableFuture<List<SourceFetchOutcome>> result = CompletableFuture.supplyAsync(
@@ -80,7 +84,8 @@ class SourceFetchCoordinatorTest {
         CountDownLatch releaseHandler = new CountDownLatch(1);
 
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
-            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, virtualThreads);
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 2, observability(), virtualThreads);
             List<ConfiguredSource> sources = List.of(source("one"), source("two"), source("three"));
 
             CompletableFuture<Void> result = CompletableFuture.runAsync(() -> coordinator.fetchEach(
@@ -122,7 +127,8 @@ class SourceFetchCoordinatorTest {
         };
 
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
-            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 1, virtualThreads);
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 1, observability(), virtualThreads);
             List<SourceFetchOutcome> outcomes = collect(coordinator, List.of(
                     source("one"), source("two"), source("three")));
 
@@ -169,7 +175,8 @@ class SourceFetchCoordinatorTest {
         };
 
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
-            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 2, virtualThreads);
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 2, observability(), virtualThreads);
             CompletableFuture<List<SourceFetchOutcome>> result = CompletableFuture.supplyAsync(
                     () -> collect(coordinator, List.of(source("blocking"), source("failing"), source("queued"))));
 
@@ -200,7 +207,8 @@ class SourceFetchCoordinatorTest {
         };
 
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
-            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 1, virtualThreads);
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 1, observability(), virtualThreads);
 
             IllegalStateException failure = assertThrows(
                     IllegalStateException.class,
@@ -208,6 +216,30 @@ class SourceFetchCoordinatorTest {
 
             assertEquals("programming failure", failure.getMessage());
             assertEquals(1, started.get());
+        }
+    }
+
+    /** Preserve Micronaut propagated context across the custom executor fan-out. */
+    @Test
+    void shouldPropagateContextIntoFetchWorker() {
+        ExternalSourceClient client = source -> {
+            TestContextElement element = PropagatedContext.getOrEmpty()
+                    .find(TestContextElement.class)
+                    .orElseThrow(() -> new AssertionError("propagated context must be available in fetch worker"));
+            assertEquals("collection-trace", element.value());
+            return content(source);
+        };
+
+        try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor();
+                PropagatedContext.Scope ignored = PropagatedContext.getOrEmpty()
+                        .plus(new TestContextElement("collection-trace"))
+                        .propagate()) {
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 1, observability(), virtualThreads);
+
+            List<SourceFetchOutcome> outcomes = collect(coordinator, List.of(source("one")));
+
+            assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.getFirst());
         }
     }
 
@@ -224,7 +256,8 @@ class SourceFetchCoordinatorTest {
         };
 
         try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
-            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(client, () -> 3, virtualThreads);
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 3, observability(), virtualThreads);
 
             coordinator.fetchEach(List.of(), (index, outcome) -> handled.incrementAndGet());
 
@@ -273,6 +306,10 @@ class SourceFetchCoordinatorTest {
                 Optional.of("text/plain"),
                 source.name().getBytes(StandardCharsets.UTF_8),
                 Instant.parse("2026-09-10T10:00:00Z"));
+    }
+
+
+    private record TestContextElement(String value) implements PropagatedContextElement {
     }
 
     /** Test double that blocks individual source calls so concurrency can be observed deterministically. */
@@ -326,4 +363,8 @@ class SourceFetchCoordinatorTest {
             return onlyVirtualThreads.get();
         }
     }
+    private static CollectionObservability observability() {
+        return new CollectionObservability(Optional.empty(), Optional.empty());
+    }
+
 }

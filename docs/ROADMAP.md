@@ -16,7 +16,7 @@ Accepted P2 reliability work includes:
 - `RELIABILITY.IDEMPOTENCY` protections used by current consumers;
 - `ANALYSIS.OUTBOX` for PostgreSQL/Kafka consistency in Analysis.
 
-No implementation sub-spec is currently selected as `current_focus` while the documentation vocabulary/readability cleanup is applied. The next planned implementation stage is `OBSERVABILITY.APPLICATION`. The active authentication/authorization sub-spec follows it before production-style Kubernetes/system acceptance.
+`OBSERVABILITY.APPLICATION` is implemented and verification-pending. The active authentication/authorization sub-spec follows it before production-style Kubernetes/system acceptance.
 
 Stable feature identifiers are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -48,11 +48,14 @@ Accepted:
 - `RELIABILITY.KAFKA_RETRY` and `RELIABILITY.DEAD_LETTER`;
 - `ANALYSIS.OUTBOX`.
 
+Current verification-pending:
+
+- `OBSERVABILITY.APPLICATION` — health/readiness, Prometheus metrics, OpenTelemetry tracing, log correlation, and custom context propagation.
+
 Next:
 
-1. `OBSERVABILITY.APPLICATION` — OpenTelemetry instrumentation plus health/readiness.
-2. `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` — stateless JWT authentication and backend-enforced RBAC.
-3. `PRESENTATION.VIEWER_RESULTS` — frontend-owned consumer result experience after the backend security contract is accepted.
+1. `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` — stateless JWT authentication and backend-enforced RBAC.
+2. `PRESENTATION.VIEWER_RESULTS` — frontend-owned consumer result experience after the backend security contract is accepted.
 
 The VIEWER UI belongs to `signalharvester-web`; its detailed layout/routing behavior must be defined there when frontend development resumes.
 

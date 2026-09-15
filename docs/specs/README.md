@@ -52,7 +52,7 @@ The rules are:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-There is currently no implementation sub-spec selected as `current_focus`. The next planned backend slice is `OBSERVABILITY.APPLICATION`; create or activate its bounded sub-spec before implementation begins. Authentication/authorization remains an active supporting specification for the later security stage.
+The current implementation focus is `OBSERVABILITY.APPLICATION`. Authentication/authorization remains an active supporting specification for the later security stage.
 
 ## When to create a sub-spec
 
@@ -134,7 +134,7 @@ Umbrella:
 
 Current implementation focus:
 
-- none; the next planned bounded implementation stage is `OBSERVABILITY.APPLICATION`.
+- [`active/subspecs/backend-application-observability.md`](active/subspecs/backend-application-observability.md) — `OBSERVABILITY.APPLICATION`; implementation complete, developer verification pending.
 
 Active supporting tracks:
 
@@ -165,7 +165,6 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
-- `OBSERVABILITY.APPLICATION` — OpenTelemetry instrumentation and health/readiness;
 - `DEPLOYMENT.KUBERNETES` + `OBSERVABILITY.INFRASTRUCTURE` — local production-style deployment and telemetry stack;
 - system resilience acceptance across restart, lag, retry, recovery, and authorization boundaries.
 

@@ -82,9 +82,13 @@ The web UI lives in the separate `signalharvester-web` repository. This reposito
 
 ## Observability and deployment
 
-Kubernetes is the target deployment environment. OpenTelemetry is the telemetry standard; Prometheus, Loki, Tempo, and Grafana are the initial observability stack.
+The application exposes Micronaut health, liveness, and readiness endpoints plus a Prometheus scrape endpoint. Micrometer owns low-cardinality runtime/application metrics; entity identifiers such as source, profile, run, item, event, and URL values are not metric labels.
 
-Application Event Explorer views explain domain/event flow. Grafana explains infrastructure/runtime health. They should complement rather than duplicate each other.
+OpenTelemetry is the distributed-tracing standard. The assembled application instruments HTTP server/client, Kafka, and JDBC boundaries. Trace export is disabled by default and can be enabled for an OTLP collector through runtime configuration. Console logs remain stdout/stderr oriented and include OpenTelemetry trace/span MDC fields when a valid span is current.
+
+Custom asynchronous boundaries preserve context explicitly. Collection captures Micronaut `PropagatedContext` before submitting source fetches to the blocking executor, and every collection run owns an application span used for the W3C `traceparent` carried by raw-item events when no parent was supplied. Analysis persists the active trace context with each transactional-outbox row and restores that context before Kafka publication, so broker retries do not sever the logical trace. Telemetry is auxiliary: disabling Micrometer/OpenTelemetry does not change business correctness.
+
+Kubernetes is the target deployment environment. Prometheus, Loki, Tempo, and Grafana remain the planned infrastructure observability stack. Application Event Explorer and Processing Flow explain retained domain/event evidence; infrastructure telemetry explains runtime health and distributed timing. They complement rather than replace each other.
 
 ## Future extraction
 

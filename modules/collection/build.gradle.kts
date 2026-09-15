@@ -28,6 +28,8 @@ dependencies {
     implementation("io.micronaut:micronaut-http-server")
 
     implementation("io.micronaut:micronaut-context")
+    implementation("io.micrometer:micrometer-core")
+    implementation("io.opentelemetry:opentelemetry-api")
     implementation("io.micronaut:micronaut-http-client")
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("io.micronaut.data:micronaut-data-tx-jdbc")

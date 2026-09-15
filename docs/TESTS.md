@@ -124,7 +124,9 @@ The first implementation foundation contains:
 - `DefaultContentNormalizerTest` for deterministic whitespace/URL normalization and stable normalized identity;
 - `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring rules and invalid rule configuration;
 - `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims, discovery counters, real SQL inspection filtering/ordering/limits, and enforcement of the application-owned JDBC transaction boundary;
-- `RawItemProcessingPostgresIntegrationTest` for focused new/irrelevant/duplicate processing, independent cross-profile acceptance, atomic deduplication/outbox commit, outbox retry metadata, and claim/counter rollback when outbox staging fails;
+- `RawItemProcessingPostgresIntegrationTest` for focused new/irrelevant/duplicate processing, independent cross-profile acceptance, atomic deduplication/outbox commit, persisted outbox trace context, outbox retry metadata, and claim/counter rollback when outbox staging fails;
+- `CollectionObservabilityTest` and `AnalysisObservabilityTest` for low-cardinality application metric emission with telemetry disabled safely through no-op boundaries;
+- `ApplicationObservabilityTest` for `/health`, liveness/readiness, and deterministic `/prometheus` exposure without PostgreSQL or Kafka;
 - `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
 - `RawItemKafkaListenerTest` for Analysis bounded retry recovery, immediate poison/key failure dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
 - `TransactionalAnalysisOutboxTest` for analyzed/rejected final topic-key mapping, stable terminal-event serialization, provenance, and outbox staging metadata;
@@ -175,6 +177,17 @@ Run them directly with:
 These tooling tests use deterministic fakes/loopback HTTP only. They do not require Docker, a running backend, or public network access. Actual `tools/live-backend/verify_pipeline.py` execution is a separate manual/live environment check.
 
 
+
+## Application observability
+
+Focused validation for `OBSERVABILITY.APPLICATION`:
+
+```bash
+./gradlew :modules:collection:test :modules:analysis:test :app:test --no-watch-fs
+./gradlew :modules:analysis:integrationTest --no-watch-fs --no-parallel
+```
+
+The unit/server tests protect low-cardinality metrics and management endpoint exposure. The Analysis PostgreSQL integration suite verifies that terminal-event outbox staging persists the trace context needed to reconnect later Kafka publication to the originating processing trace. Routine acceptance still requires `./run_checks.sh`.
 
 ## Event Observation and processing flows
 

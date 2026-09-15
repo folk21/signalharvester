@@ -30,7 +30,7 @@ Read-only `/api/v1/admin/analysis/items` endpoints expose durable normalization/
 
 The Kafka listener manually commits raw offsets after the Analysis PostgreSQL transaction commits or after acknowledged Analysis dead-letter publication for a terminal input failure. Deterministic transport/key/mapping failures bypass retry; application/database failures retry within the configured bound. The normal transaction commits the deduplication change together with the exact serialized terminal event in `analysis.event_outbox`.
 
-A background dispatcher leases a bounded batch, releases the database transaction, sends the stored bytes to Kafka, and then records `published_at` or retry metadata. Lease expiry allows another replica to recover abandoned work. If Kafka acknowledgement succeeds but the publication marker cannot be persisted, the same event may be sent again with the same event id and payload. Downstream consumers therefore retain their idempotent at-least-once behavior. The corresponding invariant is defined in [`contract.md`](contract.md).
+A background dispatcher leases a bounded batch, releases the database transaction, restores the trace context persisted with the outbox row, sends the stored bytes to Kafka, and then records `published_at` or retry metadata. Lease expiry allows another replica to recover abandoned work. If Kafka acknowledgement succeeds but the publication marker cannot be persisted, the same event may be sent again with the same event id and payload. Downstream consumers therefore retain their idempotent at-least-once behavior. Analysis also records low-cardinality processing and outbox-publication metrics. The corresponding consistency invariant is defined in [`contract.md`](contract.md).
 
 ## Read next
 

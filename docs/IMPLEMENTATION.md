@@ -131,9 +131,17 @@ Generated Protobuf Java classes are build output and remain transport types at K
 
 Configuration, analysis, collection, results, and event observation currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
 
-Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, `V6` configuration profiles, `V7` collection scheduling, `V8` Results live cursors, and `V9` event-observation history) unless the Flyway topology is deliberately changed later.
+Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, `V6` configuration profiles, `V7` collection scheduling, `V8` Results live cursors, `V9` event-observation history, `V10` Analysis event outbox, and `V11` Analysis outbox trace context) unless the Flyway topology is deliberately changed later.
 
 Direct cross-module table access remains forbidden.
+
+## Application observability
+
+The application composition root includes Micronaut management, Micrometer Prometheus, and OpenTelemetry instrumentation. It exposes `/health`, `/health/liveness`, `/health/readiness`, and `/prometheus`. Trace export defaults to `none`; configuring the OTLP exporter enables external trace collection without changing module behavior.
+
+Collection records low-cardinality run/source-fetch metrics and creates one application span per manual or scheduled run. Its custom Virtual-Thread fetch fan-out wraps submitted work with Micronaut `PropagatedContext`, so HTTP client spans remain attached to the collection trace. Analysis records processing/outbox metrics. `V11__add_analysis_outbox_trace_context.sql` persists the active W3C `traceparent` with staged terminal-event bytes, and the dispatcher restores it around Kafka send.
+
+Logback keeps console output as the deployment logging boundary. The OpenTelemetry MDC integration adds `trace_id` and `span_id` when a valid span is current. Event Explorer and Processing Flow remain separate retained application diagnostics rather than being reconstructed from trace storage.
 
 ## Testing implementation
 
@@ -160,7 +168,6 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 - no cursor/full-text result search beyond bounded REST filters;
 - no outbound SSRF/network-destination policy; source management must remain trusted until one is defined;
 - processing-flow reconstruction cannot prove Results persistence until an observation signal exists for that stage;
-- no OpenTelemetry instrumentation;
 - no Kubernetes deployment or production observability stack;
 - no cross-resource exactly-once guarantee between PostgreSQL and Kafka;
 - controlled DLQ replay tooling/UI is not implemented; failed records remain operator-managed in versioned dead-letter topics;
