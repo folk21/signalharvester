@@ -15,12 +15,12 @@ Implemented processing includes:
 - deterministic URL/text normalization and stable normalized item identity;
 - PostgreSQL/Flyway-backed duplicate claims scoped by monitoring profile;
 - configurable deterministic keyword analysis;
-- `ItemAnalyzed` and duplicate `ItemRejected` Protobuf publication;
+- transactional PostgreSQL staging and lease-driven Kafka publication of `ItemAnalyzed` and duplicate `ItemRejected`;
 - unit, PostgreSQL Testcontainers, and cross-module Kafka integration coverage.
 
 The initial analyzer uses deterministic keyword matching and does not require an external AI provider. Generated Protobuf messages and Kafka client types remain in the Kafka adapter layer; core normalization, persistence, and analyzer code use analysis-owned Java models.
 
-Monitoring-profile-owned analysis settings, richer category-specific normalization, controlled DLQ replay, and stronger DB/Kafka consistency remain future work.
+Monitoring-profile-owned analysis settings, richer category-specific normalization, and controlled DLQ replay remain future work.
 
 ## Operational inspection
 
@@ -28,7 +28,9 @@ Read-only `/api/v1/admin/analysis/items` endpoints expose durable normalization/
 
 ## Runtime notes
 
-The Kafka listener manually commits raw offsets only after successful terminal processing/publication or acknowledged Analysis dead-letter publication. Deterministic transport/key/mapping failures bypass retry; application failures retry within the configured bound. If DLQ publication fails, the source offset remains uncommitted. JDBC deduplication state uses the application-owned transaction-aware connection, and terminal publication failure rolls back the new claim or duplicate observation before the input offset can be committed. PostgreSQL and Kafka still do not form a distributed exactly-once transaction: an acknowledged output followed by database commit failure can be published again after redelivery. The corresponding invariant and downstream idempotency requirement are defined in [`contract.md`](contract.md).
+The Kafka listener manually commits raw offsets after the Analysis PostgreSQL transaction commits or after acknowledged Analysis dead-letter publication for a terminal input failure. Deterministic transport/key/mapping failures bypass retry; application/database failures retry within the configured bound. The normal transaction commits the deduplication change together with the exact serialized terminal event in `analysis.event_outbox`.
+
+A background dispatcher leases a bounded batch, releases the database transaction, sends the stored bytes to Kafka, and then records `published_at` or retry metadata. Lease expiry allows another replica to recover abandoned work. If Kafka acknowledgement succeeds but the publication marker cannot be persisted, the same event may be sent again with the same event id and payload. Downstream consumers therefore retain their idempotent at-least-once behavior. The corresponding invariant is defined in [`contract.md`](contract.md).
 
 ## Read next
 

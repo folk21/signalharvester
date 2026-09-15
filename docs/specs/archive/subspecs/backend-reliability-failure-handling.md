@@ -4,13 +4,13 @@ title: SignalHarvester backend asynchronous failure handling
 description: Bounded Kafka consumer retries, poison-record dead-letter handling, terminal failure visibility, and offset-commit guarantees.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # SignalHarvester backend asynchronous failure handling
 
 ## Status
 
-Implementation complete. Developer `./run_checks.sh` verification pending.
+Completed and verified by the developer through the canonical `./run_checks.sh` repository gate.
 
 ## Goal
 
@@ -22,7 +22,7 @@ This slice implements the first bounded retry/DLQ increment required by umbrella
 
 Before this increment, the three implemented Kafka consumers disabled automatic offset commit and committed only after successful application processing. Their persistence paths were idempotent where required, but any malformed record or persistently failing application operation could remain uncommitted and repeatedly block its partition.
 
-The implementation now adds the bounded retry and dead-letter behavior specified below; acceptance remains pending the developer verification gate.
+The implementation adds the bounded retry and dead-letter behavior specified below and was accepted after the developer repository gate passed.
 
 ## Requirements
 

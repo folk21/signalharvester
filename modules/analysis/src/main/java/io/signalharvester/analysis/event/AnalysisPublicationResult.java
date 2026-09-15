@@ -1,7 +1,7 @@
 package io.signalharvester.analysis.event;
 
 /**
- * Identifies an acknowledged analysis Kafka publication without exposing Protobuf types.
+ * Identifies a terminal Analysis event staged for reliable Kafka publication without exposing Protobuf types.
  */
 public record AnalysisPublicationResult(String eventId, String topic, String normalizedItemId) {
 

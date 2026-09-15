@@ -20,6 +20,6 @@ The diagnostic projection intentionally excludes large raw and normalized conten
 ## Read next
 
 - [`contract.md`](contract.md) — authoritative module boundary and invariants
-- [`../../docs/specs/active/subspecs/backend-processing-flow-reconstruction.md`](../../docs/specs/active/subspecs/backend-processing-flow-reconstruction.md) — active processing-flow acceptance
+- [`../../docs/specs/archive/subspecs/backend-processing-flow-reconstruction.md`](../../docs/specs/archive/subspecs/backend-processing-flow-reconstruction.md) — accepted processing-flow reconstruction history
 - [`../AGENTS.md`](../AGENTS.md) — shared module-development rules
 - [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) — system architecture

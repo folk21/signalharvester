@@ -2,8 +2,8 @@ package io.signalharvester.analysis.application;
 
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.analysis.configuration.AnalysisClockFactory;
-import io.signalharvester.analysis.event.AnalysisEventPublisher;
 import io.signalharvester.analysis.event.AnalysisPublicationResult;
+import io.signalharvester.analysis.outbox.AnalysisOutbox;
 import io.signalharvester.analysis.event.AnalyzedItem;
 import io.signalharvester.analysis.event.RejectedItem;
 import io.signalharvester.analysis.model.DiscoveredRawItem;
@@ -20,13 +20,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Executes normalization, durable profile-scoped deduplication, deterministic analysis, and publication.
+ * Executes normalization, durable profile-scoped deduplication, deterministic analysis, and outbox staging.
  *
- * <p>The deduplication claim and terminal event publication intentionally share the caller-owned JDBC
- * transaction window. If publication fails, the claim/update rolls back and Kafka redelivery can retry.
- * A broker acknowledgement followed by a database commit failure can still duplicate the analysis event;
- * downstream persistence must therefore remain idempotent until an outbox/stronger consistency mechanism
- * is introduced.</p>
+ * <p>The deduplication claim/update and exact serialized terminal event are committed in one PostgreSQL
+ * transaction. Kafka delivery happens later through the Analysis outbox dispatcher, removing the database
+ * commit versus terminal-event publication gap from this processing path.</p>
  */
 @Singleton
 public final class RawItemProcessingService implements RawItemProcessor {
@@ -39,7 +37,7 @@ public final class RawItemProcessingService implements RawItemProcessor {
     private final ContentNormalizer normalizer;
     private final DeduplicationClaimRepository deduplicationRepository;
     private final ContentAnalyzer analyzer;
-    private final AnalysisEventPublisher eventPublisher;
+    private final AnalysisOutbox outbox;
     private final TransactionOperations<Connection> transactions;
     private final Clock clock;
 
@@ -47,13 +45,13 @@ public final class RawItemProcessingService implements RawItemProcessor {
             ContentNormalizer normalizer,
             DeduplicationClaimRepository deduplicationRepository,
             ContentAnalyzer analyzer,
-            AnalysisEventPublisher eventPublisher,
+            AnalysisOutbox outbox,
             @Named("default") TransactionOperations<Connection> transactions,
             @Named(AnalysisClockFactory.ANALYSIS_CLOCK) Clock clock) {
         this.normalizer = Objects.requireNonNull(normalizer, "normalizer");
         this.deduplicationRepository = Objects.requireNonNull(deduplicationRepository, "deduplicationRepository");
         this.analyzer = Objects.requireNonNull(analyzer, "analyzer");
-        this.eventPublisher = Objects.requireNonNull(eventPublisher, "eventPublisher");
+        this.outbox = Objects.requireNonNull(outbox, "outbox");
         this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -69,7 +67,7 @@ public final class RawItemProcessingService implements RawItemProcessor {
         Instant seenAt = clock.instant();
         if (!deduplicationRepository.tryClaim(item, seenAt)) {
             deduplicationRepository.recordDuplicate(item, seenAt);
-            AnalysisPublicationResult publication = eventPublisher.publishRejected(
+            AnalysisPublicationResult publication = outbox.enqueueRejected(
                     new RejectedItem(item, DUPLICATE_REASON, DUPLICATE_EXPLANATION));
             LOG.info(
                     "Rejected duplicate raw item {} normalizedItemId={} profile={} source={}",
@@ -82,7 +80,7 @@ public final class RawItemProcessingService implements RawItemProcessor {
         }
 
         AnalysisDecision decision = analyzer.analyze(item);
-        AnalysisPublicationResult publication = eventPublisher.publishAnalyzed(new AnalyzedItem(item, decision));
+        AnalysisPublicationResult publication = outbox.enqueueAnalyzed(new AnalyzedItem(item, decision));
         LOG.info(
                 "Analyzed raw item {} normalizedItemId={} profile={} source={} classification={} score={}",
                 item.rawItemId(),

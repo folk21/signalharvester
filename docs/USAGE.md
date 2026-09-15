@@ -105,7 +105,7 @@ python3 tools/source-import/import_sources.py \
 
 The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
 
-The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. RSS/Atom produce one item per feed entry up to the configured bound. REST sources may extract candidate objects through persisted `json.*` JSON Pointer settings, and HTML sources may extract candidate elements through persisted `html.*` CSS selector settings. REST/HTML sources without those settings still produce one passthrough item per response. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and publishes `ItemAnalyzed` or `ItemRejected`. Results consumes those terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST plus resumable SSE live delivery.
+The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. RSS/Atom produce one item per feed entry up to the configured bound. REST sources may extract candidate objects through persisted `json.*` JSON Pointer settings, and HTML sources may extract candidate elements through persisted `html.*` CSS selector settings. REST/HTML sources without those settings still produce one passthrough item per response. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and atomically stages `ItemAnalyzed` or `ItemRejected` bytes in the Analysis PostgreSQL outbox. The outbox dispatcher publishes those committed records to Kafka. Results consumes the terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST plus resumable SSE live delivery.
 
 ## Kafka retry and dead-letter operation
 
@@ -119,7 +119,20 @@ signalharvester.event-observation.dead-letter.v1
 
 Each DLQ value is a versioned `failure/v1/DeadLetterEvent` defined at `contracts/event-contracts/src/main/proto/io/signalharvester/events/failure/v1/dead-letter-event.proto`. It preserves a deterministic dead-letter identity, the original topic/partition/offset/key/value, consumer identity, failure type/message, attempt count, and retryable classification. Local Redpanda runs with topic auto-creation, so these topics appear on first terminal failure.
 
-A source offset advances only after normal processing or acknowledged DLQ publication. If a DLQ producer is unavailable, the source record remains uncommitted and remains recoverable by Kafka redelivery rather than being silently skipped. There is intentionally no automatic replay command yet; correct the underlying problem before performing any controlled replay with Kafka tooling.
+For Analysis, a normal source offset advances after the deduplication change and terminal-event outbox row commit together in PostgreSQL; Kafka delivery can therefore recover independently from a broker outage. Results and Event Observation advance after their normal durable processing. Failed inputs still advance only after acknowledged DLQ publication. If a DLQ producer is unavailable, the source record remains uncommitted and remains recoverable by Kafka redelivery rather than being silently skipped. There is intentionally no automatic replay command yet; correct the underlying problem before performing any controlled replay with Kafka tooling.
+
+### Analysis outbox inspection
+
+The Analysis outbox is module-owned recovery state, not a public application API. During local diagnosis, pending rows can be inspected directly in PostgreSQL when needed:
+
+```sql
+SELECT event_id, topic, event_key, created_at, publication_attempts, lease_expires_at, last_error
+FROM analysis.event_outbox
+WHERE published_at IS NULL
+ORDER BY created_at, event_id;
+```
+
+Published rows remain marked with `published_at`. A Kafka acknowledgement followed by a failure to persist that marker can cause the same stored bytes to be published again after lease recovery. The stable event id and existing downstream idempotency make that replay intentional at-least-once behavior.
 
 Start a manual collection run for an existing monitoring-profile UUID:
 

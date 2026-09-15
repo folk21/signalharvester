@@ -1,7 +1,7 @@
 package io.signalharvester.analysis.application;
 
 /**
- * Identifies the terminal event emitted after processing one raw discovery.
+ * Identifies the terminal event staged after processing one raw discovery.
  */
 public record RawItemProcessingResult(
         RawItemProcessingStatus status,
