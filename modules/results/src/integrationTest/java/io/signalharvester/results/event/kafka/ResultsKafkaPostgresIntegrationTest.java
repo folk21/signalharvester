@@ -1,6 +1,7 @@
 package io.signalharvester.results.event.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.Timestamp;
@@ -8,6 +9,7 @@ import io.micronaut.context.ApplicationContext;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import io.signalharvester.events.analysis.v1.ItemRejected;
 import io.signalharvester.events.common.v1.EventEnvelope;
+import io.signalharvester.events.failure.v1.DeadLetterEvent;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -17,12 +19,18 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +44,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * Verifies the real {@link AnalysisOutcomeKafkaListener} -> {@link io.signalharvester.results.application.ResultProjectionService}
  * -> PostgreSQL path for idempotent analyzed and rejected Results projections.
  *
- * <p>Related specification: {@code backend-results-persistence}.</p>
+ * <p>Related specifications: {@code backend-results-persistence}, {@code backend-reliability-failure-handling}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class ResultsKafkaPostgresIntegrationTest {
@@ -44,6 +52,7 @@ class ResultsKafkaPostgresIntegrationTest {
     private static final String ANALYZED_TOPIC = "signalharvester.analysis.item-analyzed.v1.results-it";
     private static final String REJECTED_TOPIC = "signalharvester.analysis.item-rejected.v1.results-it";
     private static final String RESULTS_GROUP = "signalharvester-results-it";
+    private static final String DEAD_LETTER_TOPIC = "signalharvester.results.dead-letter.v1.results-it";
     private static final String PROFILE_ID = "profile-results-it";
     private static final String SOURCE_ID = "source-results-it";
     private static final String NORMALIZED_ITEM_ID = "b".repeat(64);
@@ -79,8 +88,17 @@ class ResultsKafkaPostgresIntegrationTest {
                         "org.apache.kafka.common.serialization.StringDeserializer"),
                 Map.entry("kafka.consumers." + RESULTS_GROUP + ".value.deserializer",
                         "org.apache.kafka.common.serialization.ByteArrayDeserializer"),
+                Map.entry("kafka.producers.results-dead-letter.key.serializer",
+                        "org.apache.kafka.common.serialization.StringSerializer"),
+                Map.entry("kafka.producers.results-dead-letter.value.serializer",
+                        "org.apache.kafka.common.serialization.ByteArraySerializer"),
+                Map.entry("kafka.producers.results-dead-letter.acks", "all"),
+                Map.entry("kafka.producers.results-dead-letter.enable.idempotence", true),
                 Map.entry("signalharvester.results.enabled", true),
                 Map.entry("signalharvester.results.consumer-group", RESULTS_GROUP),
+                Map.entry("signalharvester.results.kafka-reliability.max-attempts", 1),
+                Map.entry("signalharvester.results.kafka-reliability.retry-backoff", "0ms"),
+                Map.entry("signalharvester.results.kafka-reliability.dead-letter-topic", DEAD_LETTER_TOPIC),
                 Map.entry("signalharvester.kafka.item-analyzed-topic", ANALYZED_TOPIC),
                 Map.entry("signalharvester.kafka.item-rejected-topic", REJECTED_TOPIC)));
         producer = new KafkaProducer<>(producerProperties());
@@ -141,6 +159,27 @@ class ResultsKafkaPostgresIntegrationTest {
         assertEquals(NORMALIZED_ITEM_ID, sqlString("SELECT normalized_item_id FROM results.rejected_items"));
     }
 
+    /** Dead-letter a poison record and continue materializing the following record on the same partition. */
+    @Test
+    void shouldDeadLetterPoisonRecordAndContinuePartition() throws Exception {
+        producer.send(new ProducerRecord<>(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, new byte[] {(byte) 0x80})).get();
+        send(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, analyzedEvent("analysis-event-after-poison", 88, List.of("java")));
+
+        awaitSqlValue("SELECT count(*) FROM results.analyzed_items", 1L);
+        assertEquals(88L, sqlLong("SELECT score FROM results.analyzed_items"));
+
+        ConsumerRecord<String, byte[]> deadLetterRecord = consumeOne(DEAD_LETTER_TOPIC);
+        DeadLetterEvent deadLetter = DeadLetterEvent.parseFrom(deadLetterRecord.value());
+        assertEquals(RESULTS_GROUP + ":" + ANALYZED_TOPIC + ":"
+                + deadLetter.getSourcePartition() + ":" + deadLetter.getSourceOffset(), deadLetter.getDeadLetterId());
+        assertEquals("results", deadLetter.getConsumer());
+        assertEquals(RESULTS_GROUP, deadLetter.getConsumerGroup());
+        assertEquals(ANALYZED_TOPIC, deadLetter.getSourceTopic());
+        assertEquals(NORMALIZED_ITEM_ID, deadLetter.getSourceKey());
+        assertEquals(1, deadLetter.getAttempts());
+        assertFalse(deadLetter.getRetryable());
+    }
+
     private static ItemAnalyzed analyzedEvent(String analysisEventId, int score, List<String> tags) {
         return ItemAnalyzed.newBuilder()
                 .setEnvelope(envelope(analysisEventId, "analysis.item-analyzed.v1"))
@@ -195,6 +234,27 @@ class ResultsKafkaPostgresIntegrationTest {
     private void send(String topic, String key, com.google.protobuf.MessageLite event) throws Exception {
         producer.send(new ProducerRecord<>(topic, key, event.toByteArray())).get();
         producer.flush();
+    }
+
+    private static ConsumerRecord<String, byte[]> consumeOne(String topic) {
+        Properties properties = new Properties();
+        properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers());
+        properties.put(ConsumerConfig.GROUP_ID_CONFIG, "results-dlq-test-" + UUID.randomUUID());
+        properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+        try (KafkaConsumer<String, byte[]> consumer = new KafkaConsumer<>(properties)) {
+            consumer.subscribe(List.of(topic));
+            Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
+            while (Instant.now().isBefore(deadline)) {
+                var records = consumer.poll(Duration.ofMillis(250));
+                if (!records.isEmpty()) {
+                    return records.iterator().next();
+                }
+            }
+        }
+        throw new AssertionError("Timed out waiting for Kafka record on " + topic);
     }
 
     private static Properties producerProperties() {
@@ -266,7 +326,7 @@ class ResultsKafkaPostgresIntegrationTest {
 
     private static void createTopics() throws InterruptedException, ExecutionException {
         try (Admin admin = Admin.create(Map.<String, Object>of("bootstrap.servers", KAFKA.getBootstrapServers()))) {
-            for (String topic : List.of(ANALYZED_TOPIC, REJECTED_TOPIC)) {
+            for (String topic : List.of(ANALYZED_TOPIC, REJECTED_TOPIC, DEAD_LETTER_TOPIC)) {
                 try {
                     admin.createTopics(List.of(new NewTopic(topic, 1, (short) 1))).all().get();
                 } catch (ExecutionException failure) {

@@ -95,10 +95,11 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-processing-flow-reconstruction.md`](active/subspecs/backend-processing-flow-reconstruction.md) — bounded collection-run and item flow graphs reconstructed from Event Observation evidence.
+- [`active/subspecs/backend-reliability-failure-handling.md`](active/subspecs/backend-reliability-failure-handling.md) — bounded Kafka retries, poison-record dead-letter handling, and terminal offset-commit guarantees.
 
 Active supporting tracks:
 
+- [`active/subspecs/backend-processing-flow-reconstruction.md`](active/subspecs/backend-processing-flow-reconstruction.md) — implementation complete; developer acceptance remains verification-pending;
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — modular-monolith boundaries, published API rules, and architecture-test guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — Kafka/Protobuf event contract and schema-evolution rules;
 - [`active/subspecs/backend-authentication-authorization.md`](active/subspecs/backend-authentication-authorization.md) — stateless JWT authentication, persisted additive roles, backend RBAC, and REST/SSE browser credential policy for the later security stage.
@@ -125,7 +126,6 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
-- bounded retry, poison-event handling, and DLQ/failure inspection;
 - PostgreSQL/Kafka consistency through transactional outbox or equivalent;
 - application OpenTelemetry instrumentation;
 - Kubernetes deployment and infrastructure observability;

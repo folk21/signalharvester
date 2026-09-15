@@ -64,9 +64,11 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 ## Important invariants
 
 - deduplication identity is scoped by monitoring profile;
-- raw Kafka offsets are committed only after successful terminal processing/publication;
+- raw Kafka offsets are committed only after successful terminal processing/publication or acknowledged Analysis dead-letter publication;
+- deterministic decode/key/mapping failures are dead-lettered without retry, while application failures use a bounded retry policy;
+- DLQ publication failure leaves the source offset uncommitted;
 - deduplication writes require an active application-owned JDBC transaction;
-- terminal publication failure rolls back the new claim or duplicate observation and leaves the input offset uncommitted;
+- each failed terminal-publication attempt rolls back its claim/observation transaction; an exhausted record advances only after acknowledged Analysis dead-letter publication;
 - current DB/Kafka transaction semantics are retryable but not distributed exactly-once;
 - downstream result persistence must remain idempotent.
 

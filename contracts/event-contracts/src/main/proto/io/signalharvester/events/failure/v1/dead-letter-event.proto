@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package io.signalharvester.events.failure.v1;
+
+option java_multiple_files = true;
+option java_package = "io.signalharvester.events.failure.v1";
+
+// Captures one Kafka record that a SignalHarvester consumer could not process successfully.
+message DeadLetterEvent {
+  // Deterministic identity derived from consumer group and source Kafka position for replay-safe deduplication.
+  string dead_letter_id = 1;
+
+  // Logical consumer capability that exhausted or skipped retries.
+  string consumer = 2;
+
+  // Effective Kafka consumer group that owned the failed processing attempt.
+  string consumer_group = 3;
+
+  // Topic from which the original record was consumed.
+  string source_topic = 4;
+
+  // Partition of the original record.
+  int32 source_partition = 5;
+
+  // Offset of the original record.
+  int64 source_offset = 6;
+
+  // Original Kafka key. Empty only when the source record had no usable key.
+  string source_key = 7;
+
+  // Original serialized Kafka value so operators can inspect or replay it deliberately.
+  bytes source_payload = 8;
+
+  // Java exception type that caused terminal handling.
+  string failure_type = 9;
+
+  // Bounded human-readable failure message for diagnostics.
+  string failure_message = 10;
+
+  // Number of processing attempts made before dead-letter publication.
+  int32 attempts = 11;
+
+  // Whether the failed path was considered retryable before attempts were exhausted.
+  bool retryable = 12;
+}

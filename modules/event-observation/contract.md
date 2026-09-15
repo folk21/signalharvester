@@ -56,7 +56,9 @@ The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, and
 ## Important invariants
 
 - event identity is idempotent by published `event_id`;
-- Kafka offsets commit only after the observation transaction succeeds;
+- deterministic transport/key/mapping failures are dead-lettered without retry; recording failures use bounded retry;
+- Kafka offsets commit only after the observation transaction succeeds or terminal Event Observation dead-letter publication is acknowledged;
+- a failed Event Observation DLQ publication leaves the source offset uncommitted;
 - retention is explicitly bounded by age and count;
 - current collection-run correlation uses the event `correlation_id`;
 - REST/SSE expose decoded JSON, not generated Protobuf types;

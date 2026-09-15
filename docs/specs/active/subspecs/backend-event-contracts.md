@@ -10,7 +10,7 @@ spec_status: active
 
 ## Status
 
-Active supporting technical sub-specification — raw and analysis schemas, generation workflow, collection/analysis Kafka adapters, explicit byte serialization, and Testcontainers round trips exist. Event Explorer decoding of the currently published raw/analyzed/rejected families is implemented. Compatibility fixtures for evolved published schemas and later event families remain pending.
+Active supporting technical sub-specification — raw and analysis schemas, generation workflow, collection/analysis Kafka adapters, explicit byte serialization, and Testcontainers round trips exist. Event Explorer decoding of the currently published raw/analyzed/rejected families is implemented. The shared `failure/v1/DeadLetterEvent` contract now captures terminal Kafka-consumer failures for bounded retry/DLQ handling. Compatibility fixtures for evolved published schemas and later event families remain pending.
 
 This specification refines the umbrella event-driven requirements and the backend modular-monolith structure. It defines how Kafka integration events are represented without turning Protocol Buffers into a universal internal application model.
 
@@ -41,6 +41,7 @@ contracts/event-contracts/
         ├── common/v1/
         ├── collection/v1/
         ├── analysis/v1/
+        ├── failure/v1/
         └── results/v1/
 ```
 
@@ -155,6 +156,9 @@ collection/v1
 analysis/v1
     ItemAnalyzed
     ItemRejected
+
+failure/v1
+    DeadLetterEvent
 
 results/v1
     ResultAvailable

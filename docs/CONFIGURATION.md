@@ -40,14 +40,23 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_KAFKA_ITEM_REJECTED_TOPIC` | `signalharvester.analysis.item-rejected.v1` | Versioned topic for analysis rejection outcomes such as duplicates. |
 | `SIGNALHARVESTER_ANALYSIS_ENABLED` | `true` | Enables the raw-item analysis Kafka listener. |
 | `SIGNALHARVESTER_ANALYSIS_CONSUMER_GROUP` | `signalharvester-analysis-v1` | Consumer group for the analysis raw-item listener. |
+| `SIGNALHARVESTER_ANALYSIS_KAFKA_MAX_ATTEMPTS` | `3` | Maximum Analysis processing attempts for a validated Kafka record, including the initial attempt; bounded to 10. |
+| `SIGNALHARVESTER_ANALYSIS_KAFKA_RETRY_BACKOFF` | `250ms` | Fixed delay between retryable Analysis Kafka attempts; `0ms` through `5s`. |
+| `SIGNALHARVESTER_ANALYSIS_DEAD_LETTER_TOPIC` | `signalharvester.analysis.raw-item-dead-letter.v1` | Terminal DLQ for invalid or retry-exhausted Analysis inputs. |
 | `SIGNALHARVESTER_RESULTS_ENABLED` | `true` | Enables Results consumption/materialization of terminal Analysis events. |
 | `SIGNALHARVESTER_RESULTS_CONSUMER_GROUP` | `signalharvester-results-v1` | Consumer group for the Results terminal-analysis listeners. |
+| `SIGNALHARVESTER_RESULTS_KAFKA_MAX_ATTEMPTS` | `3` | Maximum Results projection attempts for a validated Kafka record, including the initial attempt; bounded to 10. |
+| `SIGNALHARVESTER_RESULTS_KAFKA_RETRY_BACKOFF` | `250ms` | Fixed delay between retryable Results Kafka attempts; `0ms` through `5s`. |
+| `SIGNALHARVESTER_RESULTS_DEAD_LETTER_TOPIC` | `signalharvester.results.analysis-outcome-dead-letter.v1` | Terminal DLQ for invalid or retry-exhausted Results inputs. |
 | `SIGNALHARVESTER_RESULTS_SSE_POLL_INTERVAL` | `1s` | Delay between durable Results live-cursor polls for an open SSE subscription. |
 | `SIGNALHARVESTER_RESULTS_SSE_KEEPALIVE_INTERVAL` | `15s` | Maximum idle period before a `keepalive` SSE event is emitted. |
 | `SIGNALHARVESTER_RESULTS_SSE_RECONNECT_DELAY` | `2s` | Browser reconnect delay written to SSE `retry` on ready/result events. |
 | `SIGNALHARVESTER_RESULTS_SSE_BATCH_SIZE` | `100` | Maximum live result updates read per poll; bounded to 200. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_ENABLED` | `true` | Enables the independent technical event-observation Kafka consumer. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_CONSUMER_GROUP` | `signalharvester-event-observation-v1` | Consumer group used only by Event Observation. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_KAFKA_MAX_ATTEMPTS` | `3` | Maximum Event Observation recording attempts for a validated Kafka record, including the initial attempt; bounded to 10. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_KAFKA_RETRY_BACKOFF` | `250ms` | Fixed delay between retryable Event Observation Kafka attempts; `0ms` through `5s`. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_DEAD_LETTER_TOPIC` | `signalharvester.event-observation.dead-letter.v1` | Terminal DLQ for invalid or retry-exhausted Event Observation inputs. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_MAX_EVENTS` | `10000` | Maximum retained diagnostic event rows. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_MAX_AGE` | `24h` | Maximum age of retained diagnostic event rows. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_POLL_INTERVAL` | `1s` | Delay between durable event-history polls for an open Event Explorer SSE subscription. |
@@ -71,7 +80,7 @@ Collection concurrency is validated as positive. RSS/Atom and generic JSON/HTML 
 
 Configured source URLs are domain values: they must be absolute HTTP/HTTPS locations with a host, without embedded user-info credentials and without URI fragments. Secrets should be modeled separately rather than embedded into URLs.
 
-Collection and analysis producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They wait for acknowledgements with `acks=all` and enable Kafka producer idempotence. Analysis, Results, and Event Observation consume String-keyed byte-array payloads with explicit offset commit only after their durable application processing succeeds. Event Observation uses its own consumer group and therefore does not compete with business consumers. These transport settings do not replace application-level replay/idempotency rules.
+Collection, analysis, and dead-letter producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They wait for acknowledgements with `acks=all` and enable Kafka producer idempotence. Analysis, Results, and Event Observation use manual source-offset commits. Deterministic decode/key/mapping failures bypass retry and publish a `failure/v1/DeadLetterEvent`; application failures after successful decode/key/mapping retry up to the owning configured maximum with fixed backoff. A source offset advances only after normal processing or acknowledged DLQ publication. If DLQ publication fails, the source offset remains uncommitted. Event Observation uses its own consumer group and therefore does not compete with business consumers. Automatic replay is intentionally absent in this increment.
 
 The first analyzer uses a small global keyword list in `application.properties` and `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` for the threshold. This is temporary runtime configuration until monitoring profiles own analysis rules. The threshold must be positive and cannot exceed the number of unique configured keywords.
 

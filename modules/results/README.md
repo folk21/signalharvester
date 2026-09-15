@@ -13,7 +13,7 @@ Results consumes version-one `ItemAnalyzed` and `ItemRejected` Kafka bytes and m
 
 Analyzed results are materialized by `(monitoringProfileId, normalizedItemId)`, so repeated Analysis publication updates one logical projection instead of creating duplicate result rows. Attributes and ordered tags are replaced in the same transaction as the main projection. Rejections are keyed by the upstream `sourceEventId`, preserving separate rediscoveries while making redelivery of one source event idempotent.
 
-The Kafka listener disables automatic offset commit and commits only after durable projection returns successfully. This provides at-least-once retry safety, not distributed exactly-once processing.
+The Kafka listener disables automatic offset commit. Deterministic transport/key/mapping failures are dead-lettered immediately, while projection failures retry within the configured bound. The source offset advances only after durable projection or acknowledged Results DLQ publication; DLQ failure leaves the offset uncommitted. This provides bounded at-least-once recovery behavior, not distributed exactly-once processing.
 
 `ResultQueryService` owns short read-only JDBC transactions over the same Results schema. The public REST adapter exposes:
 
@@ -31,6 +31,9 @@ The runnable application enables Results event consumption by default with:
 ```text
 SIGNALHARVESTER_RESULTS_ENABLED=true
 SIGNALHARVESTER_RESULTS_CONSUMER_GROUP=signalharvester-results-v1
+SIGNALHARVESTER_RESULTS_KAFKA_MAX_ATTEMPTS=3
+SIGNALHARVESTER_RESULTS_KAFKA_RETRY_BACKOFF=250ms
+SIGNALHARVESTER_RESULTS_DEAD_LETTER_TOPIC=signalharvester.results.analysis-outcome-dead-letter.v1
 SIGNALHARVESTER_RESULTS_SSE_POLL_INTERVAL=1s
 SIGNALHARVESTER_RESULTS_SSE_KEEPALIVE_INTERVAL=15s
 SIGNALHARVESTER_RESULTS_SSE_RECONNECT_DELAY=2s
@@ -45,7 +48,7 @@ The consumed topics are the existing `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC`
 - no full-text search;
 - rejected-result persistence remains internal operational state and is not exposed by this product API;
 - no transactional outbox/exactly-once cross-resource guarantee;
-- no bounded retry/DLQ policy yet, so a poison terminal event can repeatedly fail its partition.
+- automatic replay of dead-lettered records is intentionally not implemented yet.
 
 ## Read next
 

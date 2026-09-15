@@ -14,6 +14,7 @@ src/main/proto/io/signalharvester/events/
     common/v1/
     collection/v1/
     analysis/v1/
+    failure/v1/
     results/v1/
 ```
 
@@ -26,9 +27,10 @@ The first `v1` schemas are implemented:
 - `common/v1/event-envelope.proto`;
 - `collection/v1/raw-item-discovered.proto`;
 - `analysis/v1/item-analyzed.proto`;
-- `analysis/v1/item-rejected.proto`.
+- `analysis/v1/item-rejected.proto`;
+- `failure/v1/dead-letter-event.proto`.
 
-Gradle generates Java transport classes from these sources. Contract tests verify representative raw/analysis serialization round trips and tolerance of unknown additive fields. Collection publishes `RawItemDiscovered`; analysis consumes it and publishes `ItemAnalyzed` or `ItemRejected`.
+Gradle generates Java transport classes from these sources. Contract tests verify representative raw/analysis serialization round trips, dead-letter metadata round trips, and tolerance of unknown additive fields. Collection publishes `RawItemDiscovered`; analysis consumes it and publishes `ItemAnalyzed` or `ItemRejected`. Analysis, Results, and Event Observation publish `DeadLetterEvent` when deterministic poison input or bounded retry exhaustion reaches terminal handling.
 
 ## Read next
 

@@ -20,7 +20,7 @@ Implemented processing includes:
 
 The initial analyzer uses deterministic keyword matching and does not require an external AI provider. Generated Protobuf messages and Kafka client types remain in the Kafka adapter layer; core normalization, persistence, and analyzer code use analysis-owned Java models.
 
-Monitoring-profile-owned analysis settings, richer category-specific normalization, retry/DLQ policy, results persistence, and stronger DB/Kafka consistency remain future work.
+Monitoring-profile-owned analysis settings, richer category-specific normalization, controlled DLQ replay, and stronger DB/Kafka consistency remain future work.
 
 ## Operational inspection
 
@@ -28,7 +28,7 @@ Read-only `/api/v1/admin/analysis/items` endpoints expose durable normalization/
 
 ## Runtime notes
 
-The Kafka listener manually commits raw offsets only after successful terminal processing/publication. JDBC deduplication state uses the application-owned transaction-aware connection, and terminal publication failure rolls back the new claim or duplicate observation before the input offset can be committed. PostgreSQL and Kafka still do not form a distributed exactly-once transaction: an acknowledged output followed by database commit failure can be published again after redelivery. The corresponding invariant and downstream idempotency requirement are defined in [`contract.md`](contract.md).
+The Kafka listener manually commits raw offsets only after successful terminal processing/publication or acknowledged Analysis dead-letter publication. Deterministic transport/key/mapping failures bypass retry; application failures retry within the configured bound. If DLQ publication fails, the source offset remains uncommitted. JDBC deduplication state uses the application-owned transaction-aware connection, and terminal publication failure rolls back the new claim or duplicate observation before the input offset can be committed. PostgreSQL and Kafka still do not form a distributed exactly-once transaction: an acknowledged output followed by database commit failure can be published again after redelivery. The corresponding invariant and downstream idempotency requirement are defined in [`contract.md`](contract.md).
 
 ## Read next
 

@@ -72,8 +72,10 @@ Do not import Analysis implementation/application/persistence types or read the 
 - race-free browser bootstrap opens SSE through `ready` before loading the REST snapshot, then merges buffered/live updates by logical result identity;
 - a resume cursor ahead of current durable state is normalized to the current watermark rather than starving future delivery;
 - live delivery exposes current projections, not an append-only history, so multiple disconnected updates to one logical result may collapse to the latest projection;
-- Kafka offsets are committed only after the Results transaction commits successfully;
-- malformed payloads, key mismatches, and persistence failures leave the consumed offset uncommitted;
+- deterministic transport/key/mapping failures are dead-lettered without retry; projection failures use bounded retry;
+- Kafka offsets are committed only after the Results transaction commits successfully or terminal Results dead-letter publication is acknowledged;
+- a failed Results DLQ publication leaves the source offset uncommitted;
+- exhausted projection failures advance the consumed offset only after acknowledged Results dead-letter publication;
 - write and read repositories participate in application-owned JDBC transactions;
 - result-feed limit is bounded to `1..200` and ordered deterministically newest first;
 - feed retrieval must avoid per-result N+1 persistence reads;

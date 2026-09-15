@@ -7,7 +7,7 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current implementation focus
 
-The first real-source vertical slice, Results REST/SSE, and bounded Event Observation are verified. The current backend focus is processing-flow reconstruction under [`specs/active/subspecs/backend-processing-flow-reconstruction.md`](specs/active/subspecs/backend-processing-flow-reconstruction.md). After this slice, the companion UI can consume the complete Event Explorer history/live/graph backend surface in one frontend pass.
+Processing-flow reconstruction is implemented and remains developer-verification pending. The current backend focus is bounded Kafka retry and dead-letter failure handling under [`specs/active/subspecs/backend-reliability-failure-handling.md`](specs/active/subspecs/backend-reliability-failure-handling.md). PostgreSQL/Kafka consistency is the next reliability stage after this slice.
 
 ## P0 — repository and contract foundation
 
@@ -53,4 +53,4 @@ The first real-source vertical slice, Results REST/SSE, and bounded Event Observ
 - LLM/embedding analysis as a required core dependency.
 
 
-The backend now provides source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results REST/SSE, technical Event Explorer history/SSE, and processing-flow reconstruction. The next backend milestones are reliability/consistency, application observability, and authentication/RBAC before production-style Kubernetes/system acceptance. When frontend work resumes, the companion frontend specification should add a dedicated consumer-facing `VIEWER` result experience over the accepted backend security and Results contracts.
+The backend now provides source CRUD/testing, manual and scheduled collection, durable run inspection, analysis inspection, Results REST/SSE, technical Event Explorer history/SSE, processing-flow reconstruction, and implemented bounded Kafka retry/DLQ handling pending developer verification. The next backend milestones are PostgreSQL/Kafka consistency, application observability, and authentication/RBAC before production-style Kubernetes/system acceptance. When frontend work resumes, the companion frontend specification should add a dedicated consumer-facing `VIEWER` result experience over the accepted backend security and Results contracts.

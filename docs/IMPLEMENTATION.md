@@ -79,7 +79,7 @@ The raw-item processing path is intentionally event-driven and remains internal.
 
 PostgreSQL schema `analysis` is created by `db/migration/analysis/V2__create_normalized_item_claims.sql`. Logical normalized identity excludes monitoring profile id; duplicate claims are scoped by `(monitoringProfileId, normalizedItemId)`.
 
-The listener disables automatic offset commit and commits the raw Kafka offset only after application processing and terminal publication return successfully. Deduplication persistence uses the transaction-aware JDBC connection owned by `RawItemProcessingService`; failed analyzed/rejected publication rolls back the corresponding claim/counter update and leaves the consumed input offset uncommitted. This is **not** distributed exactly-once behavior. An acknowledged output followed by database commit failure can still be published again after redelivery, so future results persistence must be idempotent until an outbox or equivalent stronger cross-resource strategy is introduced.
+The listener disables automatic offset commit. Transport/key/mapping failures are dead-lettered immediately; application failures use bounded retry. After retry exhaustion, the original input, a deterministic source-position-based dead-letter identity, and failure metadata are published as `failure/v1/DeadLetterEvent`. The raw offset advances only after successful application processing or acknowledged dead-letter publication; a DLQ publication failure remains uncommitted. Deduplication persistence uses the transaction-aware JDBC connection owned by `RawItemProcessingService`; failed analyzed/rejected publication rolls back the corresponding claim/counter update before the listener decides whether to retry or dead-letter the record. This is **not** distributed exactly-once behavior. An acknowledged output followed by database commit failure can still be published again after redelivery, so future results persistence must be idempotent until an outbox or equivalent stronger cross-resource strategy is introduced.
 
 See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../modules/analysis/contract.md`](../modules/analysis/contract.md) for module-local detail.
 
@@ -89,7 +89,7 @@ See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../mo
 
 `ResultProjectionService` owns the JDBC transaction. `JdbcResultProjectionRepository` uses the transaction-aware default connection and upserts analyzed projections by `(monitoringProfileId, normalizedItemId)`. Tags and attributes are replaced atomically with the parent projection. Rejections are keyed by `sourceEventId`, so retry of one raw source event does not create another rejection row while later rediscovery events remain separate.
 
-The Results listener disables automatic Kafka commit and commits the consumed offset only after the Results transaction completes. This is an at-least-once/idempotent-consumer model, not distributed exactly-once processing.
+The Results listener disables automatic Kafka commit. Deterministic transport/key/mapping failures go directly to the Results DLQ; projection failures retry within the configured bound. The consumed offset advances only after the Results transaction completes or the terminal `DeadLetterEvent` is acknowledged. This remains an at-least-once/idempotent-consumer model, not distributed exactly-once processing.
 
 `ResultQueryService` owns short read-only JDBC transactions for the public Results REST API. `GET /api/v1/results` exposes a bounded recent-result feed with profile/source/category/relevance/classification/time filters without returning large normalized content, while `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` returns the detailed content, attributes, tags, and provenance for one profile-scoped logical result.
 
@@ -100,6 +100,8 @@ See [`../modules/results/README.md`](../modules/results/README.md) and [`../modu
 ## Event observation
 
 `modules:event-observation` consumes the published `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` topics through its own Kafka consumer group. Generated Protobuf messages remain confined to the Kafka adapter and are decoded into an observation-owned diagnostic model before persistence.
+
+The Event Observation listener applies the same bounded retry and dead-letter policy: deterministic decode/key/mapping failures are terminal immediately, recording failures retry, and source offsets advance only after recording or acknowledged DLQ publication.
 
 PostgreSQL schema `event_observation` is created by `V9__create_event_observation_history.sql`. `observed_events` stores event/envelope identity, Kafka topic/partition/offset/key, correlation and trace metadata, source/profile/item provenance, and selected human-readable payload diagnostics. Large raw/normalized content bodies are intentionally excluded. Event identity is unique, so Kafka redelivery is idempotent. Retention is enforced by configurable maximum age and maximum row count in the same application transaction as recording.
 
@@ -118,6 +120,7 @@ common/v1/event-envelope.proto
 collection/v1/raw-item-discovered.proto
 analysis/v1/item-analyzed.proto
 analysis/v1/item-rejected.proto
+failure/v1/dead-letter-event.proto
 ```
 
 Generated Protobuf Java classes are build output and remain transport types at Kafka adapter boundaries.
@@ -158,4 +161,4 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 - no OpenTelemetry instrumentation;
 - no Kubernetes deployment or production observability stack;
 - no cross-resource exactly-once guarantee between PostgreSQL and Kafka;
-- no bounded retry/DLQ policy for poison Analysis or Results input events.
+- controlled DLQ replay tooling/UI is not implemented; failed records remain operator-managed in versioned dead-letter topics;
