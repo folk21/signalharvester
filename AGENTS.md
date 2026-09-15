@@ -210,7 +210,7 @@ Never disable or weaken a failing test merely to make the build green.
 
 Keep tests readable as executable specifications:
 
-- Give every test class a concise but informative class-level Javadoc that names the behavior/boundary it protects and links to the primary tested production type with `{@link ...}` when practical. Reference an existing stable feature/spec identifier when it improves navigation; never invent ad-hoc feature codes.
+- Give every test class a concise but informative class-level Javadoc that names the behavior/boundary it protects and links to the primary tested production type with `{@link ...}` when practical. Prefer a stable feature ID from `docs/FEATURES.md` when it improves navigation. Use a specification identifier only when the test protects that specific change contract. Never invent ad-hoc feature codes.
 - Put a concise Javadoc-style purpose comment (`/** ... */`, normally one line, at most two) immediately before every test method annotation. Describe only the scenario/guarantee; do not prefix it with labels such as `Test purpose:`.
 - Name opaque or semantically meaningful fixture values (IDs, hashes, correlation values, profile/source identifiers, fixed timestamps) with constants when the name makes the scenario clearer, especially when reused. Do not extract trivial one-off literals mechanically.
 - Prefer parameterized JUnit tests when the same behavior/assertions are exercised over a list of input values; do not use parameterization to hide materially different scenarios.
@@ -238,6 +238,7 @@ Each topic should have one authoritative owner:
 | Test strategy and commands | `docs/TESTS.md` |
 | Coverage and code-quality tooling | `docs/QUALITY.md` |
 | Future work | `docs/ROADMAP.md` |
+| Stable feature vocabulary | `docs/FEATURES.md` |
 | Completed project changes | `CHANGELOG.md` |
 | Specification workflow/navigation | `docs/specs/README.md` |
 | Intended significant changes | active specifications |
@@ -275,6 +276,7 @@ Repository documentation is working context for both developers and coding agent
 - Clearly distinguish current implemented behavior from technical debt, planned work, and other future enhancements. Never describe planned behavior as if it already exists.
 - Prefer concrete references to modules, APIs, schemas, events, configuration keys, and persistence owners over abstract descriptions.
 - Keep important requirement identifiers and established domain terms stable across specifications, documentation, tests, and code.
+- Use stable feature IDs from `docs/FEATURES.md` for cross-document capability references. Feature IDs use uppercase ASCII hierarchy such as `RESULTS.LIVE`; do not invent or rename them locally.
 
 ## Always / Ask First / Never
 

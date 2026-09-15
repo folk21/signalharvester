@@ -4,21 +4,18 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-db-kafka-consistency.md
 ---
 # SignalHarvester initial functional product specification
 
 ## Status
 
-Active specification — initial product and architecture definition.
+Active umbrella specification for the initial SignalHarvester product target.
 
-This document defines the first functional product target for SignalHarvester. It is the umbrella specification for the system and intentionally focuses on product behavior, system boundaries, observable data flow, and acceptance targets rather than detailed service implementation.
+The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, and `ANALYSIS.OUTBOX`. The next planned implementation slice is `OBSERVABILITY.APPLICATION`. No active sub-spec is selected as `current_focus` during this documentation-maintenance stage.
 
-Backend, infrastructure, observability, persistence, and source-connector implementation details should be refined in bounded backend sub-specifications under `subspecs/` as implementation begins. Frontend-specific implementation details belong to the separate `signalharvester-web` repository and its own `docs/specs/` tree. Sub-specifications may narrow technical choices but must preserve the requirements and invariants defined here unless this umbrella specification is explicitly updated.
+`SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` remain active supporting work for the later security stage. Detailed `PRESENTATION.VIEWER_RESULTS` implementation belongs to the `signalharvester-web` specification tree.
 
-## Active implementation focus
-
-The current technical focus is PostgreSQL/Kafka consistency under `subspecs/backend-db-kafka-consistency.md`. Bounded Kafka retry, poison-record handling, dead-letter delivery, and processing-flow reconstruction are accepted after developer `./run_checks.sh` verification and are archived. Authentication/authorization remains an active supporting specification for the later security stage.
+Stable feature identifiers referenced by this specification are defined in [`../../FEATURES.md`](../../FEATURES.md).
 
 ## Goal
 
@@ -73,27 +70,73 @@ The browser communicates with application APIs over HTTP-based application proto
 
 ## Current state
 
-The repository has an implemented backend foundation, but the end-to-end product described by this umbrella is not complete. Current-state details remain owned by `docs/IMPLEMENTATION.md`; this section records only the technology direction that constrains active work.
+This umbrella describes the product target, not the complete implementation inventory. Current implementation truth belongs in `docs/IMPLEMENTATION.md`.
 
-The intended initial technology direction is:
+Accepted backend capabilities already cover the main functional pipeline:
 
-- Java with Micronaut for backend services;
-- Micronaut-managed HTTP client for generic source access, using low-level absolute requests for configuration-driven dynamic hosts, with blocking collection workflows executed on bounded Virtual Threads and `Publisher` reserved for true streaming boundaries;
-- Apache Kafka for asynchronous event transport;
-- Protocol Buffers for Kafka integration-event wire contracts;
-- PostgreSQL for application persistence;
-- React with TypeScript for the web frontend;
-- REST for request/response application APIs;
-- Server-Sent Events for the initial server-to-browser live update model where communication is predominantly unidirectional;
-- Kubernetes for local distributed deployment;
-- OpenTelemetry as the telemetry instrumentation standard;
-- Prometheus, Loki, Tempo, and Grafana as the initial observability stack.
+- persisted Sources and Monitoring Profiles;
+- manual and scheduled Collection Runs;
+- Kafka/Protobuf event processing;
+- normalization, deduplication, and deterministic analysis;
+- Results persistence, REST reads, and resumable SSE;
+- Event Observation and Processing Flow diagnostics;
+- bounded Kafka retry and dead-letter handling;
+- Analysis transactional outbox delivery.
 
-These technology choices are strong defaults for the first implementation but detailed framework configuration belongs in technical sub-specifications.
+Major product/platform work still required by this umbrella includes:
+
+- `OBSERVABILITY.APPLICATION`;
+- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`;
+- `PRESENTATION.VIEWER_RESULTS` in the companion frontend;
+- `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`;
+- final production-style system resilience acceptance.
+
+The intended technology direction remains Java/Micronaut, Kafka, Protocol Buffers, PostgreSQL, React/TypeScript, REST/SSE, Kubernetes, OpenTelemetry, Prometheus, Loki, Tempo, and Grafana. Detailed framework configuration belongs to bounded technical specifications and current-state documentation.
+
+## Requirement map
+
+This table is a navigation index. The detailed requirement text below remains normative.
+
+| Requirement | Feature ID | Purpose |
+|---|---|---|
+| R1 | `CONFIGURATION.MONITORING_PROFILES` | Persisted monitoring profiles |
+| R2 | `CONFIGURATION.SOURCES` | Persisted external sources |
+| R3 | `COLLECTION.SOURCE_TEST` | Source validation and preview |
+| R4 | `COLLECTION.SCHEDULING` | Scheduled collection |
+| R5 | `COLLECTION.RUNS` | Explicit collection-run identity |
+| R6 | `COLLECTION.ADAPTERS` | External-source adapter boundary |
+| R7 | `EVENTING.PIPELINE`, `CONTRACTS.KAFKA_PROTOBUF` | Asynchronous Kafka processing |
+| R8 | `EVENTING.CORRELATION` | Event/run/item/trace correlation |
+| R9 | `ANALYSIS.NORMALIZATION` | Normalized content model |
+| R10 | `ANALYSIS.DEDUPLICATION` | Deterministic duplicate handling |
+| R11 | `ANALYSIS.CLASSIFICATION` | Replaceable analysis boundary |
+| R12 | `RESULTS.MATERIALIZATION` | Persisted analyzed results |
+| R13 | `RESULTS.LIVE` | Live result feed |
+| R14 | `PRESENTATION.CONFIGURATION` | Browser configuration workflows |
+| R15 | `RESULTS.BROWSING` | Result browsing and inspection |
+| R16 | `DIAGNOSTICS.EVENT_OBSERVATION` | Live technical event explorer |
+| R17 | `DIAGNOSTICS.PROCESSING_FLOW` | Visual processing-flow inspection |
+| R18 | `OBSERVABILITY.APPLICATION` | Application telemetry and health |
+| R19 | `OBSERVABILITY.INFRASTRUCTURE` | Infrastructure telemetry views |
+| R20 | `RELIABILITY.KAFKA_RETRY`, `RELIABILITY.DEAD_LETTER` | Visible bounded failure handling |
+| R21 | `RELIABILITY.IDEMPOTENCY` | Duplicate-safe processing |
+| R22 | `ANALYSIS.OUTBOX` | Database/event consistency |
+| R23 | `RUNTIME.CONCURRENCY`, `SECURITY.EXTERNAL_SOURCE_ACCESS` | Bounded blocking/external I/O |
+| R24 | `DEPLOYMENT.KUBERNETES` | Local Kubernetes deployment |
+| R25 | `DELIVERY.FRONTEND_BACKEND_BOUNDARY`, `CONTRACTS.HTTP` | Independent deliverables and explicit HTTP contracts |
+| R26 | `SCALABILITY.KAFKA_CONSUMERS` | Horizontal worker scaling |
+| R27 | `DATA.PROVENANCE` | Source/run provenance |
+| R28 | `DIAGNOSTICS.EVENT_OBSERVATION` | Bounded diagnostic retention |
+| R29 | `TESTING.DETERMINISTIC_LOCAL` | Deterministic local verification |
+| R30 | `SECURITY.EXTERNAL_SOURCE_ACCESS` | Secret and external-service safety |
+| R31 | `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION` | Authenticated identities and RBAC |
+| R32 | `PRESENTATION.VIEWER_RESULTS`, `SECURITY.AUTHORIZATION` | Role-specific browser experience |
 
 ## Requirements
 
 ### R1 — configurable monitoring profiles
+
+Feature: `CONFIGURATION.MONITORING_PROFILES`.
 
 The user must be able to create, edit, enable, disable, and remove monitoring profiles through the web UI.
 
@@ -109,6 +152,8 @@ A monitoring profile must have stable identity and must define at least:
 Configuration must be persisted in PostgreSQL and survive application restarts.
 
 ### R2 — configurable external sources
+
+Feature: `CONFIGURATION.SOURCES`.
 
 The user must be able to manage external sources through the web UI.
 
@@ -128,6 +173,8 @@ A source that requires genuinely source-specific behavior may use a dedicated ad
 
 ### R3 — source validation before activation
 
+Feature: `COLLECTION.SOURCE_TEST`.
+
 The UI should allow a configured source to be tested before or during activation.
 
 A source test should make the intended external request using the same collection boundary used by normal execution and report enough information to diagnose configuration problems, including where applicable:
@@ -143,6 +190,8 @@ Testing a source must not silently insert test results into the normal productio
 
 ### R4 — schedule-driven collection
 
+Feature: `COLLECTION.SCHEDULING`.
+
 Enabled monitoring profiles must be collected automatically according to their configured schedules.
 
 A user must not need to manually trigger each collection cycle.
@@ -152,6 +201,8 @@ When a new compatible source is added to an enabled profile, subsequent schedule
 The scheduler must be designed so that multiple backend replicas do not unintentionally execute the same scheduled collection work as independent duplicates.
 
 ### R5 — explicit collection runs
+
+Feature: `COLLECTION.RUNS`.
 
 Every scheduled or manually triggered collection operation must create an explicit collection-run identity.
 
@@ -167,6 +218,8 @@ Events and collected items produced by that run must be traceable back to it.
 
 ### R6 — external data enters through collection adapters
 
+Feature: `COLLECTION.ADAPTERS`.
+
 External data must enter the application through explicit collection adapters rather than being mixed directly into analysis or persistence code.
 
 Collection adapters must isolate external protocol, parsing, and source-specific concerns from the core processing model.
@@ -179,6 +232,8 @@ The initial implementation must support at least:
 Synthetic sources may be used for deterministic tests and demonstrations but do not satisfy this requirement by themselves.
 
 ### R7 — asynchronous event-driven processing
+
+Feature: `EVENTING.PIPELINE`, `CONTRACTS.KAFKA_PROTOBUF`.
 
 Collected information must move between major processing stages through Kafka-backed asynchronous events where asynchronous decoupling is useful. Kafka integration-event payloads must use Protocol Buffers contracts defined from versioned `.proto` schemas.
 
@@ -197,6 +252,8 @@ The exact number of physical Kafka topics and services is a technical design dec
 
 ### R8 — stable event identity and correlation
 
+Feature: `EVENTING.CORRELATION`.
+
 Important application events must have stable event identity.
 
 Events belonging to one logical collection or item-processing flow must carry correlation information sufficient to reconstruct that flow across service and Kafka boundaries.
@@ -212,6 +269,8 @@ Correlation must integrate cleanly with distributed tracing rather than creating
 
 ### R9 — normalized common content model
 
+Feature: `ANALYSIS.NORMALIZATION`.
+
 Externally collected records must be converted into an internal normalized representation before downstream analysis depends on them.
 
 The common model must preserve source provenance and permit category-specific attributes without forcing all categories into a single flat schema.
@@ -220,6 +279,8 @@ For every persisted content item, the system must be able to identify its origin
 
 ### R10 — deterministic deduplication boundary
 
+Feature: `ANALYSIS.DEDUPLICATION`.
+
 The system must detect repeated discovery of the same logical external item and must not create uncontrolled duplicate domain records merely because the item was collected again.
 
 Deduplication must use explicit stable source identifiers where available and may use deterministic fingerprints when no suitable external identifier exists.
@@ -227,6 +288,8 @@ Deduplication must use explicit stable source identifiers where available and ma
 Deduplication behavior must be observable so that a user or developer can distinguish a newly accepted item from an ignored duplicate.
 
 ### R11 — pluggable analysis
+
+Feature: `ANALYSIS.CLASSIFICATION`.
 
 Analysis must be represented by a replaceable application boundary rather than being hardwired to one algorithm or AI provider.
 
@@ -243,6 +306,8 @@ Analysis results must preserve enough explanation to show why an item was consid
 
 ### R12 — persisted results
 
+Feature: `RESULTS.MATERIALIZATION`.
+
 Normalized and accepted domain results must be persisted in PostgreSQL.
 
 Persisted results must support efficient retrieval by the frontend for at least:
@@ -258,6 +323,8 @@ The first implementation does not require a general-purpose search engine such a
 
 ### R13 — live result feed
 
+Feature: `RESULTS.LIVE`.
+
 The web UI must provide a result feed for newly collected information.
 
 When new results become available, an already-open page must update automatically without requiring manual refresh.
@@ -267,6 +334,8 @@ The initial live-update transport should support efficient server-to-browser del
 The live feed must not require the browser to connect directly to Kafka.
 
 ### R14 — configuration UI
+
+Feature: `PRESENTATION.CONFIGURATION`.
 
 The web application must provide usable screens for configuring:
 
@@ -281,6 +350,8 @@ The UI must validate input before submission where validation rules are known to
 Configuration changes must become visible to collection scheduling without requiring deployment or process restart.
 
 ### R15 — result browsing and inspection
+
+Feature: `RESULTS.BROWSING`.
 
 The web application must let the user browse and inspect collected results.
 
@@ -306,6 +377,8 @@ For topic information, the initial view should expose at least:
 
 ### R16 — live technical event explorer
 
+Feature: `DIAGNOSTICS.EVENT_OBSERVATION`.
+
 The web application must provide a technical event-explorer view that can display application processing events as they occur.
 
 The event explorer must support filtering by useful dimensions such as:
@@ -320,6 +393,8 @@ The event explorer must support filtering by useful dimensions such as:
 The live event view must be a bounded diagnostic stream, not an attempt to expose unlimited Kafka history directly in the browser.
 
 ### R17 — visual processing-flow inspection
+
+Feature: `DIAGNOSTICS.PROCESSING_FLOW`.
 
 The user must be able to select a collection run or collected item and inspect a visual representation of its processing path.
 
@@ -348,6 +423,8 @@ The visualization is an application-level diagnostic feature and does not replac
 
 ### R18 — application observability
 
+Feature: `OBSERVABILITY.APPLICATION`.
+
 Backend services must emit structured telemetry sufficient to operate and study the system.
 
 The initial observability model must include:
@@ -362,6 +439,8 @@ OpenTelemetry should be the common instrumentation and propagation standard wher
 Important asynchronous boundaries, external requests, and database operations must preserve trace context where supported.
 
 ### R19 — infrastructure observability
+
+Feature: `OBSERVABILITY.INFRASTRUCTURE`.
 
 The local deployment must make infrastructure and runtime behavior inspectable through Grafana or equivalent observability views.
 
@@ -382,6 +461,8 @@ Application-owned UI and Grafana serve different purposes: the application UI ex
 
 ### R20 — failure visibility and dead-letter handling
 
+Feature: `RELIABILITY.KAFKA_RETRY`, `RELIABILITY.DEAD_LETTER`.
+
 Failures in asynchronous processing must be visible and must not result in silent loss of important work.
 
 Retryable failures should use bounded retry behavior appropriate to the operation. Permanently failing asynchronous messages must have an explicit terminal handling strategy such as a dead-letter topic or equivalent failure state.
@@ -392,6 +473,8 @@ A later implementation increment may add controlled replay after the underlying 
 
 ### R21 — idempotent processing
 
+Feature: `RELIABILITY.IDEMPOTENCY`.
+
 Kafka consumers and persistence operations must be designed for at-least-once delivery semantics and duplicate event delivery.
 
 Reprocessing the same event must not create uncontrolled duplicate domain state or repeat non-idempotent side effects without protection.
@@ -400,6 +483,8 @@ The concrete idempotency strategy belongs to the backend technical sub-specifica
 
 ### R22 — database/event consistency
 
+Feature: `ANALYSIS.OUTBOX`.
+
 Where a backend operation must both persist authoritative state and publish a corresponding integration event, the design must explicitly address the failure window between database commit and Kafka publication.
 
 The preferred production-style solution is a transactional outbox or another mechanism with equivalent consistency properties.
@@ -407,6 +492,8 @@ The preferred production-style solution is a transactional outbox or another mec
 The first minimal vertical slice may defer full outbox implementation only if the limitation is explicit and the later migration path is preserved.
 
 ### R23 — concurrency model suitable for external I/O
+
+Feature: `RUNTIME.CONCURRENCY`, `SECURITY.EXTERNAL_SOURCE_ACCESS`.
 
 External collection is expected to be dominated by network I/O.
 
@@ -417,6 +504,8 @@ Concurrency limits, connect/read/request timeouts, response-size limits, redirec
 REST controller operations that invoke JDBC, blocking HTTP, or other blocking application workflows must be offloaded with `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking executor boundary. Streaming/reactive controller methods must not be moved to blocking execution mechanically. Client/server filters must remain non-blocking unless they explicitly offload blocking work. Expected API/domain failures should be translated through Micronaut HTTP exception handlers rather than repeated controller-local error mapping.
 
 ### R24 — Kubernetes deployment
+
+Feature: `DEPLOYMENT.KUBERNETES`.
 
 The complete application must be runnable in a local Kubernetes environment.
 
@@ -432,6 +521,8 @@ The exact local Kubernetes distribution is not part of the product contract, but
 
 ### R25 — independent backend and frontend delivery boundaries
 
+Feature: `DELIVERY.FRONTEND_BACKEND_BOUNDARY`, `CONTRACTS.HTTP`.
+
 Backend and frontend are independent application deliverables and should be maintained in separate repositories.
 
 The backend repository may contain multiple backend services in one multi-module build. The project should not create one repository per service unless an actual lifecycle need emerges.
@@ -442,6 +533,8 @@ OpenAPI should be used for conventional HTTP APIs where practical. Event-stream 
 
 ### R26 — horizontal processing scalability
 
+Feature: `SCALABILITY.KAFKA_CONSUMERS`.
+
 Kafka-backed worker stages must support multiple consumer instances where partitioning permits parallelism.
 
 The design must make it possible to demonstrate that increasing worker replicas can reduce processing backlog without changing functional semantics.
@@ -449,6 +542,8 @@ The design must make it possible to demonstrate that increasing worker replicas 
 A later increment may add Kafka-lag-driven autoscaling through KEDA or equivalent Kubernetes mechanisms.
 
 ### R27 — explicit data provenance
+
+Feature: `DATA.PROVENANCE`.
 
 Every collected result must retain enough provenance to explain where it came from.
 
@@ -463,6 +558,8 @@ Analysis must not erase or replace original-source provenance.
 
 ### R28 — bounded event-observation persistence
 
+Feature: `DIAGNOSTICS.EVENT_OBSERVATION`.
+
 If application events are persisted to support the event explorer, that storage is diagnostic materialization rather than the authoritative Kafka log.
 
 Retention must be bounded by count, age, or another explicit policy so the diagnostic feature does not grow without limit.
@@ -470,6 +567,8 @@ Retention must be bounded by count, age, or another explicit policy so the diagn
 The event explorer must tolerate older diagnostic records being removed.
 
 ### R29 — deterministic local testability
+
+Feature: `TESTING.DETERMINISTIC_LOCAL`.
 
 Core configuration, scheduling decisions, normalization, deduplication, analysis, event-contract handling, and persistence behavior must be testable deterministically without relying on live Internet services.
 
@@ -479,6 +578,8 @@ Kafka and PostgreSQL integration behavior should be covered using disposable tes
 
 ### R30 — secrets and external-service safety
 
+Feature: `SECURITY.EXTERNAL_SOURCE_ACCESS`.
+
 Credentials, tokens, and other secrets required by external sources or optional analyzers must not be stored in source control.
 
 The configuration model must distinguish ordinary user-editable source configuration from sensitive secret material.
@@ -486,6 +587,8 @@ The configuration model must distinguish ordinary user-editable source configura
 Collection must use explicit timeouts and bounded concurrency. The system must not intentionally bypass external access controls, authentication restrictions, robots policies, rate limits, or terms that prohibit automated access.
 
 ### R31 — authenticated identities and additive role-based authorization
+
+Feature: `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION`.
 
 The backend must authenticate access to protected application APIs and authorize operations from explicit roles carried by the authenticated principal.
 
@@ -505,6 +608,8 @@ JWT validation must cover signature, expiry, issuer/audience expectations, and t
 Backend authorization is the security boundary. Hiding routes or navigation in the frontend is not sufficient protection.
 
 ### R32 — role-specific browser experience
+
+Feature: `PRESENTATION.VIEWER_RESULTS`, `SECURITY.AUTHORIZATION`.
 
 The product must distinguish the expert/administrative application experience from the normal result-consumption experience.
 
@@ -706,7 +811,7 @@ Performance is not defined by a production-scale numerical SLA in the initial pr
 
 The umbrella implementation should proceed through bounded sub-specifications rather than attempting the entire target in one increment.
 
-Recommended sequence:
+Recommended sequence. Accepted items remain listed because they show how the umbrella is being delivered; the next planned implementation slice is step 10.
 
 1. Define backend module boundaries, the Protocol Buffers event envelope, core domain contracts, and PostgreSQL schema strategy.
 2. Implement the first vertical slice: one configured source -> collection -> Kafka -> normalization/deduplication -> analysis -> PostgreSQL.
@@ -716,8 +821,8 @@ Recommended sequence:
 6. Add correlated processing-flow visualization for collection runs and individual items.
 7. Add the first generic configuration-driven source adapter and source-test workflow.
 8. Add explicit bounded retry, terminal failure/DLQ handling, and complete idempotent-consumer behavior.
-9. Add the database/event consistency mechanism, preferably transactional outbox.
-10. Add OpenTelemetry application instrumentation and health/readiness behavior.
+9. Add the database/event consistency mechanism, preferably transactional outbox. **Accepted:** `ANALYSIS.OUTBOX`.
+10. Add OpenTelemetry application instrumentation and health/readiness behavior. **Next:** `OBSERVABILITY.APPLICATION`.
 11. Add stateless JWT authentication, persisted user/role management, and backend-enforced RBAC for `VIEWER`, `ADMIN`, `BOT`, and baseline `USER` identities.
 12. Extend the companion frontend specification with a consumer-facing `VIEWER` result experience and integrate it with the accepted authentication/RBAC contract.
 13. Run the complete application in local Kubernetes and add the Prometheus/Loki/Tempo/Grafana observability stack.

@@ -10,13 +10,22 @@ spec_status: active
 
 ## Status
 
-Active supporting technical sub-specification — the initial repository structure is established and these requirements remain boundary guardrails while later vertical slices exercise them.
+Active supporting architecture specification.
 
-Accepted current architecture is documented in `docs/ARCHITECTURE.md`, root/module `AGENTS.md`, and module `contract.md` files. This sub-spec remains active only for still-relevant acceptance guardrails; do not add current implementation inventories here or use it instead of the owning current-state documents.
+The initial modular-monolith structure is accepted. This document remains active only for unresolved boundary and extraction guardrails that later stages must preserve. Accepted current architecture belongs in `docs/ARCHITECTURE.md`, root/module `AGENTS.md`, and module `contract.md` files.
 
-The backend starts as a modular monolith. There is one deployable backend application, while the codebase is split into independently owned functional Gradle modules.
+Do not maintain a second implementation inventory here.
 
-The repository structure is intentionally simpler than strict Hexagonal Architecture. It preserves the most important property of ports-and-adapters design — explicit boundaries around replaceable dependencies and module contracts — without requiring every use case to be wrapped in a fixed set of layers or interfaces.
+## Feature scope
+
+- `PLATFORM.MODULAR_MONOLITH` — functional-module ownership and dependency direction.
+- `CONTRACTS.KAFKA_PROTOBUF` — asynchronous integration-contract boundary.
+- `CONTRACTS.HTTP` — browser/test-client HTTP contract boundary.
+- `RUNTIME.CONCURRENCY` — explicit blocking versus streaming execution model.
+- `TESTING.DETERMINISTIC_LOCAL` — Java/Testcontainers integration strategy.
+- `DELIVERY.FRONTEND_BACKEND_BOUNDARY` — independent frontend/backend delivery.
+
+Feature identifiers are defined in [`../../../FEATURES.md`](../../../FEATURES.md).
 
 ## Goal
 
@@ -36,11 +45,9 @@ Create a backend structure that:
 
 ## Current state
 
-The backend repository root is `signalharvester/` and the Gradle root project name is `signalharvester`.
+The repository already has the modular Gradle layout, Micronaut composition root, explicit module `api` packages, module-owned persistence, contract modules, ArchUnit boundary checks, and dedicated integration-test source sets described by this specification.
 
-The repository now contains the runnable Micronaut composition root, PostgreSQL-backed configuration persistence/REST, collection HTTP and Kafka adapters, collection-run orchestration/history, and the first analysis Kafka/persistence path. Cross-module production dependencies are guarded by ArchUnit rules that permit dependencies only on a providing module's `api..` package, reject functional-module cycles, keep published APIs free of implementation/framework types, prevent direct HTTP-to-persistence coupling, and forbid functional modules from depending on the app composition root. Scheduling/monitoring profiles, source-specific parsing, results/event-observation implementations, Kubernetes deployment, and production observability remain pending. Local PostgreSQL/Redpanda Docker Compose is implemented with explicit environment overrides, and the repository provides a single full verification entry point through `run_checks.sh`, including aggregate coverage, static-analysis, dependency-health, integration, and archive-reproducibility checks.
-
-Java 21 is the initial toolchain target. Micronaut is the backend framework. Generic external-source access uses Micronaut's managed low-level HTTP client for configuration-driven absolute URLs, behind synchronous module-facing APIs executed on Micronaut's blocking executor, which uses Virtual Threads on the Java 21 baseline. Streaming boundaries remain reactive where appropriate.
+Later capabilities must preserve those boundaries. Detailed implementation status belongs in `docs/IMPLEMENTATION.md`; this supporting spec only defines architectural constraints that still matter for future work.
 
 ## Repository structure
 
@@ -187,6 +194,19 @@ FooServiceImpl
 ```
 
 A concrete application class is preferred when there is no meaningful alternative implementation or external boundary.
+
+## Requirement map
+
+| Requirement | Feature ID | Purpose |
+|---|---|---|
+| R1-R7 | `PLATFORM.MODULAR_MONOLITH` | Gradle/module ownership and composition-root boundaries |
+| R7a | `RUNTIME.CONCURRENCY` | Netty blocking/streaming execution rules |
+| R8 | `PLATFORM.MODULAR_MONOLITH` | Shared-kernel admission boundary |
+| R9 | `CONTRACTS.KAFKA_PROTOBUF` | Kafka integration-contract ownership |
+| R10 | `CONTRACTS.HTTP` | REST/SSE external contract ownership |
+| R11-R14 | `PLATFORM.MODULAR_MONOLITH` | Persistence ownership and architecture-testable dependency direction |
+| R15-R17 | `TESTING.DETERMINISTIC_LOCAL` | Java/Testcontainers integration strategy |
+| R18 | `PLATFORM.MODULAR_MONOLITH` | Runtime-need-driven service extraction |
 
 ## Requirements
 
