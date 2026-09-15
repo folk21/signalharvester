@@ -21,5 +21,6 @@ When working on another module as a dependency, read its `contract.md` before it
 | `analysis` | [`README.md`](analysis/README.md) | [`contract.md`](analysis/contract.md) |
 | `results` | [`README.md`](results/README.md) | [`contract.md`](results/contract.md) |
 | `event-observation` | [`README.md`](event-observation/README.md) | [`contract.md`](event-observation/contract.md) |
+| `security` | [`README.md`](security/README.md) | [`contract.md`](security/contract.md) |
 
 Read [`AGENTS.md`](AGENTS.md) before changing any functional module.

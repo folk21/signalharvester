@@ -7,6 +7,7 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-15 — Added persisted human/system identities with additive roles, stateless signed-JWT authentication, HttpOnly browser cookies, CSRF/CORS protection, ADMIN user management, and backend-enforced Results/admin RBAC.
 - 2026-09-15 — Added application health/readiness and Prometheus endpoints, OpenTelemetry HTTP/Kafka/JDBC tracing, trace-correlated logs, low-cardinality Collection/Analysis metrics, and trace continuity across Collection fan-out and the Analysis outbox.
 - 2026-09-15 — Added a stable uppercase feature-ID catalog, clarified feature/requirement/specification lifecycles, improved active-spec navigation/readability, and archived the verified Analysis transactional-outbox slice.
 - 2026-09-15 — Added an Analysis-owned transactional outbox with atomic deduplication/event staging, lease-based multi-replica Kafka dispatch, stable replay identity, and publication retry metadata.

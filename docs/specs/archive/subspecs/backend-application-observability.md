@@ -3,14 +3,14 @@ type: Specification
 title: Backend application observability
 description: Add health probes, Prometheus metrics, OpenTelemetry tracing, log correlation, and trace continuity across custom asynchronous boundaries.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend application observability
 
 ## Status
 
-Implementation complete. Developer verification pending.
+Accepted after developer verification.
 
 ## Feature scope
 

@@ -19,6 +19,13 @@ tags:
   description: Bounded technical event history and live Event Explorer delivery.
 - name: Processing Flows
   description: Reconstructed collection-run and item processing graphs for the Event Explorer.
+- name: Authentication
+  description: Stateless JWT browser authentication and current-principal inspection.
+- name: User Administration
+  description: ADMIN-only persistent identity and role administration.
+security:
+- cookieAuth: []
+- bearerAuth: []
 paths:
   /api/v1/sources:
     get:
@@ -653,7 +660,162 @@ paths:
           description: Invalid result identity
         '404':
           description: Result not found
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Authentication
+      operationId: login
+      summary: Authenticate with username and password
+      description: On success the backend sets an HttpOnly JWT cookie and a readable signed CSRF cookie.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication succeeded and browser credentials were set
+        '401':
+          description: Invalid credentials or disabled account
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Authentication
+      operationId: logout
+      summary: Clear browser authentication credentials
+      responses:
+        '200':
+          description: Browser authentication cookie cleared
+        '401':
+          description: Authentication required
+        '403':
+          description: CSRF validation failed
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Authentication
+      operationId: getCurrentPrincipal
+      summary: Get the current authenticated principal
+      responses:
+        '200':
+          description: Current principal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentPrincipal'
+        '401':
+          description: Authentication required
+  /api/v1/admin/users:
+    get:
+      tags:
+      - User Administration
+      operationId: listUsers
+      summary: List persisted application identities
+      responses:
+        '200':
+          description: Persisted identities without credential material
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserAccount'
+        '401':
+          description: Authentication required
+        '403':
+          description: ADMIN role required
+    post:
+      tags:
+      - User Administration
+      operationId: createUser
+      summary: Create an application identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateRequest'
+      responses:
+        '201':
+          description: Identity created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccount'
+        '400':
+          description: Invalid identity configuration
+        '401':
+          description: Authentication required
+        '403':
+          description: ADMIN role required or CSRF validation failed
+        '409':
+          description: Username already exists
+  /api/v1/admin/users/{userId}:
+    parameters:
+    - name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      tags:
+      - User Administration
+      operationId: getUser
+      summary: Get one persisted application identity
+      responses:
+        '200':
+          description: Persisted identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccount'
+        '401':
+          description: Authentication required
+        '403':
+          description: ADMIN role required
+        '404':
+          description: Identity not found
+    put:
+      tags:
+      - User Administration
+      operationId: updateUser
+      summary: Replace identity enabled state and role assignments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+      responses:
+        '200':
+          description: Identity updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAccount'
+        '400':
+          description: Invalid identity configuration
+        '401':
+          description: Authentication required
+        '403':
+          description: ADMIN role required or CSRF validation failed
+        '404':
+          description: Identity not found
 components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: SIGNALHARVESTER_AUTH
+      description: HttpOnly JWT cookie used by browser REST and native EventSource requests.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT bearer transport for approved non-browser clients.
   parameters:
     SourceId:
       name: sourceId
@@ -664,6 +826,96 @@ components:
         type: string
         format: uuid
   schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+    UserRole:
+      type: string
+      enum: [USER, VIEWER, ADMIN, BOT]
+    IdentityType:
+      type: string
+      enum: [HUMAN, BOT]
+    CurrentPrincipal:
+      type: object
+      required: [id, username, identityType, roles]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        identityType:
+          $ref: '#/components/schemas/IdentityType'
+        roles:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/UserRole'
+    UserAccount:
+      type: object
+      required: [id, username, identityType, enabled, roles, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        identityType:
+          $ref: '#/components/schemas/IdentityType'
+        enabled:
+          type: boolean
+        roles:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/UserRole'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UserCreateRequest:
+      type: object
+      required: [username, password, identityType, enabled]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 200
+        password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          writeOnly: true
+        identityType:
+          $ref: '#/components/schemas/IdentityType'
+        enabled:
+          type: boolean
+        roles:
+          type: array
+          uniqueItems: true
+          default: []
+          items:
+            $ref: '#/components/schemas/UserRole'
+    UserUpdateRequest:
+      type: object
+      required: [enabled, roles]
+      properties:
+        enabled:
+          type: boolean
+        roles:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/UserRole'
     SourceType:
       type: string
       enum:

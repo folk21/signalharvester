@@ -4,15 +4,15 @@ title: SignalHarvester backend authentication and authorization
 description: Stateless JWT authentication, persisted identities with additive roles, backend-enforced RBAC, and browser/SSE credential transport.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: active
+spec_status: verification-pending
 ---
 # SignalHarvester backend authentication and authorization
 
 ## Status
 
-Active supporting specification for the later security implementation stage.
+Implementation complete. Developer verification pending.
 
-It is not the current implementation focus. The next planned backend implementation slice is `OBSERVABILITY.APPLICATION`; authentication/authorization follows it before production-style Kubernetes/system acceptance.
+This is the current backend implementation focus for `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`. The accepted `OBSERVABILITY.APPLICATION` stage precedes it; production-style Kubernetes/infrastructure observability follows after acceptance.
 
 ## Feature scope
 
@@ -43,14 +43,19 @@ Detailed `VIEWER` UI behavior remains owned by `signalharvester-web`. When front
 
 ## Current state
 
-The backend currently exposes configuration, collection operations, Results, Event Observation, and Processing Flow endpoints without authentication. The companion frontend is therefore still a trusted-environment application.
+The implementation now provides:
 
-Missing security boundaries are explicit:
+- a dedicated `modules/security` functional module with security-owned PostgreSQL identity/role persistence;
+- `HUMAN` and `BOT` identity types with additive `USER`, `VIEWER`, `ADMIN`, and `BOT` roles;
+- salted PBKDF2-HMAC-SHA256 local password hashes with an externalized work factor;
+- blocking PostgreSQL username/password authentication through Micronaut Security;
+- short-lived signed JWTs with UUID `sub`, explicit role claims, issuer/audience validation, and SignalHarvester-specific subject/role validation;
+- HttpOnly JWT cookie transport for browser REST/native SSE plus bearer-token validation for approved non-browser clients;
+- signed double-submit CSRF protection and explicit credentialed CORS configuration;
+- ADMIN-only identity administration and deployment-provided first-ADMIN bootstrap;
+- backend-enforced role policy for existing Results/admin/diagnostic endpoints.
 
-- no persisted user account model;
-- no application-owned JWT issuer/validator;
-- no backend RBAC policy;
-- no authentication boundary for REST or SSE.
+The default local environment intentionally remains the previous trusted-environment mode until `signalharvester-web` is migrated. Protected HTTP boundaries are activated with the Micronaut `security` environment. No production signing, CSRF, or administrator credential has a repository default.
 
 ## Requirement map
 
@@ -149,9 +154,9 @@ The implementation stage must maintain an explicit endpoint/role matrix in this 
 
 Feature: `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`.
 
-Disabling an account must prevent future authentication. The implementation must define how already issued short-lived JWTs behave after account disablement or role removal.
+Disabling an account must prevent future authentication. Already issued short-lived JWTs remain valid until expiry after account disablement or role removal; changes apply to newly issued credentials.
 
-The initial design should prefer short access-token lifetime and simple stateless validation over a persistent revocation/session store. If immediate revocation is required, that requirement must be added explicitly rather than introducing a hidden session table.
+The implementation uses short access-token lifetime and stateless validation rather than a persistent revocation/session store. If immediate revocation is required later, that requirement must be added explicitly rather than introducing a hidden session table.
 
 ### A7 — authentication API surface
 
@@ -191,6 +196,22 @@ The backend must authorize `VIEWER` access by API capability, not by knowledge o
 
 The future frontend `VIEWER` screen must hide internal operational detail by presentation and authorization boundary, but this backend slice does not define its layout or UX.
 
+## Endpoint/role matrix
+
+| Boundary | Required access |
+|---|---|
+| `POST /api/v1/auth/login` | anonymous |
+| `POST /api/v1/auth/logout` | authenticated; browser cookie requests use the CSRF policy |
+| `GET /api/v1/auth/me` | authenticated |
+| `GET /api/v1/results` | `VIEWER` |
+| `GET /api/v1/results/{normalizedItemId}` | `VIEWER` |
+| `GET /api/v1/results/stream` | `VIEWER` |
+| `/api/v1/admin/users/**` | `ADMIN` |
+| all other current `/api/v1/**` configuration/admin/diagnostic boundaries | `ADMIN` |
+| `/health`, `/health/**`, `/prometheus` | anonymous operational access in this local stage |
+
+`ADMIN` does not imply `VIEWER`. A `BOT`-only principal may authenticate and inspect `/api/v1/auth/me`, but no machine-oriented business endpoint is granted to `BOT` by this initial slice.
+
 ## Scenarios
 
 ### S1 — human viewer login
@@ -205,7 +226,7 @@ An account explicitly assigned `USER`, `VIEWER`, and `ADMIN` can use both the co
 
 ### S3 — bot principal
 
-A system account with `BOT` but no `USER` can authenticate through the machine-oriented contract approved for it. It does not automatically gain viewer/admin browser capabilities.
+A system account with `BOT` but no `USER` can authenticate and inspect its own principal contract. The initial endpoint matrix grants no machine-oriented business capability to `BOT`; such access must be added explicitly for a concrete future use case. It does not automatically gain viewer/admin browser capabilities.
 
 ### S4 — SSE credential continuity
 
@@ -237,7 +258,7 @@ This slice does not require:
 ## Design constraints
 
 - Authentication/authorization is a backend security boundary owned by an explicit functional capability; it must not be scattered as ad-hoc controller conditionals.
-- The final module placement must preserve the repository's functional-module and dependency-direction rules. Introducing a new functional module or new dependency requires the approvals/rationale required by `AGENTS.md` when implementation begins.
+- Identity/password/authentication behavior is owned by the dedicated `modules/security` functional module; the cross-module HTTP role matrix remains composition-root configuration because it protects endpoints owned by several modules.
 - JWT claims must remain small and explicit. Do not embed large user profiles or mutable application data.
 - Do not expose password hashes, complete JWTs, or signing material through logs, REST responses, SSE payloads, Event Observation, or Processing Flow.
 - Existing Results/Event SSE cursor and reconnect semantics must remain independent from authentication state.
@@ -245,18 +266,11 @@ This slice does not require:
 
 ## Compatibility / migration
 
-Existing deployments currently behave as trusted-environment installations with unauthenticated APIs. Enabling this slice changes the HTTP security boundary and therefore requires an explicit migration/development profile rather than silently locking out existing local workflows.
+Existing deployments continue to use trusted-environment unauthenticated behavior unless the `security` Micronaut environment is activated. This compatibility mode is temporary and must not be treated as internet-safe.
 
-The implementation must define:
+The protected profile uses the `security` PostgreSQL schema, deployment-supplied JWT/CSRF secrets, optional deployment-supplied first-ADMIN credentials, and the endpoint/role matrix above. The companion frontend must be migrated to authenticated API/SSE access before security becomes the normal shared-deployment mode.
 
-- schema migrations for users and role assignments;
-- first-admin bootstrap behavior;
-- JWT signing/verification configuration;
-- local-development authentication defaults;
-- the point at which unauthenticated compatibility is removed or restricted to an explicitly unsafe development profile;
-- the corresponding frontend migration to authenticated API/SSE access.
-
-No migration may add committed default passwords or signing secrets.
+No migration or profile contains a committed default password or signing secret.
 
 ## Validation
 

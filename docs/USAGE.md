@@ -43,7 +43,57 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies the configuration, analysis, collection, and Results migrations at startup. The backend exposes source CRUD and diagnostic source testing under `/api/v1/sources`, monitoring-profile CRUD under `/api/v1/monitoring-profiles`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
+Flyway applies the configuration, analysis, collection, Results, Event Observation, and Security migrations at startup. The backend exposes source CRUD and diagnostic source testing under `/api/v1/sources`, monitoring-profile CRUD under `/api/v1/monitoring-profiles`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
+
+### Run with authentication and RBAC
+
+The default local profile remains the existing trusted-environment mode while the frontend authentication work is pending. Do not expose that mode publicly. To exercise the protected backend boundary, activate the `security` environment and provide deployment-owned secrets:
+
+```bash
+MICRONAUT_ENVIRONMENTS=security \
+SIGNALHARVESTER_JWT_SECRET='replace-with-a-long-random-jwt-secret' \
+SIGNALHARVESTER_CSRF_SECRET='replace-with-an-independent-long-random-csrf-secret' \
+SIGNALHARVESTER_BOOTSTRAP_ADMIN_USERNAME='admin' \
+SIGNALHARVESTER_BOOTSTRAP_ADMIN_PASSWORD='replace-with-a-strong-password' \
+./gradlew :app:run --no-watch-fs
+```
+
+Bootstrap credentials are used only when no persisted `ADMIN` exists. The created human account receives explicit `USER`, `VIEWER`, and `ADMIN` roles. There is no repository default administrator password and no login-session table.
+
+Login and keep the browser-style JWT/CSRF cookies in a temporary cookie jar:
+
+```bash
+mkdir -p build/tmp
+curl -i -c build/tmp/auth.cookies \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"replace-with-a-strong-password"}' \
+  http://localhost:8080/api/v1/auth/login
+```
+
+Read the authenticated principal:
+
+```bash
+curl -s -b build/tmp/auth.cookies http://localhost:8080/api/v1/auth/me
+```
+
+For a cookie-authenticated mutation, copy the signed CSRF cookie into the configured header:
+
+```bash
+csrf_token=$(awk '$6 == "XSRF-TOKEN" { print $7 }' build/tmp/auth.cookies)
+curl -i -b build/tmp/auth.cookies \
+  -H "X-CSRF-TOKEN: $csrf_token" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"viewer","password":"replace-with-a-strong-password","identityType":"HUMAN","enabled":true,"roles":["VIEWER"]}' \
+  http://localhost:8080/api/v1/admin/users
+```
+
+A human `VIEWER` also has baseline `USER`. `ADMIN` does not imply `VIEWER`; assign both when an administrator must use the consumer Results surface. Native SSE uses the same HttpOnly cookie and does not put JWT credentials in the URL:
+
+```bash
+curl -N -b build/tmp/auth.cookies http://localhost:8080/api/v1/results/stream
+```
+
+`/health`, `/health/**`, and `/prometheus` remain anonymously reachable in this local security slice. See [`CONFIGURATION.md`](CONFIGURATION.md) for cookie, token lifetime, CORS, and bootstrap settings.
 
 Example source creation:
 

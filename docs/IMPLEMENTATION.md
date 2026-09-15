@@ -129,11 +129,19 @@ Generated Protobuf Java classes are build output and remain transport types at K
 
 ## Persistence and Flyway
 
-Configuration, analysis, collection, results, and event observation currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
+Configuration, analysis, collection, results, event observation, and security currently share one physical datasource and one Flyway schema history while retaining module-owned PostgreSQL schemas/tables. Their migration locations are all configured in `app/src/main/resources/application.properties`.
 
-Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, `V6` configuration profiles, `V7` collection scheduling, `V8` Results live cursors, `V9` event-observation history, `V10` Analysis event outbox, and `V11` Analysis outbox trace context) unless the Flyway topology is deliberately changed later.
+Because the Flyway history is shared, migration versions are globally coordinated across module locations (`V1` configuration, `V2` analysis, `V3` collection, `V4` results, `V5` collection extraction status expansion, `V6` configuration profiles, `V7` collection scheduling, `V8` Results live cursors, `V9` event-observation history, `V10` Analysis event outbox, `V11` Analysis outbox trace context, and `V12` security identities/roles) unless the Flyway topology is deliberately changed later.
 
 Direct cross-module table access remains forbidden.
+
+## Authentication and authorization
+
+`modules/security` implements the verification-pending backend security slice. It persists identities and explicit roles in the `security` PostgreSQL schema, hashes local passwords with salted PBKDF2-HMAC-SHA256, authenticates through a blocking Micronaut Security provider, and exposes current-principal plus ADMIN-only user-management HTTP APIs. `HUMAN` accounts always include `USER`; `BOT` accounts always include `BOT`; `VIEWER` and `ADMIN` remain independent additive roles.
+
+The runnable application keeps security disabled in the default trusted local environment. Activating the `security` Micronaut environment enables short-lived signed JWT authentication, HttpOnly browser cookies, bearer-token validation, signed double-submit CSRF, explicit credentialed CORS configuration, and the cross-module endpoint/role matrix. Results REST/SSE require `VIEWER`; existing configuration, operations, and diagnostics require `ADMIN`. Health/Prometheus remain anonymously reachable in this local deployment slice. Authentication outcomes, administrative identity changes, and 401/403 API rejections are logged without credential or token contents.
+
+No login/session table exists. Disabling an account blocks future credential authentication, while already-issued JWTs remain valid until their short expiry. The first administrator can be created from deployment-provided bootstrap credentials only when no ADMIN exists; repository-known default administrator credentials are intentionally absent.
 
 ## Application observability
 

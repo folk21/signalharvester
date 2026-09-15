@@ -178,6 +178,17 @@ These tooling tests use deterministic fakes/loopback HTTP only. They do not requ
 
 
 
+## Authentication and authorization
+
+Focused validation for `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`:
+
+```bash
+./gradlew :modules:security:test :modules:security:integrationTest --no-watch-fs --no-parallel
+./gradlew :testing:integration-tests:integrationTest --tests '*SecurityAuthorizationIntegrationTest' --no-watch-fs --no-parallel
+```
+
+Security unit tests protect password hashing and SignalHarvester-specific JWT subject/role claims. The PostgreSQL/server integration suite covers first-ADMIN bootstrap, HttpOnly JWT plus readable CSRF cookies, JWT signature/expiry/issuer/audience validation, explicit USER/VIEWER/ADMIN/BOT roles, CSRF mutation rejection, credentialed CORS, disablement semantics, logout, and ADMIN user management without exposing password hashes. The cross-module application test proves `VIEWER` access to Results REST/SSE, denies VIEWER diagnostic/admin access, and proves `ADMIN` without `VIEWER` does not inherit Results access. Routine acceptance still requires `./run_checks.sh`.
+
 ## Application observability
 
 Focused validation for `OBSERVABILITY.APPLICATION`:
