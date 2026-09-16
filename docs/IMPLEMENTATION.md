@@ -137,11 +137,17 @@ Direct cross-module table access remains forbidden.
 
 ## Authentication and authorization
 
-`modules/security` implements the verification-pending backend security slice. It persists identities and explicit roles in the `security` PostgreSQL schema, hashes local passwords with salted PBKDF2-HMAC-SHA256, authenticates through a blocking Micronaut Security provider, and exposes current-principal plus ADMIN-only user-management HTTP APIs. `HUMAN` accounts always include `USER`; `BOT` accounts always include `BOT`; `VIEWER` and `ADMIN` remain independent additive roles.
+`modules/security` implements the accepted backend security slice. It persists identities and explicit roles in the `security` PostgreSQL schema, hashes local passwords with salted PBKDF2-HMAC-SHA256, authenticates through a blocking Micronaut Security provider, and exposes current-principal plus ADMIN-only user-management HTTP APIs. `HUMAN` accounts always include `USER`; `BOT` accounts always include `BOT`; `VIEWER` and `ADMIN` remain independent additive roles.
 
 The runnable application keeps security disabled in the default trusted local environment. Activating the `security` Micronaut environment enables short-lived signed JWT authentication, HttpOnly browser cookies, bearer-token validation, signed double-submit CSRF, explicit credentialed CORS configuration, and the cross-module endpoint/role matrix. Results REST/SSE require `VIEWER`; existing configuration, operations, and diagnostics require `ADMIN`. Health/Prometheus remain anonymously reachable in this local deployment slice. Authentication outcomes, administrative identity changes, and 401/403 API rejections are logged without credential or token contents.
 
 No login/session table exists. Disabling an account blocks future credential authentication, while already-issued JWTs remain valid until their short expiry. Administrative updates cannot disable or demote the last enabled `ADMIN`; the persistence boundary serializes these updates before evaluating the invariant. The first administrator can be created from deployment-provided bootstrap credentials only when no enabled ADMIN exists; repository-known default administrator credentials are intentionally absent.
+
+## External-source access security
+
+Collection contains a verification-pending runtime destination policy for configurable HTTP sources. The Micronaut Netty client uses the named `signalharvester-external-source-access` `AddressResolverGroup`, which resolves hostnames off the Netty event loop on Java 21 Virtual Threads, authorizes the complete DNS answer set, and returns only an authorized socket address to the connection path. Because redirects create subsequent client destinations through the same resolver, cross-host redirects are revalidated before connection. Already-resolved literal IP destinations are forced through the same policy path.
+
+The default trusted-local mode permits loopback/private destinations for deterministic development fixtures while still rejecting unspecified and multicast destinations. The `security` environment switches to `SECURE`, which blocks loopback, link-local, IPv4 private/site-local, and IPv6 unique-local destinations unless an operator explicitly authorizes the required network with `SIGNALHARVESTER_COLLECTION_OUTBOUND_ALLOWED_CIDRS`. Mixed DNS answers are rejected as a set rather than falling back to an unchecked address. Policy rejection maps to the existing source-fetch failure boundary, so Source Test reports `FETCH_FAILED` and Collection Runs isolate the failed source without Kafka publication or cancellation of unrelated sources.
 
 ## Application observability
 
@@ -174,7 +180,7 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 
 - cron/calendar scheduling and missed-interval catch-up are not implemented; interval scheduling is implemented;
 - no cursor/full-text result search beyond bounded REST filters;
-- no outbound SSRF/network-destination policy yet; source management must remain trusted until [`backend-external-source-access-security.md`](specs/active/subspecs/backend-external-source-access-security.md) is implemented and accepted;
+- external-source destination hardening is implemented and verification-pending; shared/production-style exposure should wait until [`backend-external-source-access-security.md`](specs/active/subspecs/backend-external-source-access-security.md) is accepted;
 - processing-flow reconstruction cannot prove Results persistence until an observation signal exists for that stage;
 - no Kubernetes deployment or production observability stack;
 - no cross-resource exactly-once guarantee between PostgreSQL and Kafka;

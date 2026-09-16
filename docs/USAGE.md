@@ -130,7 +130,7 @@ Example REST/JSON settings for an API that returns `{ "jobs": [...] }`:
 }
 ```
 
-Source URLs stored through this API are configuration data only. Do not expose source management to untrusted users as an unrestricted collection authorization mechanism until an outbound destination/SSRF policy is implemented.
+Source URLs stored through this API are configuration data only. Runtime collection applies the verification-pending outbound destination policy described in [`CONFIGURATION.md`](CONFIGURATION.md). The default trusted-local environment intentionally permits loopback/private fixtures. The `security` environment uses `SECURE` mode and rejects loopback/private/carrier-grade-NAT/link-local destinations unless the operator explicitly allows the required CIDR. Treat shared exposure as pending until that security slice completes developer verification.
 
 ### Bootstrap sources from a manifest
 

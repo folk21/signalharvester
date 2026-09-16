@@ -73,7 +73,7 @@ Other functional modules must not depend on collection `run`, `source`, `sourcet
 - source/item-level failures are best-effort and do not cancel unrelated source work;
 - one collection run id is reused as correlation id for raw-item events from that run;
 - raw-item identity is deterministic for equivalent source content;
-- external I/O has explicit timeout, size, redirect, and concurrency bounds; RSS/Atom and generic extraction have explicit item-count bounds, and RSS/Atom disables DTD/external-entity processing;
+- external I/O has explicit timeout, size, redirect, and concurrency bounds; runtime destination authorization is bound to the Netty connection resolver so secure mode rejects blocked or mixed address sets before connection and revalidates redirect destinations; RSS/Atom and generic extraction have explicit item-count bounds, and RSS/Atom disables DTD/external-entity processing;
 - source testing uses the normal source fetch/extraction ports but never publishes Kafka events or creates collection-run history;
 - REST/HTML sources retain passthrough behavior when their respective `json.*` / `html.*` extraction settings are absent;
 - completed fetch payloads are terminally handled with backpressure, so raw response bodies are retained only within the bounded in-flight concurrency window rather than for the full run;

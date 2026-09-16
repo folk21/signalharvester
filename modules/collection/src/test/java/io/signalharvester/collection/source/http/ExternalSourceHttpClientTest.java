@@ -15,6 +15,8 @@ import io.micronaut.http.client.HttpClient;
 import io.micronaut.http.client.HttpClientRegistry;
 import io.micronaut.http.client.exceptions.HttpClientException;
 import io.micronaut.http.client.exceptions.HttpClientResponseException;
+import io.signalharvester.collection.source.access.OutboundAccessAddressResolverGroup;
+import io.signalharvester.collection.source.access.OutboundAccessDeniedException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +27,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +35,7 @@ import org.junit.jupiter.api.Test;
  * Verifies HTTP transport behavior used by external-source collection, including configured headers, response
  * bounds, redirects, redirect limits, and read timeouts through {@link ExternalSourceHttpClient}.
  *
- * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ * <p>Related specifications: {@code backend-collection-run-orchestration} and feature {@code SECURITY.EXTERNAL_SOURCE_ACCESS}.</p>
  */
 class ExternalSourceHttpClientTest {
 
@@ -200,6 +203,79 @@ class ExternalSourceHttpClientTest {
         }
     }
 
+    /** Reject a blocked literal destination before the HTTP server receives a connection. */
+    @Test
+    void shouldRejectBlockedLiteralBeforeConnection() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/blocked", exchange -> {
+            requests.incrementAndGet();
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+        });
+        server.start();
+
+        try (ApplicationContext context = applicationContext(Map.of(
+                "signalharvester.collection.outbound-access.mode", "SECURE"))) {
+            ExternalSourceHttpClient client = context.getBean(ExternalSourceHttpClient.class);
+
+            RuntimeException failure = assertThrows(
+                    RuntimeException.class,
+                    () -> client.fetch(loopbackUri(server, "/blocked")));
+
+            assertTrue(hasCause(failure, OutboundAccessDeniedException.class));
+            assertEquals(0, requests.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /** Permit an explicitly allowlisted local network in secure mode. */
+    @Test
+    void shouldPermitExplicitlyAllowedLoopbackNetwork() throws Exception {
+        HttpServer server = textServer("allowed");
+        server.start();
+
+        try (ApplicationContext context = applicationContext(Map.of(
+                "signalharvester.collection.outbound-access.mode", "SECURE",
+                "signalharvester.collection.outbound-access.allowed-cidrs", "127.0.0.0/8"))) {
+            ExternalSourceHttpClient client = context.getBean(ExternalSourceHttpClient.class);
+
+            HttpResponse<byte[]> response = client.fetch(loopbackUri(server, "/source"));
+
+            assertEquals(200, response.code());
+            assertArrayEquals("allowed".getBytes(StandardCharsets.UTF_8), response.body());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /** Revalidate a cross-host redirect and reject its blocked target before connection. */
+    @Test
+    void shouldRejectRedirectToBlockedDestination() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/redirect", exchange -> {
+            exchange.getResponseHeaders().add(HttpHeaders.LOCATION, "http://10.0.0.1:1/internal");
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+        });
+        server.start();
+
+        try (ApplicationContext context = applicationContext(Map.of(
+                "signalharvester.collection.outbound-access.mode", "SECURE",
+                "signalharvester.collection.outbound-access.allowed-cidrs", "127.0.0.0/8"))) {
+            ExternalSourceHttpClient client = context.getBean(ExternalSourceHttpClient.class);
+
+            RuntimeException failure = assertThrows(
+                    RuntimeException.class,
+                    () -> client.fetch(loopbackUri(server, "/redirect")));
+
+            assertTrue(hasCause(failure, OutboundAccessDeniedException.class));
+        } finally {
+            server.stop(0);
+        }
+    }
+
     /**
      * Fail when configured read timeout is exceeded.
      */
@@ -288,11 +364,26 @@ class ExternalSourceHttpClientTest {
         return applicationContext(Map.of());
     }
 
+    private static boolean hasCause(Throwable failure, Class<? extends Throwable> type) {
+        Throwable current = failure;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
     private static ApplicationContext applicationContext(Map<String, Object> overrides) {
         HashMap<String, Object> properties = new HashMap<>();
         properties.put("micronaut.http.client.follow-redirects", true);
         properties.put("micronaut.http.client.max-redirects", 5);
         properties.put("micronaut.http.client.allow-block-event-loop", false);
+        properties.put(
+                "micronaut.http.client.address-resolver-group-name",
+                OutboundAccessAddressResolverGroup.RESOLVER_GROUP_NAME);
+        properties.put("signalharvester.collection.outbound-access.mode", "TRUSTED_LOCAL");
         properties.put("signalharvester.collection.max-concurrency", 2);
         properties.put("kafka.enabled", false);
         properties.putAll(overrides);

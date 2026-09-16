@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-authentication-authorization.md
+current_focus: subspecs/backend-external-source-access-security.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -12,7 +12,7 @@ current_focus: subspecs/backend-authentication-authorization.md
 
 Active umbrella specification for the initial SignalHarvester product target.
 
-The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, `ANALYSIS.OUTBOX`, and `OBSERVABILITY.APPLICATION`. The current implementation focus is [`backend-authentication-authorization.md`](subspecs/backend-authentication-authorization.md) for `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`; implementation is complete and developer verification is pending.
+The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, `ANALYSIS.OUTBOX`, `OBSERVABILITY.APPLICATION`, and backend authentication/RBAC. The current implementation focus is [`backend-external-source-access-security.md`](subspecs/backend-external-source-access-security.md) for `SECURITY.EXTERNAL_SOURCE_ACCESS`; implementation is complete and developer verification is pending.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` implementation belongs to the `signalharvester-web` specification tree after this backend security contract is accepted.
 
@@ -86,8 +86,7 @@ Accepted backend capabilities already cover the main functional pipeline:
 
 Major product/platform work still required by this umbrella includes:
 
-- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` (implementation verification pending);
-- `SECURITY.EXTERNAL_SOURCE_ACCESS` production/shared outbound destination hardening;
+- `SECURITY.EXTERNAL_SOURCE_ACCESS` production/shared outbound destination hardening (implementation verification pending);
 - `PRESENTATION.VIEWER_RESULTS` in the companion frontend;
 - `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`;
 - final production-style system resilience acceptance.

@@ -7,6 +7,7 @@ import io.signalharvester.collection.configuration.CollectionClockFactory;
 import io.signalharvester.collection.source.ExternalSourceClient;
 import io.signalharvester.collection.source.FetchedSourceContent;
 import io.signalharvester.collection.source.SourceFetchException;
+import io.signalharvester.collection.source.access.OutboundAccessDeniedException;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -57,9 +58,27 @@ public final class MicronautExternalSourceClient implements ExternalSourceClient
         } catch (HttpClientResponseException failure) {
             throw statusFailure(source, failure.getResponse());
         } catch (HttpClientException failure) {
+            if (containsOutboundAccessDenial(failure)) {
+                throw new SourceFetchException(
+                        source.id(), source.location(), "External source destination blocked by outbound access policy", failure);
+            }
             throw new SourceFetchException(
                     source.id(), source.location(), "External source request failed", failure);
+        } catch (OutboundAccessDeniedException failure) {
+            throw new SourceFetchException(
+                    source.id(), source.location(), "External source destination blocked by outbound access policy", failure);
         }
+    }
+
+    private static boolean containsOutboundAccessDenial(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof OutboundAccessDeniedException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     /**

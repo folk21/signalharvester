@@ -63,5 +63,5 @@ Disabling an account prevents later username/password authentication. Already is
 
 - [`contract.md`](contract.md)
 - [`../AGENTS.md`](../AGENTS.md)
-- [`../../docs/specs/active/subspecs/backend-authentication-authorization.md`](../../docs/specs/active/subspecs/backend-authentication-authorization.md)
+- [`../../docs/specs/archive/subspecs/backend-authentication-authorization.md`](../../docs/specs/archive/subspecs/backend-authentication-authorization.md)
 - [`../../docs/CONFIGURATION.md`](../../docs/CONFIGURATION.md)

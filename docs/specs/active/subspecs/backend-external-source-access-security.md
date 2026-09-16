@@ -3,14 +3,14 @@ type: Specification
 title: Backend external-source access security
 description: Define a production-safe outbound destination policy for configurable HTTP sources, including DNS resolution, redirect validation, and explicit trusted-local overrides.
 document_role: subspec
-spec_status: active
+spec_status: verification-pending
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend external-source access security
 
 ## Status
 
-Active supporting specification. Implementation has not started.
+Implementation complete. Developer verification pending.
 
 ## Feature scope
 
@@ -26,9 +26,9 @@ The policy must preserve deterministic local testing and explicitly configured i
 
 ## Current state
 
-`ConfiguredSource` and the REST/OpenAPI boundary already require absolute HTTP(S) URLs with a host and reject embedded credentials and fragments. Collection uses Micronaut's managed HTTP client with explicit connect/read/request timeouts, response-size limits, redirect limits, connection-pool limits, and bounded Virtual-Thread concurrency.
+Implementation is present and verification-pending. `ConfiguredSource` and the REST/OpenAPI boundary continue to own URL syntax only. Collection now owns runtime destination authorization through a named Netty `AddressResolverGroup` used by the Micronaut HTTP client. DNS lookup is offloaded to a Java 21 Virtual Thread, the complete resolved address set is authorized before Netty receives a socket address, and every new redirect destination passes through the same resolver.
 
-Those controls bound resource usage but do not authorize the destination network. The current client may resolve configured hostnames to loopback/private/link-local addresses and follows redirects without an application-owned destination policy. Source management therefore remains a trusted-environment capability.
+The default trusted-local environment keeps loopback/private fixtures available explicitly. The `security` environment switches the policy to `SECURE`; private, carrier-grade NAT/shared, loopback, link-local, IPv6 unique-local, unspecified, and multicast destinations are then blocked unless the operator explicitly allows an applicable CIDR where override is supported. Existing timeout, response-size, redirect-count, connection-pool, and collection-concurrency bounds remain unchanged.
 
 ## Requirements
 
@@ -160,4 +160,4 @@ Acceptance requires at least:
 4. Revalidate every redirect target while preserving the existing redirect bound.
 5. Map policy rejection through the existing collection fetch-failure boundary.
 6. Add deterministic unit/transport/source-test/run tests.
-7. Update configuration, usage, and deployment documentation after developer verification.
+7. Keep configuration and usage documentation synchronized with verification-pending behavior, then finalize shared deployment documentation after acceptance.

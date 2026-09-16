@@ -179,7 +179,17 @@ HTML extraction is enabled when any `html.*` key is present:
 
 Malformed pointers/selectors, invalid extracted URLs/timestamps, missing required mappings, and candidate sets above the configured bound are explicit extraction failures. Use the source-test API before enabling a new source to validate these settings against a real response.
 
-Persisting a source URL does not authorize collection from that destination. A configurable outbound destination/SSRF policy is still required before source management can be treated as safe for untrusted users.
+Persisting a source URL does not authorize collection from that destination. Collection owns runtime destination authorization. The current implementation is verification-pending.
+
+Outbound-source settings:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `signalharvester.collection.outbound-access.mode` | `TRUSTED_LOCAL` | `TRUSTED_LOCAL` preserves deterministic loopback/private development sources; `SECURE` blocks private, carrier-grade NAT/shared, loopback, link-local, IPv6 unique-local, unspecified, and multicast destination classes; CIDR overrides apply only to intentionally allowed internal ranges. The `security` environment forces `SECURE`. |
+| `signalharvester.collection.outbound-access.allowed-cidrs` | empty | Comma-separated IPv4/IPv6 CIDR ranges that explicitly authorize otherwise blocked internal destinations in `SECURE` mode. |
+| `micronaut.http.client.address-resolver-group-name` | `signalharvester-external-source-access` in the runnable app | Binds DNS authorization to the Netty address resolver used by the actual connection path. |
+
+Environment variables for the runnable backend are `SIGNALHARVESTER_COLLECTION_OUTBOUND_ACCESS_MODE` and `SIGNALHARVESTER_COLLECTION_OUTBOUND_ALLOWED_CIDRS`. Shared/security deployments should leave mode at `SECURE` and add the narrowest CIDR rules required for intentional internal sources. Unspecified/any-local and multicast addresses remain rejected rather than being made general-purpose source targets.
 
 ## Compatibility
 

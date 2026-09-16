@@ -158,6 +158,34 @@ class CollectionRunServiceTest {
         }
     }
 
+    /** Keep a blocked source isolated while unrelated sources continue and publish normally. */
+    @Test
+    void shouldIsolateOutboundAccessPolicyFailureFromOtherSources() {
+        List<ConfiguredSource> sources = List.of(source("one"), source("blocked"), source("three"));
+        ExternalSourceClient client = configured -> {
+            if ("blocked".equals(configured.name())) {
+                throw new SourceFetchException(
+                        configured.id(),
+                        configured.location(),
+                        "External source destination blocked by outbound access policy");
+            }
+            return content(configured);
+        };
+        RecordingPublisher publisher = new RecordingPublisher();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CollectionRunResult result = service(sources, client, publisher, executor).run(request());
+
+            assertEquals(CollectionRunStatus.PARTIALLY_SUCCEEDED, result.status());
+            assertEquals(2, result.publishedCount());
+            assertEquals(1, result.failedCount());
+            assertEquals(CollectionSourceStatus.FETCH_FAILED, result.sources().get(1).status());
+            assertTrue(result.sources().get(1).failureMessage().orElseThrow()
+                    .contains("blocked by outbound access policy"));
+            assertEquals(2, publisher.contexts.size());
+        }
+    }
+
     /**
      * Continue publication after one Kafka failure.
      */

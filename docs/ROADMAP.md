@@ -16,7 +16,7 @@ Accepted P2 reliability work includes:
 - `RELIABILITY.IDEMPOTENCY` protections used by current consumers;
 - `ANALYSIS.OUTBOX` for PostgreSQL/Kafka consistency in Analysis.
 
-`OBSERVABILITY.APPLICATION` is accepted. Authentication/authorization is implemented and verification-pending before production-style Kubernetes/system acceptance.
+`OBSERVABILITY.APPLICATION` and backend authentication/authorization are accepted. `SECURITY.EXTERNAL_SOURCE_ACCESS` is implemented and verification-pending before production-style Kubernetes/system acceptance.
 
 Stable feature identifiers are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -47,15 +47,16 @@ Accepted:
 
 - `RELIABILITY.KAFKA_RETRY` and `RELIABILITY.DEAD_LETTER`;
 - `ANALYSIS.OUTBOX`;
-- `OBSERVABILITY.APPLICATION`.
+- `OBSERVABILITY.APPLICATION`;
+- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`.
 
 Current verification-pending:
 
-- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` — persisted identities, stateless JWT authentication, CSRF/CORS policy, and backend-enforced RBAC.
+- `SECURITY.EXTERNAL_SOURCE_ACCESS` — connection-bound destination authorization is implemented; developer verification is pending.
 
 Next backend stages:
 
-1. implement and accept the active `SECURITY.EXTERNAL_SOURCE_ACCESS` outbound destination policy before shared/production-style exposure.
+1. verify and accept the implemented `SECURITY.EXTERNAL_SOURCE_ACCESS` outbound destination policy before shared/production-style exposure.
 2. `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` — production-style local deployment and telemetry stack.
 3. system resilience acceptance across restart, lag, retry/DLQ, outbox recovery, and authorization boundaries.
 

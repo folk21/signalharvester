@@ -80,6 +80,26 @@ class SourceTestServiceTest {
         assertTrue(result.failureMessage().orElseThrow().contains("429"));
     }
 
+    /** Surface outbound access rejection as a bounded source-test fetch failure. */
+    @Test
+    void shouldReturnOutboundAccessPolicyFailureDiagnostic() {
+        ExternalSourceClient client = configuredSource -> {
+            throw new SourceFetchException(
+                    configuredSource.id(),
+                    configuredSource.location(),
+                    "External source destination blocked by outbound access policy");
+        };
+        SourceTestService service = new SourceTestService(
+                provider(Optional.of(source(true))), client, (configuredSource, content) -> List.of(), configuration(5, 500));
+
+        SourceTestResult result = service.test(SOURCE_ID);
+
+        assertEquals(SourceTestStatus.FETCH_FAILED, result.status());
+        assertTrue(result.httpStatus().isEmpty());
+        assertEquals(0, result.candidateItemCount());
+        assertTrue(result.failureMessage().orElseThrow().contains("blocked by outbound access policy"));
+    }
+
     /** Preserve successful HTTP metadata when extraction configuration fails. */
     @Test
     void shouldReturnExtractionFailureDiagnostic() {

@@ -106,9 +106,10 @@ The first implementation foundation is present:
 - bounded collection-run and item processing-flow reconstruction with explicit observed, derived, and unobserved stage evidence;
 - bounded Kafka consumer retry and versioned dead-letter handling for Analysis, Results, and Event Observation poison/failure paths;
 - application observability through health/readiness endpoints, Prometheus metrics, OpenTelemetry HTTP/Kafka/JDBC tracing, trace-correlated console logs, and preserved trace context across Collection fan-out and the Analysis outbox.
-- verification-pending backend security with persisted application identities, additive USER/VIEWER/ADMIN/BOT roles, stateless JWT authentication, cookie/CSRF browser transport, and backend-enforced RBAC.
+- accepted backend security with persisted application identities, additive USER/VIEWER/ADMIN/BOT roles, stateless JWT authentication, cookie/CSRF browser transport, and backend-enforced RBAC;
+- verification-pending external-source access security with connection-bound DNS authorization, redirect revalidation, secure/shared network blocking, and explicit trusted-local compatibility.
 
-Kubernetes deployment, the production observability stack, and the consumer-facing VIEWER frontend remain planned work. Backend authentication/authorization is implemented and verification-pending; the default local profile remains the explicitly trusted unauthenticated compatibility mode until the frontend is migrated. The Analysis authoritative-state/Kafka consistency gap is addressed by the accepted transactional outbox. Repository-owned Docker Compose provides local PostgreSQL and Kafka infrastructure.
+Kubernetes deployment, the production observability stack, and the consumer-facing VIEWER frontend remain planned work. Backend authentication/authorization is accepted. The default local profile remains the explicitly trusted unauthenticated compatibility mode until the frontend is migrated, while the `security` environment enables the accepted authentication/RBAC model and the verification-pending restrictive outbound-source policy. The Analysis authoritative-state/Kafka consistency gap is addressed by the accepted transactional outbox. Repository-owned Docker Compose provides local PostgreSQL and Kafka infrastructure.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
 

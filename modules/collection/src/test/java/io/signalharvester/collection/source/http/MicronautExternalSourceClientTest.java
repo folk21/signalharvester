@@ -13,6 +13,7 @@ import io.micronaut.http.client.exceptions.HttpClientException;
 import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.signalharvester.collection.source.FetchedSourceContent;
 import io.signalharvester.collection.source.SourceFetchException;
+import io.signalharvester.collection.source.access.OutboundAccessDeniedException;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.api.SourceType;
@@ -28,7 +29,7 @@ import org.junit.jupiter.api.Test;
  * Verifies {@link MicronautExternalSourceClient} adaptation from transport responses and failures into
  * collection-owned fetched-content and source-failure semantics.
  *
- * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ * <p>Related specifications: {@code backend-collection-run-orchestration} and feature {@code SECURITY.EXTERNAL_SOURCE_ACCESS}.</p>
  */
 class MicronautExternalSourceClientTest {
 
@@ -116,6 +117,21 @@ class MicronautExternalSourceClientTest {
         assertFalse(failure.statusCode().isPresent());
         assertTrue(failure.retryAfter().isEmpty());
         assertInstanceOf(HttpClientException.class, failure.getCause());
+    }
+
+    /** Map outbound access rejection into the existing source-fetch failure boundary. */
+    @Test
+    void shouldMapOutboundAccessRejectionToFetchFailure() {
+        ExternalSourceHttpClient httpClient = uri -> {
+            throw new OutboundAccessDeniedException("blocked destination");
+        };
+        MicronautExternalSourceClient client = client(httpClient);
+
+        SourceFetchException failure = assertThrows(SourceFetchException.class, () -> client.fetch(source()));
+
+        assertEquals("External source destination blocked by outbound access policy", failure.getMessage());
+        assertFalse(failure.statusCode().isPresent());
+        assertInstanceOf(OutboundAccessDeniedException.class, failure.getCause());
     }
 
     private static MicronautExternalSourceClient client(ExternalSourceHttpClient httpClient) {

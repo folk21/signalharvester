@@ -4,13 +4,13 @@ title: SignalHarvester backend authentication and authorization
 description: Stateless JWT authentication, persisted identities with additive roles, backend-enforced RBAC, and browser/SSE credential transport.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # SignalHarvester backend authentication and authorization
 
 ## Status
 
-Implementation complete. Developer verification pending.
+Accepted after developer verification on 2026-09-16.
 
 This is the current backend implementation focus for `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`. The accepted `OBSERVABILITY.APPLICATION` stage precedes it; production-style Kubernetes/infrastructure observability follows after acceptance.
 

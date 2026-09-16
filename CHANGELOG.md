@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-16 — Accepted backend authentication/authorization after developer verification passed.
+- 2026-09-16 — Added verification-pending external-source destination authorization with connection-bound DNS validation, redirect revalidation, mixed-answer rejection, secure CIDR allow rules, and trusted-local compatibility.
 - 2026-09-16 — Hardened security administration against last-enabled-ADMIN lockout, expanded JWT/RBAC/CORS verification, isolated processing-flow reconstruction, reduced Event Observation retention writes, and added Analysis outbox post-ACK recovery coverage.
 - 2026-09-16 — Defined the active `SECURITY.EXTERNAL_SOURCE_ACCESS` specification for production-safe destination authorization, redirect revalidation, DNS binding, and explicit trusted-local compatibility before shared Kubernetes exposure.
 - 2026-09-15 — Added persisted human/system identities with additive roles, stateless signed-JWT authentication, HttpOnly browser cookies, CSRF/CORS protection, ADMIN user management, and backend-enforced Results/admin RBAC.

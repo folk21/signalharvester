@@ -17,7 +17,7 @@ Backend consumers read source and monitoring-profile configuration through the n
 
 ## Operational and security notes
 
-Persisting a URL is not outbound authorization. Source management remains trusted until a configurable outbound destination/SSRF policy exists; loopback/private destinations are intentionally not rejected by the source domain because deterministic tests and legitimate internal sources may require them.
+Persisting a URL is not outbound authorization. Configuration intentionally keeps URL syntax separate from live network authorization. Collection owns the verification-pending runtime destination policy; the source domain still does not perform DNS/network checks during CRUD so deterministic configuration behavior and legitimate operator-authorized internal sources remain possible.
 
 ## Read next
 
