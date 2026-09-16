@@ -262,3 +262,13 @@ Live cluster verification is deliberately separate because it requires a pre-exi
 ```
 
 The live script waits for the backend/infrastructure rollouts and topic-provisioning Job, then verifies backend readiness, the Prometheus endpoint, healthy Prometheus scrape targets for the backend/Redpanda/kube-state-metrics, and Grafana health. Log and trace acceptance requires generating normal application traffic and inspecting the provisioned Loki/Tempo data sources. Full umbrella R24 additionally requires a real frontend image from `signalharvester-web`.
+
+## Kubernetes system resilience acceptance
+
+The next opt-in live gate exercises controlled failure/recovery behavior against the same cluster:
+
+```bash
+python3 infra/kubernetes/resilience/run_acceptance.py
+```
+
+It is intentionally separate from `./run_checks.sh` because it restarts containers and StatefulSets, temporarily changes backend Deployment environment variables, injects Kafka traffic, and uses test-only PostgreSQL state manipulation. Deterministic parsing/asset checks for the harness are included in `./infra/kubernetes/run_tests.sh`. The live run covers stateless JWT behavior across a backend restart, slow-source availability, retry/DLQ during PostgreSQL outage, Analysis lag generation/drain, Analysis outbox recovery, multi-replica scheduler lease behavior, Redpanda restart recovery, and Prometheus/Loki/Tempo evidence.

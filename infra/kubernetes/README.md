@@ -77,6 +77,14 @@ Wait for the cluster and run the live verification:
 ./infra/kubernetes/verify-local.sh
 ```
 
+After that baseline passes, run the controlled resilience acceptance:
+
+```bash
+python3 infra/kubernetes/resilience/run_acceptance.py
+```
+
+The resilience harness is opt-in because it intentionally injects failures and restarts. Read [`resilience/README.md`](resilience/README.md) before running it.
+
 ## Access local services
 
 Backend:

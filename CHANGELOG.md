@@ -7,6 +7,7 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-16 — Added an opt-in Kubernetes resilience acceptance harness for backend restart, PostgreSQL retry/DLQ, Kafka lag recovery, Analysis outbox recovery, multi-replica scheduler leases, Redpanda restart recovery, authorization boundaries, and observability evidence.
 - 2026-09-16 — Added a verification-pending Kubernetes backend/infrastructure stack with non-root backend packaging, PostgreSQL/Redpanda, explicit topic provisioning, Prometheus/Loki/Tempo/Grafana observability, Alloy log collection, kube-state-metrics, provisioned dashboards, and deterministic/live deployment verification tooling.
 - 2026-09-16 — Accepted external-source destination authorization after the developer repository gate passed.
 - 2026-09-16 — Accepted backend authentication/authorization after developer verification passed.

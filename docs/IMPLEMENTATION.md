@@ -95,6 +95,8 @@ The repository now contains `app/Dockerfile` plus `infra/kubernetes/` assets for
 
 The same Kustomize target deploys Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana. Prometheus scrapes backend, Redpanda, and Kubernetes workload-state metrics. The backend exports OTLP traces to Tempo; Tempo generates span metrics and remote-writes them to Prometheus. Alloy collects namespace pod logs into Loki. Grafana starts with Prometheus/Loki/Tempo data sources plus a repository-owned operational dashboard. This slice remains verification-pending until developer Kubernetes verification succeeds. The separate frontend repository still owns its image; `infra/kubernetes/frontend/` defines only the expected runtime workload boundary, so full umbrella R24 is not yet accepted.
 
+`infra/kubernetes/resilience/` now provides the next verification-pending acceptance layer over the deployed stack. It deploys an opt-in deterministic RSS fixture, temporarily allows only that Service address through the accepted outbound-source CIDR override, and runs controlled restart/failure scenarios through public REST plus operator-level Kubernetes/Kafka/PostgreSQL fault injection. The harness covers backend container restart with an existing JWT, slow-source availability, PostgreSQL outage with retry exhaustion and Analysis DLQ publication, observable Analysis consumer lag and recovery, outbox recovery across rollout, one scheduled run under two replicas, Redpanda restart recovery, and Loki/Tempo/Prometheus evidence. No production Java endpoint or wire contract is added for the harness.
+
 ## Results module
 
 `modules:results` consumes terminal `ItemAnalyzed` and `ItemRejected` events and materializes them into the module-owned PostgreSQL `results` schema. Generated Protobuf messages are confined to the Kafka adapter and mapped into immutable Results-owned models before application/persistence logic.
@@ -191,6 +193,6 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 - cron/calendar scheduling and missed-interval catch-up are not implemented; interval scheduling is implemented;
 - no cursor/full-text result search beyond bounded REST filters;
 - processing-flow reconstruction cannot prove Results persistence until an observation signal exists for that stage;
-- Kubernetes backend/infrastructure deployment is implemented but still requires developer live-cluster verification; full platform R24 also requires a real frontend image from `signalharvester-web`;
+- Kubernetes backend/infrastructure deployment and the resilience acceptance harness are implemented but still require developer live-cluster verification; full platform R24 also requires a real frontend image from `signalharvester-web`;
 - no cross-resource exactly-once guarantee between PostgreSQL and Kafka;
 - controlled DLQ replay tooling/UI is not implemented; failed records remain operator-managed in versioned dead-letter topics;

@@ -10,7 +10,7 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Implementation complete for the backend-owned deployment boundary. Developer Kubernetes verification is pending. Full umbrella `DEPLOYMENT.KUBERNETES` acceptance additionally requires a real frontend image from the separate `signalharvester-web` repository.
+Implementation complete for the backend-owned deployment boundary. The routine repository gate has passed in the developer environment; live Kubernetes verification is still pending. Full umbrella `DEPLOYMENT.KUBERNETES` acceptance additionally requires a real frontend image from the separate `signalharvester-web` repository.
 
 ## Feature scope
 
@@ -39,7 +39,7 @@ The repository now contains:
 - deterministic repository tests for infrastructure assets plus a live-cluster verification script;
 - a separate frontend workload boundary that expects a real image owned by `signalharvester-web`.
 
-The current developer gate has not yet run against these files, and no local Kubernetes acceptance has yet been reported in this chat.
+The developer reported the routine repository tests passing on 2026-09-16. No live local Kubernetes acceptance has yet been reported, so rollout, telemetry, and real workload requirements remain verification-pending.
 
 ## Requirements
 

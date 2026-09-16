@@ -205,6 +205,16 @@ kubectl -n signalharvester port-forward service/grafana 3000:3000
 
 Grafana is provisioned with Prometheus, Loki, and Tempo plus the **SignalHarvester Overview** dashboard. Application Event Explorer/Processing Flow remain the correct place for one concrete run or item; Grafana is for aggregate runtime and infrastructure behavior. Full Kubernetes platform acceptance additionally requires a real `signalharvester-web` image using the separate `infra/kubernetes/frontend` workload boundary.
 
+### Run controlled resilience acceptance
+
+After the backend/infrastructure stack is healthy, run the opt-in live resilience harness:
+
+```bash
+python3 infra/kubernetes/resilience/run_acceptance.py
+```
+
+The harness deploys a temporary in-cluster RSS fixture and exercises backend container restart, slow-source availability, PostgreSQL outage with bounded Analysis retry/DLQ, Kafka lag and recovery, Analysis outbox recovery, scheduler leases across two replicas, Redpanda restart recovery, authorization boundaries, and Prometheus/Loki/Tempo evidence. It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for the fault-injection boundaries and options.
+
 ## Kafka retry and dead-letter operation
 
 Analysis, Results, and Event Observation use bounded retries for validated records and dedicated dead-letter topics for deterministic poison records or retry exhaustion. The default topics are:

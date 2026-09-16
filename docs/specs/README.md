@@ -52,7 +52,7 @@ The rules are:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current implementation focus is `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` through `active/subspecs/backend-kubernetes-observability-deployment.md`. Authentication/RBAC, application observability, and external-source access security are accepted and archived.
+The current implementation focus is system resilience acceptance through `active/subspecs/backend-system-resilience-acceptance.md`. The backend-owned Kubernetes/observability deployment remains an active supporting verification track. Authentication/RBAC, application observability, and external-source access security are accepted and archived.
 
 ## When to create a sub-spec
 
@@ -134,9 +134,11 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-kubernetes-observability-deployment.md`](active/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`; implementation complete, developer Kubernetes verification pending.
+- [`active/subspecs/backend-system-resilience-acceptance.md`](active/subspecs/backend-system-resilience-acceptance.md) — controlled multi-replica restart, lag, retry/DLQ, outbox, scheduler, authorization, and recovery acceptance; implementation complete, developer live-cluster execution pending.
 
 Active supporting tracks:
+
+- [`active/subspecs/backend-kubernetes-observability-deployment.md`](active/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`; implementation complete, developer live-cluster verification pending.
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
@@ -165,10 +167,9 @@ Active supporting tracks:
 
 ## Planned backend sub-specifications
 
-Likely future bounded specs include:
+Likely future bounded specs after the current live acceptance work include:
 
-- implementation/acceptance of the active `SECURITY.EXTERNAL_SOURCE_ACCESS` supporting specification before shared Kubernetes exposure;
-- `DEPLOYMENT.KUBERNETES` + `OBSERVABILITY.INFRASTRUCTURE` — local production-style deployment and telemetry stack;
-- system resilience acceptance across restart, lag, retry, recovery, and authorization boundaries.
+- horizontal Kafka consumer scaling where partitioning permits;
+- lower-priority product refinements after the production-style local system milestone.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` UI behavior belongs to `signalharvester-web` and should receive its own frontend sub-spec when frontend work resumes.
