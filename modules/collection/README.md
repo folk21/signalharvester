@@ -13,7 +13,7 @@ The external-source transport path is implemented around a synchronous collectio
 
 Collection also records low-cardinality run/source-fetch metrics and owns one application trace span per manual or scheduled run. `SourceFetchCoordinator` preserves Micronaut propagated context when it fans work out onto the blocking executor so downstream HTTP client spans stay connected to that run.
 
-The HTTP adapter preserves response status, `Retry-After`, source provenance, response metadata, raw bytes, and fetch timestamps. A verification-pending outbound-access resolver binds DNS authorization to the Netty connection path, rejects blocked/mixed address sets in secure mode, including private and carrier-grade-NAT ranges, and revalidates redirect destinations while preserving explicit trusted-local loopback compatibility. Tests use deterministic loopback HTTP servers and cover multiple hosts, redirects, response-size limits, scoped filters, destination policy, and bounded coordination.
+The HTTP adapter preserves response status, `Retry-After`, source provenance, response metadata, raw bytes, and fetch timestamps. The accepted outbound-access resolver binds DNS authorization to the Netty connection path, rejects blocked/mixed address sets in secure mode, including private and carrier-grade-NAT ranges, and revalidates redirect destinations while preserving explicit trusted-local loopback compatibility. Tests use deterministic loopback HTTP servers and cover multiple hosts, redirects, response-size limits, scoped filters, destination policy, and bounded coordination.
 
 The Kafka publication path maps collection-owned data to `RawItemDiscovered`, publishes explicit Protobuf bytes with acknowledgement, uses the caller-owned `rawItemId` as the record key, and assigns a new `eventId` for each publication. Producer idempotence and `acks=all` are enabled at the transport layer.
 
@@ -29,7 +29,7 @@ Automatic interval scheduling is implemented with collection-owned PostgreSQL st
 
 ## Security note
 
-Persisted source URLs are not outbound authorization. Collection now contains a verification-pending runtime destination policy. The default trusted-local mode preserves deterministic loopback/private development access; the `security` environment enables restrictive destination authorization and explicit CIDR overrides. Do not treat shared/public source management as accepted until the active security specification passes developer verification.
+Persisted source URLs are not outbound authorization. Collection owns the accepted runtime destination policy. The default trusted-local mode preserves deterministic loopback/private development access; the `security` environment enables restrictive destination authorization and explicit CIDR overrides.
 
 ## Read next
 

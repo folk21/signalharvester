@@ -1,0 +1,50 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: signalharvester
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - redpanda.yaml
+  - topic-provisioner.yaml
+  - backend.yaml
+  - observability/prometheus.yaml
+  - observability/loki.yaml
+  - observability/tempo.yaml
+  - observability/alloy.yaml
+  - observability/kube-state-metrics.yaml
+  - observability/grafana.yaml
+configMapGenerator:
+  - name: signalharvester-backend-config
+    literals:
+      - MICRONAUT_ENVIRONMENTS=security
+      - SIGNALHARVESTER_DB_URL=jdbc:postgresql://postgres:5432/signalharvester
+      - SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
+      - SIGNALHARVESTER_OTEL_TRACES_EXPORTER=otlp
+      - SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - SIGNALHARVESTER_AUTH_COOKIE_SECURE=false
+      - SIGNALHARVESTER_CORS_ENABLED=true
+      - SIGNALHARVESTER_CORS_ALLOWED_ORIGIN=http://localhost:5173
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0
+  - name: prometheus-config
+    files:
+      - prometheus.yml=observability/prometheus.yml
+  - name: loki-config
+    files:
+      - loki-config.yaml=observability/loki-config.yaml
+  - name: tempo-config
+    files:
+      - tempo-config.yaml=observability/tempo-config.yaml
+  - name: alloy-config
+    files:
+      - config.alloy=observability/alloy-config.alloy
+  - name: grafana-datasources
+    files:
+      - datasources.yaml=observability/grafana-datasources.yaml
+  - name: grafana-dashboard-provider
+    files:
+      - dashboards.yaml=observability/grafana-dashboard-provider.yaml
+  - name: grafana-dashboard
+    files:
+      - signalharvester-overview.json=observability/signalharvester-overview.json
+generatorOptions:
+  disableNameSuffixHash: true

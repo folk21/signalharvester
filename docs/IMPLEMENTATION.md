@@ -85,6 +85,16 @@ The listener disables automatic offset commit. Transport/key/mapping failures ar
 
 See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../modules/analysis/contract.md`](../modules/analysis/contract.md) for module-local detail.
 
+## External-source access security
+
+`SECURITY.EXTERNAL_SOURCE_ACCESS` is accepted. Collection owns runtime destination authorization through a named Netty address resolver used by the managed HTTP client. The resolver authorizes the exact DNS address set handed to the connection path, rejects mixed safe/unsafe answers in secure mode, reapplies the same policy to redirect destinations, and keeps an explicit `TRUSTED_LOCAL` mode for deterministic loopback fixtures. Configuration continues to validate URI syntax only; live network authorization remains in Collection. The `security` environment selects secure mode.
+
+## Verification-pending Kubernetes and infrastructure observability
+
+The repository now contains `app/Dockerfile` plus `infra/kubernetes/` assets for the backend-owned production-style local deployment slice. The backend image is built from the Gradle application distribution and runs as a non-root Java 21 process. Kubernetes runs two backend replicas against PostgreSQL and single-node Redpanda, uses the accepted `security` environment, creates runtime secrets outside source control, provisions current Kafka/DLQ topics explicitly, and uses the existing health/readiness endpoints as probes.
+
+The same Kustomize target deploys Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana. Prometheus scrapes backend, Redpanda, and Kubernetes workload-state metrics. The backend exports OTLP traces to Tempo; Tempo generates span metrics and remote-writes them to Prometheus. Alloy collects namespace pod logs into Loki. Grafana starts with Prometheus/Loki/Tempo data sources plus a repository-owned operational dashboard. This slice remains verification-pending until developer Kubernetes verification succeeds. The separate frontend repository still owns its image; `infra/kubernetes/frontend/` defines only the expected runtime workload boundary, so full umbrella R24 is not yet accepted.
+
 ## Results module
 
 `modules:results` consumes terminal `ItemAnalyzed` and `ItemRejected` events and materializes them into the module-owned PostgreSQL `results` schema. Generated Protobuf messages are confined to the Kafka adapter and mapped into immutable Results-owned models before application/persistence logic.
@@ -172,16 +182,15 @@ See [`TESTS.md`](TESTS.md) for the authoritative test inventory, infrastructure 
 
 ## Local infrastructure
 
-`infra/docker-compose/compose.yaml` provides repository-owned local PostgreSQL and a single-node Redpanda broker exposing a Kafka-compatible API. Redpanda runs in local development mode with topic auto-creation; Kubernetes and production observability configuration are not implemented yet.
+`infra/docker-compose/compose.yaml` remains the lightweight host-run development path for PostgreSQL and Redpanda. A verification-pending production-style local Kubernetes stack is now implemented under `infra/kubernetes/`; it packages the backend together with PostgreSQL, Redpanda, Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana.
 
-See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for the current local lifecycle and endpoints.
+See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for host-run development and [`../infra/kubernetes/README.md`](../infra/kubernetes/README.md) for the local cluster workflow.
 
 ## Known limitations
 
 - cron/calendar scheduling and missed-interval catch-up are not implemented; interval scheduling is implemented;
 - no cursor/full-text result search beyond bounded REST filters;
-- external-source destination hardening is implemented and verification-pending; shared/production-style exposure should wait until [`backend-external-source-access-security.md`](specs/active/subspecs/backend-external-source-access-security.md) is accepted;
 - processing-flow reconstruction cannot prove Results persistence until an observation signal exists for that stage;
-- no Kubernetes deployment or production observability stack;
+- Kubernetes backend/infrastructure deployment is implemented but still requires developer live-cluster verification; full platform R24 also requires a real frontend image from `signalharvester-web`;
 - no cross-resource exactly-once guarantee between PostgreSQL and Kafka;
 - controlled DLQ replay tooling/UI is not implemented; failed records remain operator-managed in versioned dead-letter topics;

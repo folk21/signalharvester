@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-external-source-access-security.md
+current_focus: subspecs/backend-kubernetes-observability-deployment.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -12,9 +12,9 @@ current_focus: subspecs/backend-external-source-access-security.md
 
 Active umbrella specification for the initial SignalHarvester product target.
 
-The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, `ANALYSIS.OUTBOX`, `OBSERVABILITY.APPLICATION`, and backend authentication/RBAC. The current implementation focus is [`backend-external-source-access-security.md`](subspecs/backend-external-source-access-security.md) for `SECURITY.EXTERNAL_SOURCE_ACCESS`; implementation is complete and developer verification is pending.
+The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, `ANALYSIS.OUTBOX`, `OBSERVABILITY.APPLICATION`, backend authentication/RBAC, and `SECURITY.EXTERNAL_SOURCE_ACCESS`. The current implementation focus is [`backend-kubernetes-observability-deployment.md`](subspecs/backend-kubernetes-observability-deployment.md) for the backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` slice; implementation is present and developer Kubernetes verification is pending.
 
-Detailed `PRESENTATION.VIEWER_RESULTS` implementation belongs to the `signalharvester-web` specification tree after this backend security contract is accepted.
+Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository even after the backend-owned cluster stack is verified.
 
 Stable feature identifiers referenced by this specification are defined in [`../../FEATURES.md`](../../FEATURES.md).
 
@@ -86,9 +86,8 @@ Accepted backend capabilities already cover the main functional pipeline:
 
 Major product/platform work still required by this umbrella includes:
 
-- `SECURITY.EXTERNAL_SOURCE_ACCESS` production/shared outbound destination hardening (implementation verification pending);
-- `PRESENTATION.VIEWER_RESULTS` in the companion frontend;
-- `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`;
+- `PRESENTATION.VIEWER_RESULTS` and the real frontend Kubernetes image in the companion frontend;
+- developer verification of the backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` implementation;
 - final production-style system resilience acceptance.
 
 The intended technology direction remains Java/Micronaut, Kafka, Protocol Buffers, PostgreSQL, React/TypeScript, REST/SSE, Kubernetes, OpenTelemetry, Prometheus, Loki, Tempo, and Grafana. Detailed framework configuration belongs to bounded technical specifications and current-state documentation.

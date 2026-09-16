@@ -13,7 +13,7 @@ description: Entry point for local Docker Compose, Kubernetes deployment, and ob
 
 ## Current state
 
-Repository-owned Docker Compose now provides the local PostgreSQL and Kafka-compatible Redpanda infrastructure required by the backend. The backend and Web application intentionally remain host-run during development. Kubernetes and observability deployment configuration are still planned.
+Repository-owned Docker Compose provides the lightweight local PostgreSQL and Kafka-compatible Redpanda development path. A verification-pending Kubernetes stack now packages the backend with PostgreSQL, Redpanda, Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana. The separate frontend repository still owns its image; `kubernetes/frontend/` defines only the runtime boundary needed for later full platform acceptance.
 
 Start the local infrastructure from the repository root with built-in safe development defaults:
 
@@ -23,6 +23,6 @@ docker compose -f infra/docker-compose/compose.yaml up -d
 
 The Compose file also supports explicit environment overrides through `infra/docker-compose/.env.example`; use `--env-file infra/docker-compose/.env` when a customized local file is present.
 
-See [`docker-compose/README.md`](docker-compose/README.md) for lifecycle, reset, and override commands.
+See [`docker-compose/README.md`](docker-compose/README.md) for the host-run development lifecycle and [`kubernetes/README.md`](kubernetes/README.md) for the production-style local cluster workflow.
 
 Read [`AGENTS.md`](AGENTS.md), [`../docs/INSTALLATION.md`](../docs/INSTALLATION.md), and [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).

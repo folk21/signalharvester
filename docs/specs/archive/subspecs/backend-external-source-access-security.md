@@ -3,14 +3,14 @@ type: Specification
 title: Backend external-source access security
 description: Define a production-safe outbound destination policy for configurable HTTP sources, including DNS resolution, redirect validation, and explicit trusted-local overrides.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend external-source access security
 
 ## Status
 
-Implementation complete. Developer verification pending.
+Accepted after the developer repository gate passed on 2026-09-16.
 
 ## Feature scope
 
@@ -26,7 +26,7 @@ The policy must preserve deterministic local testing and explicitly configured i
 
 ## Current state
 
-Implementation is present and verification-pending. `ConfiguredSource` and the REST/OpenAPI boundary continue to own URL syntax only. Collection now owns runtime destination authorization through a named Netty `AddressResolverGroup` used by the Micronaut HTTP client. DNS lookup is offloaded to a Java 21 Virtual Thread, the complete resolved address set is authorized before Netty receives a socket address, and every new redirect destination passes through the same resolver.
+The implementation is accepted. `ConfiguredSource` and the REST/OpenAPI boundary continue to own URL syntax only. Collection now owns runtime destination authorization through a named Netty `AddressResolverGroup` used by the Micronaut HTTP client. DNS lookup is offloaded to a Java 21 Virtual Thread, the complete resolved address set is authorized before Netty receives a socket address, and every new redirect destination passes through the same resolver.
 
 The default trusted-local environment keeps loopback/private fixtures available explicitly. The `security` environment switches the policy to `SECURE`; private, carrier-grade NAT/shared, loopback, link-local, IPv6 unique-local, unspecified, and multicast destinations are then blocked unless the operator explicitly allows an applicable CIDR where override is supported. Existing timeout, response-size, redirect-count, connection-pool, and collection-concurrency bounds remain unchanged.
 

@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: SignalHarvester
+    orgId: 1
+    folder: SignalHarvester
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

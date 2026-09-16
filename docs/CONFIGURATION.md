@@ -179,7 +179,7 @@ HTML extraction is enabled when any `html.*` key is present:
 
 Malformed pointers/selectors, invalid extracted URLs/timestamps, missing required mappings, and candidate sets above the configured bound are explicit extraction failures. Use the source-test API before enabling a new source to validate these settings against a real response.
 
-Persisting a source URL does not authorize collection from that destination. Collection owns runtime destination authorization. The current implementation is verification-pending.
+Persisting a source URL does not authorize collection from that destination. Collection owns the accepted runtime destination authorization boundary.
 
 Outbound-source settings:
 
@@ -194,3 +194,9 @@ Environment variables for the runnable backend are `SIGNALHARVESTER_COLLECTION_O
 ## Compatibility
 
 Configuration fields that affect persisted behavior, API contracts, or source interpretation require explicit compatibility consideration and tests when implemented.
+
+## Kubernetes runtime configuration
+
+The verification-pending local Kubernetes stack sets non-secret backend values through `infra/kubernetes/kustomization.yaml` and requires deployment-owned Secret objects named `signalharvester-runtime-secrets` and `signalharvester-observability-secrets`. `infra/kubernetes/create-local-secrets.sh` creates them from explicit environment values or generated local values without writing credentials to repository files.
+
+The backend Kubernetes ConfigMap activates `MICRONAUT_ENVIRONMENTS=security`, PostgreSQL at `postgres:5432`, Redpanda at `redpanda:9092`, OTLP trace export to `tempo:4317`, and the localhost CORS origin used by the documented frontend port-forward workflow. The local stack sets `SIGNALHARVESTER_AUTH_COOKIE_SECURE=false` because it intentionally uses HTTP port forwarding; production/shared Internet exposure must terminate TLS and set the cookie secure flag appropriately rather than copying this local-development exception.

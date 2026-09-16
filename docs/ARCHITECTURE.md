@@ -97,7 +97,7 @@ OpenTelemetry is the distributed-tracing standard. The assembled application ins
 
 Custom asynchronous boundaries preserve context explicitly. Collection captures Micronaut `PropagatedContext` before submitting source fetches to the blocking executor, and every collection run owns an application span used for the W3C `traceparent` carried by raw-item events when no parent was supplied. Analysis persists the active trace context with each transactional-outbox row and restores that context before Kafka publication, so broker retries do not sever the logical trace. Telemetry is auxiliary: disabling Micrometer/OpenTelemetry does not change business correctness.
 
-Kubernetes is the target deployment environment. Prometheus, Loki, Tempo, and Grafana remain the planned infrastructure observability stack. Application Event Explorer and Processing Flow explain retained domain/event evidence; infrastructure telemetry explains runtime health and distributed timing. They complement rather than replace each other.
+Kubernetes is the target deployment environment. The backend-owned local Kubernetes and Prometheus/Loki/Tempo/Grafana observability stack is implemented and verification-pending; full platform Kubernetes acceptance still depends on the separately owned frontend image. Application Event Explorer and Processing Flow explain retained domain/event evidence; infrastructure telemetry explains runtime health and distributed timing. They complement rather than replace each other.
 
 ## Future extraction
 

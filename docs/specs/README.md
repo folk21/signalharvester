@@ -52,7 +52,7 @@ The rules are:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current implementation focus is `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`. Application observability is accepted and archived.
+The current implementation focus is `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` through `active/subspecs/backend-kubernetes-observability-deployment.md`. Authentication/RBAC, application observability, and external-source access security are accepted and archived.
 
 ## When to create a sub-spec
 
@@ -134,7 +134,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-external-source-access-security.md`](active/subspecs/backend-external-source-access-security.md) — `SECURITY.EXTERNAL_SOURCE_ACCESS`; implementation complete, developer verification pending.
+- [`active/subspecs/backend-kubernetes-observability-deployment.md`](active/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`; implementation complete, developer Kubernetes verification pending.
 
 Active supporting tracks:
 
@@ -143,6 +143,7 @@ Active supporting tracks:
 
 ## Recently completed sub-specifications
 
+- [`archive/subspecs/backend-external-source-access-security.md`](archive/subspecs/backend-external-source-access-security.md) — `SECURITY.EXTERNAL_SOURCE_ACCESS`, accepted after developer `./run_checks.sh` verification on 2026-09-16;
 - [`archive/subspecs/backend-authentication-authorization.md`](archive/subspecs/backend-authentication-authorization.md) — `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`, accepted after developer `./run_checks.sh` verification on 2026-09-16;
 - [`archive/subspecs/backend-application-observability.md`](archive/subspecs/backend-application-observability.md) — `OBSERVABILITY.APPLICATION`, accepted after developer `./run_checks.sh` verification;
 - [`archive/subspecs/backend-db-kafka-consistency.md`](archive/subspecs/backend-db-kafka-consistency.md) — `ANALYSIS.OUTBOX`, accepted after developer `./run_checks.sh` verification;

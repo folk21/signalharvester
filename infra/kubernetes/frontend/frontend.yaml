@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signalharvester-web
+  labels:
+    app.kubernetes.io/name: signalharvester-web
+    app.kubernetes.io/part-of: signalharvester
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: signalharvester-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: signalharvester-web
+        app.kubernetes.io/part-of: signalharvester
+    spec:
+      containers:
+        - name: signalharvester-web
+          image: signalharvester-web:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: signalharvester-web
+spec:
+  selector:
+    app.kubernetes.io/name: signalharvester-web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

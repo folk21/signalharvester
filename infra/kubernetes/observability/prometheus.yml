@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: signalharvester-backend
+    metrics_path: /prometheus
+    dns_sd_configs:
+      - names: ["signalharvester-backend-metrics.signalharvester.svc.cluster.local"]
+        type: A
+        port: 8080
+        refresh_interval: 30s
+
+  - job_name: redpanda
+    metrics_path: /public_metrics
+    static_configs:
+      - targets: ["redpanda:9644"]
+
+  - job_name: kube-state-metrics
+    static_configs:
+      - targets: ["kube-state-metrics:8080"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

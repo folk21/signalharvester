@@ -16,7 +16,7 @@ Accepted P2 reliability work includes:
 - `RELIABILITY.IDEMPOTENCY` protections used by current consumers;
 - `ANALYSIS.OUTBOX` for PostgreSQL/Kafka consistency in Analysis.
 
-`OBSERVABILITY.APPLICATION` and backend authentication/authorization are accepted. `SECURITY.EXTERNAL_SOURCE_ACCESS` is implemented and verification-pending before production-style Kubernetes/system acceptance.
+`OBSERVABILITY.APPLICATION`, backend authentication/authorization, and `SECURITY.EXTERNAL_SOURCE_ACCESS` are accepted. The backend-owned Kubernetes/infrastructure-observability stack is implemented and verification-pending; full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
 Stable feature identifiers are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -52,13 +52,13 @@ Accepted:
 
 Current verification-pending:
 
-- `SECURITY.EXTERNAL_SOURCE_ACCESS` — connection-bound destination authorization is implemented; developer verification is pending.
+- backend-owned `DEPLOYMENT.KUBERNETES` + `OBSERVABILITY.INFRASTRUCTURE` — manifests, observability stack, dashboard, and verification tooling are implemented; live local-cluster verification is pending.
 
 Next backend stages:
 
-1. verify and accept the implemented `SECURITY.EXTERNAL_SOURCE_ACCESS` outbound destination policy before shared/production-style exposure.
-2. `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` — production-style local deployment and telemetry stack.
-3. system resilience acceptance across restart, lag, retry/DLQ, outbox recovery, and authorization boundaries.
+1. verify the Kubernetes backend/infrastructure stack and archive its backend-owned sub-spec; umbrella R24 remains incomplete until the companion frontend image is verified.
+2. system resilience acceptance across restart, lag, retry/DLQ, outbox recovery, scheduler/outbox leases, and authorization boundaries.
+3. horizontal-scaling and lower-priority product refinements after the production-style system milestone.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security is accepted, but it is intentionally deferred until frontend development resumes. Its detailed layout/routing behavior belongs to `signalharvester-web`.
 

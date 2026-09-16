@@ -130,7 +130,7 @@ Example REST/JSON settings for an API that returns `{ "jobs": [...] }`:
 }
 ```
 
-Source URLs stored through this API are configuration data only. Runtime collection applies the verification-pending outbound destination policy described in [`CONFIGURATION.md`](CONFIGURATION.md). The default trusted-local environment intentionally permits loopback/private fixtures. The `security` environment uses `SECURE` mode and rejects loopback/private/carrier-grade-NAT/link-local destinations unless the operator explicitly allows the required CIDR. Treat shared exposure as pending until that security slice completes developer verification.
+Source URLs stored through this API are configuration data only. Runtime collection applies the accepted outbound destination policy described in [`CONFIGURATION.md`](CONFIGURATION.md). The default trusted-local environment intentionally permits loopback/private fixtures. The `security` environment uses `SECURE` mode and rejects loopback/private/carrier-grade-NAT/link-local destinations unless the operator explicitly allows the required CIDR.
 
 ### Bootstrap sources from a manifest
 
@@ -184,6 +184,26 @@ SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
 ```
 
 Console logs include `trace_id` and `span_id` fields when a valid OpenTelemetry span is active. The backend still writes application logs to stdout/stderr; use shell redirection or the deployment logging stack for file/storage collection.
+
+## Run the production-style local Kubernetes stack
+
+The backend-owned Kubernetes deployment is currently verification-pending. Build/load `signalharvester-backend:local`, create local runtime secrets, apply the Kustomize target, and run the live cluster verification:
+
+```bash
+docker build -f app/Dockerfile -t signalharvester-backend:local .
+./infra/kubernetes/create-local-secrets.sh
+kubectl apply -k infra/kubernetes
+./infra/kubernetes/verify-local.sh
+```
+
+Port-forward the backend and Grafana when interactive inspection is needed:
+
+```bash
+kubectl -n signalharvester port-forward service/signalharvester-backend 8080:8080
+kubectl -n signalharvester port-forward service/grafana 3000:3000
+```
+
+Grafana is provisioned with Prometheus, Loki, and Tempo plus the **SignalHarvester Overview** dashboard. Application Event Explorer/Processing Flow remain the correct place for one concrete run or item; Grafana is for aggregate runtime and infrastructure behavior. Full Kubernetes platform acceptance additionally requires a real `signalharvester-web` image using the separate `infra/kubernetes/frontend` workload boundary.
 
 ## Kafka retry and dead-letter operation
 

@@ -17,7 +17,7 @@ Backend consumers read source and monitoring-profile configuration through the n
 
 ## Operational and security notes
 
-Persisting a URL is not outbound authorization. Configuration intentionally keeps URL syntax separate from live network authorization. Collection owns the verification-pending runtime destination policy; the source domain still does not perform DNS/network checks during CRUD so deterministic configuration behavior and legitimate operator-authorized internal sources remain possible.
+Persisting a URL is not outbound authorization. Configuration intentionally keeps URL syntax separate from live network authorization. Collection owns the accepted runtime destination policy; the source domain still does not perform DNS/network checks during CRUD so deterministic configuration behavior and legitimate operator-authorized internal sources remain possible.
 
 ## Read next
 

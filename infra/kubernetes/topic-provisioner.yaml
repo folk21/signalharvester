@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redpanda-topic-provisioner
+  labels:
+    app.kubernetes.io/name: redpanda-topic-provisioner
+    app.kubernetes.io/part-of: signalharvester
+spec:
+  backoffLimit: 8
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redpanda-topic-provisioner
+        app.kubernetes.io/part-of: signalharvester
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: provision
+          image: docker.redpanda.com/redpandadata/redpanda:v26.2.2
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              until rpk cluster health --brokers redpanda:9092 >/dev/null 2>&1; do sleep 2; done
+              rpk cluster config set enable_consumer_group_metrics '["group","partition","consumer_lag"]' --brokers redpanda:9092
+              for topic in \
+                signalharvester.collection.raw-item-discovered.v1 \
+                signalharvester.analysis.item-analyzed.v1 \
+                signalharvester.analysis.item-rejected.v1 \
+                signalharvester.analysis.raw-item-dead-letter.v1 \
+                signalharvester.results.analysis-outcome-dead-letter.v1 \
+                signalharvester.event-observation.dead-letter.v1; do
+                rpk topic describe "$topic" --brokers redpanda:9092 >/dev/null 2>&1 \
+                  || rpk topic create "$topic" --partitions 3 --replicas 1 --brokers redpanda:9092
+              done
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 192Mi
