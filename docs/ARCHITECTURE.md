@@ -21,7 +21,8 @@ Functional modules own complete capabilities rather than repository-wide technic
 - collection;
 - analysis;
 - results;
-- event observation.
+- event observation;
+- security.
 
 Each module owns its model/use cases, persistence, adapters, tests, and any public API it deliberately publishes. A module does not need a Java `api` package when it has no synchronous functional-module consumer. When a synchronous cross-module contract is required, it lives under `io.signalharvester.<module>.api` and is expressed through interfaces with only the minimal contract data they require. The `api` package is not a home for every Java interface: controller-facing application ports, repositories, outbound clients, publishers, analyzers, and other internal ports stay internal unless they are intentionally published capabilities. Cross-module synchronous access may target only the providing module's `api..` package; internal implementation packages and private database tables are not cross-module APIs. Each module root also contains a concise `contract.md` that indexes its Java/OpenAPI/event surfaces, ownership, dependency rules, and invariants without duplicating source signatures.
 
@@ -75,6 +76,14 @@ DLQ acknowledgement is part of terminal durability: a source offset is never adv
 ## HTTP server execution boundary
 
 Micronaut Netty event-loop threads must not run blocking application work. REST controller methods or classes that invoke JDBC, blocking HTTP, or other imperative blocking workflows use `@ExecuteOn(TaskExecutors.BLOCKING)`. On the Java 21 baseline this means Virtual Threads. True streaming endpoints such as SSE keep their `Publisher`/reactive execution model and are not moved to blocking execution mechanically. Expected API/domain failures should be translated at the HTTP boundary through Micronaut `ExceptionHandler` implementations rather than repeated controller `try/catch` blocks; handlers and filters remain non-blocking unless explicitly offloaded.
+
+## Security boundary
+
+The security functional module owns persisted identities, local credential verification, baseline role invariants, and security-owned authentication/user-administration HTTP adapters. Its PostgreSQL tables are private to that module. Other functional modules do not query security tables or make authorization decisions from security implementation types.
+
+HTTP authorization spans APIs owned by several modules, so the endpoint/role matrix is composition-root configuration rather than a synchronous dependency from every module to Security. Roles are explicit and additive: `ADMIN` does not imply `VIEWER`, human identities receive `USER`, and system identities may use `BOT` without human UI capability. Browser JWT transport uses an HttpOnly cookie so native SSE remains compatible; cookie-authenticated mutations use explicit CSRF protection. JWTs are short-lived and stateless, so account disablement and role changes prevent future login/issuance while already-issued credentials remain valid until expiry unless a later revocation design is introduced.
+
+The default local environment remains an explicitly trusted compatibility mode while the companion frontend migrates. Shared/public deployments must enable the protected security profile and provide deployment-owned signing/CSRF secrets.
 
 ## UI boundary
 

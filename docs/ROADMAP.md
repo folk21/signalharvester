@@ -16,7 +16,7 @@ Accepted P2 reliability work includes:
 - `RELIABILITY.IDEMPOTENCY` protections used by current consumers;
 - `ANALYSIS.OUTBOX` for PostgreSQL/Kafka consistency in Analysis.
 
-`OBSERVABILITY.APPLICATION` is implemented and verification-pending. The active authentication/authorization sub-spec follows it before production-style Kubernetes/system acceptance.
+`OBSERVABILITY.APPLICATION` is accepted. Authentication/authorization is implemented and verification-pending before production-style Kubernetes/system acceptance.
 
 Stable feature identifiers are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -46,18 +46,19 @@ Accepted backend capabilities:
 Accepted:
 
 - `RELIABILITY.KAFKA_RETRY` and `RELIABILITY.DEAD_LETTER`;
-- `ANALYSIS.OUTBOX`.
+- `ANALYSIS.OUTBOX`;
+- `OBSERVABILITY.APPLICATION`.
 
 Current verification-pending:
 
-- `OBSERVABILITY.APPLICATION` — health/readiness, Prometheus metrics, OpenTelemetry tracing, log correlation, and custom context propagation.
+- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` — persisted identities, stateless JWT authentication, CSRF/CORS policy, and backend-enforced RBAC.
 
-Next:
+Next backend stages:
 
-1. `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` — stateless JWT authentication and backend-enforced RBAC.
-2. `PRESENTATION.VIEWER_RESULTS` — frontend-owned consumer result experience after the backend security contract is accepted.
+1. `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` — production-style local deployment and telemetry stack.
+2. system resilience acceptance across restart, lag, retry/DLQ, outbox recovery, and authorization boundaries.
 
-The VIEWER UI belongs to `signalharvester-web`; its detailed layout/routing behavior must be defined there when frontend development resumes.
+`PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security is accepted, but it is intentionally deferred until frontend development resumes. Its detailed layout/routing behavior belongs to `signalharvester-web`.
 
 ## P2 — deployment and system acceptance
 

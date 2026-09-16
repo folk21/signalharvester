@@ -117,9 +117,9 @@ Tests and documents must reference IDs from this catalog. Do not invent local fe
 | Feature ID | Capability | Primary owner | Related umbrella requirements |
 |---|---|---|---|
 | `SECURITY.EXTERNAL_SOURCE_ACCESS` | Safe outbound source access, secret separation, and access-policy constraints | Configuration + Collection | R23, R30 |
-| `SECURITY.IDENTITY_ROLES` | Persisted identities and explicit additive role assignments | Authentication/authorization capability | R31 |
-| `SECURITY.AUTHENTICATION` | Stateless signed-JWT request authentication | Authentication/authorization capability | R31 |
-| `SECURITY.AUTHORIZATION` | Backend-enforced role/capability access control | Authentication/authorization capability | R31, R32 |
+| `SECURITY.IDENTITY_ROLES` | Persisted identities and explicit additive role assignments | Security | R31 |
+| `SECURITY.AUTHENTICATION` | Stateless signed-JWT request authentication | Security | R31 |
+| `SECURITY.AUTHORIZATION` | Backend-enforced role/capability access control | Security + App | R31, R32 |
 
 ### Platform, delivery, and testing
 

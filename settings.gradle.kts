@@ -10,6 +10,7 @@ include(
     ":modules:analysis",
     ":modules:results",
     ":modules:event-observation",
+    ":modules:security",
     ":testing:test-support",
     ":testing:integration-tests",
 )

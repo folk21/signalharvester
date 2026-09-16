@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":modules:analysis"))
     implementation(project(":modules:results"))
     implementation(project(":modules:event-observation"))
+    implementation(project(":modules:security"))
 
     implementation("io.micronaut:micronaut-runtime")
     implementation("io.micronaut:micronaut-management")

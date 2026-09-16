@@ -25,6 +25,18 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_PROMETHEUS_ENABLED` | `true` | Enables the Prometheus registry and `/prometheus` scrape endpoint. |
 | `SIGNALHARVESTER_OTEL_TRACES_EXPORTER` | `none` | OpenTelemetry trace exporter; use `otlp` when an OTLP collector is available. |
 | `SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | OTLP endpoint used when an OTLP exporter is enabled. |
+| `MICRONAUT_ENVIRONMENTS` | _(unset)_ | Include `security` to activate protected JWT/RBAC HTTP boundaries. |
+| `SIGNALHARVESTER_JWT_SECRET` | _(required with `security`)_ | HMAC secret used to sign and validate application JWTs; no repository default. |
+| `SIGNALHARVESTER_JWT_TTL_SECONDS` | `900` | Access-token lifetime in seconds. |
+| `SIGNALHARVESTER_JWT_AUDIENCE` | `signalharvester-api` | Required JWT audience and generated audience claim. |
+| `SIGNALHARVESTER_AUTH_COOKIE_SECURE` | `false` | Sets Secure on JWT/CSRF cookies; must be `true` for HTTPS shared/public deployment. |
+| `SIGNALHARVESTER_AUTH_COOKIE_MAX_AGE` | `15m` | Browser JWT cookie maximum age. |
+| `SIGNALHARVESTER_CSRF_SECRET` | _(required with `security`)_ | Independent HMAC secret for signed double-submit CSRF tokens; no repository default. |
+| `SIGNALHARVESTER_BOOTSTRAP_ADMIN_USERNAME` | _(empty)_ | Optional first-ADMIN login used only when no ADMIN exists. |
+| `SIGNALHARVESTER_BOOTSTRAP_ADMIN_PASSWORD` | _(empty)_ | Optional first-ADMIN password; must be supplied together with the bootstrap username. |
+| `SIGNALHARVESTER_PASSWORD_HASH_ITERATIONS` | `600000` | PBKDF2-HMAC-SHA256 iteration count for newly stored local passwords. |
+| `SIGNALHARVESTER_CORS_ENABLED` | `false` | Enables credentialed CORS for an explicitly separate frontend origin. |
+| `SIGNALHARVESTER_CORS_ALLOWED_ORIGIN` | `http://localhost:5173` | Single allowed frontend origin when credentialed CORS is enabled. |
 | `SIGNALHARVESTER_DB_URL` | `jdbc:postgresql://localhost:5432/signalharvester` | JDBC URL for the application PostgreSQL database. |
 | `SIGNALHARVESTER_DB_USERNAME` | `signalharvester` | Local-development PostgreSQL username. |
 | `SIGNALHARVESTER_DB_PASSWORD` | `signalharvester` | Local-development PostgreSQL password; override outside local development. |
@@ -83,6 +95,10 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_COLLECTION_HTTP_MAX_PENDING_ACQUIRES` | `64` | Maximum pending connection-pool acquisitions. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_POOL_ACQUIRE_TIMEOUT` | `2s` | Maximum wait for a pooled connection. |
 
+The default runtime keeps Micronaut Security disabled for the existing trusted local workflow. Activating the `security` environment loads `application-security.properties`. That profile requires deployment-provided JWT and CSRF signing secrets, enables HttpOnly JWT cookies plus bearer-token validation, applies the explicit endpoint/role matrix, and enables signed double-submit CSRF. CORS remains disabled unless `SIGNALHARVESTER_CORS_ENABLED=true`; credentialed CORS uses the single configured origin rather than `*`.
+
+The browser JWT cookie is HttpOnly and `SameSite=Strict`. The readable `XSRF-TOKEN` cookie contains only CSRF proof and is sent back in `X-CSRF-TOKEN` for JSON/form mutations. JWTs must not be placed in URLs. Local HTTP development may keep `SIGNALHARVESTER_AUTH_COOKIE_SECURE=false`; HTTPS shared/public deployment must enable Secure cookies. Account disablement and role changes affect future login/token issuance; already-issued stateless JWTs remain valid until their configured short expiry.
+
 Health endpoints `/health`, `/health/liveness`, and `/health/readiness` and the `/prometheus` endpoint are enabled by the application composition root. OpenTelemetry traces use the standard `tracecontext,baggage` propagators. `otel.traces.exporter` defaults to `none`, so a local OTLP collector is not a startup dependency. Set `SIGNALHARVESTER_OTEL_TRACES_EXPORTER=otlp` and `SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT` to export traces. Health and Prometheus paths are excluded from normal HTTP trace noise.
 
 Application metrics deliberately use bounded status/outcome labels rather than source/profile/run/item/event identifiers or URLs. This keeps Prometheus cardinality independent from harvested entity count.
@@ -126,7 +142,7 @@ The local `.env` file is ignored by Git and excluded from FULL archives.
 
 ## Persisted application configuration
 
-The configuration module owns source and monitoring-profile persistence in PostgreSQL. Its Flyway migrations under `db/migration/configuration` create source configuration plus monitoring profiles, ordered source membership, and profile criteria. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history and monitoring-profile schedule state under `db/migration/collection` and schema `collection`; Results owns analyzed/rejected projections and durable live-result cursors under `db/migration/results` and schema `results`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider`; they must not read configuration tables directly.
+The configuration module owns source and monitoring-profile persistence in PostgreSQL. Its Flyway migrations under `db/migration/configuration` create source configuration plus monitoring profiles, ordered source membership, and profile criteria. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history and monitoring-profile schedule state under `db/migration/collection` and schema `collection`; Results owns analyzed/rejected projections and durable live-result cursors under `db/migration/results` and schema `results`; Security owns identities and explicit roles under `db/migration/security` and schema `security`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider`; they must not read configuration tables directly.
 
 A monitoring profile stores a positive collection interval, at least one existing source id, and string criteria. Enabled profiles are polled by Collection scheduling. Scheduler state remains collection-owned and is not stored in configuration tables. Disabling a profile prevents new automatic claims; manual execution may still target an existing profile explicitly.
 

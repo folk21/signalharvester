@@ -289,6 +289,7 @@ class CollectionAnalysisIntegrationTest {
             statement.execute("DROP SCHEMA IF EXISTS collection CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS results CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS event_observation CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS security CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
         }
     }

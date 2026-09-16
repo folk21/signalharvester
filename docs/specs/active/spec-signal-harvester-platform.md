@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-application-observability.md
+current_focus: subspecs/backend-authentication-authorization.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -12,9 +12,9 @@ current_focus: subspecs/backend-application-observability.md
 
 Active umbrella specification for the initial SignalHarvester product target.
 
-The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, and `ANALYSIS.OUTBOX`. The current implementation focus is [`backend-application-observability.md`](subspecs/backend-application-observability.md) for `OBSERVABILITY.APPLICATION`; implementation is complete and developer verification is pending.
+The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, `ANALYSIS.OUTBOX`, and `OBSERVABILITY.APPLICATION`. The current implementation focus is [`backend-authentication-authorization.md`](subspecs/backend-authentication-authorization.md) for `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`; implementation is complete and developer verification is pending.
 
-`SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` remain active supporting work for the later security stage. Detailed `PRESENTATION.VIEWER_RESULTS` implementation belongs to the `signalharvester-web` specification tree.
+Detailed `PRESENTATION.VIEWER_RESULTS` implementation belongs to the `signalharvester-web` specification tree after this backend security contract is accepted.
 
 Stable feature identifiers referenced by this specification are defined in [`../../FEATURES.md`](../../FEATURES.md).
 
@@ -86,8 +86,7 @@ Accepted backend capabilities already cover the main functional pipeline:
 
 Major product/platform work still required by this umbrella includes:
 
-- `OBSERVABILITY.APPLICATION`;
-- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`;
+- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` (implementation verification pending);
 - `PRESENTATION.VIEWER_RESULTS` in the companion frontend;
 - `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`;
 - final production-style system resilience acceptance.
