@@ -16,6 +16,8 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,7 @@ class SecurityAuthorizationIntegrationTest {
     private static final String JWT_SECRET = "integration-jwt-secret-that-is-long-enough-for-hmac-sha256-123456";
     private static final String CSRF_SECRET = "integration-csrf-secret-that-is-long-enough-for-hmac-signing-123456";
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(15);
+    private static final Pattern ID_PATTERN = Pattern.compile("\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -75,6 +78,10 @@ class SecurityAuthorizationIntegrationTest {
 
         Client viewer = login(viewerName, "viewer-password-for-integration");
         assertEquals(200, viewer.send("GET", "/api/v1/results?limit=1", null, false).statusCode());
+        assertEquals(404, viewer.send("GET",
+                "/api/v1/results/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?monitoringProfileId=missing",
+                null,
+                false).statusCode());
         assertEquals(403, viewer.send("GET", "/api/v1/admin/collection-runs?limit=1", null, false).statusCode());
         assertEquals(403, viewer.send("GET", "/api/v1/events?limit=1", null, false).statusCode());
 
@@ -110,6 +117,95 @@ class SecurityAuthorizationIntegrationTest {
         assertEquals(403, adminOnly.send("GET", "/api/v1/results?limit=1", null, false).statusCode());
     }
 
+    /** Apply role removal only to newly issued JWTs while preserving already issued stateless credentials. */
+    @Test
+    void shouldApplyRoleChangesToNewJwtCredentials() throws Exception {
+        Client bootstrapAdmin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        String username = "role-change-" + UUID.randomUUID().toString().substring(0, 8);
+        String password = "role-change-password-for-integration";
+        HttpResponse<String> created = bootstrapAdmin.send("POST", "/api/v1/admin/users", """
+                {
+                  "username": "%s",
+                  "password": "%s",
+                  "identityType": "HUMAN",
+                  "enabled": true,
+                  "roles": ["VIEWER", "ADMIN"]
+                }
+                """.formatted(username, password), true);
+        assertEquals(201, created.statusCode());
+        UUID userId = extractId(created.body());
+
+        Client oldCredential = login(username, password);
+        assertEquals(200, oldCredential.send("GET", "/api/v1/results?limit=1", null, false).statusCode());
+
+        HttpResponse<String> updated = bootstrapAdmin.send(
+                "PUT",
+                "/api/v1/admin/users/" + userId,
+                "{\"enabled\":true,\"roles\":[\"ADMIN\"]}",
+                true);
+        assertEquals(200, updated.statusCode());
+
+        assertEquals(200, oldCredential.send("GET", "/api/v1/results?limit=1", null, false).statusCode());
+        Client newCredential = login(username, password);
+        assertEquals(403, newCredential.send("GET", "/api/v1/results?limit=1", null, false).statusCode());
+        assertEquals(200, newCredential.send("GET", "/api/v1/sources", null, false).statusCode());
+    }
+
+    /** Keep baseline USER and BOT identities authenticated without implicitly granting VIEWER or ADMIN access. */
+    @Test
+    void shouldKeepBaselineIdentitiesWithoutBusinessCapabilities() throws Exception {
+        Client admin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String humanName = "user-only-" + suffix;
+        String botName = "bot-only-" + suffix;
+        String humanPassword = "user-only-password-for-integration";
+        String botPassword = "bot-only-password-for-integration";
+
+        assertEquals(201, admin.send("POST", "/api/v1/admin/users", """
+                {
+                  "username": "%s",
+                  "password": "%s",
+                  "identityType": "HUMAN",
+                  "enabled": true,
+                  "roles": []
+                }
+                """.formatted(humanName, humanPassword), true).statusCode());
+        assertEquals(201, admin.send("POST", "/api/v1/admin/users", """
+                {
+                  "username": "%s",
+                  "password": "%s",
+                  "identityType": "BOT",
+                  "enabled": true,
+                  "roles": []
+                }
+                """.formatted(botName, botPassword), true).statusCode());
+
+        Client human = login(humanName, humanPassword);
+        HttpResponse<String> humanPrincipal = human.send("GET", "/api/v1/auth/me", null, false);
+        assertEquals(200, humanPrincipal.statusCode());
+        assertTrue(humanPrincipal.body().contains("\"USER\""));
+        assertEquals(403, human.send("GET", "/api/v1/results?limit=1", null, false).statusCode());
+        assertEquals(403, human.send("GET", "/api/v1/sources", null, false).statusCode());
+
+        Client bot = login(botName, botPassword);
+        HttpResponse<String> botPrincipal = bot.send("GET", "/api/v1/auth/me", null, false);
+        assertEquals(200, botPrincipal.statusCode());
+        assertTrue(botPrincipal.body().contains("\"BOT\""));
+        assertEquals(403, bot.send("GET", "/api/v1/results?limit=1", null, false).statusCode());
+        assertEquals(403, bot.send("GET", "/api/v1/sources", null, false).statusCode());
+    }
+
+    /** Keep health and Prometheus operational boundaries anonymous when application security is enabled. */
+    @Test
+    void shouldKeepOperationalEndpointsAnonymous() throws Exception {
+        Client anonymous = new Client(new CookieManager());
+
+        assertEquals(200, anonymous.send("GET", "/health", null, false).statusCode());
+        assertEquals(200, anonymous.send("GET", "/health/liveness", null, false).statusCode());
+        assertEquals(200, anonymous.send("GET", "/health/readiness", null, false).statusCode());
+        assertEquals(200, anonymous.send("GET", "/prometheus", null, false).statusCode());
+    }
+
     private Client login(String username, String password) throws Exception {
         Client client = new Client(new CookieManager());
         HttpResponse<String> response = client.send("POST", "/api/v1/auth/login", """
@@ -117,6 +213,14 @@ class SecurityAuthorizationIntegrationTest {
                 """.formatted(username, password), false);
         assertEquals(200, response.statusCode(), () -> "Login failed: " + response.body());
         return client;
+    }
+
+    private static UUID extractId(String body) {
+        Matcher matcher = ID_PATTERN.matcher(body);
+        if (!matcher.find()) {
+            throw new AssertionError("Response did not contain an id: " + body);
+        }
+        return UUID.fromString(matcher.group(1));
     }
 
     private static Map<String, Object> serverProperties() {

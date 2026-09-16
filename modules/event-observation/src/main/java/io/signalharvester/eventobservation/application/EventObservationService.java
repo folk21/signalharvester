@@ -39,8 +39,7 @@ public final class EventObservationService implements EventObservationRecorder, 
         Objects.requireNonNull(event, "event");
         transactions.executeWrite(status -> {
             repository.insert(event);
-            repository.pruneBefore(event.observedAt().minus(retention.getMaxAge()));
-            repository.pruneToMaxEvents(retention.getMaxEvents());
+            repository.prune(event.observedAt().minus(retention.getMaxAge()), retention.getMaxEvents());
             return null;
         });
     }

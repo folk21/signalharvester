@@ -32,7 +32,7 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_AUTH_COOKIE_SECURE` | `false` | Sets Secure on JWT/CSRF cookies; must be `true` for HTTPS shared/public deployment. |
 | `SIGNALHARVESTER_AUTH_COOKIE_MAX_AGE` | `15m` | Browser JWT cookie maximum age. |
 | `SIGNALHARVESTER_CSRF_SECRET` | _(required with `security`)_ | Independent HMAC secret for signed double-submit CSRF tokens; no repository default. |
-| `SIGNALHARVESTER_BOOTSTRAP_ADMIN_USERNAME` | _(empty)_ | Optional first-ADMIN login used only when no ADMIN exists. |
+| `SIGNALHARVESTER_BOOTSTRAP_ADMIN_USERNAME` | _(empty)_ | Optional first-ADMIN login used only when no enabled ADMIN exists. |
 | `SIGNALHARVESTER_BOOTSTRAP_ADMIN_PASSWORD` | _(empty)_ | Optional first-ADMIN password; must be supplied together with the bootstrap username. |
 | `SIGNALHARVESTER_PASSWORD_HASH_ITERATIONS` | `600000` | PBKDF2-HMAC-SHA256 iteration count for newly stored local passwords. |
 | `SIGNALHARVESTER_CORS_ENABLED` | `false` | Enables credentialed CORS for an explicitly separate frontend origin. |

@@ -43,17 +43,16 @@ public final class JdbcEventObservationRepository implements EventObservationRep
     private static final String CURRENT_CURSOR_SQL = """
             SELECT COALESCE(MAX(observation_id), 0) FROM event_observation.observed_events
             """;
-    private static final String PRUNE_AGE_SQL = """
-            DELETE FROM event_observation.observed_events WHERE observed_at < ?
-            """;
-    private static final String PRUNE_COUNT_SQL = """
+    private static final String PRUNE_SQL = """
             DELETE FROM event_observation.observed_events
-             WHERE observation_id <= COALESCE((
-                 SELECT observation_id
-                   FROM event_observation.observed_events
-                  ORDER BY observation_id DESC
-                 OFFSET ? LIMIT 1
-             ), 0)
+             WHERE observed_at < ?
+                OR observation_id NOT IN (
+                    SELECT observation_id
+                      FROM event_observation.observed_events
+                     WHERE observed_at >= ?
+                     ORDER BY observation_id DESC
+                     LIMIT ?
+                )
             """;
 
     private final Connection connection;
@@ -106,22 +105,14 @@ public final class JdbcEventObservationRepository implements EventObservationRep
     }
 
     @Override
-    public void pruneBefore(Instant cutoff) {
-        try (PreparedStatement statement = connection.prepareStatement(PRUNE_AGE_SQL)) {
+    public void prune(Instant cutoff, int maxEvents) {
+        try (PreparedStatement statement = connection.prepareStatement(PRUNE_SQL)) {
             statement.setTimestamp(1, Timestamp.from(cutoff));
+            statement.setTimestamp(2, Timestamp.from(cutoff));
+            statement.setInt(3, maxEvents);
             statement.executeUpdate();
         } catch (SQLException | RuntimeException exception) {
-            throw new EventObservationPersistenceException("Failed to prune observed events by age", exception);
-        }
-    }
-
-    @Override
-    public void pruneToMaxEvents(int maxEvents) {
-        try (PreparedStatement statement = connection.prepareStatement(PRUNE_COUNT_SQL)) {
-            statement.setInt(1, maxEvents);
-            statement.executeUpdate();
-        } catch (SQLException | RuntimeException exception) {
-            throw new EventObservationPersistenceException("Failed to prune observed events by count", exception);
+            throw new EventObservationPersistenceException("Failed to prune observed events", exception);
         }
     }
 

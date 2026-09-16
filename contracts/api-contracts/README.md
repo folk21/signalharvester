@@ -26,7 +26,7 @@ It currently defines:
 - bounded technical event-observation history with event/correlation/run/item/trace filters;
 - resumable technical event-observation SSE with decoded JSON payload metadata for Event Explorer clients.
 - reconstructed collection-run and run-scoped item processing-flow graphs with explicit evidence levels.
-- authentication/login/logout/current-principal contracts plus ADMIN-only persisted identity and role administration.
+- authentication/login/logout/current-principal contracts plus ADMIN-only persisted identity and role administration, including `409 Conflict` when an update would remove the last enabled ADMIN capability.
 
 Source names must contain at least one non-whitespace character, and source locations require an absolute HTTP(S) URL with a host and without embedded credentials or fragments so the external contract matches the configuration-module invariant. Source-test responses keep nullable diagnostic fields explicit and never expose the full fetched response body. `SourceUpsertRequest.enabled` is optional and defaults to `false`; omitted `settings` default to an empty object. Response DTOs explicitly preserve schema-required fields even when collections are empty or nullable operational values are unavailable.
 

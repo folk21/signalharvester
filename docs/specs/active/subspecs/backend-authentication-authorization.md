@@ -180,6 +180,8 @@ Administrative APIs must not return password hashes, signing material, or JWT cr
 
 The initial bootstrap mechanism for the first `ADMIN` account must be deterministic and deployment-safe. It must not require committing default credentials to the repository.
 
+Administrative updates must not leave the deployment without an enabled `ADMIN`. Disabling the last enabled administrator or removing its `ADMIN` role must be rejected as a conflict. The check must remain correct under concurrent administrative updates rather than relying on a frontend warning.
+
 ### A9 — audit-safe security logging
 
 Feature: `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION`.
@@ -279,11 +281,13 @@ Acceptance requires at least:
 1. persistence tests for user identity, default `USER`, explicit additional roles, disabled users, and system `BOT` identities;
 2. unit/contract tests for JWT creation and validation including signature, expiry, issuer, audience, subject, and roles;
 3. server-level tests for login, logout/credential clearing, and current-principal APIs;
-4. server-level authorization tests covering the explicit endpoint/role matrix, including forbidden admin access for a `VIEWER`;
+4. server-level authorization tests covering the explicit endpoint/role matrix, including forbidden admin access for a `VIEWER`, baseline `USER`/`BOT` restrictions, and anonymous operational endpoints;
 5. server-level SSE authentication coverage proving native Results SSE authentication without JWT query parameters;
-6. CSRF/CORS tests matching the selected browser deployment model;
-7. cross-module/integration coverage proving authorized Results access and rejected unauthorized admin access through the running application;
-8. canonical `./run_checks.sh` passing in the developer environment.
+6. CSRF/CORS tests matching the selected browser deployment model, including rejection of an unconfigured credentialed origin;
+7. account-update coverage proving disablement/role changes affect newly issued credentials while existing JWTs remain stateless until expiry;
+8. concurrent-safe persistence/HTTP coverage proving the last enabled `ADMIN` cannot be disabled or demoted;
+9. cross-module/integration coverage proving authorized Results access and rejected unauthorized admin access through the running application;
+10. canonical `./run_checks.sh` passing in the developer environment.
 
 Frontend VIEWER UX acceptance belongs to the later `signalharvester-web` sub-specification and is not part of this backend slice.
 

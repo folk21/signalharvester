@@ -142,6 +142,29 @@ class EventObservationKafkaPostgresIntegrationTest {
         assertEquals("Already accepted", filtered.getFirst().explanation().orElseThrow());
     }
 
+    /** Apply age retention before the count bound so expired high cursors do not evict valid recent history. */
+    @Test
+    void shouldPruneExpiredRowsWithoutConsumingTheCountRetentionBudget() throws Exception {
+        executeUpdate("""
+                INSERT INTO event_observation.observed_events (
+                    event_id, event_type, occurred_at, observed_at, correlation_id, producer, schema_version,
+                    kafka_topic, kafka_partition, kafka_offset, kafka_key, payload_type
+                ) VALUES
+                    ('recent-1', 'test.event', now(), now(), 'run-retention', 'test', 'v1', 'test-topic', 0, 1, 'k1', 'Test'),
+                    ('recent-2', 'test.event', now(), now(), 'run-retention', 'test', 'v1', 'test-topic', 0, 2, 'k2', 'Test'),
+                    ('expired-newest', 'test.event', now(), now() - interval '25 hours', 'run-retention',
+                     'test', 'v1', 'test-topic', 0, 3, 'k3', 'Test')
+                """);
+
+        send(RAW_TOPIC, "raw-1", rawEvent());
+        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 2L);
+
+        assertEquals(0L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='expired-newest'"));
+        assertEquals(0L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='recent-1'"));
+        assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='recent-2'"));
+        assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
+    }
+
     private static RawItemDiscovered rawEvent() {
         return RawItemDiscovered.newBuilder()
                 .setEnvelope(envelope("raw-event", "collection.raw-item-discovered.v1", "collection"))
@@ -227,6 +250,13 @@ class EventObservationKafkaPostgresIntegrationTest {
             Thread.sleep(100);
         }
         throw new AssertionError("Timed out waiting for SQL value " + expected + ": " + sql);
+    }
+
+    private static void executeUpdate(String sql) throws Exception {
+        try (Connection connection = connection();
+                Statement statement = connection.createStatement()) {
+            statement.executeUpdate(sql);
+        }
     }
 
     private static long sqlLong(String sql) throws Exception {

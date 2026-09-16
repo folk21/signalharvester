@@ -15,7 +15,11 @@ public interface SecurityUserRepository {
 
     Optional<StoredCredentials> findCredentialsByUsername(String username);
 
-    boolean anyAdminExists();
+    boolean anyEnabledAdminExists();
+
+    void lockAdministratorState();
+
+    boolean anyOtherEnabledAdminExists(UserId excludedUserId);
 
     void insert(UserAccount account, String passwordHash);
 
