@@ -14,7 +14,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Creates the first explicit administrator from deployment-provided credentials when needed. */
+/** Creates the first explicit administrator from deployment-provided credentials when no enabled administrator is available. */
 @Singleton
 @Requires(property = "micronaut.security.enabled", value = "true")
 public final class BootstrapAdminInitializer {
@@ -36,11 +36,11 @@ public final class BootstrapAdminInitializer {
     /** Ensures a deployment can bootstrap its first administrator without repository default credentials. */
     @EventListener
     public void onStartup(StartupEvent event) {
-        if (operations.anyAdminExists()) {
+        if (operations.anyEnabledAdminExists()) {
             return;
         }
         if (username.isEmpty() && password.isEmpty()) {
-            LOGGER.warn("Security is enabled but no ADMIN exists and bootstrap credentials are not configured");
+            LOGGER.warn("Security is enabled but no enabled ADMIN exists and bootstrap credentials are not configured");
             return;
         }
         if (username.isEmpty() || password.isEmpty()) {
@@ -55,8 +55,10 @@ public final class BootstrapAdminInitializer {
                     Set.of(UserRole.USER, UserRole.VIEWER, UserRole.ADMIN)));
             LOGGER.info("Bootstrapped initial administrator login={}", username);
         } catch (UsernameAlreadyExistsException exception) {
-            if (!operations.anyAdminExists()) {
-                throw exception;
+            if (!operations.anyEnabledAdminExists()) {
+                throw new IllegalStateException(
+                        "No enabled ADMIN exists and the configured bootstrap username is already in use",
+                        exception);
             }
         }
     }

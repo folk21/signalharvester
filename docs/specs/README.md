@@ -139,7 +139,8 @@ Current implementation focus:
 Active supporting tracks:
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
-- [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
+- [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules;
+- [`active/subspecs/backend-external-source-access-security.md`](active/subspecs/backend-external-source-access-security.md) — `SECURITY.EXTERNAL_SOURCE_ACCESS`; production/shared outbound destination policy is specified and implementation remains pending.
 
 ## Recently completed sub-specifications
 
@@ -165,6 +166,7 @@ Active supporting tracks:
 
 Likely future bounded specs include:
 
+- implementation/acceptance of the active `SECURITY.EXTERNAL_SOURCE_ACCESS` supporting specification before shared Kubernetes exposure;
 - `DEPLOYMENT.KUBERNETES` + `OBSERVABILITY.INFRASTRUCTURE` — local production-style deployment and telemetry stack;
 - system resilience acceptance across restart, lag, retry, recovery, and authorization boundaries.
 

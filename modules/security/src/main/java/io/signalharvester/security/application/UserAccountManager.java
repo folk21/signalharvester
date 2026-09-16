@@ -88,28 +88,39 @@ public final class UserAccountManager implements UserAccountOperations {
     }
 
     @Override
-    public boolean anyAdminExists() {
-        return transactions.executeRead(status -> repository.anyAdminExists());
+    public boolean anyEnabledAdminExists() {
+        return transactions.executeRead(status -> repository.anyEnabledAdminExists());
     }
 
     @Override
     public UserAccount update(UserId userId, UpdateUserCommand command) {
         return transactions.executeWrite(status -> {
+            repository.lockAdministratorState();
             UserAccount existing = repository.findById(userId)
                     .orElseThrow(() -> new UserNotFoundException(userId));
+            Set<UserRole> roles = normalizeRoles(existing.identityType(), command.roles());
             UserAccount updated = new UserAccount(
                     existing.id(),
                     existing.username(),
                     existing.identityType(),
                     command.enabled(),
-                    normalizeRoles(existing.identityType(), command.roles()),
+                    roles,
                     existing.createdAt(),
                     clock.instant());
+            if (isEnabledAdmin(existing)
+                    && !isEnabledAdmin(updated)
+                    && !repository.anyOtherEnabledAdminExists(userId)) {
+                throw new LastEnabledAdministratorException(userId);
+            }
             if (!repository.update(updated)) {
                 throw new UserNotFoundException(userId);
             }
             return updated;
         });
+    }
+
+    private static boolean isEnabledAdmin(UserAccount account) {
+        return account.enabled() && account.roles().contains(UserRole.ADMIN);
     }
 
     private static Set<UserRole> normalizeRoles(IdentityType type, Set<UserRole> requested) {

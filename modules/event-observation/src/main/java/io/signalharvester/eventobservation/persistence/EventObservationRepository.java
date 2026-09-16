@@ -9,8 +9,7 @@ import java.util.List;
 /** Persistence port for bounded technical event history. */
 public interface EventObservationRepository {
     void insert(ObservedEventInput event);
-    void pruneBefore(Instant cutoff);
-    void pruneToMaxEvents(int maxEvents);
+    void prune(Instant cutoff, int maxEvents);
     List<ObservedEvent> findRecent(EventObservationCriteria criteria, int limit);
     long currentCursor();
     List<ObservedEvent> findAfter(long cursor, long throughCursor, EventObservationCriteria criteria, int limit);

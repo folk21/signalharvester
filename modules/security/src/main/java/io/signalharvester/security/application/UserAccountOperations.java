@@ -14,5 +14,5 @@ public interface UserAccountOperations {
 
     UserAccount update(UserId userId, UpdateUserCommand command);
 
-    boolean anyAdminExists();
+    boolean anyEnabledAdminExists();
 }

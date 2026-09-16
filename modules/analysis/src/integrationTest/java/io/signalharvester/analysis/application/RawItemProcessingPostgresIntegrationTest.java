@@ -1,5 +1,6 @@
 package io.signalharvester.analysis.application;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -12,6 +13,7 @@ import io.signalharvester.analysis.event.AnalysisPublicationResult;
 import io.signalharvester.analysis.outbox.AnalysisOutbox;
 import io.signalharvester.analysis.outbox.AnalysisOutboxPersistenceException;
 import io.signalharvester.analysis.outbox.AnalysisOutboxDispatcher;
+import io.signalharvester.analysis.outbox.AnalysisOutboxEntry;
 import io.signalharvester.analysis.outbox.AnalysisOutboxStore;
 import io.signalharvester.analysis.configuration.AnalysisOutboxConfiguration;
 import io.signalharvester.analysis.event.kafka.AnalysisKafkaClient;
@@ -21,6 +23,7 @@ import io.signalharvester.analysis.model.DiscoveredRawItem;
 import io.signalharvester.analysis.observability.AnalysisObservability;
 import io.signalharvester.analysis.normalization.ContentNormalizer;
 import io.signalharvester.analysis.persistence.DeduplicationClaimRepository;
+import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -28,10 +31,12 @@ import java.sql.Statement;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
@@ -288,6 +293,38 @@ class RawItemProcessingPostgresIntegrationTest {
         assertTrue(retriedPayload.get().length > 0);
     }
 
+    /** Republish identical event bytes when Kafka acknowledges before the published marker can be persisted. */
+    @Test
+    void shouldRepublishSameBytesAfterPublishedMarkerFailure() throws Exception {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        RawItemProcessingResult result = service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        AnalysisOutboxStore delegate = context.getBean(AnalysisOutboxStore.class);
+        AnalysisOutboxStore failingStore = new FailingFirstPublishedMarkerStore(delegate);
+        List<SentRecord> sentRecords = new ArrayList<>();
+        AnalysisKafkaClient client = (topic, key, payload) -> sentRecords.add(new SentRecord(topic, key, payload.clone()));
+
+        dispatcher(failingStore, client, Instant.parse("2026-09-15T12:05:00Z")).dispatchAvailable();
+
+        assertFalse(outboxPublished());
+        assertEquals(1, outboxPublicationAttempts());
+        assertEquals(1, sentRecords.size());
+
+        dispatcher(failingStore, client, Instant.parse("2026-09-15T12:05:03Z")).dispatchAvailable();
+
+        assertTrue(outboxPublished());
+        assertEquals(2, outboxPublicationAttempts());
+        assertEquals(2, sentRecords.size());
+        SentRecord first = sentRecords.get(0);
+        SentRecord second = sentRecords.get(1);
+        assertEquals(first.topic(), second.topic());
+        assertEquals(first.key(), second.key());
+        assertArrayEquals(first.payload(), second.payload());
+        assertEquals(result.eventId(), ItemAnalyzed.parseFrom(first.payload()).getEnvelope().getEventId());
+        assertEquals(result.eventId(), ItemAnalyzed.parseFrom(second.payload()).getEnvelope().getEventId());
+        assertEquals(result.eventId(), outboxEventId());
+    }
+
     /** Roll back a new deduplication claim when analyzed outbox staging fails. */
     @Test
     void shouldRollbackNewClaimWhenAnalyzedOutboxAppendFails() {
@@ -369,8 +406,12 @@ class RawItemProcessingPostgresIntegrationTest {
     }
 
     private AnalysisOutboxDispatcher dispatcher(AnalysisKafkaClient client, Instant now) {
+        return dispatcher(context.getBean(AnalysisOutboxStore.class), client, now);
+    }
+
+    private AnalysisOutboxDispatcher dispatcher(AnalysisOutboxStore store, AnalysisKafkaClient client, Instant now) {
         return new AnalysisOutboxDispatcher(
-                context.getBean(AnalysisOutboxStore.class),
+                store,
                 client,
                 context.getBean(AnalysisOutboxConfiguration.class),
                 transactions,
@@ -430,6 +471,44 @@ class RawItemProcessingPostgresIntegrationTest {
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA IF EXISTS analysis CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
+        }
+    }
+
+    private record SentRecord(String topic, String key, byte[] payload) {
+    }
+
+    private static final class FailingFirstPublishedMarkerStore implements AnalysisOutboxStore {
+        private final AnalysisOutboxStore delegate;
+        private final AtomicBoolean failNextPublishedMarker = new AtomicBoolean(true);
+
+        private FailingFirstPublishedMarkerStore(AnalysisOutboxStore delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void append(AnalysisOutboxEntry entry) {
+            delegate.append(entry);
+        }
+
+        @Override
+        public List<AnalysisOutboxEntry> claimBatch(
+                Instant now, UUID leaseToken, Instant leaseExpiresAt, int limit) {
+            return delegate.claimBatch(now, leaseToken, leaseExpiresAt, limit);
+        }
+
+        @Override
+        public void markPublished(String eventId, UUID leaseToken, Instant publishedAt) {
+            if (failNextPublishedMarker.compareAndSet(true, false)) {
+                throw new AnalysisOutboxPersistenceException(
+                        "simulated published-marker failure",
+                        new IllegalStateException("database unavailable after Kafka acknowledgement"));
+            }
+            delegate.markPublished(eventId, leaseToken, publishedAt);
+        }
+
+        @Override
+        public void markFailed(String eventId, UUID leaseToken, Instant nextAttemptAt, String failureMessage) {
+            delegate.markFailed(eventId, leaseToken, nextAttemptAt, failureMessage);
         }
     }
 

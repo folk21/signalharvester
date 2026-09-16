@@ -804,6 +804,8 @@ paths:
           description: ADMIN role required or CSRF validation failed
         '404':
           description: Identity not found
+        '409':
+          description: Update would leave the deployment without an enabled ADMIN identity
 components:
   securitySchemes:
     cookieAuth:

@@ -87,6 +87,7 @@ Accepted backend capabilities already cover the main functional pipeline:
 Major product/platform work still required by this umbrella includes:
 
 - `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION` (implementation verification pending);
+- `SECURITY.EXTERNAL_SOURCE_ACCESS` production/shared outbound destination hardening;
 - `PRESENTATION.VIEWER_RESULTS` in the companion frontend;
 - `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`;
 - final production-style system resilience acceptance.

@@ -71,6 +71,7 @@ Other functional modules must not query or mutate `security` tables directly. Se
 - generated JWT `sub` is the stable persisted UUID rather than the mutable login name;
 - accepted JWT role claims contain only known role values;
 - disabled accounts cannot authenticate through local credentials;
+- administrative updates cannot disable or remove `ADMIN` from the last enabled administrator;
 - issued JWTs are stateless and remain valid until expiry after disablement/role changes;
 - local passwords are stored only as salted PBKDF2-HMAC-SHA256 hashes;
 - browser JWTs are not exposed to JavaScript or URL query parameters;

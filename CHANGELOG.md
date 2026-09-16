@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-16 — Hardened security administration against last-enabled-ADMIN lockout, expanded JWT/RBAC/CORS verification, isolated processing-flow reconstruction, reduced Event Observation retention writes, and added Analysis outbox post-ACK recovery coverage.
+- 2026-09-16 — Defined the active `SECURITY.EXTERNAL_SOURCE_ACCESS` specification for production-safe destination authorization, redirect revalidation, DNS binding, and explicit trusted-local compatibility before shared Kubernetes exposure.
 - 2026-09-15 — Added persisted human/system identities with additive roles, stateless signed-JWT authentication, HttpOnly browser cookies, CSRF/CORS protection, ADMIN user management, and backend-enforced Results/admin RBAC.
 - 2026-09-15 — Added application health/readiness and Prometheus endpoints, OpenTelemetry HTTP/Kafka/JDBC tracing, trace-correlated logs, low-cardinality Collection/Analysis metrics, and trace continuity across Collection fan-out and the Analysis outbox.
 - 2026-09-15 — Added a stable uppercase feature-ID catalog, clarified feature/requirement/specification lifecycles, improved active-spec navigation/readability, and archived the verified Analysis transactional-outbox slice.

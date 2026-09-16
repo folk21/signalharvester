@@ -55,8 +55,9 @@ Current verification-pending:
 
 Next backend stages:
 
-1. `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` — production-style local deployment and telemetry stack.
-2. system resilience acceptance across restart, lag, retry/DLQ, outbox recovery, and authorization boundaries.
+1. implement and accept the active `SECURITY.EXTERNAL_SOURCE_ACCESS` outbound destination policy before shared/production-style exposure.
+2. `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` — production-style local deployment and telemetry stack.
+3. system resilience acceptance across restart, lag, retry/DLQ, outbox recovery, and authorization boundaries.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security is accepted, but it is intentionally deferred until frontend development resumes. Its detailed layout/routing behavior belongs to `signalharvester-web`.
 

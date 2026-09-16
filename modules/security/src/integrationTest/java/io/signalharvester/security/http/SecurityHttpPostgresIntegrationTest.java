@@ -9,11 +9,10 @@ import io.micronaut.context.ApplicationContext;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import io.micronaut.runtime.server.EmbeddedServer;
-import java.net.CookieManager;
-import java.net.HttpCookie;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -24,15 +23,22 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import java.util.stream.Collectors;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -42,7 +48,6 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * {@code SECURITY.IDENTITY_ROLES}, {@code SECURITY.AUTHENTICATION}, and {@code SECURITY.AUTHORIZATION}.
  */
 @Testcontainers(disabledWithoutDocker = true)
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SecurityHttpPostgresIntegrationTest {
     private static final String ADMIN_USERNAME = "bootstrap-admin";
     private static final String ADMIN_PASSWORD = "bootstrap-password-for-tests";
@@ -59,16 +64,19 @@ class SecurityHttpPostgresIntegrationTest {
 
     private EmbeddedServer server;
 
-    @BeforeAll
+    /** Start every scenario with a fresh security schema and Micronaut runtime. */
+    @BeforeEach
     void startServer() throws Exception {
         resetDatabase();
         server = ApplicationContext.run(EmbeddedServer.class, serverProperties(), "test");
     }
 
-    @AfterAll
+    /** Close the per-scenario runtime even when the test fails. */
+    @AfterEach
     void stopServer() {
         if (server != null) {
             server.close();
+            server = null;
         }
     }
 
@@ -83,9 +91,20 @@ class SecurityHttpPostgresIntegrationTest {
         assertTrue(current.body().contains("\"ADMIN\""));
         assertTrue(current.body().contains("\"VIEWER\""));
         assertTrue(admin.hasCookie("SIGNALHARVESTER_AUTH"));
-        assertTrue(admin.cookie("SIGNALHARVESTER_AUTH").isHttpOnly());
+        assertTrue(admin.cookie("SIGNALHARVESTER_AUTH").httpOnly());
         assertTrue(admin.hasCookie("XSRF-TOKEN"));
-        assertFalse(admin.cookie("XSRF-TOKEN").isHttpOnly());
+        assertFalse(admin.cookie("XSRF-TOKEN").httpOnly());
+
+        SignedJWT issuedToken = SignedJWT.parse(admin.cookie("SIGNALHARVESTER_AUTH").value());
+        assertTrue(issuedToken.verify(new MACVerifier(JWT_SECRET)));
+        JWTClaimsSet issuedClaims = issuedToken.getJWTClaimsSet();
+        assertEquals(scalarString("SELECT id::text FROM security.users WHERE username = '" + ADMIN_USERNAME + "'"),
+                issuedClaims.getSubject());
+        assertEquals("signalharvester", issuedClaims.getIssuer());
+        assertEquals(List.of("signalharvester-api"), issuedClaims.getAudience());
+        assertEquals(new HashSet<>(List.of("ADMIN", "USER", "VIEWER")),
+                new HashSet<>(issuedClaims.getStringListClaim("roles")));
+        assertTrue(issuedClaims.getExpirationTime().toInstant().isAfter(Instant.now()));
 
         String storedHash = scalarString("SELECT password_hash FROM security.users WHERE username = '" + ADMIN_USERNAME + "'");
         assertNotEquals(ADMIN_PASSWORD, storedHash);
@@ -98,7 +117,11 @@ class SecurityHttpPostgresIntegrationTest {
                 """));
 
         HttpResponse<String> logout = admin.send("POST", "/api/v1/auth/logout", "{}", true);
-        assertEquals(200, logout.statusCode(), () -> "Logout failed: " + logout.statusCode() + " " + logout.body());
+        assertEquals(200, logout.statusCode(),
+                () -> "Logout failed: " + logout.statusCode() + " " + logout.body()
+                        + " set-cookie=" + logout.headers().allValues("Set-Cookie"));
+        assertFalse(admin.hasCookie("SIGNALHARVESTER_AUTH"));
+        assertFalse(admin.hasCookie("XSRF-TOKEN"));
         assertEquals(401, admin.send("GET", "/api/v1/auth/me", null, false).statusCode());
     }
 
@@ -124,9 +147,9 @@ class SecurityHttpPostgresIntegrationTest {
                 "signalharvester-api", Instant.now().plusSeconds(60), JWT_SECRET + "-wrong")).statusCode());
     }
 
-    /** Apply baseline USER/BOT roles while keeping VIEWER and ADMIN assignments explicit. */
+    /** Apply the baseline USER role while keeping additional human roles explicit. */
     @Test
-    void shouldPersistExplicitAdditiveRoleSets() throws Exception {
+    void shouldPersistHumanBaselineAndExplicitAdditionalRoles() throws Exception {
         AuthenticatedClient admin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
         String suffix = UUID.randomUUID().toString().substring(0, 8);
 
@@ -139,11 +162,19 @@ class SecurityHttpPostgresIntegrationTest {
                   "roles": ["VIEWER"]
                 }
                 """.formatted(suffix), true);
-        assertEquals(201, human.statusCode());
+        assertEquals(201, human.statusCode(),
+                () -> "Human creation failed: " + human.statusCode() + " " + human.body());
         assertTrue(human.body().contains("\"USER\""));
         assertTrue(human.body().contains("\"VIEWER\""));
         assertFalse(human.body().contains("\"ADMIN\""));
         assertFalse(human.body().contains("password"));
+    }
+
+    /** Apply the baseline BOT role to a system identity without implicitly assigning USER. */
+    @Test
+    void shouldPersistBotBaselineWithoutUserRole() throws Exception {
+        AuthenticatedClient admin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
 
         HttpResponse<String> bot = admin.send("POST", "/api/v1/admin/users", """
                 {
@@ -154,7 +185,8 @@ class SecurityHttpPostgresIntegrationTest {
                   "roles": []
                 }
                 """.formatted(suffix), true);
-        assertEquals(201, bot.statusCode());
+        assertEquals(201, bot.statusCode(),
+                () -> "BOT creation failed: " + bot.statusCode() + " " + bot.body());
         assertTrue(bot.body().contains("\"BOT\""));
         assertFalse(bot.body().contains("\"USER\""));
     }
@@ -162,7 +194,7 @@ class SecurityHttpPostgresIntegrationTest {
     /** Require CSRF proof for cookie-authenticated mutations and enforce ADMIN independently of UI routing. */
     @Test
     void shouldRequireCsrfAndRejectViewerFromAdminApi() throws Exception {
-        AuthenticatedClient admin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        AuthenticatedClient csrfRejectedAdmin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
         String username = "viewer-rbac-" + UUID.randomUUID().toString().substring(0, 8);
         String body = """
                 {
@@ -174,10 +206,12 @@ class SecurityHttpPostgresIntegrationTest {
                 }
                 """.formatted(username);
 
-        assertEquals(403, admin.send("POST", "/api/v1/admin/users", body, false).statusCode());
+        assertEquals(403, csrfRejectedAdmin.send("POST", "/api/v1/admin/users", body, false).statusCode());
 
+        AuthenticatedClient admin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
         HttpResponse<String> created = admin.send("POST", "/api/v1/admin/users", body, true);
-        assertEquals(201, created.statusCode());
+        assertEquals(201, created.statusCode(),
+                () -> "CSRF-authenticated creation failed: " + created.statusCode() + " " + created.body());
 
         AuthenticatedClient viewer = login(username, "viewer-password-for-tests");
         assertEquals(200, viewer.send("GET", "/api/v1/auth/me", null, false).statusCode());
@@ -199,6 +233,118 @@ class SecurityHttpPostgresIntegrationTest {
         assertEquals("http://localhost:5173", response.headers().firstValue("Access-Control-Allow-Origin").orElseThrow());
         assertEquals("true", response.headers().firstValue("Access-Control-Allow-Credentials").orElseThrow());
         assertNotEquals("*", response.headers().firstValue("Access-Control-Allow-Origin").orElseThrow());
+
+        HttpRequest denied = HttpRequest.newBuilder(server.getURI().resolve("/api/v1/auth/login"))
+                .timeout(HTTP_TIMEOUT)
+                .header("Origin", "https://untrusted.example")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "Content-Type")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> deniedResponse = HttpClient.newHttpClient()
+                .send(denied, HttpResponse.BodyHandlers.ofString());
+        assertFalse(deniedResponse.headers().firstValue("Access-Control-Allow-Origin").isPresent());
+        assertFalse(deniedResponse.headers().firstValue("Access-Control-Allow-Credentials").isPresent());
+    }
+
+    /** Prevent administrative updates from leaving the deployment without an enabled ADMIN identity. */
+    @Test
+    void shouldProtectLastEnabledAdministrator() throws Exception {
+        AuthenticatedClient bootstrapAdmin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        String recoveryAdminName = "recovery-admin-" + UUID.randomUUID().toString().substring(0, 8);
+        String recoveryPassword = "recovery-admin-password-for-tests";
+        HttpResponse<String> created = bootstrapAdmin.send("POST", "/api/v1/admin/users", """
+                {
+                  "username": "%s",
+                  "password": "%s",
+                  "identityType": "HUMAN",
+                  "enabled": true,
+                  "roles": ["ADMIN"]
+                }
+                """.formatted(recoveryAdminName, recoveryPassword), true);
+        assertEquals(201, created.statusCode());
+        UUID recoveryAdminId = extractId(created.body());
+        UUID bootstrapAdminId = UUID.fromString(
+                scalarString("SELECT id::text FROM security.users WHERE username = '" + ADMIN_USERNAME + "'"));
+        AuthenticatedClient recoveryAdmin = login(recoveryAdminName, recoveryPassword);
+
+        HttpResponse<String> disabledBootstrap = recoveryAdmin.send(
+                "PUT",
+                "/api/v1/admin/users/" + bootstrapAdminId,
+                "{\"enabled\":false,\"roles\":[\"ADMIN\"]}",
+                true);
+        assertEquals(200, disabledBootstrap.statusCode());
+
+        HttpResponse<String> selfDisable = recoveryAdmin.send(
+                "PUT",
+                "/api/v1/admin/users/" + recoveryAdminId,
+                "{\"enabled\":false,\"roles\":[\"ADMIN\"]}",
+                true);
+        assertEquals(409, selfDisable.statusCode());
+
+        HttpResponse<String> selfDemote = recoveryAdmin.send(
+                "PUT",
+                "/api/v1/admin/users/" + recoveryAdminId,
+                "{\"enabled\":true,\"roles\":[\"VIEWER\"]}",
+                true);
+        assertEquals(409, selfDemote.statusCode());
+    }
+
+    /** Serialize concurrent ADMIN demotions so exactly one enabled administrator remains. */
+    @Test
+    void shouldProtectLastEnabledAdministratorDuringConcurrentUpdates() throws Exception {
+        AuthenticatedClient bootstrapAdmin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        UUID bootstrapAdminId = UUID.fromString(
+                scalarString("SELECT id::text FROM security.users WHERE username = '" + ADMIN_USERNAME + "'"));
+        String peerName = "concurrent-admin-" + UUID.randomUUID().toString().substring(0, 8);
+        String peerPassword = "concurrent-admin-password-for-tests";
+        HttpResponse<String> created = bootstrapAdmin.send("POST", "/api/v1/admin/users", """
+                {
+                  "username": "%s",
+                  "password": "%s",
+                  "identityType": "HUMAN",
+                  "enabled": true,
+                  "roles": ["ADMIN"]
+                }
+                """.formatted(peerName, peerPassword), true);
+        assertEquals(201, created.statusCode());
+        UUID peerId = extractId(created.body());
+        AuthenticatedClient peerAdmin = login(peerName, peerPassword);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<Integer> bootstrapUpdate = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return bootstrapAdmin.send(
+                        "PUT",
+                        "/api/v1/admin/users/" + bootstrapAdminId,
+                        "{\"enabled\":false,\"roles\":[\"ADMIN\"]}",
+                        true).statusCode();
+            });
+            Future<Integer> peerUpdate = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return peerAdmin.send(
+                        "PUT",
+                        "/api/v1/admin/users/" + peerId,
+                        "{\"enabled\":false,\"roles\":[\"ADMIN\"]}",
+                        true).statusCode();
+            });
+
+            assertTrue(ready.await(HTTP_TIMEOUT.toSeconds(), java.util.concurrent.TimeUnit.SECONDS));
+            start.countDown();
+            Set<Integer> statuses = new HashSet<>(List.of(bootstrapUpdate.get(), peerUpdate.get()));
+            assertEquals(Set.of(200, 409), statuses);
+            assertEquals(1, scalarLong("""
+                    SELECT COUNT(*)
+                      FROM security.users u
+                      JOIN security.user_roles r ON r.user_id = u.id
+                     WHERE u.enabled = TRUE
+                       AND r.role = 'ADMIN'
+                    """));
+        }
     }
 
     /** Disable future authentication while already issued short-lived JWTs remain stateless until expiry. */
@@ -226,7 +372,7 @@ class SecurityHttpPostgresIntegrationTest {
         assertTrue(disabled.body().contains("\"enabled\":false"));
 
         assertEquals(200, viewer.send("GET", "/api/v1/auth/me", null, false).statusCode());
-        assertEquals(401, loginResponse(username, password, new CookieManager()).statusCode());
+        assertEquals(401, loginResponse(username, password).statusCode());
     }
 
     private HttpResponse<String> bearerRequest(String token) throws Exception {
@@ -259,14 +405,13 @@ class SecurityHttpPostgresIntegrationTest {
     }
 
     private AuthenticatedClient login(String username, String password) throws Exception {
-        CookieManager cookies = new CookieManager();
-        HttpResponse<String> response = loginResponse(username, password, cookies);
-        assertEquals(200, response.statusCode(), () -> "Login failed: " + response.body());
-        return new AuthenticatedClient(cookies);
+        HttpResponse<String> response = loginResponse(username, password);
+        assertEquals(200, response.statusCode(), () -> "Login failed: " + response.statusCode() + " " + response.body());
+        return new AuthenticatedClient(response);
     }
 
-    private HttpResponse<String> loginResponse(String username, String password, CookieManager cookies) throws Exception {
-        HttpClient client = HttpClient.newBuilder().cookieHandler(cookies).connectTimeout(Duration.ofSeconds(5)).build();
+    private HttpResponse<String> loginResponse(String username, String password) throws Exception {
+        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
         HttpRequest request = HttpRequest.newBuilder(server.getURI().resolve("/api/v1/auth/login"))
                 .timeout(HTTP_TIMEOUT)
                 .header("Content-Type", "application/json")
@@ -341,8 +486,13 @@ class SecurityHttpPostgresIntegrationTest {
                 Map.entry("micronaut.security.csrf.cookie-name", "XSRF-TOKEN"),
                 Map.entry("micronaut.security.csrf.cookie-http-only", false),
                 Map.entry("micronaut.security.csrf.cookie-secure", false),
+                Map.entry("micronaut.security.csrf.cookie-same-site", "Strict"),
+                Map.entry("micronaut.security.csrf.cookie-path", "/"),
+                Map.entry("micronaut.security.csrf.header-name", "X-CSRF-TOKEN"),
                 Map.entry("micronaut.security.csrf.filter.regex-pattern", "^(?!/api/v1/auth/login$).*$"),
                 Map.entry("micronaut.security.csrf.filter.content-types[0]", "application/json"),
+                Map.entry("micronaut.security.csrf.filter.content-types[1]", "application/x-www-form-urlencoded"),
+                Map.entry("micronaut.security.csrf.filter.content-types[2]", "multipart/form-data"),
                 Map.entry("signalharvester.security.bootstrap.username", ADMIN_USERNAME),
                 Map.entry("signalharvester.security.bootstrap.password", ADMIN_PASSWORD),
                 Map.entry("signalharvester.security.password-hashing.iterations", 10_000),
@@ -380,18 +530,22 @@ class SecurityHttpPostgresIntegrationTest {
     }
 
     private final class AuthenticatedClient {
-        private final CookieManager cookies;
-        private final HttpClient client;
+        private final Map<String, BrowserCookie> cookies = new LinkedHashMap<>();
+        private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
-        private AuthenticatedClient(CookieManager cookies) {
-            this.cookies = cookies;
-            this.client = HttpClient.newBuilder().cookieHandler(cookies).connectTimeout(Duration.ofSeconds(5)).build();
+        private AuthenticatedClient(HttpResponse<?> loginResponse) {
+            applySetCookieHeaders(loginResponse);
         }
 
         private HttpResponse<String> send(String method, String path, String body, boolean includeCsrf) throws Exception {
             HttpRequest.Builder request = HttpRequest.newBuilder(server.getURI().resolve(path)).timeout(HTTP_TIMEOUT);
+            if (!cookies.isEmpty()) {
+                request.header("Cookie", cookies.values().stream()
+                        .map(cookie -> cookie.name() + "=" + cookie.value())
+                        .collect(Collectors.joining("; ")));
+            }
             if (includeCsrf) {
-                request.header("X-CSRF-TOKEN", cookie("XSRF-TOKEN").getValue());
+                request.header("X-CSRF-TOKEN", cookie("XSRF-TOKEN").value());
             }
             if (body == null) {
                 request.method(method, HttpRequest.BodyPublishers.noBody());
@@ -399,18 +553,53 @@ class SecurityHttpPostgresIntegrationTest {
                 request.header("Content-Type", "application/json");
                 request.method(method, HttpRequest.BodyPublishers.ofString(body));
             }
-            return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            applySetCookieHeaders(response);
+            return response;
+        }
+
+        private void applySetCookieHeaders(HttpResponse<?> response) {
+            for (String header : response.headers().allValues("Set-Cookie")) {
+                String[] segments = header.split(";");
+                int separator = segments[0].indexOf('=');
+                if (separator <= 0) {
+                    throw new AssertionError("Invalid Set-Cookie header: " + header);
+                }
+
+                String name = segments[0].substring(0, separator).trim();
+                String value = segments[0].substring(separator + 1).trim();
+                boolean httpOnly = false;
+                boolean expired = false;
+                for (int index = 1; index < segments.length; index++) {
+                    String attribute = segments[index].trim();
+                    if (attribute.equalsIgnoreCase("HttpOnly")) {
+                        httpOnly = true;
+                    } else if (attribute.regionMatches(true, 0, "Max-Age=", 0, "Max-Age=".length())) {
+                        expired = "0".equals(attribute.substring("Max-Age=".length()).trim());
+                    }
+                }
+
+                if (expired) {
+                    cookies.remove(name);
+                } else {
+                    cookies.put(name, new BrowserCookie(name, value, httpOnly));
+                }
+            }
         }
 
         private boolean hasCookie(String name) {
-            return cookies.getCookieStore().getCookies().stream().anyMatch(cookie -> cookie.getName().equals(name));
+            return cookies.containsKey(name);
         }
 
-        private HttpCookie cookie(String name) {
-            return cookies.getCookieStore().getCookies().stream()
-                    .filter(cookie -> cookie.getName().equals(name))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Missing cookie " + name));
+        private BrowserCookie cookie(String name) {
+            BrowserCookie cookie = cookies.get(name);
+            if (cookie == null) {
+                throw new AssertionError("Missing cookie " + name + "; available cookies=" + cookies.keySet());
+            }
+            return cookie;
         }
+    }
+
+    private record BrowserCookie(String name, String value, boolean httpOnly) {
     }
 }

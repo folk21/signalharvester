@@ -102,13 +102,51 @@ public final class JdbcSecurityUserRepository implements SecurityUserRepository 
     }
 
     @Override
-    public boolean anyAdminExists() {
-        String sql = "SELECT 1 FROM security.user_roles WHERE role = 'ADMIN' LIMIT 1";
+    public boolean anyEnabledAdminExists() {
+        String sql = """
+                SELECT 1
+                  FROM security.users u
+                  JOIN security.user_roles r ON r.user_id = u.id
+                 WHERE u.enabled = TRUE
+                   AND r.role = 'ADMIN'
+                 LIMIT 1
+                """;
         try (PreparedStatement statement = connection.prepareStatement(sql);
                 ResultSet rows = statement.executeQuery()) {
             return rows.next();
         } catch (SQLException exception) {
-            throw new SecurityPersistenceException("Failed to inspect administrator state", exception);
+            throw new SecurityPersistenceException("Failed to inspect enabled administrator state", exception);
+        }
+    }
+
+    @Override
+    public void lockAdministratorState() {
+        String sql = "LOCK TABLE security.users, security.user_roles IN SHARE ROW EXCLUSIVE MODE";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.execute();
+        } catch (SQLException exception) {
+            throw new SecurityPersistenceException("Failed to lock administrator state", exception);
+        }
+    }
+
+    @Override
+    public boolean anyOtherEnabledAdminExists(UserId excludedUserId) {
+        String sql = """
+                SELECT 1
+                  FROM security.users u
+                  JOIN security.user_roles r ON r.user_id = u.id
+                 WHERE u.enabled = TRUE
+                   AND r.role = 'ADMIN'
+                   AND u.id <> ?
+                 LIMIT 1
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, excludedUserId.value());
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next();
+            }
+        } catch (SQLException exception) {
+            throw new SecurityPersistenceException("Failed to inspect alternate administrator state", exception);
         }
     }
 
