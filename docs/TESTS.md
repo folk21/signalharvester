@@ -32,9 +32,10 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 1. `docker info` preflight for container-backed verification;
 2. optional `git diff --check` when running inside a Git worktree;
 3. `./tools/source-import/run_tests.sh` and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
-4. `./gradlew clean check --no-watch-fs`;
-5. `./gradlew integrationTest --no-watch-fs --no-parallel`;
-6. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
+4. `./infra/kubernetes/run_tests.sh` for deterministic Kubernetes/deployment asset checks without a live cluster;
+5. `./gradlew clean check --no-watch-fs`;
+6. `./gradlew integrationTest --no-watch-fs --no-parallel`;
+7. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
 
 The script prints a final PASS/FAIL summary of every routine verification step that actually ran and lists the relevant test/problems report locations. Use focused Gradle commands during development, but run `./run_checks.sh` before treating a substantial PATCH or branch as functionally verified. Slower coverage/static/dependency analysis and repository-size metrics run through `./run_rare_checks.sh`; quality-tool policy and report ownership are documented in [`QUALITY.md`](QUALITY.md).
 
@@ -243,3 +244,31 @@ Focused validation for the manual-run/history and analysis-inspection slice:
 ```
 
 Collection tests cover durable PostgreSQL run/source history; analysis PostgreSQL tests cover bounded inspection of durable normalized-item claims. Server-level HTTP coverage now verifies source CRUD plus the collection-admin and analysis-inspection endpoints, including validation/status mapping and blocking Virtual Thread execution. The operational-admin slice has completed its focused Gradle and container-backed verification and its spec is archived; these commands remain useful targeted regressions.
+
+## Kubernetes deployment assets
+
+Deterministic infrastructure checks for `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` run without a live cluster:
+
+```bash
+./infra/kubernetes/run_tests.sh
+```
+
+They protect Kustomize resource references, versioned image tags, deployment-owned secret separation, backend security/probe/resource wiring, Prometheus/Tempo/Loki/Alloy/Grafana integration, dashboard JSON, and the non-root backend Docker image contract. They are part of `./run_checks.sh`.
+
+Live cluster verification is deliberately separate because it requires a pre-existing Kubernetes cluster and locally loaded images:
+
+```bash
+./infra/kubernetes/verify-local.sh
+```
+
+The live script waits for the backend/infrastructure rollouts and topic-provisioning Job, then verifies backend readiness, the Prometheus endpoint, healthy Prometheus scrape targets for the backend/Redpanda/kube-state-metrics, and Grafana health. Log and trace acceptance requires generating normal application traffic and inspecting the provisioned Loki/Tempo data sources. Full umbrella R24 additionally requires a real frontend image from `signalharvester-web`.
+
+## Kubernetes system resilience acceptance
+
+The next opt-in live gate exercises controlled failure/recovery behavior against the same cluster:
+
+```bash
+python3 infra/kubernetes/resilience/run_acceptance.py
+```
+
+It is intentionally separate from `./run_checks.sh` because it restarts containers and StatefulSets, temporarily changes backend Deployment environment variables, injects Kafka traffic, and uses test-only PostgreSQL state manipulation. Deterministic parsing/asset checks for the harness are included in `./infra/kubernetes/run_tests.sh`. The live run covers stateless JWT behavior across a backend restart, slow-source availability, retry/DLQ during PostgreSQL outage, Analysis lag generation/drain, Analysis outbox recovery, multi-replica scheduler lease behavior, Redpanda restart recovery, and Prometheus/Loki/Tempo evidence.

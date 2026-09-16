@@ -76,3 +76,23 @@ See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for
 ## UI setup
 
 The companion UI is not installed from this repository. Use the `signalharvester-web` root README for frontend prerequisites and development-server configuration.
+
+## Local Kubernetes deployment
+
+The verification-pending production-style local deployment requires Docker (or another image builder), a local Kubernetes cluster such as `kind` or `k3d`, `kubectl`, and enough local resources for PostgreSQL, Redpanda, two backend replicas, and the observability stack.
+
+Build the backend image from the repository root:
+
+```bash
+docker build -f app/Dockerfile -t signalharvester-backend:local .
+```
+
+Load that image into the selected local cluster when required by the distribution, then create deployment-owned secrets and apply the Kustomize target:
+
+```bash
+./infra/kubernetes/create-local-secrets.sh
+kubectl apply -k infra/kubernetes
+./infra/kubernetes/verify-local.sh
+```
+
+See [`../infra/kubernetes/README.md`](../infra/kubernetes/README.md) for image-loading examples, port-forward commands, reset behavior, observability access, and the separate frontend image boundary.

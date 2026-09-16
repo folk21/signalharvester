@@ -8,6 +8,7 @@ set -eu
 # - git diff --check (when executed inside a Git worktree)
 # - ./tools/source-import/run_tests.sh
 # - ./tools/live-backend/run_tests.sh
+# - ./infra/kubernetes/run_tests.sh
 # - ./gradlew clean check --no-watch-fs
 # - ./gradlew integrationTest --no-watch-fs --no-parallel (container-backed module tests + cross-module HTTP smoke)
 # - ./archive.sh <temporary FULL archive>
@@ -164,6 +165,7 @@ fi
 
 run_step "./tools/source-import/run_tests.sh" ./tools/source-import/run_tests.sh
 run_step "./tools/live-backend/run_tests.sh" ./tools/live-backend/run_tests.sh
+run_step "./infra/kubernetes/run_tests.sh" ./infra/kubernetes/run_tests.sh
 run_step "./gradlew clean check --no-watch-fs" run_gradle clean check --no-watch-fs
 run_step "./gradlew integrationTest --no-watch-fs --no-parallel" run_gradle integrationTest --no-watch-fs --no-parallel
 

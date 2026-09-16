@@ -52,7 +52,7 @@ The rules are:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current implementation focus is `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`. Application observability is accepted and archived.
+The current implementation focus is system resilience acceptance through `active/subspecs/backend-system-resilience-acceptance.md`. The backend-owned Kubernetes/observability deployment remains an active supporting verification track. Authentication/RBAC, application observability, and external-source access security are accepted and archived.
 
 ## When to create a sub-spec
 
@@ -134,15 +134,18 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-external-source-access-security.md`](active/subspecs/backend-external-source-access-security.md) — `SECURITY.EXTERNAL_SOURCE_ACCESS`; implementation complete, developer verification pending.
+- [`active/subspecs/backend-system-resilience-acceptance.md`](active/subspecs/backend-system-resilience-acceptance.md) — controlled multi-replica restart, lag, retry/DLQ, outbox, scheduler, authorization, and recovery acceptance; implementation complete, developer live-cluster execution pending.
 
 Active supporting tracks:
+
+- [`active/subspecs/backend-kubernetes-observability-deployment.md`](active/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`; implementation complete, developer live-cluster verification pending.
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
 
 ## Recently completed sub-specifications
 
+- [`archive/subspecs/backend-external-source-access-security.md`](archive/subspecs/backend-external-source-access-security.md) — `SECURITY.EXTERNAL_SOURCE_ACCESS`, accepted after developer `./run_checks.sh` verification on 2026-09-16;
 - [`archive/subspecs/backend-authentication-authorization.md`](archive/subspecs/backend-authentication-authorization.md) — `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`, accepted after developer `./run_checks.sh` verification on 2026-09-16;
 - [`archive/subspecs/backend-application-observability.md`](archive/subspecs/backend-application-observability.md) — `OBSERVABILITY.APPLICATION`, accepted after developer `./run_checks.sh` verification;
 - [`archive/subspecs/backend-db-kafka-consistency.md`](archive/subspecs/backend-db-kafka-consistency.md) — `ANALYSIS.OUTBOX`, accepted after developer `./run_checks.sh` verification;
@@ -164,10 +167,9 @@ Active supporting tracks:
 
 ## Planned backend sub-specifications
 
-Likely future bounded specs include:
+Likely future bounded specs after the current live acceptance work include:
 
-- implementation/acceptance of the active `SECURITY.EXTERNAL_SOURCE_ACCESS` supporting specification before shared Kubernetes exposure;
-- `DEPLOYMENT.KUBERNETES` + `OBSERVABILITY.INFRASTRUCTURE` — local production-style deployment and telemetry stack;
-- system resilience acceptance across restart, lag, retry, recovery, and authorization boundaries.
+- horizontal Kafka consumer scaling where partitioning permits;
+- lower-priority product refinements after the production-style local system milestone.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` UI behavior belongs to `signalharvester-web` and should receive its own frontend sub-spec when frontend work resumes.
