@@ -187,7 +187,7 @@ Console logs include `trace_id` and `span_id` fields when a valid OpenTelemetry 
 
 ## Run the production-style local Kubernetes stack
 
-The backend-owned Kubernetes deployment is currently verification-pending. Build/load `signalharvester-backend:local`, create local runtime secrets, apply the Kustomize target, and run the live cluster verification:
+The backend-owned Kubernetes deployment and resilience workflow are accepted. To recreate or re-verify the local cluster, build/load `signalharvester-backend:local`, create local runtime secrets, apply the Kustomize target, and run the live cluster verification:
 
 ```bash
 docker build -f app/Dockerfile -t signalharvester-backend:local .
@@ -214,6 +214,16 @@ python3 infra/kubernetes/resilience/run_acceptance.py
 ```
 
 The harness deploys a temporary in-cluster RSS fixture and exercises backend container restart, slow-source availability, PostgreSQL outage with bounded Analysis retry/DLQ, Kafka lag and recovery, Analysis outbox recovery, scheduler leases across two replicas, Redpanda restart recovery, authorization boundaries, and Prometheus/Loki/Tempo evidence. It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for the fault-injection boundaries and options.
+
+### Demonstrate Kafka consumer horizontal scaling
+
+After the resilience workflow passes, demonstrate R26/S9 with:
+
+```bash
+python3 infra/kubernetes/scaling/run_acceptance.py
+```
+
+The default run creates a bounded 6,000-item backlog, confirms positive Analysis lag with one worker, scales the existing backend Deployment to three replicas, verifies three active Analysis consumers own the three raw-event partitions, verifies Results and Event Observation also have three active clients, and waits for the backlog to drain. The runner then verifies durable Analysis/Results completeness, outbox completion, DLQ stability, and restores the original replica count. See [`../infra/kubernetes/scaling/README.md`](../infra/kubernetes/scaling/README.md).
 
 ## Kafka retry and dead-letter operation
 

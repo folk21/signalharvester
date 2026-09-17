@@ -56,7 +56,7 @@ PARTITION  LEADER  EPOCH  REPLICAS  LOG-START-OFFSET  HIGH-WATERMARK
             acceptance.parse_topic_record_count("no partition table here")
 
     def test_resilience_spec_reuses_stable_feature_ids(self):
-        text = (ROOT / "docs" / "specs" / "active" / "subspecs" / "backend-system-resilience-acceptance.md").read_text()
+        text = (ROOT / "docs" / "specs" / "archive" / "subspecs" / "backend-system-resilience-acceptance.md").read_text()
         for feature in (
             "RELIABILITY.KAFKA_RETRY",
             "RELIABILITY.DEAD_LETTER",

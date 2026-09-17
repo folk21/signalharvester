@@ -16,7 +16,7 @@ Accepted P2 reliability work includes:
 - `RELIABILITY.IDEMPOTENCY` protections used by current consumers;
 - `ANALYSIS.OUTBOX` for PostgreSQL/Kafka consistency in Analysis.
 
-`OBSERVABILITY.APPLICATION`, backend authentication/authorization, and `SECURITY.EXTERNAL_SOURCE_ACCESS` are accepted. The backend-owned Kubernetes/infrastructure-observability stack is implemented and verification-pending. The current bounded focus is live system resilience acceptance over that stack; full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
+`OBSERVABILITY.APPLICATION`, backend authentication/authorization, `SECURITY.EXTERNAL_SOURCE_ACCESS`, the backend-owned Kubernetes/infrastructure-observability stack, and the live system resilience acceptance are accepted. The current bounded backend focus is `SCALABILITY.KAFKA_CONSUMERS`; full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
 Stable feature identifiers are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -50,16 +50,20 @@ Accepted:
 - `OBSERVABILITY.APPLICATION`;
 - `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`.
 
+Accepted deployment/system milestone:
+
+- backend-owned `DEPLOYMENT.KUBERNETES` + `OBSERVABILITY.INFRASTRUCTURE`;
+- controlled live system resilience acceptance for restart, persistence outage, retry/DLQ, lag recovery, outbox recovery, scheduler leases, authorization, and telemetry evidence.
+
 Current verification-pending:
 
-- backend-owned `DEPLOYMENT.KUBERNETES` + `OBSERVABILITY.INFRASTRUCTURE` — manifests, observability stack, dashboard, and verification tooling are implemented; live local-cluster verification is pending;
-- system resilience acceptance — the live harness for restart, persistence outage, retry/DLQ, lag recovery, outbox recovery, scheduler leases, authorization, and telemetry evidence is implemented and awaiting developer execution.
+- `SCALABILITY.KAFKA_CONSUMERS` — live scale from one to three backend replicas while Analysis lag exists, with shared-group partition ownership and semantic-completeness checks.
 
 Next backend stages:
 
-1. run the Kubernetes deployment and resilience live gates; if both pass, archive the two backend-owned sub-specs in order. Umbrella R24 remains incomplete until the companion frontend image is verified.
-2. horizontal Kafka consumer scaling where partitioning permits.
-3. lower-priority product refinements after the production-style system milestone.
+1. execute and accept Kafka consumer horizontal-scaling verification.
+2. choose the next lower-priority product refinement from analysis settings, replay operations, search/pagination, scheduling refinement, or other active product need.
+3. consider KEDA only after manual horizontal scaling behavior is accepted and an autoscaling policy is justified.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security is accepted, but it is intentionally deferred until frontend development resumes. Its detailed layout/routing behavior belongs to `signalharvester-web`.
 

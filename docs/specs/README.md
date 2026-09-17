@@ -52,7 +52,7 @@ The rules are:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current implementation focus is system resilience acceptance through `active/subspecs/backend-system-resilience-acceptance.md`. The backend-owned Kubernetes/observability deployment remains an active supporting verification track. Authentication/RBAC, application observability, and external-source access security are accepted and archived.
+The current implementation focus is Kafka consumer horizontal scaling through `active/subspecs/backend-kafka-consumer-horizontal-scaling.md`. Backend-owned Kubernetes/observability deployment and system resilience acceptance are accepted and archived, together with authentication/RBAC, application observability, and external-source access security.
 
 ## When to create a sub-spec
 
@@ -134,17 +134,17 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-system-resilience-acceptance.md`](active/subspecs/backend-system-resilience-acceptance.md) — controlled multi-replica restart, lag, retry/DLQ, outbox, scheduler, authorization, and recovery acceptance; implementation complete, developer live-cluster execution pending.
+- [`active/subspecs/backend-kafka-consumer-horizontal-scaling.md`](active/subspecs/backend-kafka-consumer-horizontal-scaling.md) — `SCALABILITY.KAFKA_CONSUMERS`; implementation complete, developer live-cluster execution pending.
 
 Active supporting tracks:
-
-- [`active/subspecs/backend-kubernetes-observability-deployment.md`](active/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`; implementation complete, developer live-cluster verification pending.
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
 
 ## Recently completed sub-specifications
 
+- [`archive/subspecs/backend-system-resilience-acceptance.md`](archive/subspecs/backend-system-resilience-acceptance.md) — live multi-replica restart, outage, lag, outbox, scheduler, authorization, recovery, and telemetry acceptance, accepted after developer execution on 2026-09-17;
+- [`archive/subspecs/backend-kubernetes-observability-deployment.md`](archive/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`, accepted after routine and live-cluster developer verification on 2026-09-17;
 - [`archive/subspecs/backend-external-source-access-security.md`](archive/subspecs/backend-external-source-access-security.md) — `SECURITY.EXTERNAL_SOURCE_ACCESS`, accepted after developer `./run_checks.sh` verification on 2026-09-16;
 - [`archive/subspecs/backend-authentication-authorization.md`](archive/subspecs/backend-authentication-authorization.md) — `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`, accepted after developer `./run_checks.sh` verification on 2026-09-16;
 - [`archive/subspecs/backend-application-observability.md`](archive/subspecs/backend-application-observability.md) — `OBSERVABILITY.APPLICATION`, accepted after developer `./run_checks.sh` verification;

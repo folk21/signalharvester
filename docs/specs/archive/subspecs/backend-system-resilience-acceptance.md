@@ -3,16 +3,14 @@ type: Specification
 title: Backend system resilience acceptance
 description: Exercise the deployed multi-replica backend under controlled restart, lag, persistence outage, retry/DLQ, outbox, scheduler, authorization, and observability scenarios.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend system resilience acceptance
 
 ## Status
 
-Implementation complete for the backend-owned live acceptance harness. Developer execution against the local Kubernetes stack is pending.
-
-The Kubernetes/observability deployment sub-spec remains active and verification-pending until its live requirements are demonstrated. This resilience harness intentionally reuses that same cluster and provides additional evidence for its backend-owned runtime requirements.
+Accepted on 2026-09-17 after the developer executed the complete live Kubernetes resilience workflow successfully. The run also supplied the live runtime evidence required to accept the backend-owned Kubernetes/observability deployment sub-spec.
 
 ## Feature scope
 
