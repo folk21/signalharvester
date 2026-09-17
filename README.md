@@ -7,7 +7,14 @@ description: Entry point for the modular event-driven backend, its architecture,
 
 SignalHarvester is a modular event-driven backend for collecting, analyzing, and presenting information from configurable external sources.
 
-The first product focus is monitoring job vacancies and selected information topics. The backend is intentionally designed as a **modular monolith first**: one deployable Micronaut application composed from cohesive Gradle modules with explicit Java and event contracts. Kafka, PostgreSQL, Kubernetes, and observability remain first-class parts of the system without forcing every module to become a microservice.
+The first product focus is:
+
+- job-vacancy monitoring;
+- selected information-topic monitoring.
+
+The backend is **modular monolith first**. One Micronaut application is assembled from cohesive Gradle modules with explicit Java and event contracts.
+
+Kafka, PostgreSQL, Kubernetes, and observability remain first-class system components. They do not require every module to become a separately deployed service.
 
 ## System at a glance
 
@@ -24,17 +31,24 @@ flowchart TB
     OBS --> API
 ```
 
-Kafka events are defined by versioned `.proto` files. In-process synchronous module collaboration uses Java interfaces/types. Browser and test clients use REST/JSON, and browser live updates use SSE/JSON.
+Communication boundaries are explicit:
+
+- Kafka events use versioned `.proto` files.
+- Synchronous in-process module collaboration uses Java interfaces and Java types.
+- Browser and test clients use REST/JSON.
+- Browser live updates use SSE/JSON.
 
 ## Companion UI project
 
-The web frontend is a separate repository. The frontend repository is **`signalharvester-web`** and owns the complete SignalHarvester Web application. The current operational/admin screens are its first implemented product slice, not a separate admin-only frontend.
+The web frontend is a separate repository named **`signalharvester-web`**. It owns the complete SignalHarvester Web application.
 
-This backend repository owns the public REST/OpenAPI and SSE contracts consumed by the UI, but it does not own frontend implementation details.
+The current operational/admin screens are the first implemented frontend product slice. They are not a separate admin-only application.
 
-For UI installation and run instructions, use the **UI repository's root `README.md`** as the initial authoritative guide. The UI project should have its own `docs/specs/` tree from the beginning. Separate UI `docs/INSTALLATION.md` and `docs/USAGE.md` files should be introduced only when setup/operation becomes too large or independently owned for a single README.
+This backend repository owns the public REST/OpenAPI and SSE contracts consumed by the UI. Frontend implementation details stay in the UI repository.
 
-Backend [`docs/INSTALLATION.md`](docs/INSTALLATION.md) and [`docs/USAGE.md`](docs/USAGE.md) describe backend/infrastructure setup and operation only.
+For frontend setup and run instructions, start with the UI repository root `README.md`. Frontend specifications belong in its own `docs/specs/` tree.
+
+Backend [`docs/INSTALLATION.md`](docs/INSTALLATION.md) and [`docs/USAGE.md`](docs/USAGE.md) cover backend and infrastructure setup only.
 
 ## Start here
 
@@ -79,42 +93,74 @@ signalharvester/
     └── specs/
 ```
 
-Read [`modules/README.md`](modules/README.md) for functional-module ownership and [`contracts/README.md`](contracts/README.md) for external/event contract ownership.
+Read [`modules/README.md`](modules/README.md) for functional-module ownership. Read [`contracts/README.md`](contracts/README.md) for REST and event-contract ownership.
 
 ## Current state
 
-The first implementation foundation is present:
+The implemented backend foundation includes the following capability groups.
 
-- a runnable Micronaut composition root in `app`;
-- centralized dependency/plugin versions through `gradle/libs.versions.toml`, with the Micronaut Platform version exposed as the Gradle plugin-compatible `micronautVersion` property;
-- the configuration-module Java API plus PostgreSQL/Flyway-backed source and monitoring-profile persistence;
-- the source REST/OpenAPI CRUD contract implemented under `/api/v1/sources`;
-- versioned Protobuf `EventEnvelope`, `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` Kafka schemas;
-- JUnit contract tests plus PostgreSQL and Kafka Testcontainers coverage for the implemented persistence/event boundaries;
-- repository-level JaCoCo coverage, SpotBugs static-analysis, and dependency-health reporting integrated into the canonical verification workflow;
-- the first collection HTTP transport using Micronaut-managed HTTP infrastructure with bounded Virtual Thread orchestration and deterministic loopback tests;
-- collection-owned source extraction with bounded RSS/Atom parsing, configuration-driven REST/JSON and HTML extraction, and backward-compatible passthrough when generic extraction is not configured;
-- diagnostic persisted-source testing through the normal fetch/extraction boundary without publishing test data into Kafka or collection-run history;
-- profile-driven collection execution over persisted monitoring-profile source membership, with bounded best-effort fetch, deterministic raw-item identity, run correlation, and partial-failure results;
-- collection-owned PostgreSQL interval scheduling with cluster-safe leases and lease heartbeats across backend replicas;
-- the Analysis consumer pipeline with deterministic normalization, PostgreSQL-backed profile-scoped deduplication, configurable keyword analysis, manual source-offset commit after durable processing, and transactional-outbox staging of `ItemAnalyzed`/`ItemRejected`;
-- a first operational admin API for manual collection runs, durable run/source outcome history, and read-only normalized-item inspection;
-- Results-owned PostgreSQL materialization of `ItemAnalyzed` and `ItemRejected` with idempotent at-least-once Kafka consumption;
-- a bounded public Results REST API for recent feed browsing and profile-scoped result detail;
-- Results-owned resumable SSE live delivery backed by durable PostgreSQL cursors and browser `Last-Event-ID` reconnection;
-- event-observation persistence over published raw/analyzed/rejected Kafka events, with bounded diagnostic history plus REST/SSE Event Explorer APIs;
-- bounded collection-run and item processing-flow reconstruction with explicit observed, derived, and unobserved stage evidence;
-- bounded Kafka consumer retry and versioned dead-letter handling for Analysis, Results, and Event Observation poison/failure paths;
-- application observability through health/readiness endpoints, Prometheus metrics, OpenTelemetry HTTP/Kafka/JDBC tracing, trace-correlated console logs, and preserved trace context across Collection fan-out and the Analysis outbox.
-- accepted backend security with persisted application identities, additive USER/VIEWER/ADMIN/BOT roles, stateless JWT authentication, cookie/CSRF browser transport, and backend-enforced RBAC;
-- accepted external-source access security with connection-bound DNS authorization, redirect revalidation, secure/shared network blocking, and explicit trusted-local compatibility;
-- accepted backend-owned Kubernetes/infrastructure deployment with PostgreSQL, Redpanda, Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, Grafana, and a separately owned frontend workload boundary;
-- accepted Kubernetes resilience verification for restart, persistence outage, retry/DLQ, Kafka lag, outbox recovery, scheduler leases, authorization, and telemetry evidence;
-- verification-pending Kafka consumer horizontal-scaling acceptance over the existing modular-monolith Deployment and three-partition local topics.
+### Runtime, contracts, and verification
 
-External-source access security and backend authentication/authorization are accepted. The default host-run local profile remains the explicitly trusted unauthenticated compatibility mode until the frontend is migrated, while the `security` environment enables authentication/RBAC and restrictive outbound-source policy. Kubernetes backend/infrastructure manifests, observability, and the controlled resilience workflow are accepted after live developer verification. The current backend focus is horizontal Kafka consumer scaling: demonstrating backlog drain when the existing modular-monolith Deployment grows from one to three replicas while topic partitioning permits parallelism. Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. The Analysis authoritative-state/Kafka consistency gap is addressed by the accepted transactional outbox. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
+- Runnable Micronaut composition root in `app`.
+- Centralized dependency/plugin versions in `gradle/libs.versions.toml`.
+- Micronaut Platform version exposed as Gradle property `micronautVersion`.
+- Versioned Protobuf `EventEnvelope`, `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` schemas.
+- JUnit contract tests plus PostgreSQL and Kafka Testcontainers coverage.
+- Repository-level JaCoCo, SpotBugs, dependency-health reporting, and canonical verification workflows.
 
-See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for the exact implemented state and [`docs/USAGE.md`](docs/USAGE.md) for current runnable commands.
+### Configuration and collection
+
+- Configuration-module Java API with PostgreSQL/Flyway-backed Sources and Monitoring Profiles.
+- Source REST/OpenAPI CRUD under `/api/v1/sources`.
+- Micronaut-managed collection HTTP transport with bounded Virtual Thread orchestration.
+- Bounded RSS/Atom extraction.
+- Configuration-driven REST/JSON and HTML extraction.
+- Backward-compatible passthrough when generic extraction is not configured.
+- Persisted-source diagnostic testing without Kafka publication or Collection Run history.
+- Profile-driven Collection Runs with deterministic raw-item identity, run correlation, bounded best-effort fetch, and partial-failure outcomes.
+- PostgreSQL interval scheduling with cluster-safe leases and lease heartbeats.
+
+### Analysis and results
+
+- Analysis consumption with deterministic normalization.
+- PostgreSQL-backed profile-scoped deduplication.
+- Configurable deterministic keyword analysis.
+- Manual source-offset commit after durable processing.
+- Transactional-outbox staging of `ItemAnalyzed` and `ItemRejected`.
+- Operational APIs for Collection Runs and bounded Analysis inspection.
+- Results-owned PostgreSQL materialization with idempotent at-least-once consumption.
+- Bounded Results REST browsing and profile-scoped detail.
+- Resumable Results SSE backed by durable PostgreSQL cursors and `Last-Event-ID`.
+
+### Diagnostics, reliability, and observability
+
+- Event Observation over published raw/analyzed/rejected Kafka events.
+- Bounded diagnostic history with REST/SSE Event Explorer APIs.
+- Collection-run and item Processing Flow reconstruction with explicit observed, derived, and unobserved evidence.
+- Bounded Kafka retry and versioned dead-letter handling for Analysis, Results, and Event Observation.
+- Health/readiness endpoints, Prometheus metrics, OpenTelemetry HTTP/Kafka/JDBC tracing, and trace-correlated console logs.
+- Trace-context preservation across Collection fan-out and the Analysis outbox.
+
+### Security and deployment
+
+- Persisted application identities with additive `USER`, `VIEWER`, `ADMIN`, and `BOT` roles.
+- Stateless JWT authentication.
+- HttpOnly browser JWT cookie plus double-submit CSRF protection.
+- Backend-enforced RBAC.
+- Connection-bound external-source DNS authorization with redirect revalidation and explicit trusted-local compatibility.
+- Accepted backend-owned Kubernetes deployment with PostgreSQL, Redpanda, Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana.
+- Accepted live resilience verification for restart, persistence outage, retry/DLQ, Kafka lag, outbox recovery, scheduler leases, authorization, and telemetry evidence.
+- Verification-pending Kafka consumer horizontal-scaling acceptance over the existing modular-monolith Deployment and three-partition local topics.
+
+The default host-run local profile remains an explicitly trusted unauthenticated compatibility mode while the frontend is migrated.
+
+The `security` environment enables authentication/RBAC and restrictive outbound-source policy.
+
+The current backend focus is `SCALABILITY.KAFKA_CONSUMERS`. It demonstrates backlog drain while the existing modular-monolith Deployment scales from one to three replicas and topic partitioning permits parallelism.
+
+Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
+
+See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for detailed implemented state. See [`docs/USAGE.md`](docs/USAGE.md) for runnable workflows.
 
 For local development infrastructure, defaults work without an env file:
 
@@ -122,16 +168,25 @@ For local development infrastructure, defaults work without an env file:
 docker compose -f infra/docker-compose/compose.yaml up -d
 ```
 
-For local overrides, copy `infra/docker-compose/.env.example` to `infra/docker-compose/.env` and pass it explicitly with `--env-file`. See [`infra/docker-compose/README.md`](infra/docker-compose/README.md).
+For local overrides:
+
+1. copy `infra/docker-compose/.env.example` to `infra/docker-compose/.env`;
+2. pass it explicitly with `--env-file`.
+
+See [`infra/docker-compose/README.md`](infra/docker-compose/README.md).
 
 ## Documentation model
 
-Documentation uses minimal YAML frontmatter (`type`, `title`, `description`) to make purpose searchable for humans and LLMs. Active specifications add relationship/workflow metadata defined by [`docs/specs/README.md`](docs/specs/README.md).
+Managed documentation uses minimal YAML frontmatter: `type`, `title`, and `description`. Active specifications add workflow metadata defined by [`docs/specs/README.md`](docs/specs/README.md).
 
-Stable capability names live in [`docs/FEATURES.md`](docs/FEATURES.md). Feature IDs are long-lived cross-references; requirement IDs remain local to their specifications, and completed implementation specs are archived.
+Stable capability names live in [`docs/FEATURES.md`](docs/FEATURES.md). Feature IDs are long-lived cross-references. Requirement IDs remain local to their specifications.
 
-Current-state documentation and active specs have different roles: specs define intended changes; architecture/implementation/configuration/usage docs describe the accepted current system.
+Current-state documentation and active specifications have different roles:
+
+- active specifications define intended unresolved changes;
+- architecture, implementation, configuration, installation, usage, testing, and quality documents describe accepted current state;
+- completed implementation specifications move to the archive.
 
 ## License
 
-See [`LICENSE.md`](LICENSE.md). No redistribution license is currently assumed unless that file is updated explicitly.
+See [`LICENSE.md`](LICENSE.md). No redistribution license is assumed unless that file is updated explicitly.

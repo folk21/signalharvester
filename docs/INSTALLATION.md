@@ -20,7 +20,9 @@ The current implementation requires:
 - a Kafka-compatible broker for the current collection -> analysis event flow;
 - network access to Maven/Gradle repositories on the first dependency resolution.
 
-A Docker-compatible runtime is required for the PostgreSQL and Kafka Testcontainers integration tests. Docker is also a convenient way to run local development infrastructure, but the backend uses configured PostgreSQL and Kafka endpoints rather than depending on Docker itself.
+A Docker-compatible runtime is required for PostgreSQL and Kafka Testcontainers integration tests.
+
+Docker is also a convenient local infrastructure option. The backend itself depends only on configured PostgreSQL and Kafka endpoints; it does not depend on Docker as an application runtime.
 
 ## Verify Java
 
@@ -58,7 +60,9 @@ Verify that PostgreSQL and Redpanda are healthy:
 docker compose -f infra/docker-compose/compose.yaml ps
 ```
 
-Redpanda runs in `dev-container` mode for local development. That mode enables Kafka topic auto-creation, so the current versioned topics are created on first use. Production environments must provision topics explicitly. Redpanda is a local-development implementation detail; the application contract remains Kafka + Protobuf.
+Redpanda runs in `dev-container` mode for local development. In this mode, Kafka topics are auto-created on first use.
+
+Production environments must provision topics explicitly. Redpanda is only a local-development implementation detail. The application contract remains Kafka + Protobuf.
 
 The defaults match the backend runtime configuration:
 
@@ -69,7 +73,21 @@ The defaults match the backend runtime configuration:
 - analyzed topic: `signalharvester.analysis.item-analyzed.v1`;
 - rejected topic: `signalharvester.analysis.item-rejected.v1`.
 
-These credentials are safe local-development defaults only. The Compose file supports local host-port, database-name, credential, advertised-host, and Redpanda-admin-port overrides. Copy `infra/docker-compose/.env.example` to `infra/docker-compose/.env` and pass it explicitly with `docker compose --env-file infra/docker-compose/.env ...`. Keep the backend `SIGNALHARVESTER_DB_URL` and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` aligned with any overridden Compose host ports/database name.
+These credentials are local-development defaults only.
+
+The Compose stack supports overrides for:
+
+- host ports;
+- database name;
+- database credentials;
+- advertised Kafka host;
+- Redpanda Admin API port.
+
+To use overrides:
+
+1. copy `infra/docker-compose/.env.example` to `infra/docker-compose/.env`;
+2. pass it explicitly with `docker compose --env-file infra/docker-compose/.env ...`;
+3. keep backend `SIGNALHARVESTER_DB_URL` and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` aligned with overridden Compose endpoints.
 
 See [`../infra/docker-compose/README.md`](../infra/docker-compose/README.md) for parameterized local endpoints, explicit `.env` usage, shutdown, and volume reset commands.
 
@@ -79,7 +97,12 @@ The companion UI is not installed from this repository. Use the `signalharvester
 
 ## Local Kubernetes deployment
 
-The verification-pending production-style local deployment requires Docker (or another image builder), a local Kubernetes cluster such as `kind` or `k3d`, `kubectl`, and enough local resources for PostgreSQL, Redpanda, two backend replicas, and the observability stack.
+The accepted production-style local deployment requires:
+
+- Docker or another image builder;
+- a local Kubernetes cluster such as `kind` or `k3d`;
+- `kubectl`;
+- enough local resources for PostgreSQL, Redpanda, two backend replicas, and the observability stack.
 
 Build the backend image from the repository root:
 

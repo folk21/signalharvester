@@ -12,9 +12,24 @@ current_focus: subspecs/backend-kafka-consumer-horizontal-scaling.md
 
 Active umbrella specification for the initial SignalHarvester product target.
 
-The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, `ANALYSIS.OUTBOX`, `OBSERVABILITY.APPLICATION`, backend authentication/RBAC, `SECURITY.EXTERNAL_SOURCE_ACCESS`, the backend-owned Kubernetes/observability deployment, and controlled live system resilience acceptance. The current implementation focus is [`backend-kafka-consumer-horizontal-scaling.md`](subspecs/backend-kafka-consumer-horizontal-scaling.md), which demonstrates R26/S9 by increasing compatible Kafka consumer instances while backlog exists and verifying partition-bounded drain without changing processing semantics.
+The accepted backend baseline includes:
 
-Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository even after the backend-owned cluster stack is verified.
+- configuration and collection;
+- Analysis and Results;
+- Event Observation and Processing Flow;
+- bounded Kafka retry/DLQ handling;
+- `ANALYSIS.OUTBOX`;
+- `OBSERVABILITY.APPLICATION`;
+- backend authentication/RBAC;
+- `SECURITY.EXTERNAL_SOURCE_ACCESS`;
+- backend-owned Kubernetes/infrastructure observability;
+- controlled live system resilience acceptance.
+
+The current implementation focus is [`backend-kafka-consumer-horizontal-scaling.md`](subspecs/backend-kafka-consumer-horizontal-scaling.md).
+
+It demonstrates R26/S9 by increasing compatible Kafka consumer instances while backlog exists. Acceptance verifies partition-bounded drain without changing processing semantics.
+
+Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository.
 
 Stable feature identifiers referenced by this specification are defined in [`../../FEATURES.md`](../../FEATURES.md).
 
@@ -65,7 +80,9 @@ The system has four primary functional areas:
 3. **Analysis and persistence** — normalizes, deduplicates, analyzes, classifies, scores, and stores collected information.
 4. **Presentation and observation** — exposes configuration, collected results, live updates, event history, and processing-flow visualization to the user.
 
-Kafka is the main asynchronous transport between processing stages. PostgreSQL is the authoritative application data store for configuration, collected domain data, processing state, and selected event-observation data where persistence is required.
+Kafka is the main asynchronous transport between processing stages.
+
+PostgreSQL is the authoritative application data store for configuration, collected domain data, processing state, and selected event-observation data where persistence is required.
 
 The browser communicates with application APIs over HTTP-based application protocols. The browser must not connect directly to Kafka or PostgreSQL.
 
@@ -84,13 +101,26 @@ Accepted backend capabilities already cover the main functional pipeline:
 - bounded Kafka retry and dead-letter handling;
 - Analysis transactional outbox delivery.
 
-Major product/platform work still required by this umbrella includes:
+Major unresolved work in this umbrella includes:
 
-- `PRESENTATION.VIEWER_RESULTS` and the real frontend Kubernetes image in the companion frontend;
-- developer verification of the backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE` implementation;
-- final production-style system resilience acceptance.
+- developer acceptance of `SCALABILITY.KAFKA_CONSUMERS`;
+- `PRESENTATION.VIEWER_RESULTS` in the companion frontend;
+- a real frontend Kubernetes image from `signalharvester-web`;
+- final cross-repository umbrella acceptance after those remaining pieces are integrated.
 
-The intended technology direction remains Java/Micronaut, Kafka, Protocol Buffers, PostgreSQL, React/TypeScript, REST/SSE, Kubernetes, OpenTelemetry, Prometheus, Loki, Tempo, and Grafana. Detailed framework configuration belongs to bounded technical specifications and current-state documentation.
+Backend-owned `DEPLOYMENT.KUBERNETES`, `OBSERVABILITY.INFRASTRUCTURE`, and the controlled system resilience workflow are already accepted.
+
+The intended technology direction remains:
+
+- Java/Micronaut;
+- Kafka and Protocol Buffers;
+- PostgreSQL;
+- React/TypeScript;
+- REST/SSE;
+- Kubernetes;
+- OpenTelemetry, Prometheus, Loki, Tempo, and Grafana.
+
+Detailed framework configuration belongs to bounded technical specifications and current-state documentation.
 
 ## Requirement map
 
@@ -129,7 +159,7 @@ This table is a navigation index. The detailed requirement text below remains no
 | R29 | `TESTING.DETERMINISTIC_LOCAL` | Deterministic local verification |
 | R30 | `SECURITY.EXTERNAL_SOURCE_ACCESS` | Secret and external-service safety |
 | R31 | `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION` | Authenticated identities and RBAC |
-| R32 | `PRESENTATION.VIEWER_RESULTS`, `SECURITY.AUTHORIZATION` | Role-specific browser experience |
+| R32 | `PRESENTATION.VIEWER_RESULTS`, `DIAGNOSTICS.ANALYSIS_INSPECTION`, `SECURITY.AUTHORIZATION` | Role-specific browser experience |
 
 ## Requirements
 
@@ -234,7 +264,9 @@ Synthetic sources may be used for deterministic tests and demonstrations but do 
 
 Feature: `EVENTING.PIPELINE`, `CONTRACTS.KAFKA_PROTOBUF`.
 
-Collected information must move between major processing stages through Kafka-backed asynchronous events where asynchronous decoupling is useful. Kafka integration-event payloads must use Protocol Buffers contracts defined from versioned `.proto` schemas.
+Collected information must move between major processing stages through Kafka-backed asynchronous events where asynchronous decoupling is useful.
+
+Kafka integration-event payloads must use Protocol Buffers contracts defined from versioned `.proto` schemas.
 
 The product must visibly demonstrate an event-driven processing path rather than using Kafka only as an incidental dependency.
 
@@ -328,7 +360,9 @@ The web UI must provide a result feed for newly collected information.
 
 When new results become available, an already-open page must update automatically without requiring manual refresh.
 
-The initial live-update transport should support efficient server-to-browser delivery and reconnection. Server-Sent Events are the preferred initial mechanism unless a technical sub-spec demonstrates a concrete need for bidirectional WebSocket communication.
+The initial live-update transport should support efficient server-to-browser delivery and reconnection.
+
+Server-Sent Events are the preferred initial mechanism. A technical sub-spec may choose bidirectional WebSocket communication only when it demonstrates a concrete need.
 
 The live feed must not require the browser to connect directly to Kafka.
 
@@ -496,11 +530,30 @@ Feature: `RUNTIME.CONCURRENCY`, `SECURITY.EXTERNAL_SOURCE_ACCESS`.
 
 External collection is expected to be dominated by network I/O.
 
-The Java backend must keep concurrency models explicit and simple. Generic external-source retrieval uses Micronaut's managed low-level HTTP client for dynamic absolute URLs through a synchronous module-facing contract executed on Micronaut's blocking executor. On the Java 21 baseline that executor uses Virtual Threads, allowing imperative collection workflows without blocking Netty event-loop threads.
+The Java backend must keep concurrency models explicit and simple.
 
-Concurrency limits, connect/read/request timeouts, response-size limits, redirect limits, connection-pool limits, and protection against overwhelming external services must remain explicit. Before source configuration is accepted from untrusted users, outbound destination policy must also cover SSRF-sensitive addresses and redirect targets. The low cost of Virtual Threads must not be treated as permission for unbounded external concurrency. `Publisher`/reactive types remain appropriate for genuine streaming boundaries such as SSE.
+Generic external-source retrieval must use Micronaut's managed low-level HTTP client for dynamic absolute URLs.
 
-REST controller operations that invoke JDBC, blocking HTTP, or other blocking application workflows must be offloaded with `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking executor boundary. Streaming/reactive controller methods must not be moved to blocking execution mechanically. Client/server filters must remain non-blocking unless they explicitly offload blocking work. Expected API/domain failures should be translated through Micronaut HTTP exception handlers rather than repeated controller-local error mapping.
+Its synchronous module-facing contract must run on Micronaut's blocking executor. On Java 21, that executor uses Virtual Threads. Imperative collection work must not block Netty event-loop threads.
+
+The following limits must remain explicit:
+
+- source concurrency;
+- connect/read/request timeouts;
+- response size;
+- redirects;
+- connection-pool capacity;
+- protection against overwhelming external services.
+
+Outbound destination policy must cover SSRF-sensitive addresses and redirect targets before source configuration is accepted from untrusted users.
+
+The low cost of Virtual Threads must not be treated as permission for unbounded external concurrency. `Publisher`/reactive types remain appropriate for genuine streaming boundaries such as SSE.
+
+REST controllers that invoke JDBC, blocking HTTP, or other blocking application workflows must use `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking boundary.
+
+Streaming/reactive controllers must not be moved to blocking execution mechanically. Client/server filters must remain non-blocking unless they explicitly offload blocking work.
+
+Expected API/domain failures should be translated through Micronaut HTTP exception handlers instead of repeated controller-local error mapping.
 
 ### R24 — Kubernetes deployment
 
@@ -591,32 +644,59 @@ Feature: `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORI
 
 The backend must authenticate access to protected application APIs and authorize operations from explicit roles carried by the authenticated principal.
 
-User accounts are persisted application identities. A human user must receive the `USER` role by default when created. Additional roles are additive and explicit rather than implied by a hidden hierarchy. The initial role vocabulary must include at least:
+User accounts are persisted application identities.
+
+A human user must receive `USER` by default when created. Additional roles are additive and explicit. They must not be inferred from a hidden hierarchy.
+
+The initial role vocabulary must include at least:
 
 - `USER` — human application identity and baseline authenticated access;
 - `VIEWER` — read-only access to the consumer-facing result experience and the backend result APIs required by it;
 - `ADMIN` — access to configuration, operational administration, and technical diagnostic capabilities;
 - `BOT` — non-human/system identity for machine-oriented access where required.
 
-A system identity may have `BOT` without `USER`. An administrator who also needs the consumer-facing result experience may be assigned both `ADMIN` and `VIEWER`; authorization must not rely on an implicit `ADMIN > VIEWER > USER` role hierarchy.
+A system identity may have `BOT` without `USER`.
 
-Authentication must use signed, time-bounded JWT credentials and must remain stateless on the backend. PostgreSQL must not contain server-side login-session records. User identity, enabled/disabled state, and assigned roles may be persisted, but possession and validation of the current JWT determine the authenticated request context.
+An administrator who also needs the consumer-facing result experience may have both `ADMIN` and `VIEWER`. Authorization must not rely on an implicit `ADMIN > VIEWER > USER` hierarchy.
 
-JWT validation must cover signature, expiry, issuer/audience expectations, and the principal/role claims required by the authorization model. Browser transport must support both REST and existing native SSE clients without exposing JWTs in URLs. Cross-origin, cookie, and CSRF policy must be defined by the authentication sub-specification before public/shared deployment.
+Authentication must use signed, time-bounded JWT credentials and remain stateless on the backend. PostgreSQL must not contain server-side login-session records.
+
+User identity, enabled/disabled state, and assigned roles may be persisted. The current authenticated request context is determined by validation of the presented JWT.
+
+JWT validation must cover:
+
+- signature;
+- expiry;
+- issuer/audience expectations;
+- principal and role claims required by authorization.
+
+Browser transport must support REST and native SSE without exposing JWTs in URLs. Cross-origin, cookie, and CSRF policy must be explicit before public/shared deployment.
 
 Backend authorization is the security boundary. Hiding routes or navigation in the frontend is not sufficient protection.
 
 ### R32 — role-specific browser experience
 
-Feature: `PRESENTATION.VIEWER_RESULTS`, `SECURITY.AUTHORIZATION`.
+Feature: `PRESENTATION.VIEWER_RESULTS`, `DIAGNOSTICS.ANALYSIS_INSPECTION`, `SECURITY.AUTHORIZATION`.
 
 The product must distinguish the expert/administrative application experience from the normal result-consumption experience.
 
-Users with `ADMIN` may access the existing configuration, collection-operation, analysis-inspection, Event Explorer, Processing Flow, and other administrative/diagnostic workflows allowed by backend policy. Users with `VIEWER` must have a consumer-facing interface for comfortably browsing and inspecting relevant Results without exposing internal operational or infrastructure-oriented details that are not part of the viewer experience.
+Users with `ADMIN` may access backend-authorized administrative and diagnostic workflows, including:
 
-The consumer-facing interface should reuse the same backend Results contracts where those contracts already provide the required data. A separate duplicate Results API must not be introduced merely to support a different presentation. Backend authorization must nevertheless ensure that a `VIEWER` cannot call protected admin or diagnostic endpoints directly.
+- configuration;
+- Collection operations;
+- `DIAGNOSTICS.ANALYSIS_INSPECTION`;
+- Event Explorer;
+- Processing Flow.
 
-Detailed React routing, layout, presentation, and component behavior for the `VIEWER` experience belong to the `signalharvester-web` specification tree. When frontend work resumes, its active specification must be extended with a bounded VIEWER-UI sub-specification based on the backend authentication/authorization contract.
+Users with `VIEWER` must have a consumer-facing interface for browsing and inspecting relevant Results. That experience must not expose internal operational or infrastructure details that are outside viewer scope.
+
+The consumer-facing interface should reuse existing Results contracts when they already provide the required data. A duplicate Results API must not be introduced only to support different presentation.
+
+Backend authorization must ensure that a `VIEWER` cannot call protected admin or diagnostic endpoints directly.
+
+Detailed React routing, layout, presentation, and component behavior belong to the `signalharvester-web` specification tree.
+
+When frontend work resumes, its active specification must add a bounded VIEWER UI sub-spec. That sub-spec must use the accepted backend authentication/authorization contract.
 
 ## Scenarios
 
@@ -624,7 +704,9 @@ Detailed React routing, layout, presentation, and component behavior for the `VI
 
 A user creates a monitoring profile named `Java Backend Jobs`, enables several configured vacancy sources, sets a collection interval, and enables the profile.
 
-At the next due time the system creates a collection run, queries the enabled sources, emits discovered items into Kafka-backed processing, removes duplicates, analyzes the remaining vacancies, stores accepted results, and pushes newly available results to the open browser feed.
+At the next due time the system creates a collection run and queries the enabled sources.
+
+It emits discovered items into Kafka-backed processing, removes duplicates, analyzes the remaining vacancies, stores accepted results, and pushes newly available results to the open browser feed.
 
 The user sees the new vacancies without refreshing the page.
 
@@ -640,7 +722,9 @@ The next scheduled run includes that source automatically. No application restar
 
 A user creates an `AI Development` information profile using configured article/news sources.
 
-The system periodically collects newly published entries, normalizes them into the common content model, deduplicates previously seen entries, applies configured topic analysis, stores the results, and displays relevant new entries in the live feed.
+The system periodically collects newly published entries and normalizes them into the common content model.
+
+It deduplicates previously seen entries, applies configured topic analysis, stores the results, and displays relevant new entries in the live feed.
 
 ### S4 — inspect one item's event path
 
@@ -676,7 +760,9 @@ The failure is retried only according to bounded policy and then becomes inspect
 
 A user leaves the result page open while the SSE connection is interrupted.
 
-The frontend detects disconnection and reconnects according to the selected live-stream contract. The application remains usable, and the user can recover authoritative current results through the normal query API even if some transient live notifications were missed.
+The frontend detects disconnection and reconnects according to the selected live-stream contract.
+
+The application remains usable. The user can recover authoritative current results through the normal query API even if some transient live notifications were missed.
 
 ### S9 — scale a Kafka consumer workload
 
@@ -708,9 +794,13 @@ The application-level view explains the logical processing stages, while the obs
 
 A persisted human account authenticates and receives a signed JWT representing its stable identity and explicit assigned roles. No server-side login session is inserted into PostgreSQL.
 
-A principal with `USER` and `VIEWER` can open the consumer-facing result experience and use the Results read/live contracts required by that experience, but direct requests to administrative configuration or technical diagnostic endpoints are rejected by backend authorization.
+A principal with `USER` and `VIEWER` can open the consumer-facing result experience and use its required Results read/live contracts.
 
-A principal with `USER`, `VIEWER`, and `ADMIN` can use both the consumer-facing result experience and the authorized administrative workflows. A machine identity may instead authenticate with `BOT` without being treated as an interactive human user.
+Backend authorization rejects direct requests from that principal to administrative configuration or technical diagnostic endpoints.
+
+A principal with `USER`, `VIEWER`, and `ADMIN` can use both the consumer-facing result experience and authorized administrative workflows.
+
+A machine identity may instead authenticate with `BOT` without being treated as an interactive human user.
 
 ## Non-goals
 
@@ -746,7 +836,8 @@ The initial product does not require:
 - Keep the browser isolated from infrastructure protocols.
 - Prefer SSE over WebSocket for initial unidirectional live streams; introduce WebSocket only for a demonstrated bidirectional requirement.
 - Keep blocking application workflows imperative and run them on Micronaut's blocking executor, which is Virtual-Thread backed on the Java 21 baseline; never block Netty event-loop threads.
-- Preserve backpressure through bounded source concurrency, HTTP connection/resource limits, Kafka consumer flow control, and explicit downstream capacity limits. Use `Publisher` for genuinely streaming boundaries such as SSE rather than forcing all workflows into one concurrency model.
+- Preserve backpressure through bounded source concurrency, HTTP connection/resource limits, Kafka consumer flow control, and explicit downstream capacity limits.
+  Use `Publisher` for genuinely streaming boundaries such as SSE instead of forcing all workflows into one concurrency model.
 - Keep collection adapters isolated from normalized domain processing.
 - Prefer configuration-driven integration when sources share a common protocol/extraction model.
 - Keep analysis replaceable and allow deterministic non-AI operation.
@@ -760,7 +851,9 @@ The initial product does not require:
 
 The intended product-level repository boundary remains separate backend and frontend repositories.
 
-The backend repository is `signalharvester` and starts as a Gradle modular monolith with one deployable application. Functional backend capabilities are separate Gradle modules, not separate deployments. A future deployment repository may be introduced when Kubernetes/GitOps configuration becomes independently substantial.
+The backend repository is `signalharvester`. It starts as a Gradle modular monolith with one deployable application.
+
+Functional backend capabilities are separate Gradle modules, not separate deployments. A future deployment repository may be introduced when Kubernetes/GitOps configuration becomes independently substantial.
 
 The backend modules must remain extractable by contract rather than by premature deployment. Public module APIs, Kafka event contracts, and logical PostgreSQL ownership are the primary extraction boundaries.
 
@@ -804,13 +897,15 @@ Initial umbrella acceptance requires a working end-to-end deployment in which:
 18. authenticated requests demonstrate backend-enforced separation between `VIEWER` result access and `ADMIN` operational/diagnostic access without server-side login sessions;
 19. repository documentation explains how to start the local environment and observe one complete collection flow.
 
-Performance is not defined by a production-scale numerical SLA in the initial product. Instead, the implementation must support a repeatable demonstration in which concurrent collection and Kafka backlog behavior can be observed and reasoned about.
+Performance is not defined by a production-scale numerical SLA in the initial product.
+
+Instead, the implementation must support a repeatable demonstration. Concurrent collection and Kafka backlog behavior must be observable and understandable in that demonstration.
 
 ## Implementation tasks
 
 The umbrella implementation should proceed through bounded sub-specifications rather than attempting the entire target in one increment.
 
-Recommended sequence. Accepted items remain listed because they show how the umbrella is being delivered; the next planned implementation slice is step 10.
+Recommended sequence. Accepted items remain listed to show delivery history. The current active slice is step 15.
 
 1. Define backend module boundaries, the Protocol Buffers event envelope, core domain contracts, and PostgreSQL schema strategy.
 2. Implement the first vertical slice: one configured source -> collection -> Kafka -> normalization/deduplication -> analysis -> PostgreSQL.
@@ -821,10 +916,10 @@ Recommended sequence. Accepted items remain listed because they show how the umb
 7. Add the first generic configuration-driven source adapter and source-test workflow.
 8. Add explicit bounded retry, terminal failure/DLQ handling, and complete idempotent-consumer behavior.
 9. Add the database/event consistency mechanism, preferably transactional outbox. **Accepted:** `ANALYSIS.OUTBOX`.
-10. Add OpenTelemetry application instrumentation and health/readiness behavior. **Next:** `OBSERVABILITY.APPLICATION`.
-11. Add stateless JWT authentication, persisted user/role management, and backend-enforced RBAC for `VIEWER`, `ADMIN`, `BOT`, and baseline `USER` identities.
-12. Extend the companion frontend specification with a consumer-facing `VIEWER` result experience and integrate it with the accepted authentication/RBAC contract.
-13. Run the complete application in local Kubernetes and add the Prometheus/Loki/Tempo/Grafana observability stack.
-14. Add controlled workload and failure demonstrations for Kafka lag, pod restart, slow source, retry, authorization boundaries, and recovery.
-15. Add horizontal worker scaling and optionally KEDA-based lag-driven autoscaling.
-16. Complete umbrella acceptance, move stable implementation truth into architecture/implementation documentation, and archive completed sub-specifications according to the specification lifecycle.
+10. Add OpenTelemetry application instrumentation and health/readiness behavior. **Accepted:** `OBSERVABILITY.APPLICATION`.
+11. Add stateless JWT authentication, persisted user/role management, and backend-enforced RBAC for `VIEWER`, `ADMIN`, `BOT`, and baseline `USER`. **Accepted.**
+12. Extend the companion frontend specification with a consumer-facing `VIEWER` result experience and integrate it with the accepted authentication/RBAC contract. **Pending in `signalharvester-web`.**
+13. Run the backend/infrastructure slice in local Kubernetes and add Prometheus/Loki/Tempo/Grafana observability. **Accepted for backend-owned scope.**
+14. Add controlled restart, lag, slow-source, retry, authorization, outbox-recovery, and recovery demonstrations. **Accepted.**
+15. Add horizontal Kafka consumer scaling within partition limits. **Implementation complete; live developer verification pending.** KEDA remains optional future work.
+16. Complete cross-repository umbrella acceptance after the frontend image and remaining viewer experience are integrated. Then move stable implementation truth into current-state documentation and archive completed sub-specifications.

@@ -43,11 +43,22 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies the configuration, analysis, collection, Results, Event Observation, and Security migrations at startup. The backend exposes source CRUD and diagnostic source testing under `/api/v1/sources`, monitoring-profile CRUD under `/api/v1/monitoring-profiles`, operational collection-run endpoints under `/api/v1/admin/collection-runs`, and analysis inspection under `/api/v1/admin/analysis/items`. The analysis Kafka listener starts by default and waits for `RawItemDiscovered` events. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
+Flyway applies Configuration, Analysis, Collection, Results, Event Observation, and Security migrations at startup.
+
+The backend exposes:
+
+- Source CRUD and diagnostic testing under `/api/v1/sources`;
+- Monitoring Profile CRUD under `/api/v1/monitoring-profiles`;
+- Collection Run operations under `/api/v1/admin/collection-runs`;
+- `DIAGNOSTICS.ANALYSIS_INSPECTION` under `/api/v1/admin/analysis/items`.
+
+The Analysis Kafka listener starts by default and waits for `RawItemDiscovered`. The Results listener also starts by default and materializes terminal `ItemAnalyzed` / `ItemRejected` events into PostgreSQL.
 
 ### Run with authentication and RBAC
 
-The default local profile remains the existing trusted-environment mode while the frontend authentication work is pending. Do not expose that mode publicly. To exercise the protected backend boundary, activate the `security` environment and provide deployment-owned secrets:
+The default local profile remains trusted-environment compatibility mode while frontend authentication work is pending. Do not expose that mode publicly.
+
+To exercise the protected backend boundary, activate the `security` environment and provide deployment-owned secrets:
 
 ```bash
 MICRONAUT_ENVIRONMENTS=security \
@@ -115,7 +126,14 @@ Test a persisted source without publishing Kafka events or creating collection-r
 curl -i -X POST http://localhost:8080/api/v1/sources/<SOURCE_UUID>/test
 ```
 
-A source may remain `enabled=false` while it is being tested. Fetch and extraction problems are returned in the diagnostic JSON payload with `FETCH_FAILED` or `EXTRACTION_FAILED`; the endpoint itself returns HTTP 200 when the persisted source exists. See [`CONFIGURATION.md`](CONFIGURATION.md) for `json.*` and `html.*` extraction settings.
+A Source may remain `enabled=false` while it is being tested.
+
+When the persisted Source exists, fetch/extraction problems are returned in the diagnostic JSON payload rather than as endpoint failure:
+
+- `FETCH_FAILED`;
+- `EXTRACTION_FAILED`.
+
+See [`CONFIGURATION.md`](CONFIGURATION.md) for `json.*` and `html.*` extraction settings.
 
 Example REST/JSON settings for an API that returns `{ "jobs": [...] }`:
 
@@ -130,7 +148,9 @@ Example REST/JSON settings for an API that returns `{ "jobs": [...] }`:
 }
 ```
 
-Source URLs stored through this API are configuration data only. Runtime collection applies the accepted outbound destination policy described in [`CONFIGURATION.md`](CONFIGURATION.md). The default trusted-local environment intentionally permits loopback/private fixtures. The `security` environment uses `SECURE` mode and rejects loopback/private/carrier-grade-NAT/link-local destinations unless the operator explicitly allows the required CIDR.
+Source URLs stored through this API are configuration data only. Runtime Collection applies the accepted outbound destination policy from [`CONFIGURATION.md`](CONFIGURATION.md).
+
+The default trusted-local environment permits loopback/private fixtures. The `security` environment uses `SECURE` mode and rejects blocked destination classes unless the operator explicitly allows the required CIDR.
 
 ### Bootstrap sources from a manifest
 
@@ -153,9 +173,31 @@ python3 tools/source-import/import_sources.py \
   --base-url http://localhost:8080
 ```
 
-The importer matches by source type plus normalized location, skips existing identities, and does not reconcile changed names/settings/enabled flags. Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
+The importer matches by Source type plus normalized location. It skips existing identities and does not reconcile changed names, settings, or enabled flags.
 
-The collection run workflow resolves one persisted monitoring profile through the configuration API, preserves its configured source order, skips disabled member sources, performs bounded best-effort fetches, extracts semantic items, persists the completed run snapshot, and publishes successful items to Kafka. Enabled profiles are also scheduled automatically from their persisted collection interval using collection-owned PostgreSQL leases. RSS/Atom produce one item per feed entry up to the configured bound. REST sources may extract candidate objects through persisted `json.*` JSON Pointer settings, and HTML sources may extract candidate elements through persisted `html.*` CSS selector settings. REST/HTML sources without those settings still produce one passthrough item per response. The analysis listener consumes those raw events, normalizes/deduplicates them, runs deterministic keyword analysis, and atomically stages `ItemAnalyzed` or `ItemRejected` bytes in the Analysis PostgreSQL outbox. The outbox dispatcher publishes those committed records to Kafka. Results consumes the terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST plus resumable SSE live delivery.
+Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for manifest versioning, normalization, failure semantics, and security constraints.
+
+The Collection Run workflow is:
+
+1. Resolve one persisted Monitoring Profile through the Configuration API.
+2. Preserve configured Source order and skip disabled member Sources.
+3. Perform bounded best-effort fetches.
+4. Extract semantic items.
+5. Persist the completed run snapshot.
+6. Publish successful items to Kafka.
+
+Enabled profiles are also scheduled from their persisted collection interval through Collection-owned PostgreSQL leases.
+
+Extraction behavior is:
+
+- RSS/Atom — one item per feed entry up to the configured bound;
+- REST — optional candidate extraction through persisted `json.*` JSON Pointer settings;
+- HTML — optional candidate extraction through persisted `html.*` CSS selector settings;
+- REST/HTML without those settings — one passthrough item per response.
+
+Analysis consumes the raw events, normalizes and deduplicates them, runs deterministic keyword analysis, and atomically stages `ItemAnalyzed` or `ItemRejected` bytes in the Analysis outbox.
+
+The outbox dispatcher publishes committed records to Kafka. Results consumes terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST and resumable SSE.
 
 ## Inspect application observability
 
@@ -173,7 +215,12 @@ Inspect Prometheus-format runtime and application metrics:
 curl -s http://localhost:8080/prometheus
 ```
 
-Application metrics include Collection Run/source-fetch outcomes and durations plus Analysis processing/outbox publication outcomes. Their labels are intentionally low-cardinality. Event Explorer and Processing Flow remain the better tools for inspecting one concrete run/item/event.
+Application metrics cover:
+
+- Collection Run and source-fetch outcomes/durations;
+- Analysis processing and outbox publication outcomes.
+
+Their labels are intentionally low-cardinality. Use Event Explorer or Processing Flow to inspect one concrete run, item, or event.
 
 Trace export is disabled by default. When an OTLP collector is available, enable it for the backend process:
 
@@ -187,7 +234,14 @@ Console logs include `trace_id` and `span_id` fields when a valid OpenTelemetry 
 
 ## Run the production-style local Kubernetes stack
 
-The backend-owned Kubernetes deployment and resilience workflow are accepted. To recreate or re-verify the local cluster, build/load `signalharvester-backend:local`, create local runtime secrets, apply the Kustomize target, and run the live cluster verification:
+The backend-owned Kubernetes deployment and resilience workflow are accepted.
+
+To recreate or re-verify the local cluster:
+
+1. build/load `signalharvester-backend:local`;
+2. create local runtime secrets;
+3. apply the Kustomize target;
+4. run live cluster verification.
 
 ```bash
 docker build -f app/Dockerfile -t signalharvester-backend:local .
@@ -203,7 +257,11 @@ kubectl -n signalharvester port-forward service/signalharvester-backend 8080:808
 kubectl -n signalharvester port-forward service/grafana 3000:3000
 ```
 
-Grafana is provisioned with Prometheus, Loki, and Tempo plus the **SignalHarvester Overview** dashboard. Application Event Explorer/Processing Flow remain the correct place for one concrete run or item; Grafana is for aggregate runtime and infrastructure behavior. Full Kubernetes platform acceptance additionally requires a real `signalharvester-web` image using the separate `infra/kubernetes/frontend` workload boundary.
+Grafana is provisioned with Prometheus, Loki, Tempo, and the **SignalHarvester Overview** dashboard.
+
+Use Event Explorer or Processing Flow for one concrete run or item. Use Grafana for aggregate runtime and infrastructure behavior.
+
+Full Kubernetes platform acceptance additionally requires a real `signalharvester-web` image through the separate `infra/kubernetes/frontend` workload boundary.
 
 ### Run controlled resilience acceptance
 
@@ -213,7 +271,19 @@ After the backend/infrastructure stack is healthy, run the opt-in live resilienc
 python3 infra/kubernetes/resilience/run_acceptance.py
 ```
 
-The harness deploys a temporary in-cluster RSS fixture and exercises backend container restart, slow-source availability, PostgreSQL outage with bounded Analysis retry/DLQ, Kafka lag and recovery, Analysis outbox recovery, scheduler leases across two replicas, Redpanda restart recovery, authorization boundaries, and Prometheus/Loki/Tempo evidence. It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for the fault-injection boundaries and options.
+The harness deploys a temporary in-cluster RSS fixture and exercises:
+
+- backend container restart;
+- slow-source availability;
+- PostgreSQL outage with bounded Analysis retry/DLQ;
+- Kafka lag and recovery;
+- Analysis outbox recovery;
+- scheduler leases across two replicas;
+- Redpanda restart recovery;
+- authorization boundaries;
+- Prometheus, Loki, and Tempo evidence.
+
+It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for fault-injection boundaries and options.
 
 ### Demonstrate Kafka consumer horizontal scaling
 
@@ -223,7 +293,18 @@ After the resilience workflow passes, demonstrate R26/S9 with:
 python3 infra/kubernetes/scaling/run_acceptance.py
 ```
 
-The default run creates a bounded 6,000-item backlog, confirms positive Analysis lag with one worker, scales the existing backend Deployment to three replicas, verifies three active Analysis consumers own the three raw-event partitions, verifies Results and Event Observation also have three active clients, and waits for the backlog to drain. The runner then verifies durable Analysis/Results completeness, outbox completion, DLQ stability, and restores the original replica count. See [`../infra/kubernetes/scaling/README.md`](../infra/kubernetes/scaling/README.md).
+The default scaling run:
+
+1. creates a bounded 6,000-item backlog;
+2. confirms positive Analysis lag with one worker;
+3. scales the existing backend Deployment to three replicas;
+4. verifies three active Analysis consumers own the three raw-event partitions;
+5. verifies Results and Event Observation also have three active clients;
+6. waits for the backlog to drain;
+7. verifies durable Analysis/Results completeness, outbox completion, and DLQ stability;
+8. restores the original replica count.
+
+See [`../infra/kubernetes/scaling/README.md`](../infra/kubernetes/scaling/README.md).
 
 ## Kafka retry and dead-letter operation
 
@@ -235,9 +316,26 @@ signalharvester.results.analysis-outcome-dead-letter.v1
 signalharvester.event-observation.dead-letter.v1
 ```
 
-Each DLQ value is a versioned `failure/v1/DeadLetterEvent` defined at `contracts/event-contracts/src/main/proto/io/signalharvester/events/failure/v1/dead-letter-event.proto`. It preserves a deterministic dead-letter identity, the original topic/partition/offset/key/value, consumer identity, failure type/message, attempt count, and retryable classification. Local Redpanda runs with topic auto-creation, so these topics appear on first terminal failure.
+Each DLQ value is a versioned `failure/v1/DeadLetterEvent` defined at `contracts/event-contracts/src/main/proto/io/signalharvester/events/failure/v1/dead-letter-event.proto`.
 
-For Analysis, a normal source offset advances after the deduplication change and terminal-event outbox row commit together in PostgreSQL; Kafka delivery can therefore recover independently from a broker outage. Results and Event Observation advance after their normal durable processing. Failed inputs still advance only after acknowledged DLQ publication. If a DLQ producer is unavailable, the source record remains uncommitted and remains recoverable by Kafka redelivery rather than being silently skipped. There is intentionally no automatic replay command yet; correct the underlying problem before performing any controlled replay with Kafka tooling.
+It preserves:
+
+- deterministic dead-letter identity;
+- original topic, partition, offset, key, and value;
+- consumer identity;
+- failure type and message;
+- attempt count;
+- retryable classification.
+
+Local Redpanda uses topic auto-creation, so these topics appear on the first terminal failure.
+
+Analysis advances a normal source offset only after deduplication state and the terminal-event outbox row commit together in PostgreSQL. Kafka terminal-event delivery can therefore recover independently from a broker outage.
+
+Results and Event Observation advance after their normal durable processing.
+
+Failed inputs advance only after acknowledged DLQ publication. If a DLQ producer is unavailable, the source record remains uncommitted and recoverable by Kafka redelivery.
+
+There is no automatic replay command. Correct the underlying problem before any controlled replay with Kafka tooling.
 
 ### Analysis outbox inspection
 
@@ -250,7 +348,9 @@ WHERE published_at IS NULL
 ORDER BY created_at, event_id;
 ```
 
-Published rows remain marked with `published_at`. A Kafka acknowledgement followed by a failure to persist that marker can cause the same stored bytes to be published again after lease recovery. The stable event id and existing downstream idempotency make that replay intentional at-least-once behavior.
+Published rows remain marked with `published_at`.
+
+A Kafka acknowledgement followed by failure to persist that marker can cause the same stored bytes to be published again after lease recovery. Stable event identity and downstream idempotency make this intentional at-least-once behavior.
 
 Start a manual collection run for an existing monitoring-profile UUID:
 
@@ -279,7 +379,14 @@ The analysis inspection API exposes durable normalization/deduplication provenan
 
 ### Live backend pipeline verification
 
-For a separately running backend, use the opt-in black-box verifier instead of manually copying multiple `curl` commands. It can optionally import a source manifest. When `--profile` is omitted it creates a temporary persisted monitoring profile over the enabled sources, starts a manual collection run, waits until correlated output becomes visible through the public Results API, and removes the temporary profile afterward:
+For a separately running backend, use the opt-in black-box verifier instead of copying multiple `curl` commands. It can optionally import a source manifest.
+
+When `--profile` is omitted, the verifier:
+
+1. creates a temporary persisted Monitoring Profile over the enabled sources;
+2. starts a manual Collection Run;
+3. waits until correlated output becomes visible through the public Results API;
+4. removes the temporary profile afterward.
 
 ```bash
 python3 tools/live-backend/verify_pipeline.py \
@@ -297,7 +404,9 @@ python3 tools/live-backend/verify_pipeline.py \
   --category GENERAL
 ```
 
-The live command intentionally does **not** run from `run_checks.sh`: it depends on an already running backend. Only its deterministic self-tests run in the repository gate. See [`../tools/live-backend/README.md`](../tools/live-backend/README.md).
+The live command intentionally does **not** run from `run_checks.sh` because it depends on an already running backend. Only its deterministic self-tests run in the repository gate.
+
+See [`../tools/live-backend/README.md`](../tools/live-backend/README.md).
 
 Browse recent analyzed results:
 
@@ -322,9 +431,25 @@ curl -N -H 'Accept: text/event-stream' \
   'http://localhost:8080/api/v1/results/stream?monitoringProfileId=real-trial'
 ```
 
-A fresh connection receives a named `ready` event with the current numeric cursor and then only later updates. Named `result` events carry the compact `ResultSummary` payload. `keepalive` events keep idle connections active. Browser `EventSource` automatically reconnects with the last SSE `id` as `Last-Event-ID`, so the backend resumes after the last committed cursor. The stream represents current projections rather than an append-only event history; several updates to one logical result while disconnected may collapse to the latest projection.
+A fresh Results SSE connection receives `ready` with the current numeric cursor before later updates.
 
-For a race-free browser bootstrap, open SSE first and wait for `ready`. Then load the regular Results REST feed while buffering later `result` events. Apply the REST snapshot and then merge the buffered/live updates by `(monitoringProfileId, normalizedItemId)`. Do not load REST first and open SSE afterward, because a result committed between those operations could be missed. SSE is incremental delivery, not a duplicate initial snapshot.
+Event meanings are:
+
+- `result` — compact `ResultSummary` payload;
+- `keepalive` — keeps an idle connection active.
+
+Browser `EventSource` reconnects with the last SSE `id` as `Last-Event-ID`, so the backend resumes after the last committed cursor.
+
+The stream represents current projections, not append-only event history. Several disconnected updates to one logical result may collapse to the latest projection.
+
+For a race-free browser bootstrap:
+
+1. open SSE and wait for `ready`;
+2. load the Results REST feed while buffering later `result` events;
+3. apply the REST snapshot;
+4. merge buffered/live updates by `(monitoringProfileId, normalizedItemId)`.
+
+Do not load REST first and open SSE afterward. A result committed between those operations could be missed. SSE is incremental delivery, not a duplicate initial snapshot.
 
 
 ## Inspect technical event history
@@ -335,7 +460,17 @@ List the newest retained processing events:
 curl 'http://localhost:8080/api/v1/events?limit=100'
 ```
 
-Useful Event Explorer filters are `eventType`, `producer`, `topic`, `correlationId`, `collectionRunId`, `itemId`, and `traceId`. In the current pipeline the collection run id is also the event correlation id. `itemId` matches either raw or normalized item identity.
+Useful Event Explorer filters are:
+
+- `eventType`;
+- `producer`;
+- `topic`;
+- `correlationId`;
+- `collectionRunId`;
+- `itemId`;
+- `traceId`.
+
+In the current pipeline, the Collection Run ID is also the event correlation ID. `itemId` matches either raw or normalized item identity.
 
 Stream later technical events with SSE:
 
@@ -344,7 +479,16 @@ curl -N -H 'Accept: text/event-stream' \
   'http://localhost:8080/api/v1/events/stream?collectionRunId=<COLLECTION_RUN_ID>'
 ```
 
-A fresh connection receives `ready` and then later `event` updates. `keepalive` events keep idle connections active. Browser reconnection uses `Last-Event-ID`. For a race-free initial Event Explorer load, establish SSE and receive `ready` before loading the REST history snapshot, buffer later `event` messages until that snapshot is applied, and then merge the buffered/live events by `eventId`. Event history is diagnostic and retention-bounded; a cursor older than retained history can recover only events that still exist.
+A fresh Event Explorer connection receives `ready` before later `event` updates. `keepalive` events keep idle connections active. Browser reconnection uses `Last-Event-ID`.
+
+For a race-free initial load:
+
+1. establish SSE and receive `ready`;
+2. load the REST history snapshot;
+3. buffer later `event` messages until the snapshot is applied;
+4. merge buffered/live events by `eventId`.
+
+Event history is diagnostic and retention-bounded. A cursor older than retained history can recover only records that still exist.
 
 Reconstruct the application-level processing graph for a collection run:
 
@@ -358,7 +502,13 @@ Reconstruct one raw or normalized item branch inside that run:
 curl 'http://localhost:8080/api/v1/flows/collection-runs/<COLLECTION_RUN_ID>/items/<ITEM_ID>'
 ```
 
-Flow nodes state their evidence level. `OBSERVED_EVENT` and `OBSERVED_KAFKA_METADATA` are backed directly by retained technical events. `DERIVED_FROM_EVENT` is inferred from the current published event semantics. `NOT_OBSERVED` means the backend intentionally cannot prove that stage from Event Observation data. Results persistence currently appears as `NOT_OBSERVED`; the graph does not claim completion merely because a terminal Analysis event was published.
+Flow nodes state their evidence level:
+
+- `OBSERVED_EVENT` and `OBSERVED_KAFKA_METADATA` — backed directly by retained technical events;
+- `DERIVED_FROM_EVENT` — inferred from current published-event semantics;
+- `NOT_OBSERVED` — the backend cannot prove the stage from Event Observation data.
+
+Results persistence currently appears as `NOT_OBSERVED`. The graph does not claim completion merely because a terminal Analysis event was published.
 
 ## Run tests and repository checks
 

@@ -7,18 +7,27 @@ description: Compact SignalHarvester backend roadmap and current implementation 
 
 ## Current position
 
-The main functional backend pipeline is implemented and verified through `ANALYSIS.OUTBOX`.
+The main backend pipeline is implemented and verified through `ANALYSIS.OUTBOX`.
 
-Accepted P2 reliability work includes:
+The following platform work is also accepted:
 
 - `RELIABILITY.KAFKA_RETRY`;
 - `RELIABILITY.DEAD_LETTER`;
-- `RELIABILITY.IDEMPOTENCY` protections used by current consumers;
-- `ANALYSIS.OUTBOX` for PostgreSQL/Kafka consistency in Analysis.
+- current `RELIABILITY.IDEMPOTENCY` protections;
+- `OBSERVABILITY.APPLICATION`;
+- `SECURITY.IDENTITY_ROLES`;
+- `SECURITY.AUTHENTICATION`;
+- `SECURITY.AUTHORIZATION`;
+- `SECURITY.EXTERNAL_SOURCE_ACCESS`;
+- backend-owned `DEPLOYMENT.KUBERNETES`;
+- `OBSERVABILITY.INFRASTRUCTURE`;
+- live system resilience acceptance.
 
-`OBSERVABILITY.APPLICATION`, backend authentication/authorization, `SECURITY.EXTERNAL_SOURCE_ACCESS`, the backend-owned Kubernetes/infrastructure-observability stack, and the live system resilience acceptance are accepted. The current bounded backend focus is `SCALABILITY.KAFKA_CONSUMERS`; full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
+The current bounded backend focus is `SCALABILITY.KAFKA_CONSUMERS`.
 
-Stable feature identifiers are defined in [`FEATURES.md`](FEATURES.md).
+Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
+
+Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
 ## P0 — repository and contract foundation
 
@@ -38,45 +47,37 @@ Accepted backend capabilities:
 - `COLLECTION.SOURCE_TEST`, `COLLECTION.RUNS`, `COLLECTION.SCHEDULING`, and `COLLECTION.ADAPTERS`;
 - `EVENTING.PIPELINE` and `EVENTING.CORRELATION`;
 - `ANALYSIS.NORMALIZATION`, `ANALYSIS.DEDUPLICATION`, and deterministic `ANALYSIS.CLASSIFICATION`;
+- `DIAGNOSTICS.ANALYSIS_INSPECTION`;
 - `RESULTS.MATERIALIZATION`, `RESULTS.BROWSING`, and `RESULTS.LIVE`;
 - `DIAGNOSTICS.EVENT_OBSERVATION` and `DIAGNOSTICS.PROCESSING_FLOW`.
 
-## P2 — reliability, observability, and security
+## P2 — reliability, observability, security, and deployment
 
-Accepted:
+Accepted reliability/security work:
 
 - `RELIABILITY.KAFKA_RETRY` and `RELIABILITY.DEAD_LETTER`;
 - `ANALYSIS.OUTBOX`;
 - `OBSERVABILITY.APPLICATION`;
-- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`.
+- `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`;
+- `SECURITY.EXTERNAL_SOURCE_ACCESS`.
 
-Accepted deployment/system milestone:
+Accepted deployment/system work:
 
-- backend-owned `DEPLOYMENT.KUBERNETES` + `OBSERVABILITY.INFRASTRUCTURE`;
-- controlled live system resilience acceptance for restart, persistence outage, retry/DLQ, lag recovery, outbox recovery, scheduler leases, authorization, and telemetry evidence.
+- backend-owned `DEPLOYMENT.KUBERNETES`;
+- `OBSERVABILITY.INFRASTRUCTURE`;
+- controlled live resilience acceptance for restart, persistence outage, retry/DLQ, lag recovery, outbox recovery, scheduler leases, authorization, and telemetry evidence.
 
-Current verification-pending:
+Current verification-pending work:
 
 - `SCALABILITY.KAFKA_CONSUMERS` — live scale from one to three backend replicas while Analysis lag exists, with shared-group partition ownership and semantic-completeness checks.
 
-Next backend stages:
+## Next backend stages
 
-1. execute and accept Kafka consumer horizontal-scaling verification.
-2. choose the next lower-priority product refinement from analysis settings, replay operations, search/pagination, scheduling refinement, or other active product need.
-3. consider KEDA only after manual horizontal scaling behavior is accepted and an autoscaling policy is justified.
+1. Execute and accept Kafka consumer horizontal-scaling verification.
+2. Choose the next product refinement from current needs such as profile-owned analysis settings, controlled replay operations, Results search/pagination, or scheduling refinement.
+3. Consider KEDA only after manual horizontal scaling is accepted and an autoscaling policy is justified.
 
-`PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security is accepted, but it is intentionally deferred until frontend development resumes. Its detailed layout/routing behavior belongs to `signalharvester-web`.
-
-## P2 — deployment and system acceptance
-
-After application observability and security:
-
-- implement `DEPLOYMENT.KUBERNETES`;
-- implement `OBSERVABILITY.INFRASTRUCTURE` with Prometheus/Loki/Tempo/Grafana-oriented views;
-- run controlled restart, lag, slow-source, retry/DLQ, outbox-recovery, and authorization-boundary scenarios;
-- complete one production-style local system acceptance pass.
-
-That acceptance point is the intended logical milestone before lower-priority product refinements.
+`PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
 
 ## Deferred until justified
 
@@ -86,4 +87,4 @@ That acceptance point is the intended logical milestone before lower-priority pr
 - LLM/embedding analysis as a required core dependency;
 - automatic DLQ replay UI/workflows;
 - KEDA-driven autoscaling;
-- richer scheduling and search capabilities that are not required for the system milestone.
+- richer scheduling and search capabilities that are not yet required by an active product slice.

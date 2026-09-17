@@ -12,7 +12,9 @@ spec_status: active
 
 Active supporting architecture specification.
 
-The initial modular-monolith structure is accepted. This document remains active only for unresolved boundary and extraction guardrails that later stages must preserve. Accepted current architecture belongs in `docs/ARCHITECTURE.md`, root/module `AGENTS.md`, and module `contract.md` files.
+The initial modular-monolith structure is accepted.
+
+This document remains active only for unresolved boundary and extraction guardrails that later stages must preserve. Accepted current architecture belongs in `docs/ARCHITECTURE.md`, root/module `AGENTS.md`, and module `contract.md` files.
 
 Do not maintain a second implementation inventory here.
 
@@ -45,7 +47,15 @@ Create a backend structure that:
 
 ## Current state
 
-The repository already has the modular Gradle layout, Micronaut composition root, explicit module `api` packages, module-owned persistence, contract modules, ArchUnit boundary checks, and dedicated integration-test source sets described by this specification.
+The repository already implements the foundation described by this specification:
+
+- modular Gradle layout;
+- Micronaut composition root;
+- explicit module `api` packages;
+- module-owned persistence;
+- contract modules;
+- ArchUnit boundary checks;
+- dedicated integration-test source sets.
 
 Later capabilities must preserve those boundaries. Detailed implementation status belongs in `docs/IMPLEMENTATION.md`; this supporting spec only defines architectural constraints that still matter for future work.
 
@@ -139,7 +149,9 @@ A module may internally use packages such as `api`, `application`, `model`, and 
 
 ## Module contract rule
 
-Every functional module has an internal implementation surface and may expose a narrow public contract surface when a real synchronous functional-module consumer exists. A module whose inbound interfaces are used only by its own adapters should keep those interfaces internal rather than creating a nominal public API.
+Every functional module has an internal implementation surface. It may expose a narrow public contract only when a real synchronous functional-module consumer exists.
+
+If inbound interfaces are used only by the module's own adapters, they should remain internal instead of creating a nominal public API.
 
 When published, the preferred Java namespace convention is:
 
@@ -166,9 +178,26 @@ configuration.persistence.JdbcSourceConfigurationRepository
 
 This rule is enforced with an ArchUnit-backed architecture test that rejects production cross-module Java dependencies outside the providing module's `api..` package.
 
-Public module APIs should remain small. A class must not be moved to an `api` package merely because another module wants convenient access to it. Published module behavior is expressed through interfaces under `api`; contract data may be colocated there or referenced from an existing owned model when duplication would add no value. Controller-facing application ports that have no external functional-module consumer remain internal, just like repositories, outbound clients, publishers, analyzers, and strategy interfaces. REST controllers remain transport adapters and are never promoted to Java API merely to make them injectable.
+Public module APIs should remain small. A class must not move to an `api` package merely because another module wants convenient access to it.
 
-Each functional module also keeps a root `contract.md` as a compact context/navigation index. It points to the authoritative Java `api/**`, OpenAPI, and Protobuf sources and records ownership/dependency/invariant information without copying complete method or field signatures. This supports selective context loading for both developers and coding agents.
+Published module behavior is expressed through interfaces under `api`. Contract data may be colocated there or referenced from an existing owned model when duplication would add no value.
+
+The following stay internal when they have no external functional-module consumer:
+
+- controller-facing application ports;
+- repositories;
+- outbound clients;
+- publishers;
+- analyzers;
+- strategy interfaces.
+
+REST controllers remain transport adapters. They are never promoted to Java API merely to make them injectable.
+
+Each functional module also keeps a root `contract.md` as a compact context/navigation index.
+
+It points to authoritative Java `api/**`, OpenAPI, and Protobuf sources. It records ownership, dependency, and invariant information without copying complete method or field signatures.
+
+This supports selective context loading for developers and coding agents.
 
 ## Interfaces and contracts
 
@@ -350,11 +379,15 @@ It must not become a substitute for OpenTelemetry, Prometheus, Loki, Tempo, or G
 
 Micronaut Netty event-loop threads must not execute blocking application work.
 
-REST controller methods or classes that invoke JDBC, blocking source access, or other imperative blocking workflows must use `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking execution boundary. On the Java 21 baseline the blocking executor is Virtual-Thread backed.
+REST controller methods or classes that invoke JDBC, blocking source access, or other imperative blocking workflows must use `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking boundary.
+
+On Java 21, the blocking executor is Virtual-Thread backed.
 
 Controllers that expose true streaming/reactive responses, especially SSE, must keep their reactive execution model instead of being moved to blocking execution mechanically.
 
-Micronaut client/server filters should remain lightweight and non-blocking. A filter that performs blocking work must explicitly offload that work and must not block a Netty event loop. Expected application/domain failures should be mapped through centralized Micronaut `ExceptionHandler` implementations at the HTTP boundary rather than duplicated controller `try/catch` logic.
+Micronaut client/server filters should remain lightweight and non-blocking. A filter that performs blocking work must explicitly offload it and must not block a Netty event loop.
+
+Expected application/domain failures should be mapped through centralized Micronaut `ExceptionHandler` implementations at the HTTP boundary. Do not duplicate controller `try/catch` translation.
 
 ### R8 — common contains only genuinely cross-cutting primitives
 
@@ -412,7 +445,9 @@ Generated Java classes are build output. They must be generated by Gradle from `
 
 The contract module must not contain event handlers, Kafka clients, repositories, application services, or module business logic.
 
-Protobuf-generated message classes are transport types, not domain entities. A functional module may map between a generated event message and its own internal model rather than allowing generated classes to spread through unrelated application logic.
+Protobuf-generated message classes are transport types, not domain entities.
+
+A functional module may map a generated event message to its own internal model. Generated classes should not spread through unrelated application logic.
 
 Kafka remains useful inside the modular monolith because it models the intended asynchronous boundaries and makes event flow, lag, retries, replay, schema evolution, and observability visible.
 
@@ -443,7 +478,9 @@ event-observation module
 
 OpenAPI definitions and API-generation/validation configuration belong to `contracts:api-contracts`.
 
-REST request/response payloads remain JSON-oriented contracts. Server-Sent Events exposed to the browser also use browser-friendly JSON payloads. Protobuf is not used merely to make in-process Java calls or browser APIs more complex.
+REST request/response payloads remain JSON-oriented contracts. Server-Sent Events exposed to the browser also use browser-friendly JSON.
+
+Do not use Protobuf merely to make in-process Java calls or browser APIs more complex.
 
 The frontend and external black-box test clients must depend on the HTTP contract, not Java implementation classes.
 

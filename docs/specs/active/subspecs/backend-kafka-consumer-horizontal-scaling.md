@@ -14,28 +14,36 @@ Implementation complete. Developer execution of the live Kubernetes scaling acce
 
 ## Feature scope
 
-- `SCALABILITY.KAFKA_CONSUMERS`
-- `RELIABILITY.IDEMPOTENCY`
-- `DEPLOYMENT.KUBERNETES`
-- `OBSERVABILITY.INFRASTRUCTURE`
+- `SCALABILITY.KAFKA_CONSUMERS` — partition-bounded horizontal consumer scaling.
+- `RELIABILITY.IDEMPOTENCY` — duplicate-safe semantics during rebalance and redelivery.
+- `DEPLOYMENT.KUBERNETES` — backend replica scaling in the accepted local cluster.
+- `OBSERVABILITY.INFRASTRUCTURE` — consumer lag and replica evidence during the demonstration.
 
 ## Goal
 
 Demonstrate umbrella R26 and scenario S9 without splitting the modular monolith or introducing autoscaling infrastructure.
 
-The current backend already creates one Analysis, Results, and Event Observation Kafka consumer instance per application replica. The Kubernetes topics have three partitions, so a deployment scaled from one to three backend replicas can increase Kafka worker parallelism while partitioning permits it. This slice makes that behavior explicit, reproducible, and observable.
+The current backend creates one Analysis, Results, and Event Observation Kafka consumer instance per application replica.
+
+The local Kubernetes topics have three partitions. Scaling the backend from one to three replicas can therefore increase Kafka worker parallelism while partitioning permits it.
+
+This slice makes that behavior explicit, reproducible, and observable.
 
 ## Requirements
 
 ### S1 — shared consumer groups remain the scaling boundary
 
-Analysis, Results, and Event Observation replicas must keep stable shared consumer-group identities. Replica-specific consumer groups are forbidden because they would broadcast every event to every backend replica instead of sharing work.
+Analysis, Results, and Event Observation replicas must keep stable shared consumer-group identities.
+
+Replica-specific consumer groups are forbidden. They would broadcast every event to every backend replica instead of sharing work.
 
 No Java module is extracted into a separate deployment for this stage. Scaling operates on the existing `signalharvester-backend` Deployment.
 
 ### S2 — partition capacity is explicit
 
-The local Kubernetes application topics used by the worker pipeline must have at least three partitions. The live scaling demonstration uses three backend replicas because useful consumer parallelism is bounded by available partitions.
+The local Kubernetes application topics used by the worker pipeline must have at least three partitions.
+
+The live demonstration uses three backend replicas because useful consumer parallelism is bounded by available partitions.
 
 Increasing backend replicas beyond a subscribed topic's partition count must not be described as increasing that consumer group's processing parallelism.
 
@@ -80,7 +88,9 @@ The acceptance runner must print the one-replica lag, scaled member/partition as
 - The runner must restore the original backend replica count and temporary environment overrides in `finally` cleanup.
 - Temporary profiles must be deleted before their Sources.
 - The test fixture must be removed after the run.
-- A backlog that drains before the three-replica assignment can be observed is an inconclusive workload, not permission to weaken the assertions. Increase the bounded fixture workload instead.
+- A backlog that drains before the three-replica assignment can be observed is inconclusive. It is not permission to weaken assertions.
+
+Increase the bounded fixture workload instead.
 - No scenario may commit or seek Kafka consumer offsets manually.
 
 ## Non-goals
