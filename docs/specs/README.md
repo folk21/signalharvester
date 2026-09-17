@@ -19,7 +19,9 @@ Current implementation truth belongs in:
 - [`../USAGE.md`](../USAGE.md);
 - owning module and contract documentation.
 
-Stable capability names belong in [`../FEATURES.md`](../FEATURES.md). Frontend implementation specifications belong in the separate `signalharvester-web/docs/specs/` tree.
+Stable capability names belong in [`../FEATURES.md`](../FEATURES.md).
+
+Frontend implementation specifications belong in the separate `signalharvester-web/docs/specs/` tree.
 
 ## Feature, requirement, and specification IDs
 
@@ -29,9 +31,9 @@ Keep these concepts separate:
 - **Requirement ID** — normative requirement inside one specification, for example `R22` or `A5`.
 - **Specification name** — one implementation/change slice, for example `backend-authentication-authorization`.
 
-A feature may be refined by several specifications over time. A completed specification is archived; its feature ID remains stable.
+A feature may be refined by several specifications. A completed specification is archived, but its feature IDs remain stable.
 
-Do not invent feature IDs inside a test, class, or specification. Add the capability to `docs/FEATURES.md` first.
+Do not invent feature IDs in tests, classes, or specifications. Add a genuinely new durable capability to `docs/FEATURES.md` first.
 
 ## Active tree
 
@@ -44,15 +46,19 @@ active/
         <bounded-focus>.md
 ```
 
-The rules are:
+Rules:
 
 - the umbrella defines the active product/system target;
 - one sub-spec may be the current implementation focus;
-- other sub-specs may remain active only when they define unresolved supporting constraints;
+- other sub-specs may remain active only while they define unresolved supporting constraints;
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current implementation focus is Kafka consumer horizontal scaling through `active/subspecs/backend-kafka-consumer-horizontal-scaling.md`. Backend-owned Kubernetes/observability deployment and system resilience acceptance are accepted and archived, together with authentication/RBAC, application observability, and external-source access security.
+Current implementation focus:
+
+- [`active/subspecs/backend-kafka-consumer-horizontal-scaling.md`](active/subspecs/backend-kafka-consumer-horizontal-scaling.md) — `SCALABILITY.KAFKA_CONSUMERS`; implementation complete, live developer verification pending.
+
+Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, and external-source access security are archived.
 
 ## When to create a sub-spec
 
@@ -62,20 +68,25 @@ Create a sub-spec when a change materially affects one or more of these areas:
 - persistence or transaction semantics;
 - public HTTP/SSE or Kafka contracts;
 - reliability and failure behavior;
-- authentication/authorization;
+- authentication or authorization;
 - deployment or observability;
-- work that spans multiple implementation sessions and benefits from stable acceptance criteria.
+- work that spans multiple implementation sessions and needs stable acceptance criteria.
 
-Small bugs, local refactors, narrow documentation cleanup, and routine dependency maintenance do not require a sub-spec.
+Do not create a sub-spec for:
+
+- small bugs;
+- local refactors;
+- narrow documentation cleanup;
+- routine dependency maintenance.
 
 ## Lifecycle
 
 1. Keep the umbrella under `docs/specs/active/spec-*.md`.
-2. Put an unresolved bounded implementation slice under `docs/specs/active/subspecs/`.
+2. Put one unresolved bounded implementation slice under `docs/specs/active/subspecs/`.
 3. Record its parent and lifecycle state in frontmatter.
-4. If the umbrella has a current implementation focus, make `current_focus` and the human-readable status agree.
+4. Keep umbrella `current_focus` and human-readable status synchronized.
 5. Reference stable feature IDs from `docs/FEATURES.md` when they improve navigation.
-6. Give important normative requirements stable IDs when tests or reviews need them.
+6. Give important normative requirements stable local IDs when tests or reviews need them.
 7. Implement and validate the slice.
 8. After developer acceptance, move stable behavior into current-state documentation.
 9. Move the completed sub-spec to `docs/specs/archive/subspecs/`.
@@ -83,7 +94,12 @@ Small bugs, local refactors, narrow documentation cleanup, and routine dependenc
 
 A specification must exist in exactly one lifecycle location. Archival is a move, not a copy.
 
-An implemented but unverified slice may remain active with `spec_status: verification-pending`. Once accepted, current-state documentation owns the behavior; the archived spec remains historical context only.
+An implemented but unverified slice may remain active with `spec_status: verification-pending`.
+
+After acceptance:
+
+- current-state documentation owns the behavior;
+- the archived spec is historical context only.
 
 ## Document metadata
 
@@ -93,18 +109,18 @@ Managed documentation uses minimal YAML frontmatter:
 - `title`;
 - `description`.
 
-Specification files may additionally use:
+Specifications may additionally use:
 
 - `document_role` — `umbrella` or `subspec`;
 - `spec_status` — for example `active`, `verification-pending`, or `completed` in an archived spec;
 - `parent` — umbrella path for a sub-spec;
-- `current_focus` — only when an umbrella currently points to one active implementation sub-spec.
+- `current_focus` — only when an umbrella points to one active implementation sub-spec.
 
 Do not add metadata that only repeats the body or Git history.
 
 ## Writing structure
 
-Prefer a small, predictable structure. Use only the sections that add value.
+Prefer a small predictable structure. Use only sections that add value.
 
 ```text
 # <Change name>
@@ -124,7 +140,13 @@ Prefer a small, predictable structure. Use only the sections that add value.
 ## Implementation tasks
 ```
 
-Keep processing order separate from invariants and failure semantics. Use short paragraphs and bullets rather than combining several independent requirements into one sentence.
+Writing rules:
+
+- keep normative requirements precise;
+- prefer short paragraphs with one main assertion;
+- use lists for independent rules or steps;
+- keep processing order separate from invariants and failure semantics;
+- do not restate accepted current-state detail when a current-state document already owns it.
 
 ## Active specifications
 
@@ -143,33 +165,48 @@ Active supporting tracks:
 
 ## Recently completed sub-specifications
 
-- [`archive/subspecs/backend-system-resilience-acceptance.md`](archive/subspecs/backend-system-resilience-acceptance.md) — live multi-replica restart, outage, lag, outbox, scheduler, authorization, recovery, and telemetry acceptance, accepted after developer execution on 2026-09-17;
-- [`archive/subspecs/backend-kubernetes-observability-deployment.md`](archive/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`, accepted after routine and live-cluster developer verification on 2026-09-17;
-- [`archive/subspecs/backend-external-source-access-security.md`](archive/subspecs/backend-external-source-access-security.md) — `SECURITY.EXTERNAL_SOURCE_ACCESS`, accepted after developer `./run_checks.sh` verification on 2026-09-16;
-- [`archive/subspecs/backend-authentication-authorization.md`](archive/subspecs/backend-authentication-authorization.md) — `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`, accepted after developer `./run_checks.sh` verification on 2026-09-16;
-- [`archive/subspecs/backend-application-observability.md`](archive/subspecs/backend-application-observability.md) — `OBSERVABILITY.APPLICATION`, accepted after developer `./run_checks.sh` verification;
-- [`archive/subspecs/backend-db-kafka-consistency.md`](archive/subspecs/backend-db-kafka-consistency.md) — `ANALYSIS.OUTBOX`, accepted after developer `./run_checks.sh` verification;
-- [`archive/subspecs/backend-reliability-failure-handling.md`](archive/subspecs/backend-reliability-failure-handling.md) — `RELIABILITY.KAFKA_RETRY` and `RELIABILITY.DEAD_LETTER`, accepted after developer verification;
-- [`archive/subspecs/backend-processing-flow-reconstruction.md`](archive/subspecs/backend-processing-flow-reconstruction.md) — `DIAGNOSTICS.PROCESSING_FLOW`, accepted after developer verification;
-- [`archive/subspecs/backend-event-observation.md`](archive/subspecs/backend-event-observation.md) — `DIAGNOSTICS.EVENT_OBSERVATION`, accepted after developer verification;
-- [`archive/subspecs/backend-results-sse-live-delivery.md`](archive/subspecs/backend-results-sse-live-delivery.md) — `RESULTS.LIVE`, accepted after developer verification;
-- [`archive/subspecs/backend-source-test-generic-extraction.md`](archive/subspecs/backend-source-test-generic-extraction.md) — `COLLECTION.SOURCE_TEST`, accepted after developer verification;
-- [`archive/subspecs/backend-profile-driven-scheduling.md`](archive/subspecs/backend-profile-driven-scheduling.md) — `COLLECTION.SCHEDULING`, accepted after developer verification;
-- [`archive/subspecs/backend-monitoring-profile-configuration.md`](archive/subspecs/backend-monitoring-profile-configuration.md) — `CONFIGURATION.MONITORING_PROFILES`, accepted after developer verification;
-- [`archive/subspecs/backend-rss-atom-extraction.md`](archive/subspecs/backend-rss-atom-extraction.md) — `COLLECTION.ADAPTERS`, accepted after developer verification;
-- [`archive/subspecs/backend-results-rest-api.md`](archive/subspecs/backend-results-rest-api.md) — `RESULTS.BROWSING`, accepted after developer verification;
-- [`archive/subspecs/backend-results-persistence.md`](archive/subspecs/backend-results-persistence.md) — `RESULTS.MATERIALIZATION`, accepted after developer verification;
-- [`archive/subspecs/backend-configuration-persistence-rest.md`](archive/subspecs/backend-configuration-persistence-rest.md) — `CONFIGURATION.SOURCES`, accepted after developer verification;
-- [`archive/subspecs/backend-operational-admin-api.md`](archive/subspecs/backend-operational-admin-api.md) — operational APIs for `COLLECTION.RUNS` and Analysis inspection, accepted after developer verification;
-- [`archive/subspecs/backend-analysis-normalization-deduplication.md`](archive/subspecs/backend-analysis-normalization-deduplication.md) — `ANALYSIS.NORMALIZATION`, `ANALYSIS.DEDUPLICATION`, and `ANALYSIS.CLASSIFICATION`, accepted after developer verification;
-- [`archive/subspecs/backend-collection-kafka-transport.md`](archive/subspecs/backend-collection-kafka-transport.md) — `EVENTING.PIPELINE`, accepted after developer verification;
-- [`archive/subspecs/backend-collection-run-orchestration.md`](archive/subspecs/backend-collection-run-orchestration.md) — `COLLECTION.RUNS`, accepted after developer verification.
+Accepted on 2026-09-17:
+
+- [`archive/subspecs/backend-system-resilience-acceptance.md`](archive/subspecs/backend-system-resilience-acceptance.md) — live restart, outage, lag, outbox, scheduler, authorization, recovery, and telemetry acceptance;
+- [`archive/subspecs/backend-kubernetes-observability-deployment.md`](archive/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`.
+
+Accepted security/observability/reliability slices:
+
+- [`archive/subspecs/backend-external-source-access-security.md`](archive/subspecs/backend-external-source-access-security.md) — `SECURITY.EXTERNAL_SOURCE_ACCESS`;
+- [`archive/subspecs/backend-authentication-authorization.md`](archive/subspecs/backend-authentication-authorization.md) — `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, and `SECURITY.AUTHORIZATION`;
+- [`archive/subspecs/backend-application-observability.md`](archive/subspecs/backend-application-observability.md) — `OBSERVABILITY.APPLICATION`;
+- [`archive/subspecs/backend-db-kafka-consistency.md`](archive/subspecs/backend-db-kafka-consistency.md) — `ANALYSIS.OUTBOX`;
+- [`archive/subspecs/backend-reliability-failure-handling.md`](archive/subspecs/backend-reliability-failure-handling.md) — `RELIABILITY.KAFKA_RETRY` and `RELIABILITY.DEAD_LETTER`.
+
+Accepted diagnostic/result slices:
+
+- [`archive/subspecs/backend-processing-flow-reconstruction.md`](archive/subspecs/backend-processing-flow-reconstruction.md) — `DIAGNOSTICS.PROCESSING_FLOW`;
+- [`archive/subspecs/backend-event-observation.md`](archive/subspecs/backend-event-observation.md) — `DIAGNOSTICS.EVENT_OBSERVATION`;
+- [`archive/subspecs/backend-results-sse-live-delivery.md`](archive/subspecs/backend-results-sse-live-delivery.md) — `RESULTS.LIVE`;
+- [`archive/subspecs/backend-results-rest-api.md`](archive/subspecs/backend-results-rest-api.md) — `RESULTS.BROWSING`;
+- [`archive/subspecs/backend-results-persistence.md`](archive/subspecs/backend-results-persistence.md) — `RESULTS.MATERIALIZATION`.
+
+Accepted configuration/collection/analysis slices:
+
+- [`archive/subspecs/backend-source-test-generic-extraction.md`](archive/subspecs/backend-source-test-generic-extraction.md) — `COLLECTION.SOURCE_TEST`;
+- [`archive/subspecs/backend-profile-driven-scheduling.md`](archive/subspecs/backend-profile-driven-scheduling.md) — `COLLECTION.SCHEDULING`;
+- [`archive/subspecs/backend-monitoring-profile-configuration.md`](archive/subspecs/backend-monitoring-profile-configuration.md) — `CONFIGURATION.MONITORING_PROFILES`;
+- [`archive/subspecs/backend-rss-atom-extraction.md`](archive/subspecs/backend-rss-atom-extraction.md) — `COLLECTION.ADAPTERS`;
+- [`archive/subspecs/backend-configuration-persistence-rest.md`](archive/subspecs/backend-configuration-persistence-rest.md) — `CONFIGURATION.SOURCES`;
+- [`archive/subspecs/backend-operational-admin-api.md`](archive/subspecs/backend-operational-admin-api.md) — `COLLECTION.RUNS` and `DIAGNOSTICS.ANALYSIS_INSPECTION` operational APIs;
+- [`archive/subspecs/backend-analysis-normalization-deduplication.md`](archive/subspecs/backend-analysis-normalization-deduplication.md) — `ANALYSIS.NORMALIZATION`, `ANALYSIS.DEDUPLICATION`, and `ANALYSIS.CLASSIFICATION`;
+- [`archive/subspecs/backend-collection-kafka-transport.md`](archive/subspecs/backend-collection-kafka-transport.md) — collection-side Kafka transport and event publication;
+- [`archive/subspecs/backend-collection-run-orchestration.md`](archive/subspecs/backend-collection-run-orchestration.md) — `COLLECTION.RUNS` orchestration and durable outcomes.
 
 ## Planned backend sub-specifications
 
-Likely future bounded specs after the current live acceptance work include:
+After the current Kafka scaling acceptance, likely bounded specs include lower-priority product refinements such as:
 
-- horizontal Kafka consumer scaling where partitioning permits;
-- lower-priority product refinements after the production-style local system milestone.
+- profile-owned analysis settings;
+- controlled replay operations;
+- Results search/pagination;
+- scheduling refinements.
 
-Detailed `PRESENTATION.VIEWER_RESULTS` UI behavior belongs to `signalharvester-web` and should receive its own frontend sub-spec when frontend work resumes.
+These are candidates, not active commitments.
+
+Detailed `PRESENTATION.VIEWER_RESULTS` behavior belongs to `signalharvester-web`. It should receive its own frontend sub-spec when that work resumes.

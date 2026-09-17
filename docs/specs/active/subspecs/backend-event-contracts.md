@@ -84,7 +84,9 @@ Feature: `CONTRACTS.KAFKA_PROTOBUF`.
 
 Protocol Buffers package structure must include an explicit contract version, initially `v1`.
 
-Versioning is a compatibility boundary, not a release-number mirror. Additive compatible changes remain in the same contract version. A new package version is introduced only when an intentional incompatible contract is required.
+Versioning is a compatibility boundary, not a release-number mirror.
+
+Additive compatible changes remain in the same contract version. Introduce a new package version only for an intentional incompatible contract.
 
 ### R3 — common envelope metadata is intentional
 
@@ -137,7 +139,9 @@ Feature: `CONTRACTS.KAFKA_PROTOBUF`.
 
 Kafka producer and consumer configuration must use an explicit Protobuf serialization strategy.
 
-The first implementation may use direct Protobuf byte serialization without introducing a Schema Registry. Schema Registry integration may be added later when compatibility enforcement, operational schema discovery, or multi-language consumers justify it.
+The first implementation may use direct Protobuf byte serialization without a Schema Registry.
+
+Schema Registry integration may be added later when compatibility enforcement, operational schema discovery, or multi-language consumers justify it.
 
 The application-level contract remains the `.proto` schema regardless of whether a registry is present.
 

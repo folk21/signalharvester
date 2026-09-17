@@ -95,23 +95,111 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_COLLECTION_HTTP_MAX_PENDING_ACQUIRES` | `64` | Maximum pending connection-pool acquisitions. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_POOL_ACQUIRE_TIMEOUT` | `2s` | Maximum wait for a pooled connection. |
 
-The default runtime keeps Micronaut Security disabled for the existing trusted local workflow. Activating the `security` environment loads `application-security.properties`. That profile requires deployment-provided JWT and CSRF signing secrets, enables HttpOnly JWT cookies plus bearer-token validation, applies the explicit endpoint/role matrix, and enables signed double-submit CSRF. CORS remains disabled unless `SIGNALHARVESTER_CORS_ENABLED=true`; credentialed CORS uses the single configured origin rather than `*`.
+### Security runtime
 
-The browser JWT cookie is HttpOnly and `SameSite=Strict`. The readable `XSRF-TOKEN` cookie contains only CSRF proof and is sent back in `X-CSRF-TOKEN` for JSON/form mutations. JWTs must not be placed in URLs. Local HTTP development may keep `SIGNALHARVESTER_AUTH_COOKIE_SECURE=false`; HTTPS shared/public deployment must enable Secure cookies. Account disablement and role changes affect future login/token issuance; already-issued stateless JWTs remain valid until their configured short expiry.
+The default runtime keeps Micronaut Security disabled for the trusted local workflow.
 
-Health endpoints `/health`, `/health/liveness`, and `/health/readiness` and the `/prometheus` endpoint are enabled by the application composition root. OpenTelemetry traces use the standard `tracecontext,baggage` propagators. `otel.traces.exporter` defaults to `none`, so a local OTLP collector is not a startup dependency. Set `SIGNALHARVESTER_OTEL_TRACES_EXPORTER=otlp` and `SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT` to export traces. Health and Prometheus paths are excluded from normal HTTP trace noise.
+Activating the `security` environment loads `application-security.properties`. That profile:
 
-Application metrics deliberately use bounded status/outcome labels rather than source/profile/run/item/event identifiers or URLs. This keeps Prometheus cardinality independent from harvested entity count.
+- requires deployment-provided JWT and CSRF signing secrets;
+- enables HttpOnly JWT cookies and bearer-token validation;
+- applies the explicit endpoint/role matrix;
+- enables signed double-submit CSRF.
 
-`micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on the Java 21 baseline. The current source, collection-admin, analysis-inspection, Results REST, and Event Observation history controllers use this executor for JDBC and synchronous workflows rather than running blocking work on a Netty event loop. Results and Event Observation SSE remain reactive streaming controllers; their JDBC polling is submitted to the same blocking executor by the stream implementation.
+CORS stays disabled unless `SIGNALHARVESTER_CORS_ENABLED=true`. Credentialed CORS uses one configured origin, never `*`.
 
-Collection concurrency is validated as positive. RSS/Atom and generic JSON/HTML extraction validate positive maximum item counts capped at 10,000. Source-test preview cardinality is capped at 50 items and preview content at 5,000 characters per item. These bounds sit behind the existing HTTP maximum-response-size limit. Micronaut may surface non-success HTTP statuses as `HttpClientResponseException`; the collection adapter normalizes that transport behavior into `SourceFetchException` while preserving status and raw `Retry-After` metadata. Redirect following is enabled but bounded. Automatic decompression is enabled, connection pooling is explicit, and `allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
+The browser JWT cookie is HttpOnly and `SameSite=Strict`. The readable `XSRF-TOKEN` cookie contains only CSRF proof. JSON/form mutations return that proof in `X-CSRF-TOKEN`.
 
-Configured source URLs are domain values: they must be absolute HTTP/HTTPS locations with a host, without embedded user-info credentials and without URI fragments. Secrets should be modeled separately rather than embedded into URLs.
+JWTs must not appear in URLs.
 
-Collection, analysis-outbox, and dead-letter producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They wait for acknowledgements with `acks=all` and enable Kafka producer idempotence. Analysis, Results, and Event Observation use manual source-offset commits. Deterministic decode/key/mapping failures bypass retry and publish a `failure/v1/DeadLetterEvent`; application failures after successful decode/key/mapping retry up to the owning configured maximum with fixed backoff. For Analysis, normal processing commits the deduplication change plus serialized terminal event to PostgreSQL before advancing the raw source offset; the outbox dispatcher later publishes that stored record. Results and Event Observation advance their source offset after durable projection/recording. An acknowledged DLQ remains the terminal boundary for failed inputs, and a failed DLQ publication leaves the source offset uncommitted. Event Observation uses its own consumer group and therefore does not compete with business consumers. Automatic replay is intentionally absent in this increment.
+Local HTTP development may keep `SIGNALHARVESTER_AUTH_COOKIE_SECURE=false`. Shared/public HTTPS deployment must enable Secure cookies.
 
-The first analyzer uses a small global keyword list in `application.properties` and `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` for the threshold. This is temporary runtime configuration until monitoring profiles own analysis rules. The threshold must be positive and cannot exceed the number of unique configured keywords.
+Account disablement and role changes affect future login and token issuance. Already-issued stateless JWTs remain valid until their configured short expiry.
+
+### Observability runtime
+
+The composition root enables:
+
+- `/health`;
+- `/health/liveness`;
+- `/health/readiness`;
+- `/prometheus`.
+
+OpenTelemetry uses the standard `tracecontext,baggage` propagators. `otel.traces.exporter` defaults to `none`, so a local OTLP collector is not required for startup.
+
+To export traces, set:
+
+- `SIGNALHARVESTER_OTEL_TRACES_EXPORTER=otlp`;
+- `SIGNALHARVESTER_OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+Health and Prometheus paths are excluded from normal HTTP trace noise.
+
+Application metrics use bounded status/outcome labels. They do not use source, profile, run, item, event, or URL identifiers as labels. Prometheus cardinality therefore stays independent from harvested entity count.
+
+### Blocking execution
+
+`micronaut.executors.blocking.virtual=true` makes Micronaut's blocking executor Virtual-Thread backed on Java 21.
+
+Source, collection-admin, Analysis-inspection, Results REST, and Event Observation history controllers use that executor for JDBC and synchronous work. They do not run blocking work on Netty event-loop threads.
+
+Results and Event Observation SSE remain reactive streaming controllers. Their JDBC polling is submitted to the same blocking executor by the stream implementation.
+
+### Collection bounds
+
+Collection concurrency must be positive.
+
+Configured extraction bounds are also validated:
+
+- RSS/Atom and generic JSON/HTML maximum item counts are positive and capped at 10,000;
+- Source Test preview cardinality is capped at 50 items;
+- Source Test preview content is capped at 5,000 characters per item.
+
+These bounds sit behind the HTTP maximum-response-size limit.
+
+Micronaut may surface non-success HTTP statuses as `HttpClientResponseException`.
+
+The Collection adapter normalizes that transport behavior into `SourceFetchException` while preserving status and raw `Retry-After` metadata.
+
+Redirect following is enabled but bounded. Automatic decompression is enabled. Connection pooling is explicit.
+
+`allow-block-event-loop=false` protects against accidental blocking client calls from Netty event-loop threads.
+
+Configured Source URLs are domain values. They must:
+
+- use absolute HTTP/HTTPS locations;
+- include a host;
+- omit embedded user-info credentials;
+- omit URI fragments.
+
+Secrets belong in separate secret configuration, not in URLs.
+
+### Kafka durability and failure handling
+
+Collection, Analysis outbox, and dead-letter producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They use `acks=all` and Kafka producer idempotence.
+
+Analysis, Results, and Event Observation use manual source-offset commits.
+
+Failure handling is explicit:
+
+- deterministic decode/key/mapping failures bypass retry and publish `failure/v1/DeadLetterEvent`;
+- application failures retry up to the owning configured maximum with fixed backoff;
+- Analysis commits deduplication state plus serialized terminal event to PostgreSQL before advancing the raw source offset;
+- the Analysis outbox publishes that stored record later;
+- Results and Event Observation advance source offsets after durable projection or recording;
+- an acknowledged DLQ is the terminal boundary for failed inputs;
+- failed DLQ publication leaves the source offset uncommitted.
+
+Event Observation uses its own consumer group and does not compete with business consumers.
+
+Automatic replay is intentionally absent.
+
+### Temporary global analysis configuration
+
+The first analyzer uses a small global keyword list in `application.properties`. `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` defines the relevance threshold.
+
+This is temporary runtime configuration until Monitoring Profiles own analysis rules.
+
+The threshold must be positive and must not exceed the number of unique configured keywords.
 
 Secrets must not be committed.
 
@@ -129,7 +217,9 @@ Secrets must not be committed.
 | `SIGNALHARVESTER_KAFKA_PORT` | `9092` | Kafka API host port. |
 | `SIGNALHARVESTER_REDPANDA_ADMIN_PORT` | `9644` | Redpanda Admin API host port. |
 
-The checked-in `.env.example` also contains `SIGNALHARVESTER_DB_URL` and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` so one local file can be sourced for the host-run backend. Docker Compose cannot derive a JDBC URL for the backend, so when `DB_NAME`, `DB_PORT`, or the Kafka host port changes, keep those runtime endpoint values synchronized explicitly.
+The checked-in `.env.example` also contains `SIGNALHARVESTER_DB_URL` and `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS`. One local file can therefore be sourced for the host-run backend.
+
+Docker Compose cannot derive a JDBC URL for the backend. When `DB_NAME`, `DB_PORT`, or the Kafka host port changes, keep those runtime endpoint values synchronized explicitly.
 
 Use the env file explicitly:
 
@@ -142,15 +232,41 @@ The local `.env` file is ignored by Git and excluded from FULL archives.
 
 ## Persisted application configuration
 
-The configuration module owns source and monitoring-profile persistence in PostgreSQL. Its Flyway migrations under `db/migration/configuration` create source configuration plus monitoring profiles, ordered source membership, and profile criteria. Analysis owns deduplication state under `db/migration/analysis` and schema `analysis`; collection owns durable run history and monitoring-profile schedule state under `db/migration/collection` and schema `collection`; Results owns analyzed/rejected projections and durable live-result cursors under `db/migration/results` and schema `results`; Security owns identities and explicit roles under `db/migration/security` and schema `security`. All module migration locations are applied through one datasource and one Flyway schema history, so migration version numbers must remain globally unique across those locations. Other modules consume effective configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider`; they must not read configuration tables directly.
+The Configuration module owns Source and Monitoring Profile persistence in PostgreSQL. Its Flyway migrations under `db/migration/configuration` create:
 
-A monitoring profile stores a positive collection interval, at least one existing source id, and string criteria. Enabled profiles are polled by Collection scheduling. Scheduler state remains collection-owned and is not stored in configuration tables. Disabling a profile prevents new automatic claims; manual execution may still target an existing profile explicitly.
+- Source configuration;
+- Monitoring Profiles;
+- ordered Source membership;
+- profile criteria.
+
+Other modules own their own state:
+
+- Analysis — deduplication state under `db/migration/analysis` and schema `analysis`;
+- Collection — durable run history and Monitoring Profile schedule state under `db/migration/collection` and schema `collection`;
+- Results — analyzed/rejected projections and durable live-result cursors under `db/migration/results` and schema `results`;
+- Security — identities and explicit roles under `db/migration/security` and schema `security`.
+
+All module migration locations use one datasource and one Flyway schema history. Migration version numbers must therefore remain globally unique across those locations.
+
+Other modules consume effective configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider`. They must not read Configuration tables directly.
+
+A Monitoring Profile stores:
+
+- a positive collection interval;
+- at least one existing Source ID;
+- string criteria.
+
+Enabled profiles are polled by Collection scheduling. Scheduler state remains Collection-owned and is not stored in Configuration tables.
+
+Disabling a profile prevents new automatic claims. Manual execution may still target an existing profile explicitly.
 
 Source names are not globally unique. The stable `SourceId` is the identity boundary, so two sources may intentionally share a display name while retaining different identifiers, locations, and settings.
 
 ### Persisted source extraction settings
 
-`source_settings` stores string values. Collection interprets the following additive keys. A REST or HTML source with no matching extraction prefix keeps the original one-response passthrough behavior. Unknown settings outside these prefixes remain opaque to Collection.
+`source_settings` stores string values. Collection interprets the additive keys below.
+
+A REST or HTML Source with no matching extraction prefix keeps the original one-response passthrough behavior. Unknown settings outside these prefixes remain opaque to Collection.
 
 REST JSON extraction is enabled when any `json.*` key is present:
 
@@ -177,7 +293,14 @@ HTML extraction is enabled when any `html.*` key is present:
 | `html.publishedAtSelector` | no | Optional publication-time selector. |
 | `html.publishedAtAttribute` | no | Attribute containing publication time; text is used when omitted. |
 
-Malformed pointers/selectors, invalid extracted URLs/timestamps, missing required mappings, and candidate sets above the configured bound are explicit extraction failures. Use the source-test API before enabling a new source to validate these settings against a real response.
+The following are explicit extraction failures:
+
+- malformed pointers/selectors;
+- invalid extracted URLs or timestamps;
+- missing required mappings;
+- candidate sets above the configured bound.
+
+Use the Source Test API before enabling a new Source to validate these settings against a real response.
 
 Persisting a source URL does not authorize collection from that destination. Collection owns the accepted runtime destination authorization boundary.
 
@@ -189,7 +312,12 @@ Outbound-source settings:
 | `signalharvester.collection.outbound-access.allowed-cidrs` | empty | Comma-separated IPv4/IPv6 CIDR ranges that explicitly authorize otherwise blocked internal destinations in `SECURE` mode. |
 | `micronaut.http.client.address-resolver-group-name` | `signalharvester-external-source-access` in the runnable app | Binds DNS authorization to the Netty address resolver used by the actual connection path. |
 
-Environment variables for the runnable backend are `SIGNALHARVESTER_COLLECTION_OUTBOUND_ACCESS_MODE` and `SIGNALHARVESTER_COLLECTION_OUTBOUND_ALLOWED_CIDRS`. Shared/security deployments should leave mode at `SECURE` and add the narrowest CIDR rules required for intentional internal sources. Unspecified/any-local and multicast addresses remain rejected rather than being made general-purpose source targets.
+Runnable-backend environment variables are:
+
+- `SIGNALHARVESTER_COLLECTION_OUTBOUND_ACCESS_MODE`;
+- `SIGNALHARVESTER_COLLECTION_OUTBOUND_ALLOWED_CIDRS`.
+
+Shared/security deployments should keep `SECURE` mode and add only the narrowest CIDR rules required for intentional internal Sources. Unspecified/any-local and multicast addresses remain rejected.
 
 ## Compatibility
 
@@ -197,6 +325,23 @@ Configuration fields that affect persisted behavior, API contracts, or source in
 
 ## Kubernetes runtime configuration
 
-The verification-pending local Kubernetes stack sets non-secret backend values through `infra/kubernetes/kustomization.yaml` and requires deployment-owned Secret objects named `signalharvester-runtime-secrets` and `signalharvester-observability-secrets`. `infra/kubernetes/create-local-secrets.sh` creates them from explicit environment values or generated local values without writing credentials to repository files.
+The accepted local Kubernetes stack sets non-secret backend values through `infra/kubernetes/kustomization.yaml`.
 
-The backend Kubernetes ConfigMap activates `MICRONAUT_ENVIRONMENTS=security`, PostgreSQL at `postgres:5432`, Redpanda at `redpanda:9092`, OTLP trace export to `tempo:4317`, and the localhost CORS origin used by the documented frontend port-forward workflow. The local stack sets `SIGNALHARVESTER_AUTH_COOKIE_SECURE=false` because it intentionally uses HTTP port forwarding; production/shared Internet exposure must terminate TLS and set the cookie secure flag appropriately rather than copying this local-development exception.
+It requires deployment-owned Secret objects:
+
+- `signalharvester-runtime-secrets`;
+- `signalharvester-observability-secrets`.
+
+`infra/kubernetes/create-local-secrets.sh` creates these Secrets from explicit environment values or generated local values. It does not write credentials to repository files.
+
+The backend Kubernetes ConfigMap activates:
+
+- `MICRONAUT_ENVIRONMENTS=security`;
+- PostgreSQL at `postgres:5432`;
+- Redpanda at `redpanda:9092`;
+- OTLP trace export to `tempo:4317`;
+- the localhost CORS origin used by the documented frontend port-forward workflow.
+
+The local stack sets `SIGNALHARVESTER_AUTH_COOKIE_SECURE=false` because it intentionally uses HTTP port forwarding.
+
+Shared/public Internet exposure must terminate TLS and enable Secure cookies. Do not copy the local HTTP exception into production.
