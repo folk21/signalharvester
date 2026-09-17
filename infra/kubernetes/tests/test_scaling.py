@@ -110,7 +110,7 @@ class KubernetesScalingAssetsTest(unittest.TestCase):
             ROOT
             / "docs"
             / "specs"
-            / "active"
+            / "archive"
             / "subspecs"
             / "backend-kafka-consumer-horizontal-scaling.md"
         ).read_text()

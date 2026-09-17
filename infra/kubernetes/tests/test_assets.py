@@ -129,7 +129,7 @@ class KubernetesAssetsTest(unittest.TestCase):
             manifest = (K8S / "observability" / filename).read_text()
             self.assertIn(fs_group, manifest, filename)
 
-    def test_spec_lifecycle_points_to_kafka_scaling_stage(self):
+    def test_spec_lifecycle_archives_accepted_kafka_scaling_stage(self):
         active = ROOT / "docs" / "specs" / "active" / "subspecs"
         archive = ROOT / "docs" / "specs" / "archive" / "subspecs"
         umbrella = (ROOT / "docs" / "specs" / "active" / "spec-signal-harvester-platform.md").read_text()
@@ -139,8 +139,9 @@ class KubernetesAssetsTest(unittest.TestCase):
         self.assertFalse((active / "backend-system-resilience-acceptance.md").exists())
         self.assertTrue((archive / "backend-kubernetes-observability-deployment.md").exists())
         self.assertTrue((archive / "backend-system-resilience-acceptance.md").exists())
-        self.assertTrue((active / "backend-kafka-consumer-horizontal-scaling.md").exists())
-        self.assertIn("current_focus: subspecs/backend-kafka-consumer-horizontal-scaling.md", umbrella)
+        self.assertFalse((active / "backend-kafka-consumer-horizontal-scaling.md").exists())
+        self.assertTrue((archive / "backend-kafka-consumer-horizontal-scaling.md").exists())
+        self.assertNotIn("current_focus:", umbrella)
 
     def test_backend_dockerfile_builds_distribution_and_runs_non_root(self):
         dockerfile = (ROOT / "app" / "Dockerfile").read_text()

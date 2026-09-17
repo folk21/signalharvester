@@ -150,13 +150,13 @@ The implemented backend foundation includes the following capability groups.
 - Connection-bound external-source DNS authorization with redirect revalidation and explicit trusted-local compatibility.
 - Accepted backend-owned Kubernetes deployment with PostgreSQL, Redpanda, Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana.
 - Accepted live resilience verification for restart, persistence outage, retry/DLQ, Kafka lag, outbox recovery, scheduler leases, authorization, and telemetry evidence.
-- Verification-pending Kafka consumer horizontal-scaling acceptance over the existing modular-monolith Deployment and three-partition local topics.
+- Accepted Kafka consumer horizontal scaling over the existing modular-monolith Deployment and three-partition local topics, with live backlog-drain verification from one to three replicas.
 
 The default host-run local profile remains an explicitly trusted unauthenticated compatibility mode while the frontend is migrated.
 
 The `security` environment enables authentication/RBAC and restrictive outbound-source policy.
 
-The current backend focus is `SCALABILITY.KAFKA_CONSUMERS`. It demonstrates backlog drain while the existing modular-monolith Deployment scales from one to three replicas and topic partitioning permits parallelism.
+`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. No new bounded backend implementation sub-spec is active yet; the next refinement should be selected from current product needs.
 
 Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
 

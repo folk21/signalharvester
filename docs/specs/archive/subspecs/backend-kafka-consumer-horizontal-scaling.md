@@ -3,14 +3,14 @@ type: Specification
 title: Backend Kafka consumer horizontal scaling
 description: Demonstrate safe multi-replica Kafka worker scaling and backlog drain within the modular-monolith Kubernetes deployment.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend Kafka consumer horizontal scaling
 
 ## Status
 
-Implementation complete. Developer execution of the live Kubernetes scaling acceptance is pending.
+Accepted on 2026-09-17 after the developer completed the live Kubernetes scaling workflow and the canonical repository gate. The accepted run established one-replica Analysis lag `5745`, scaled to three distinct Analysis group members assigned to raw-event partitions `0`, `1`, and `2`, observed Results/Event Observation multi-replica membership, and drained final Analysis lag to `0` while semantic-completeness checks passed.
 
 ## Feature scope
 
@@ -61,8 +61,8 @@ The live workflow must:
 2. generate positive Analysis consumer lag;
 3. restore Analysis with one consumer and confirm lag still exists;
 4. increase the backend Deployment to three replicas while the backlog remains positive;
-5. confirm the Analysis consumer group reaches three distinct active clients and all three raw-event partitions are assigned;
-6. confirm Results and Event Observation consumer groups also reach three active clients;
+5. confirm the Analysis consumer group reaches three distinct active members and all three raw-event partitions are assigned;
+6. confirm Results and Event Observation consumer groups also expose at least three active members;
 7. observe the Analysis backlog decrease and eventually drain to zero without manual offset changes.
 
 ### S5 — scaling preserves processing semantics

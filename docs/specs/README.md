@@ -56,7 +56,7 @@ Rules:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-kafka-consumer-horizontal-scaling.md`](active/subspecs/backend-kafka-consumer-horizontal-scaling.md) — `SCALABILITY.KAFKA_CONSUMERS`; implementation complete, live developer verification pending.
+- none. `SCALABILITY.KAFKA_CONSUMERS` completed live acceptance on 2026-09-17 and is archived. Activate the next bounded backend sub-spec only after its design/acceptance boundary is defined.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, and external-source access security are archived.
 
@@ -156,7 +156,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-kafka-consumer-horizontal-scaling.md`](active/subspecs/backend-kafka-consumer-horizontal-scaling.md) — `SCALABILITY.KAFKA_CONSUMERS`; implementation complete, developer live-cluster execution pending.
+- none. The last bounded backend focus, `SCALABILITY.KAFKA_CONSUMERS`, is accepted and archived.
 
 Active supporting tracks:
 
@@ -167,6 +167,7 @@ Active supporting tracks:
 
 Accepted on 2026-09-17:
 
+- [`archive/subspecs/backend-kafka-consumer-horizontal-scaling.md`](archive/subspecs/backend-kafka-consumer-horizontal-scaling.md) — `SCALABILITY.KAFKA_CONSUMERS`; accepted live one-to-three replica consumer scaling with partition-bounded backlog drain;
 - [`archive/subspecs/backend-system-resilience-acceptance.md`](archive/subspecs/backend-system-resilience-acceptance.md) — live restart, outage, lag, outbox, scheduler, authorization, recovery, and telemetry acceptance;
 - [`archive/subspecs/backend-kubernetes-observability-deployment.md`](archive/subspecs/backend-kubernetes-observability-deployment.md) — backend-owned `DEPLOYMENT.KUBERNETES` and `OBSERVABILITY.INFRASTRUCTURE`.
 
@@ -200,7 +201,7 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-After the current Kafka scaling acceptance, likely bounded specs include lower-priority product refinements such as:
+Likely next bounded backend specs include product refinements such as:
 
 - profile-owned analysis settings;
 - controlled replay operations;
