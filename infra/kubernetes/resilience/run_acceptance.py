@@ -122,8 +122,14 @@ class ApiSession:
             raise AcceptanceError(f"GET {path} returned HTTP {status}: {body!r}")
         return body
 
-    def post_json(self, path: str, payload: dict[str, Any], expected: int = 201) -> Any:
-        status, body = self.request("POST", path, payload)
+    def post_json(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        expected: int = 201,
+        timeout: float | None = None,
+    ) -> Any:
+        status, body = self.request("POST", path, payload, timeout=timeout)
         if status != expected:
             raise AcceptanceError(f"POST {path} returned HTTP {status}, expected {expected}: {body!r}")
         return body
@@ -144,17 +150,21 @@ class ApiSession:
         method: str,
         path: str,
         payload: dict[str, Any] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> tuple[int, Any]:
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         headers = {"Accept": "application/json"}
-        if method in {"POST", "PUT", "DELETE"}:
+        if payload is not None:
             headers["Content-Type"] = "application/json"
+        if method in {"POST", "PUT", "DELETE"}:
             csrf = self.cookie_value("XSRF-TOKEN")
             if csrf is not None and path != "/api/v1/auth/login":
                 headers["X-CSRF-TOKEN"] = csrf
         request = Request(self.base_url + path, data=data, headers=headers, method=method)
+        request_timeout = self.timeout if timeout is None else timeout
         try:
-            with self.opener.open(request, timeout=self.timeout) as response:
+            with self.opener.open(request, timeout=request_timeout) as response:
                 status = response.status
                 raw = response.read()
         except HTTPError as failure:
@@ -455,10 +465,16 @@ def create_viewer(admin: ApiSession, tracker: ResourceTracker, base_url: str, ti
     return viewer
 
 
-def run_collection(admin: ApiSession, profile_id: str) -> dict[str, Any]:
+def run_collection(
+    admin: ApiSession,
+    profile_id: str,
+    *,
+    timeout: float | None = None,
+) -> dict[str, Any]:
     run = admin.post_json(
         "/api/v1/admin/collection-runs",
         {"monitoringProfileId": profile_id},
+        timeout=timeout,
     )
     if run.get("status") not in {"SUCCEEDED", "PARTIALLY_SUCCEEDED"}:
         raise AcceptanceError(f"collection run failed: {run!r}")

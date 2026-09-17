@@ -42,6 +42,47 @@ class KubernetesResilienceAssetsTest(unittest.TestCase):
         self.assertIn("SIGNALHARVESTER_ANALYSIS_ENABLED", runner)
         self.assertIn("SIGNALHARVESTER_ANALYSIS_OUTBOX_ENABLED", runner)
 
+    def test_api_session_supports_long_requests_without_json_delete_body(self):
+        class FakeResponse:
+            status = 204
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b""
+
+        class FakeOpener:
+            def __init__(self):
+                self.request = None
+                self.timeout = None
+
+            def open(self, request, timeout):
+                self.request = request
+                self.timeout = timeout
+                return FakeResponse()
+
+        session = acceptance.ApiSession("http://127.0.0.1:18082", 10.0)
+        opener = FakeOpener()
+        session.opener = opener
+        session.cookie_value = lambda name: "csrf-proof" if name == "XSRF-TOKEN" else None
+
+        status, body = session.request(
+            "DELETE",
+            "/api/v1/sources/source-id",
+            timeout=240.0,
+        )
+
+        self.assertEqual(204, status)
+        self.assertIsNone(body)
+        self.assertEqual(240.0, opener.timeout)
+        self.assertIsNone(opener.request.data)
+        self.assertIsNone(opener.request.get_header("Content-type"))
+        self.assertEqual("csrf-proof", opener.request.get_header("X-csrf-token"))
+
     def test_topic_record_count_parser_sums_partition_ranges(self):
         sample = """
 PARTITION  LEADER  EPOCH  REPLICAS  LOG-START-OFFSET  HIGH-WATERMARK

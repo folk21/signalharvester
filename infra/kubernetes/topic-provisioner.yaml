@@ -22,8 +22,8 @@ spec:
             - -c
             - |
               set -eu
-              until rpk cluster health --brokers redpanda:9092 >/dev/null 2>&1; do sleep 2; done
-              rpk cluster config set enable_consumer_group_metrics '["group","partition","consumer_lag"]' --brokers redpanda:9092
+              until rpk cluster health -X admin.hosts=redpanda:9644 >/dev/null 2>&1; do sleep 2; done
+              rpk cluster config set enable_consumer_group_metrics '["group","partition","consumer_lag"]' -X admin.hosts=redpanda:9644
               for topic in \
                 signalharvester.collection.raw-item-discovered.v1 \
                 signalharvester.analysis.item-analyzed.v1 \
@@ -31,8 +31,8 @@ spec:
                 signalharvester.analysis.raw-item-dead-letter.v1 \
                 signalharvester.results.analysis-outcome-dead-letter.v1 \
                 signalharvester.event-observation.dead-letter.v1; do
-                rpk topic describe "$topic" --brokers redpanda:9092 >/dev/null 2>&1 \
-                  || rpk topic create "$topic" --partitions 3 --replicas 1 --brokers redpanda:9092
+                rpk topic describe "$topic" -X brokers=redpanda:9092 >/dev/null 2>&1 \
+                  || rpk topic create "$topic" --partitions 3 --replicas 1 -X brokers=redpanda:9092
               done
           resources:
             requests:

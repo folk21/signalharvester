@@ -45,6 +45,27 @@ class KubernetesAssetsTest(unittest.TestCase):
             self.assertNotIn(":latest", image)
             self.assertIn(":", image, image)
 
+    def test_redpanda_uses_current_rpk_cli_contract(self):
+        redpanda = (K8S / "redpanda.yaml").read_text()
+        provisioner = (K8S / "topic-provisioner.yaml").read_text()
+        self.assertIn("- /usr/bin/rpk\n            - redpanda\n            - start", redpanda)
+        self.assertIn("rpk cluster health -X admin.hosts=localhost:9644", redpanda)
+        self.assertIn("rpk cluster health -X admin.hosts=redpanda:9644", provisioner)
+        self.assertIn(
+            "rpk cluster config set enable_consumer_group_metrics "
+            "'[\"group\",\"partition\",\"consumer_lag\"]' -X admin.hosts=redpanda:9644",
+            provisioner,
+        )
+        self.assertIn('rpk topic describe "$topic" -X brokers=redpanda:9092', provisioner)
+        self.assertIn('rpk topic create "$topic" --partitions 3 --replicas 1 -X brokers=redpanda:9092', provisioner)
+        self.assertNotIn("rpk cluster health -X brokers=", provisioner)
+        self.assertNotRegex(
+            provisioner,
+            r"rpk cluster config set enable_consumer_group_metrics .* -X brokers=",
+        )
+        self.assertNotIn("--brokers", redpanda)
+        self.assertNotIn("--brokers", provisioner)
+
     def test_observability_stack_is_wired(self):
         prometheus = (K8S / "observability" / "prometheus.yml").read_text()
         tempo = (K8S / "observability" / "tempo-config.yaml").read_text()
