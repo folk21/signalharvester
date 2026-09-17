@@ -84,7 +84,7 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_KEEPALIVE_INTERVAL` | `15s` | Maximum idle period before an Event Explorer `keepalive` SSE event. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_RECONNECT_DELAY` | `2s` | Browser reconnect delay written to Event Explorer SSE `retry`. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_BATCH_SIZE` | `200` | Maximum observed events read per live poll; bounded to 500. |
-| `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` | `1` | Minimum configured keyword matches required for relevance. |
+| `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` | `1` | Compatibility threshold used for legacy profiles/clients and raw events without a persisted/captured Analysis-settings snapshot. |
 | `SIGNALHARVESTER_COLLECTION_MAX_CONCURRENCY` | `8` | Maximum concurrently active source-fetch workers. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_CONNECT_TIMEOUT` | `3s` | External HTTP connection timeout. |
 | `SIGNALHARVESTER_COLLECTION_HTTP_READ_TIMEOUT` | `10s` | Maximum wait for response reads. |
@@ -193,13 +193,13 @@ Event Observation uses its own consumer group and does not compete with business
 
 Automatic replay is intentionally absent.
 
-### Temporary global analysis configuration
+### Profile-owned Analysis configuration
 
-The first analyzer uses a small global keyword list in `application.properties`. `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` defines the relevance threshold.
+Monitoring Profiles own the effective deterministic keyword settings used by new collection events. The persisted typed settings contain normalized unique keywords plus a positive `minimumMatches` threshold that cannot exceed the keyword count. Collection snapshots those settings into `RawItemDiscovered`, and Analysis uses that immutable snapshot instead of looking up the latest profile.
 
-This is temporary runtime configuration until Monitoring Profiles own analysis rules.
+The checked-in `signalharvester.analysis.keyword-rules` values and `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` now exist only for compatibility. A create request from an older client that omits `analysisSettings` materializes those defaults into the new profile. A pre-migration profile without explicit settings resolves the same defaults until its next update, when they become persisted. An already-published legacy raw event without the snapshot also uses those defaults in Analysis. New clients should always round-trip `analysisSettings`.
 
-The threshold must be positive and must not exceed the number of unique configured keywords.
+Compatibility defaults must satisfy the same keyword/threshold invariant as persisted settings.
 
 Secrets must not be committed.
 

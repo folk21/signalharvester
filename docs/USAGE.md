@@ -48,7 +48,7 @@ Flyway applies Configuration, Analysis, Collection, Results, Event Observation, 
 The backend exposes:
 
 - Source CRUD and diagnostic testing under `/api/v1/sources`;
-- Monitoring Profile CRUD under `/api/v1/monitoring-profiles`;
+- Monitoring Profile CRUD, including typed keyword Analysis settings, under `/api/v1/monitoring-profiles`;
 - Collection Run operations under `/api/v1/admin/collection-runs`;
 - `DIAGNOSTICS.ANALYSIS_INSPECTION` under `/api/v1/admin/analysis/items`.
 
@@ -179,12 +179,12 @@ Read [`../tools/source-import/README.md`](../tools/source-import/README.md) for 
 
 The Collection Run workflow is:
 
-1. Resolve one persisted Monitoring Profile through the Configuration API.
+1. Resolve one persisted Monitoring Profile through the Configuration API, including its effective Analysis settings.
 2. Preserve configured Source order and skip disabled member Sources.
 3. Perform bounded best-effort fetches.
 4. Extract semantic items.
 5. Persist the completed run snapshot.
-6. Publish successful items to Kafka.
+6. Publish successful items to Kafka with the profile's Analysis settings captured in each `RawItemDiscovered`.
 
 Enabled profiles are also scheduled from their persisted collection interval through Collection-owned PostgreSQL leases.
 

@@ -1086,6 +1086,7 @@ components:
       - collectionIntervalMinutes
       - sourceIds
       - criteria
+      - analysisSettings
       properties:
         id:
           type: string
@@ -1114,6 +1115,8 @@ components:
           type: object
           additionalProperties:
             type: string
+        analysisSettings:
+          $ref: '#/components/schemas/MonitoringProfileAnalysisSettings'
     MonitoringProfileUpsertRequest:
       type: object
       required:
@@ -1148,6 +1151,27 @@ components:
           default: {}
           additionalProperties:
             type: string
+        analysisSettings:
+          description: Optional compatibility bridge. Create omission uses deployment defaults; update omission preserves the current effective settings. New clients should round-trip this field.
+          $ref: '#/components/schemas/MonitoringProfileAnalysisSettings'
+    MonitoringProfileAnalysisSettings:
+      type: object
+      required:
+      - keywords
+      - minimumMatches
+      properties:
+        keywords:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            pattern: .*\S.*
+        minimumMatches:
+          type: integer
+          minimum: 1
+          description: Must not exceed the number of unique normalized keywords.
     CollectionRunRequest:
       type: object
       required:

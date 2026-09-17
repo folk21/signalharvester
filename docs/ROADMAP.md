@@ -24,7 +24,7 @@ The following platform work is also accepted:
 - live system resilience acceptance;
 - `SCALABILITY.KAFKA_CONSUMERS` with live one-to-three replica backlog-drain acceptance.
 
-No new bounded backend implementation sub-spec is active yet.
+Profile-owned typed Analysis settings are the current verification-pending backend refinement. They make Monitoring Profiles authoritative for deterministic keyword behavior and carry the effective settings through `RawItemDiscovered`.
 
 Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
@@ -74,9 +74,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Define the next bounded backend refinement. Profile-owned analysis settings are the leading candidate because they complete monitoring-profile ownership of deterministic analysis behavior.
-2. Follow with another product refinement such as controlled replay operations, Results search/pagination, or scheduling refinement.
-3. Consider KEDA only if an autoscaling policy is justified by operational needs; manual horizontal scaling is already accepted.
+1. Accept the current profile-owned Analysis-settings slice after the canonical repository gate passes.
+2. Expand the Results browsing contract with production-oriented search/pagination semantics when the product slice requires them.
+3. Add controlled operator recovery/replay behavior while preserving original event identity and semantics. Consider KEDA only if an autoscaling policy is justified by operational needs; manual horizontal scaling is already accepted.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
 

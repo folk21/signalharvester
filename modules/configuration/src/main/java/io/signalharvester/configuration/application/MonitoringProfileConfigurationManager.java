@@ -2,10 +2,12 @@ package io.signalharvester.configuration.application;
 
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
+import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.MonitoringProfileConfigurationProvider;
 import io.signalharvester.configuration.api.MonitoringProfileId;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import io.signalharvester.configuration.api.SourceId;
+import io.signalharvester.configuration.configuration.MonitoringProfileAnalysisDefaultsConfiguration;
 import io.signalharvester.configuration.persistence.MonitoringProfileRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -21,20 +23,26 @@ public final class MonitoringProfileConfigurationManager
 
     private final MonitoringProfileRepository repository;
     private final SourceConfigurationProvider sources;
+    private final MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults;
     private final TransactionOperations<Connection> transactions;
 
     public MonitoringProfileConfigurationManager(
             MonitoringProfileRepository repository,
             SourceConfigurationProvider sources,
+            MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults,
             @Named("default") TransactionOperations<Connection> transactions) {
         this.repository = repository;
         this.sources = sources;
+        this.analysisDefaults = analysisDefaults;
         this.transactions = transactions;
     }
 
     @Override
     public ConfiguredMonitoringProfile create(MonitoringProfileConfigurationCommand command) {
-        ConfiguredMonitoringProfile profile = materialize(MonitoringProfileId.of(UUID.randomUUID()), command);
+        MonitoringProfileAnalysisSettings effectiveSettings = command.analysisSettings().orElseGet(() ->
+                new MonitoringProfileAnalysisSettings(analysisDefaults.getKeywords(), analysisDefaults.getMinimumMatches()));
+        ConfiguredMonitoringProfile profile = materialize(
+                MonitoringProfileId.of(UUID.randomUUID()), command, effectiveSettings);
         validateSources(profile);
         return transactions.executeWrite(status -> {
             repository.insert(profile);
@@ -57,7 +65,9 @@ public final class MonitoringProfileConfigurationManager
     public ConfiguredMonitoringProfile update(
             MonitoringProfileId profileId,
             MonitoringProfileConfigurationCommand command) {
-        ConfiguredMonitoringProfile profile = materialize(profileId, command);
+        ConfiguredMonitoringProfile current = get(profileId);
+        MonitoringProfileAnalysisSettings effectiveSettings = command.analysisSettings().orElse(current.analysisSettings());
+        ConfiguredMonitoringProfile profile = materialize(profileId, command, effectiveSettings);
         validateSources(profile);
         return transactions.executeWrite(status -> {
             if (!repository.update(profile)) {
@@ -99,9 +109,10 @@ public final class MonitoringProfileConfigurationManager
 
     private static ConfiguredMonitoringProfile materialize(
             MonitoringProfileId profileId,
-            MonitoringProfileConfigurationCommand command) {
+            MonitoringProfileConfigurationCommand command,
+            MonitoringProfileAnalysisSettings analysisSettings) {
         try {
-            return command.toProfile(profileId);
+            return command.toProfile(profileId, analysisSettings);
         } catch (IllegalArgumentException exception) {
             throw new InvalidMonitoringProfileConfigurationException(exception.getMessage(), exception);
         }

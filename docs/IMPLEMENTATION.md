@@ -78,7 +78,7 @@ Configuration administration is an internal application boundary used by module-
 
 `SourceConfigurationManager` implements both the internal administration boundary and the published provider contract.
 
-PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. Application use cases own write transactions. Persistence adapters own JDBC SQL and resource handling.
+PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. Persistence adapters own JDBC SQL and resource handling. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
 
 See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md).
 
@@ -103,7 +103,7 @@ Collection publishes no synchronous cross-module Java API.
 
 Collection resolves Monitoring Profiles and Sources only through `configuration.api`. The Gradle dependency on Configuration is therefore an `implementation` dependency.
 
-Manual Collection Run requests provide only the persisted Monitoring Profile UUID. The profile supplies information category and ordered source membership. Disabled member sources are skipped.
+Manual Collection Run requests provide only the persisted Monitoring Profile UUID. The profile supplies information category, ordered source membership, and effective Analysis settings. Disabled member sources are skipped. The run's effective Analysis settings are copied into every newly published `RawItemDiscovered`, so later profile edits do not alter queued event semantics.
 
 External HTTP access and Kafka publication remain internal module ports.
 
@@ -126,7 +126,7 @@ Extraction behavior is source-type specific:
 - HTML with `html.*` settings uses jsoup CSS selectors;
 - REST/HTML without those settings keeps one-response passthrough behavior.
 
-Extracted metadata populates existing `RawItemDiscovered` fields for external ID, title, URL, content, content type, and publication time.
+Extracted metadata populates `RawItemDiscovered` fields for external ID, title, URL, content, content type, and publication time. Collection also publishes the effective profile keyword Analysis settings as additive field 12.
 
 The Collection Run ID is reused as event correlation ID.
 
@@ -159,10 +159,10 @@ The processing path performs:
 
 1. normalization;
 2. monitoring-profile-scoped durable deduplication;
-3. deterministic keyword analysis;
+3. deterministic keyword analysis from the immutable settings snapshot captured by Collection;
 4. terminal `ItemAnalyzed` or `ItemRejected` event creation.
 
-The raw-item processing path remains event-driven and internal. Analysis publishes no synchronous cross-module Java API.
+The raw-item processing path remains event-driven and internal. Analysis publishes no synchronous cross-module Java API and never queries Configuration while consuming a captured settings snapshot. Deployment-global keyword rules are used only for legacy `RawItemDiscovered` messages that predate field 12.
 
 `AnalysisItemInspectionQuery` is an internal application boundary for `DIAGNOSTICS.ANALYSIS_INSPECTION`. The analysis-owned `/api/v1/admin/analysis/items` adapter uses it for bounded operational inspection.
 
@@ -416,7 +416,8 @@ Because Flyway history is shared, versions are globally coordinated across modul
 - `V9` — Event Observation history;
 - `V10` — Analysis event outbox;
 - `V11` — Analysis outbox trace context;
-- `V12` — Security identities and roles.
+- `V12` — Security identities and roles;
+- `V13` — Configuration Monitoring Profile Analysis settings.
 
 Direct cross-module table access remains forbidden.
 

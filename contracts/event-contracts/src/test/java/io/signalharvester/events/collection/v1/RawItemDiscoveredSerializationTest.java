@@ -1,6 +1,7 @@
 package io.signalharvester.events.collection.v1;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.CodedOutputStream;
@@ -38,6 +39,9 @@ class RawItemDiscoveredSerializationTest {
         RawItemDiscovered decoded = RawItemDiscovered.parseFrom(original.toByteArray());
 
         assertEquals(original, decoded);
+        assertTrue(decoded.hasAnalysisSettings());
+        assertEquals(java.util.List.of("java", "kafka"), decoded.getAnalysisSettings().getKeywordsList());
+        assertEquals(1, decoded.getAnalysisSettings().getMinimumMatches());
     }
 
     /**
@@ -58,6 +62,17 @@ class RawItemDiscoveredSerializationTest {
         assertEquals(original.getRawItemId(), decoded.getRawItemId());
         assertEquals(original.getEnvelope().getEventId(), decoded.getEnvelope().getEventId());
         assertTrue(decoded.getUnknownFields().hasField(UNKNOWN_FIELD_NUMBER));
+    }
+
+    /** Legacy payloads without settings remain decodable with field presence absent. */
+    @Test
+    void shouldDecodeLegacyEventWithoutAnalysisSettings() throws IOException {
+        RawItemDiscovered legacy = representativeEvent().toBuilder().clearAnalysisSettings().build();
+
+        RawItemDiscovered decoded = RawItemDiscovered.parseFrom(legacy.toByteArray());
+
+        assertFalse(decoded.hasAnalysisSettings());
+        assertEquals(RAW_ITEM_ID, decoded.getRawItemId());
     }
 
     private static RawItemDiscovered representativeEvent() {
@@ -87,6 +102,9 @@ class RawItemDiscoveredSerializationTest {
                 .setContent("Java, Kafka and PostgreSQL")
                 .setContentType("text/plain")
                 .setPublishedAt(occurredAt)
+                .setAnalysisSettings(KeywordAnalysisSettings.newBuilder()
+                        .addAllKeywords(java.util.List.of("java", "kafka"))
+                        .setMinimumMatches(1))
                 .build();
     }
 }

@@ -11,6 +11,8 @@ import io.signalharvester.analysis.application.RawItemProcessingResult;
 import io.signalharvester.analysis.application.RawItemProcessingStatus;
 import io.signalharvester.analysis.application.RawItemProcessor;
 import io.signalharvester.analysis.configuration.AnalysisKafkaReliabilityConfiguration;
+import io.signalharvester.analysis.configuration.KeywordAnalysisConfiguration;
+import io.signalharvester.events.collection.v1.KeywordAnalysisSettings;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import io.signalharvester.events.common.v1.EventEnvelope;
 import java.lang.reflect.Proxy;
@@ -117,6 +119,32 @@ class RawItemKafkaListenerTest {
         assertTrue(failure.failure().getMessage().contains("Invalid RawItemDiscovered"));
     }
 
+    /** Dead-letter invalid captured Analysis settings immediately without invoking the processor. */
+    @Test
+    void shouldDeadLetterInvalidCapturedAnalysisSettingsWithoutRetry() {
+        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+        AtomicBoolean processed = new AtomicBoolean();
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        RawItemKafkaListener listener = listener(rawItem -> {
+            processed.set(true);
+            throw new AssertionError("processor must not run for invalid captured Analysis settings");
+        }, deadLetters, 3);
+        RawItemDiscovered invalidEvent = event().toBuilder()
+                .setAnalysisSettings(KeywordAnalysisSettings.newBuilder()
+                        .addKeywords("java")
+                        .setMinimumMatches(2))
+                .build();
+
+        listener.receive(RAW_ITEM_ID, invalidEvent.toByteArray(), 7L, 2, TOPIC, consumer(committed));
+
+        assertFalse(processed.get());
+        assertCommitted(committed, 8L);
+        Failure failure = deadLetters.failures.getFirst();
+        assertEquals(1, failure.attempts());
+        assertFalse(failure.retryable());
+        assertTrue(failure.failure().getMessage().contains("minimumMatches"));
+    }
+
     /** Dead-letter a key mismatch immediately without invoking the processor. */
     @Test
     void shouldDeadLetterKeyMismatchWithoutRetry() {
@@ -186,7 +214,19 @@ class RawItemKafkaListenerTest {
                 return "analysis-dlq";
             }
         };
-        return new RawItemKafkaListener(new RawItemDiscoveredMapper(), processor, configuration, deadLetters);
+        KeywordAnalysisConfiguration legacyDefaults = new KeywordAnalysisConfiguration() {
+            @Override
+            public List<String> getKeywords() {
+                return List.of("legacy");
+            }
+
+            @Override
+            public int getMinimumMatches() {
+                return 1;
+            }
+        };
+        return new RawItemKafkaListener(
+                new RawItemDiscoveredMapper(legacyDefaults), processor, configuration, deadLetters);
     }
 
     private static RawItemProcessingResult successfulResult() {

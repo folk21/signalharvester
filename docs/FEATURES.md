@@ -62,7 +62,7 @@ Tests and documents must use IDs from this catalog. Do not invent local feature 
 
 ### Configuration and collection
 
-- `CONFIGURATION.MONITORING_PROFILES` — persisted monitoring profiles, source membership, criteria, and collection interval. Owner: Configuration. Related umbrella requirement: R1.
+- `CONFIGURATION.MONITORING_PROFILES` — persisted monitoring profiles, source membership, criteria, collection interval, and typed Analysis settings. Owner: Configuration. Related umbrella requirement: R1.
 - `CONFIGURATION.SOURCES` — persisted external-source configuration. Owner: Configuration. Related umbrella requirement: R2.
 - `COLLECTION.SOURCE_TEST` — diagnostic persisted-source fetch and extraction preview. Owner: Collection. Related umbrella requirement: R3.
 - `COLLECTION.SCHEDULING` — cluster-safe scheduled collection for enabled profiles. Owner: Collection. Related umbrella requirement: R4.
@@ -75,7 +75,7 @@ Tests and documents must use IDs from this catalog. Do not invent local feature 
 - `EVENTING.CORRELATION` — stable event, run, item, and trace correlation. Owner: Event Contracts and producing/consuming modules. Related umbrella requirement: R8.
 - `ANALYSIS.NORMALIZATION` — conversion of collected records into normalized content. Owner: Analysis. Related umbrella requirement: R9.
 - `ANALYSIS.DEDUPLICATION` — deterministic profile-scoped duplicate handling. Owner: Analysis. Related umbrella requirement: R10.
-- `ANALYSIS.CLASSIFICATION` — replaceable deterministic or future provider-backed analysis. Owner: Analysis. Related umbrella requirement: R11.
+- `ANALYSIS.CLASSIFICATION` — replaceable deterministic or future provider-backed analysis using immutable per-item rule snapshots where required. Owner: Analysis. Related umbrella requirement: R11.
 - `ANALYSIS.OUTBOX` — transactional staging and at-least-once publication of terminal Analysis events. Owner: Analysis. Related umbrella requirement: R22.
 
 ### Results and presentation

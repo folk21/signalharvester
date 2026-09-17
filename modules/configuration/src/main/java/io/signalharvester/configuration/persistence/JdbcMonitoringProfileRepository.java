@@ -1,8 +1,10 @@
 package io.signalharvester.configuration.persistence;
 
 import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
+import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.MonitoringProfileId;
 import io.signalharvester.configuration.api.SourceId;
+import io.signalharvester.configuration.configuration.MonitoringProfileAnalysisDefaultsConfiguration;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.Connection;
@@ -20,27 +22,31 @@ import javax.sql.DataSource;
 @Singleton
 public final class JdbcMonitoringProfileRepository implements MonitoringProfileRepository {
     private final DataSource dataSource;
+    private final MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults;
 
-    public JdbcMonitoringProfileRepository(@Named("default") DataSource dataSource) {
+    public JdbcMonitoringProfileRepository(
+            @Named("default") DataSource dataSource,
+            MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults) {
         this.dataSource = dataSource;
+        this.analysisDefaults = analysisDefaults;
     }
 
     @Override
     public List<ConfiguredMonitoringProfile> findAll() {
-        return find("SELECT id, name, information_category, enabled, collection_interval_minutes "
+        return find("SELECT id, name, information_category, enabled, collection_interval_minutes, analysis_minimum_matches "
                 + "FROM configuration.monitoring_profiles ORDER BY name, id", null);
     }
 
     @Override
     public List<ConfiguredMonitoringProfile> findEnabled() {
-        return find("SELECT id, name, information_category, enabled, collection_interval_minutes "
+        return find("SELECT id, name, information_category, enabled, collection_interval_minutes, analysis_minimum_matches "
                 + "FROM configuration.monitoring_profiles WHERE enabled = TRUE ORDER BY name, id", null);
     }
 
     @Override
     public Optional<ConfiguredMonitoringProfile> findById(MonitoringProfileId profileId) {
         List<ConfiguredMonitoringProfile> profiles = find(
-                "SELECT id, name, information_category, enabled, collection_interval_minutes "
+                "SELECT id, name, information_category, enabled, collection_interval_minutes, analysis_minimum_matches "
                         + "FROM configuration.monitoring_profiles WHERE id = ?",
                 profileId);
         return profiles.stream().findFirst();
@@ -51,7 +57,8 @@ public final class JdbcMonitoringProfileRepository implements MonitoringProfileR
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO configuration.monitoring_profiles "
-                                + "(id, name, information_category, enabled, collection_interval_minutes) VALUES (?, ?, ?, ?, ?)")) {
+                                + "(id, name, information_category, enabled, collection_interval_minutes, analysis_minimum_matches) "
+                                + "VALUES (?, ?, ?, ?, ?, ?)")) {
             bindProfile(statement, profile);
             statement.executeUpdate();
             replaceChildren(connection, profile);
@@ -65,12 +72,13 @@ public final class JdbcMonitoringProfileRepository implements MonitoringProfileR
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "UPDATE configuration.monitoring_profiles SET name = ?, information_category = ?, enabled = ?, "
-                                + "collection_interval_minutes = ? WHERE id = ?")) {
+                                + "collection_interval_minutes = ?, analysis_minimum_matches = ? WHERE id = ?")) {
             statement.setString(1, profile.name());
             statement.setString(2, profile.informationCategory());
             statement.setBoolean(3, profile.enabled());
             statement.setInt(4, profile.collectionIntervalMinutes());
-            statement.setObject(5, profile.id().value());
+            statement.setInt(5, profile.analysisSettings().minimumMatches());
+            statement.setObject(6, profile.id().value());
             if (statement.executeUpdate() == 0) {
                 return false;
             }
@@ -116,6 +124,7 @@ public final class JdbcMonitoringProfileRepository implements MonitoringProfileR
                 List<ConfiguredMonitoringProfile> profiles = new ArrayList<>();
                 while (rows.next()) {
                     MonitoringProfileId id = MonitoringProfileId.of(rows.getObject("id", java.util.UUID.class));
+                    Integer minimumMatches = rows.getObject("analysis_minimum_matches", Integer.class);
                     profiles.add(new ConfiguredMonitoringProfile(
                             id,
                             rows.getString("name"),
@@ -123,7 +132,8 @@ public final class JdbcMonitoringProfileRepository implements MonitoringProfileR
                             rows.getBoolean("enabled"),
                             rows.getInt("collection_interval_minutes"),
                             loadSources(connection, id),
-                            loadCriteria(connection, id)));
+                            loadCriteria(connection, id),
+                            loadAnalysisSettings(connection, id, minimumMatches)));
                 }
                 return List.copyOf(profiles);
             }
@@ -162,28 +172,72 @@ public final class JdbcMonitoringProfileRepository implements MonitoringProfileR
         }
     }
 
+    private MonitoringProfileAnalysisSettings loadAnalysisSettings(
+            Connection connection,
+            MonitoringProfileId id,
+            Integer minimumMatches) throws SQLException {
+        List<String> keywords = loadAnalysisKeywords(connection, id);
+        if (minimumMatches == null && keywords.isEmpty()) {
+            return new MonitoringProfileAnalysisSettings(
+                    analysisDefaults.getKeywords(), analysisDefaults.getMinimumMatches());
+        }
+        if (minimumMatches == null || keywords.isEmpty()) {
+            throw new SourcePersistenceException(
+                    "Monitoring profile has incomplete persisted Analysis settings: " + id.value(),
+                    new IllegalStateException("analysis minimum and keywords must be persisted together"));
+        }
+        try {
+            return new MonitoringProfileAnalysisSettings(keywords, minimumMatches);
+        } catch (IllegalArgumentException exception) {
+            throw new SourcePersistenceException(
+                    "Monitoring profile has invalid persisted Analysis settings: " + id.value(), exception);
+        }
+    }
+
+    private static List<String> loadAnalysisKeywords(Connection connection, MonitoringProfileId id) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT keyword FROM configuration.monitoring_profile_analysis_keywords "
+                        + "WHERE profile_id = ? ORDER BY keyword_ordinal")) {
+            statement.setObject(1, id.value());
+            try (ResultSet rows = statement.executeQuery()) {
+                List<String> keywords = new ArrayList<>();
+                while (rows.next()) {
+                    keywords.add(rows.getString("keyword"));
+                }
+                return List.copyOf(keywords);
+            }
+        }
+    }
+
     private static void bindProfile(PreparedStatement statement, ConfiguredMonitoringProfile profile) throws SQLException {
         statement.setObject(1, profile.id().value());
         statement.setString(2, profile.name());
         statement.setString(3, profile.informationCategory());
         statement.setBoolean(4, profile.enabled());
         statement.setInt(5, profile.collectionIntervalMinutes());
+        statement.setInt(6, profile.analysisSettings().minimumMatches());
     }
 
     private static void replaceChildren(Connection connection, ConfiguredMonitoringProfile profile) throws SQLException {
         try (PreparedStatement deleteSources = connection.prepareStatement(
                         "DELETE FROM configuration.monitoring_profile_sources WHERE profile_id = ?");
                 PreparedStatement deleteCriteria = connection.prepareStatement(
-                        "DELETE FROM configuration.monitoring_profile_criteria WHERE profile_id = ?")) {
+                        "DELETE FROM configuration.monitoring_profile_criteria WHERE profile_id = ?");
+                PreparedStatement deleteKeywords = connection.prepareStatement(
+                        "DELETE FROM configuration.monitoring_profile_analysis_keywords WHERE profile_id = ?")) {
             deleteSources.setObject(1, profile.id().value());
             deleteSources.executeUpdate();
             deleteCriteria.setObject(1, profile.id().value());
             deleteCriteria.executeUpdate();
+            deleteKeywords.setObject(1, profile.id().value());
+            deleteKeywords.executeUpdate();
         }
         try (PreparedStatement insertSource = connection.prepareStatement(
                         "INSERT INTO configuration.monitoring_profile_sources (profile_id, source_id, source_ordinal) VALUES (?, ?, ?)");
                 PreparedStatement insertCriterion = connection.prepareStatement(
-                        "INSERT INTO configuration.monitoring_profile_criteria (profile_id, criterion_key, criterion_value) VALUES (?, ?, ?)")) {
+                        "INSERT INTO configuration.monitoring_profile_criteria (profile_id, criterion_key, criterion_value) VALUES (?, ?, ?)");
+                PreparedStatement insertKeyword = connection.prepareStatement(
+                        "INSERT INTO configuration.monitoring_profile_analysis_keywords (profile_id, keyword_ordinal, keyword) VALUES (?, ?, ?)")) {
             for (int index = 0; index < profile.sourceIds().size(); index++) {
                 insertSource.setObject(1, profile.id().value());
                 insertSource.setObject(2, profile.sourceIds().get(index).value());
@@ -198,6 +252,13 @@ public final class JdbcMonitoringProfileRepository implements MonitoringProfileR
                 insertCriterion.addBatch();
             }
             insertCriterion.executeBatch();
+            for (int index = 0; index < profile.analysisSettings().keywords().size(); index++) {
+                insertKeyword.setObject(1, profile.id().value());
+                insertKeyword.setInt(2, index);
+                insertKeyword.setString(3, profile.analysisSettings().keywords().get(index));
+                insertKeyword.addBatch();
+            }
+            insertKeyword.executeBatch();
         }
     }
 }

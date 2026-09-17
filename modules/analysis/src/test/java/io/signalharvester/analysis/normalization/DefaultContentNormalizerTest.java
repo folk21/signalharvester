@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.signalharvester.analysis.model.DiscoveredRawItem;
+import io.signalharvester.analysis.model.KeywordAnalysisSettings;
 import io.signalharvester.analysis.model.NormalizedContentItem;
 import java.net.URI;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -113,6 +115,7 @@ class DefaultContentNormalizerTest {
                 SOURCE_ID,
                 profileId,
                 "JOB",
+                new KeywordAnalysisSettings(List.of("java"), 1),
                 externalId,
                 Optional.of("  Senior   Java Engineer "),
                 url,

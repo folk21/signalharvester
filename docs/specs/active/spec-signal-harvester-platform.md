@@ -4,6 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
+current_focus: subspecs/backend-profile-owned-analysis-settings.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -25,7 +26,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-No bounded backend implementation sub-spec is currently selected as `current_focus`. The next backend refinement should be activated only after its design and acceptance boundary are defined.
+`backend-profile-owned-analysis-settings` is the current backend implementation focus and is verification-pending until the canonical repository gate passes.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository.
 

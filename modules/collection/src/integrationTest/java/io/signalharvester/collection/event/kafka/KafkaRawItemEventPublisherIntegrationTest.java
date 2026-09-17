@@ -7,6 +7,7 @@ import io.signalharvester.collection.event.RawItemEventPublisher;
 import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationResult;
 import io.signalharvester.collection.source.ExtractedSourceItem;
+import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.net.URI;
@@ -88,6 +89,7 @@ class KafkaRawItemEventPublisherIntegrationTest {
                 RUN_ID,
                 PROFILE_ID,
                 "JOB",
+                new MonitoringProfileAnalysisSettings(List.of("java", "kafka"), 1),
                 Optional.empty()));
 
         ConsumerRecord<String, byte[]> record = consumeOne();

@@ -20,6 +20,7 @@ import io.signalharvester.analysis.event.kafka.AnalysisKafkaClient;
 import io.signalharvester.analysis.event.AnalyzedItem;
 import io.signalharvester.analysis.event.RejectedItem;
 import io.signalharvester.analysis.model.DiscoveredRawItem;
+import io.signalharvester.analysis.model.KeywordAnalysisSettings;
 import io.signalharvester.analysis.observability.AnalysisObservability;
 import io.signalharvester.analysis.normalization.ContentNormalizer;
 import io.signalharvester.analysis.persistence.DeduplicationClaimRepository;
@@ -119,7 +120,7 @@ class RawItemProcessingPostgresIntegrationTest {
     @Test
     void shouldPublishAnalyzedForValidIrrelevantItemAndPersistClaim() {
         RecordingOutbox outbox = new RecordingOutbox();
-        ContentAnalyzer analyzer = item -> new AnalysisDecision(
+        ContentAnalyzer analyzer = (item, settings) -> new AnalysisDecision(
                 false,
                 "NO_KEYWORD_MATCH",
                 0,
@@ -148,7 +149,7 @@ class RawItemProcessingPostgresIntegrationTest {
     @Test
     void shouldRejectDuplicateWithoutRunningAnalyzerAgain() {
         AtomicInteger analyzerCalls = new AtomicInteger();
-        ContentAnalyzer analyzer = item -> {
+        ContentAnalyzer analyzer = (item, settings) -> {
             analyzerCalls.incrementAndGet();
             return new AnalysisDecision(
                     true,
@@ -185,7 +186,7 @@ class RawItemProcessingPostgresIntegrationTest {
     @Test
     void shouldAnalyzeSameLogicalItemIndependentlyForDifferentProfiles() {
         AtomicInteger analyzerCalls = new AtomicInteger();
-        ContentAnalyzer analyzer = item -> {
+        ContentAnalyzer analyzer = (item, settings) -> {
             analyzerCalls.incrementAndGet();
             return new AnalysisDecision(
                     true,
@@ -373,7 +374,7 @@ class RawItemProcessingPostgresIntegrationTest {
     }
 
     private static ContentAnalyzer matchingAnalyzer() {
-        return item -> new AnalysisDecision(
+        return (item, settings) -> new AnalysisDecision(
                 true,
                 "MATCHED_KEYWORDS",
                 100,
@@ -397,6 +398,7 @@ class RawItemProcessingPostgresIntegrationTest {
                 SOURCE_ID,
                 profileId,
                 "JOB",
+                new KeywordAnalysisSettings(List.of("java", "kafka"), 1),
                 Optional.of("external-job-01"),
                 Optional.of("Senior Java Engineer"),
                 URI.create("https://example.test/jobs/1"),

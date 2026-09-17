@@ -202,6 +202,7 @@ public final class CollectionRunService implements CollectionRunner {
                 runId,
                 profile.id().value().toString(),
                 profile.informationCategory(),
+                profile.analysisSettings(),
                 request.traceparent());
         try {
             RawItemPublicationResult publication = eventPublisher.publish(item, publicationContext);

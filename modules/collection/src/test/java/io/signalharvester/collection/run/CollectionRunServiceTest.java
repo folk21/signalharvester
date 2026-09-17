@@ -18,6 +18,7 @@ import io.signalharvester.collection.source.extract.RssAtomItemExtractor;
 import io.signalharvester.collection.source.extract.SourceItemExtractor;
 import io.signalharvester.collection.source.SourceFetchException;
 import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
+import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.MonitoringProfileConfigurationProvider;
 import io.signalharvester.configuration.api.MonitoringProfileId;
@@ -81,6 +82,8 @@ class CollectionRunServiceTest {
             assertTrue(publisher.contexts.stream().allMatch(context -> RUN_ID.equals(context.correlationId())));
             assertTrue(publisher.contexts.stream().allMatch(context -> PROFILE_ID.value().toString().equals(context.monitoringProfileId())));
             assertTrue(publisher.contexts.stream().allMatch(context -> "JOB".equals(context.informationCategory())));
+            assertTrue(publisher.contexts.stream().allMatch(context ->
+                    context.analysisSettings().equals(new MonitoringProfileAnalysisSettings(List.of("java", "kafka"), 1))));
         }
     }
 
@@ -377,7 +380,8 @@ class CollectionRunServiceTest {
                 true,
                 5,
                 sources.stream().map(ConfiguredSource::id).toList(),
-                Map.of());
+                Map.of(),
+                new MonitoringProfileAnalysisSettings(List.of("java", "kafka"), 1));
         MonitoringProfileConfigurationProvider profileProvider = new MonitoringProfileConfigurationProvider() {
             @Override
             public Optional<ConfiguredMonitoringProfile> findProfile(MonitoringProfileId profileId) {

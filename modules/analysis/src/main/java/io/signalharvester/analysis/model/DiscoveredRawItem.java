@@ -19,6 +19,7 @@ import java.util.Optional;
  * @param sourceId configured source identifier
  * @param monitoringProfileId profile in whose processing scope the item was discovered
  * @param informationCategory product information category
+ * @param analysisSettings immutable deterministic settings captured for this event
  * @param externalId stable source-provided identity when available
  * @param title source-provided title when available
  * @param url source/canonical URL
@@ -35,6 +36,7 @@ public record DiscoveredRawItem(
         String sourceId,
         String monitoringProfileId,
         String informationCategory,
+        KeywordAnalysisSettings analysisSettings,
         Optional<String> externalId,
         Optional<String> title,
         URI url,
@@ -51,6 +53,7 @@ public record DiscoveredRawItem(
         requireNonBlank(sourceId, "sourceId");
         requireNonBlank(monitoringProfileId, "monitoringProfileId");
         requireNonBlank(informationCategory, "informationCategory");
+        Objects.requireNonNull(analysisSettings, "analysisSettings");
         Objects.requireNonNull(externalId, "externalId");
         Objects.requireNonNull(title, "title");
         Objects.requireNonNull(url, "url");

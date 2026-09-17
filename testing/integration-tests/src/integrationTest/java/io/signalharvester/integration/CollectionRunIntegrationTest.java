@@ -107,7 +107,9 @@ class CollectionRunIntegrationTest {
                 Map.entry("signalharvester.analysis.enabled", false),
                 Map.entry("signalharvester.results.enabled", false),
                 Map.entry("signalharvester.collection.max-concurrency", 2),
-                Map.entry("signalharvester.collection.scheduler.enabled", false)));
+                Map.entry("signalharvester.collection.scheduler.enabled", false),
+                Map.entry("signalharvester.analysis.keyword-rules.keywords", List.of("java")),
+                Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1)));
     }
 
     @AfterEach
@@ -164,6 +166,8 @@ class CollectionRunIntegrationTest {
             assertEquals(result.collectionRunId(), event.getEnvelope().getCorrelationId());
             assertEquals(profile.id().value().toString(), event.getMonitoringProfileId());
             assertEquals("JOB", event.getInformationCategory());
+            assertEquals(List.of("java"), event.getAnalysisSettings().getKeywordsList());
+            assertEquals(1, event.getAnalysisSettings().getMinimumMatches());
             publishedSourceIds.add(event.getSourceId());
             rawItemIds.add(event.getRawItemId());
             eventIds.add(event.getEnvelope().getEventId());

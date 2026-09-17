@@ -15,7 +15,8 @@ public record MonitoringProfileResponse(
         boolean enabled,
         int collectionIntervalMinutes,
         List<UUID> sourceIds,
-        Map<String, String> criteria) {
+        Map<String, String> criteria,
+        MonitoringProfileAnalysisSettingsResponse analysisSettings) {
 
     static MonitoringProfileResponse from(ConfiguredMonitoringProfile profile) {
         return new MonitoringProfileResponse(
@@ -25,6 +26,7 @@ public record MonitoringProfileResponse(
                 profile.enabled(),
                 profile.collectionIntervalMinutes(),
                 profile.sourceIds().stream().map(sourceId -> sourceId.value()).toList(),
-                profile.criteria());
+                profile.criteria(),
+                MonitoringProfileAnalysisSettingsResponse.from(profile.analysisSettings()));
     }
 }

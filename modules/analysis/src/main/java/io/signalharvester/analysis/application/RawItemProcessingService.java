@@ -7,6 +7,7 @@ import io.signalharvester.analysis.outbox.AnalysisOutbox;
 import io.signalharvester.analysis.event.AnalyzedItem;
 import io.signalharvester.analysis.event.RejectedItem;
 import io.signalharvester.analysis.model.DiscoveredRawItem;
+import io.signalharvester.analysis.model.KeywordAnalysisSettings;
 import io.signalharvester.analysis.model.NormalizedContentItem;
 import io.signalharvester.analysis.normalization.ContentNormalizer;
 import io.signalharvester.analysis.observability.AnalysisObservability;
@@ -67,7 +68,8 @@ public final class RawItemProcessingService implements RawItemProcessor {
         long startedAtNanos = System.nanoTime();
         try {
             NormalizedContentItem normalized = normalizer.normalize(rawItem);
-            RawItemProcessingResult result = transactions.executeWrite(status -> processInTransaction(normalized));
+            RawItemProcessingResult result = transactions.executeWrite(
+                    status -> processInTransaction(normalized, rawItem.analysisSettings()));
             observability.recordProcessing(
                     result.status().name(), Duration.ofNanos(System.nanoTime() - startedAtNanos));
             return result;
@@ -77,7 +79,9 @@ public final class RawItemProcessingService implements RawItemProcessor {
         }
     }
 
-    private RawItemProcessingResult processInTransaction(NormalizedContentItem item) {
+    private RawItemProcessingResult processInTransaction(
+            NormalizedContentItem item,
+            KeywordAnalysisSettings analysisSettings) {
         Instant seenAt = clock.instant();
         if (!deduplicationRepository.tryClaim(item, seenAt)) {
             deduplicationRepository.recordDuplicate(item, seenAt);
@@ -93,7 +97,7 @@ public final class RawItemProcessingService implements RawItemProcessor {
                     publication.topic());
         }
 
-        AnalysisDecision decision = analyzer.analyze(item);
+        AnalysisDecision decision = analyzer.analyze(item, analysisSettings);
         AnalysisPublicationResult publication = outbox.enqueueAnalyzed(new AnalyzedItem(item, decision));
         LOG.info(
                 "Analyzed raw item {} normalizedItemId={} profile={} source={} classification={} score={}",

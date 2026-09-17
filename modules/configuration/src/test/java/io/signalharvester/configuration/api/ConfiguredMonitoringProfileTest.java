@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 /** Verifies intrinsic monitoring-profile invariants independently from Micronaut and persistence. */
 class ConfiguredMonitoringProfileTest {
     private static final SourceId SOURCE_ID = SourceId.of(UUID.fromString("10000000-0000-0000-0000-000000000001"));
+    private static final MonitoringProfileAnalysisSettings ANALYSIS_SETTINGS =
+            new MonitoringProfileAnalysisSettings(List.of("java", "kafka"), 1);
 
     /** Normalize text and preserve effective configuration. */
     @Test
@@ -22,11 +24,13 @@ class ConfiguredMonitoringProfileTest {
                 true,
                 15,
                 List.of(SOURCE_ID),
-                Map.of("keywords", "java,spring"));
+                Map.of("keywords", "java,spring"),
+                ANALYSIS_SETTINGS);
 
         assertEquals("Java jobs", profile.name());
         assertEquals("JOB", profile.informationCategory());
         assertEquals(List.of(SOURCE_ID), profile.sourceIds());
+        assertEquals(ANALYSIS_SETTINGS, profile.analysisSettings());
     }
 
     /** Reject profiles without a source or a positive collection interval. */
@@ -34,9 +38,9 @@ class ConfiguredMonitoringProfileTest {
     void shouldRejectIncompleteProfile() {
         MonitoringProfileId id = MonitoringProfileId.of(UUID.randomUUID());
         assertThrows(IllegalArgumentException.class,
-                () -> new ConfiguredMonitoringProfile(id, "Jobs", "JOB", true, 0, List.of(SOURCE_ID), Map.of()));
+                () -> new ConfiguredMonitoringProfile(id, "Jobs", "JOB", true, 0, List.of(SOURCE_ID), Map.of(), ANALYSIS_SETTINGS));
         assertThrows(IllegalArgumentException.class,
-                () -> new ConfiguredMonitoringProfile(id, "Jobs", "JOB", true, 15, List.of(), Map.of()));
+                () -> new ConfiguredMonitoringProfile(id, "Jobs", "JOB", true, 15, List.of(), Map.of(), ANALYSIS_SETTINGS));
     }
 
     /** Reject duplicate source membership so persistence ordering remains unambiguous. */
@@ -49,6 +53,7 @@ class ConfiguredMonitoringProfileTest {
                 true,
                 15,
                 List.of(SOURCE_ID, SOURCE_ID),
-                Map.of()));
+                Map.of(),
+                ANALYSIS_SETTINGS));
     }
 }

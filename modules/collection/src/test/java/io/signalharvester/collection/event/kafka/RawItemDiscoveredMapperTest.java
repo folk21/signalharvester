@@ -6,11 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.source.ExtractedSourceItem;
+import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,7 @@ class RawItemDiscoveredMapperTest {
                 RUN_ID,
                 PROFILE_ID,
                 "TOPIC",
+                new MonitoringProfileAnalysisSettings(List.of("java", "kafka"), 1),
                 Optional.of(TRACEPARENT));
 
         RawItemDiscovered event = mapper.map(item, context);
@@ -71,6 +74,8 @@ class RawItemDiscoveredMapperTest {
         assertEquals(item.content(), event.getContent());
         assertEquals(item.contentType(), event.getContentType());
         assertEquals(PUBLISHED_AT.getEpochSecond(), event.getPublishedAt().getSeconds());
+        assertEquals(List.of("java", "kafka"), event.getAnalysisSettings().getKeywordsList());
+        assertEquals(1, event.getAnalysisSettings().getMinimumMatches());
         assertTrue(event.hasExternalId());
         assertTrue(event.hasTitle());
         assertTrue(event.hasPublishedAt());
@@ -94,7 +99,8 @@ class RawItemDiscoveredMapperTest {
                 "hello".getBytes(StandardCharsets.UTF_8));
 
         RawItemDiscovered event = mapper.map(item, new RawItemPublicationContext(
-                "raw-1", "run-1", "profile-1", "TOPIC", Optional.empty()));
+                "raw-1", "run-1", "profile-1", "TOPIC",
+                new MonitoringProfileAnalysisSettings(List.of("java"), 1), Optional.empty()));
 
         assertFalse(event.hasExternalId());
         assertFalse(event.hasTitle());

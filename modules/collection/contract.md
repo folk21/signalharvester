@@ -67,7 +67,8 @@ Other functional modules must not depend on collection `run`, `source`, `sourcet
 
 ## Important invariants
 
-- a run derives information category and ordered source membership from the persisted monitoring profile; callers cannot override them;
+- a run derives information category, ordered source membership, and effective Analysis settings from the persisted monitoring profile; callers cannot override them;
+- every newly published `RawItemDiscovered` carries the effective profile Analysis settings snapshot used by that run;
 - automatic scheduling considers only enabled profiles and fetches only enabled member sources;
 - scheduler due-work claims and lease updates use short collection-owned PostgreSQL transactions; external HTTP/Kafka work runs outside those transactions;
 - source/item-level failures are best-effort and do not cancel unrelated source work;

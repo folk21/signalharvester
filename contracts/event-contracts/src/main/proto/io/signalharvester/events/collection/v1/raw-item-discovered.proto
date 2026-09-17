@@ -42,4 +42,16 @@ message RawItemDiscovered {
 
   // Source publication time when it is known.
   optional google.protobuf.Timestamp published_at = 11;
+
+  // Effective deterministic Analysis settings captured when Collection published the item.
+  KeywordAnalysisSettings analysis_settings = 12;
+}
+
+// Immutable keyword-analysis settings captured from the effective Monitoring Profile.
+message KeywordAnalysisSettings {
+  // Case-normalized unique keywords evaluated by the deterministic analyzer.
+  repeated string keywords = 1;
+
+  // Minimum number of matching keywords required for relevance.
+  int32 minimum_matches = 2;
 }

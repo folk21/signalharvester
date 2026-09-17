@@ -14,7 +14,8 @@ public record ConfiguredMonitoringProfile(
         boolean enabled,
         int collectionIntervalMinutes,
         List<SourceId> sourceIds,
-        Map<String, String> criteria) {
+        Map<String, String> criteria,
+        MonitoringProfileAnalysisSettings analysisSettings) {
 
     public ConfiguredMonitoringProfile {
         Objects.requireNonNull(id, "id");
@@ -31,6 +32,7 @@ public record ConfiguredMonitoringProfile(
             throw new IllegalArgumentException("sourceIds must not contain duplicates");
         }
         criteria = Collections.unmodifiableMap(new LinkedHashMap<>(Objects.requireNonNull(criteria, "criteria")));
+        Objects.requireNonNull(analysisSettings, "analysisSettings");
     }
 
     private static String requireText(String value, String name) {

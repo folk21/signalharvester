@@ -9,11 +9,11 @@ For module ownership, published Java APIs, data ownership, dependency rules, inv
 
 ## Current implementation
 
-Source configuration is persisted in the configuration-owned PostgreSQL schema through an explicit JDBC repository. `SourceConfigurationManager` owns write transaction boundaries, while the repository owns SQL and JDBC resource handling. Flyway migrations create source configuration plus monitoring profiles, ordered profile-to-source membership, and profile criteria in the `configuration` schema.
+Source configuration is persisted in the configuration-owned PostgreSQL schema through explicit JDBC repositories. Application managers own write transaction boundaries, while repositories own SQL and JDBC resource handling. Flyway migrations create source configuration plus Monitoring Profiles, ordered profile-to-source membership, profile criteria, and ordered typed keyword Analysis settings in the `configuration` schema.
 
 The OpenAPI configuration contract is implemented under `/api/v1/sources` and `/api/v1/monitoring-profiles`. HTTP request records are separate from persistence types, Jakarta Validation enforces the input boundary, omitted `enabled` values default to `false`, expected not-found/invalid-configuration failures use centralized Micronaut `ExceptionHandler` beans, and the controller runs on `TaskExecutors.BLOCKING` for JDBC work.
 
-Backend consumers read source and monitoring-profile configuration through the narrow `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider` APIs rather than through persistence. Configuration CRUD operations remain internal application boundaries behind module-owned HTTP adapters. Automatic scheduling and profile-owned analysis execution remain future work.
+Backend consumers read source and Monitoring Profile configuration through the narrow `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider` APIs rather than through persistence. Effective profiles include typed Analysis settings. Configuration CRUD operations remain internal application boundaries behind module-owned HTTP adapters. Omitted settings are only a compatibility bridge: create materializes deployment defaults, while replacement update preserves the profile's current effective settings.
 
 ## Operational and security notes
 

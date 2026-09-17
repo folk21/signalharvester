@@ -41,7 +41,7 @@ The payload contract stays explicit rather than storing domain data in an opaque
 
 ## Raw item event
 
-`RawItemDiscovered` carries the raw item identity, source/profile provenance, information category, optional source identifier/title, URL, raw text content, content type, and optional publication timestamp.
+`RawItemDiscovered` carries the raw item identity, source/profile provenance, information category, optional source identifier/title, URL, raw text content, content type, optional publication timestamp, and an additive immutable keyword Analysis-settings snapshot captured by Collection. Field 12 is optional at the wire level for backward compatibility with already-published version-one events.
 
 This is a Kafka transport contract, not the collection or analysis domain model.
 

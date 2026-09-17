@@ -110,7 +110,7 @@ The implemented backend foundation includes the following capability groups.
 
 ### Configuration and collection
 
-- Configuration-module Java API with PostgreSQL/Flyway-backed Sources and Monitoring Profiles.
+- Configuration-module Java API with PostgreSQL/Flyway-backed Sources and Monitoring Profiles, including typed profile-owned Analysis settings.
 - Source REST/OpenAPI CRUD under `/api/v1/sources`.
 - Micronaut-managed collection HTTP transport with bounded Virtual Thread orchestration.
 - Bounded RSS/Atom extraction.
@@ -124,7 +124,7 @@ The implemented backend foundation includes the following capability groups.
 
 - Analysis consumption with deterministic normalization.
 - PostgreSQL-backed profile-scoped deduplication.
-- Configurable deterministic keyword analysis.
+- Deterministic keyword analysis driven by immutable Monitoring Profile settings snapshots carried in `RawItemDiscovered`.
 - Manual source-offset commit after durable processing.
 - Transactional-outbox staging of `ItemAnalyzed` and `ItemRejected`.
 - Operational APIs for Collection Runs and bounded Analysis inspection.
@@ -156,7 +156,7 @@ The default host-run local profile remains an explicitly trusted unauthenticated
 
 The `security` environment enables authentication/RBAC and restrictive outbound-source policy.
 
-`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. No new bounded backend implementation sub-spec is active yet; the next refinement should be selected from current product needs.
+`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. The current verification-pending backend focus is profile-owned typed Analysis settings under `CONFIGURATION.MONITORING_PROFILES` and `ANALYSIS.CLASSIFICATION`.
 
 Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
 

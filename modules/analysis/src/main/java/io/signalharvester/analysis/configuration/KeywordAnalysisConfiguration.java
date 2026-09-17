@@ -8,18 +8,16 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
 
-/**
- * Configures the initial deterministic keyword analyzer until profile-owned analysis rules exist.
- */
+/** Supplies compatibility keyword defaults only for legacy raw events that predate settings snapshots. */
 @Context
 @ConfigurationProperties("signalharvester.analysis.keyword-rules")
 public interface KeywordAnalysisConfiguration {
 
-    /** Returns normalized candidate keywords used by the deterministic analyzer. */
+    /** Returns compatibility keywords for legacy raw events without an Analysis settings snapshot. */
     @NotEmpty
     List<@NotBlank String> getKeywords();
 
-    /** Returns how many configured keywords must match before an item is considered relevant. */
+    /** Returns the compatibility threshold for legacy raw events without an Analysis settings snapshot. */
     @Min(1)
     @Bindable(defaultValue = "1")
     int getMinimumMatches();

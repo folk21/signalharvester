@@ -7,6 +7,7 @@ import io.micronaut.context.ApplicationContext;
 import io.signalharvester.collection.scheduling.ProfileScheduleCoordinator;
 import io.signalharvester.collection.scheduling.ProfileScheduleLease;
 import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
+import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.MonitoringProfileId;
 import io.signalharvester.configuration.api.SourceId;
 import java.sql.Connection;
@@ -130,7 +131,8 @@ class ProfileSchedulePostgresTest {
                 true,
                 intervalMinutes,
                 List.of(SOURCE_ID),
-                Map.of());
+                Map.of(),
+                new MonitoringProfileAnalysisSettings(List.of("java"), 1));
     }
 
     private static Map<String, Object> databaseProperties() {

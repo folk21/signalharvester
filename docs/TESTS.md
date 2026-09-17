@@ -147,7 +147,7 @@ The first implementation foundation contains:
 - `JsonSourceItemExtractorTest` and `HtmlSourceItemExtractorTest` for configuration-driven JSON Pointer/CSS-selector extraction, semantic metadata, relative URLs, malformed configuration, and generic candidate-item bounds;
 - `GenericExtractionConfigurationTest`, `SourceTestConfigurationTest`, and `SourceTestServiceTest` for fail-fast extraction/preview limits plus disabled-source diagnostics, fetch/extraction failures, missing sources, and bounded previews;
 - `SourceTestControllerTest` for server-level source-test response mapping, missing/invalid identity handling, and blocking Virtual Thread execution;
-- `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping including extracted external id, title, and publication time;
+- Collection `RawItemDiscoveredMapperTest` for event identity/correlation/provenance mapping including extracted external id, title, publication time, and the effective Monitoring Profile Analysis-settings snapshot;
 - `KafkaRawItemEventPublisherTest` for explicit Protobuf byte serialization, topic/key behavior, and failure normalization;
 - `KafkaRawItemEventPublisherIntegrationTest` for a real Micronaut producer -> Kafka Testcontainers -> byte-array consumer -> `RawItemDiscovered` round trip;
 - `CollectionRunHistoryPostgresTest` covers Collection-owned PostgreSQL history:
@@ -160,10 +160,12 @@ The first implementation foundation contains:
 - `ProfileSchedulePostgresTest` for persisted interval state, interval-change rescheduling, and exclusive due-work lease claims across two application contexts sharing PostgreSQL;
 - `CollectionRunControllerTest` for server-level manual-run/history status mapping, validation/default limits, required JSON response shape, and blocking Virtual Thread execution without external infrastructure;
 - `ConfigurationPostgresIntegrationTest` for Flyway bootstrap, persisted CRUD/provider behavior, restart-safe provider reads, duplicate-name semantics, and transactional rollback for both create and update settings failures;
+- `MonitoringProfileControllerPostgresTest` for Monitoring Profile CRUD plus typed Analysis-settings normalization, persistence, replacement-update preservation, invalid settings, and legacy-row compatibility materialization;
 - `SourceControllerPostgresTest` for real HTTP CRUD/status validation against PostgreSQL and blocking Virtual Thread execution;
 - `SourceLocationValidatorTest` for REST URI validation parity with `ConfiguredSource`;
 - `DefaultContentNormalizerTest` for deterministic whitespace/URL normalization and stable normalized identity;
-- `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring rules and invalid rule configuration;
+- `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring from explicit immutable per-item settings;
+- Analysis `RawItemDiscoveredMapperTest` for captured-settings authority, legacy-event fallback, and deterministic invalid-snapshot rejection;
 - `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims, discovery counters, real SQL inspection filtering/ordering/limits, and enforcement of the application-owned JDBC transaction boundary;
 - `RawItemProcessingPostgresIntegrationTest` covers Analysis PostgreSQL processing:
   - new, irrelevant, and duplicate items;
@@ -175,7 +177,7 @@ The first implementation foundation contains:
 - `CollectionObservabilityTest` and `AnalysisObservabilityTest` for low-cardinality application metric emission with telemetry disabled safely through no-op boundaries;
 - `ApplicationObservabilityTest` for `/health`, liveness/readiness, and deterministic `/prometheus` exposure without PostgreSQL or Kafka;
 - `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
-- `RawItemKafkaListenerTest` for Analysis bounded retry recovery, immediate poison/key failure dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
+- `RawItemKafkaListenerTest` for Analysis bounded retry recovery, immediate malformed/key/invalid-settings dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
 - `TransactionalAnalysisOutboxTest` for analyzed/rejected final topic-key mapping, stable terminal-event serialization, provenance, and outbox staging metadata;
 - `AnalysisOutcomeKafkaListenerTest` for Results terminal-event mapping, bounded projection retry, poison-input dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
 - `ResultsKafkaPostgresIntegrationTest` covers real Kafka -> Results listener -> PostgreSQL materialization, including:
@@ -194,7 +196,7 @@ The first implementation foundation contains:
 - `ProcessingFlowControllerTest` for collection-run/item graph routes, stable JSON shape, 404 mapping, and blocking Virtual Thread execution;
 - `EventObservationKafkaPostgresIntegrationTest` for real Kafka -> Event Observation -> PostgreSQL decoding, event-id idempotency, selected diagnostics, count-bounded retention, and age/count retention interaction;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
-- `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including equivalent normalized rediscovery with different raw ids.
+- `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including profile-owned Analysis settings overriding deployment compatibility defaults and equivalent normalized rediscovery with different raw ids.
 - `HttpPipelineSmokeIntegrationTest` covers the black-box public pipeline:
   - REST source configuration and source-test/generic JSON extraction;
   - manual collection against a deterministic HTTP source;

@@ -8,11 +8,13 @@ import io.signalharvester.collection.event.RawItemPublicationContext;
 import io.signalharvester.collection.event.RawItemPublicationException;
 import io.signalharvester.collection.event.RawItemPublicationResult;
 import io.signalharvester.collection.source.ExtractedSourceItem;
+import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -123,6 +125,12 @@ class KafkaRawItemEventPublisherTest {
     }
 
     private static RawItemPublicationContext publicationContext() {
-        return new RawItemPublicationContext(RAW_ITEM_ID, RUN_ID, PROFILE_ID, "JOB", Optional.empty());
+        return new RawItemPublicationContext(
+                RAW_ITEM_ID,
+                RUN_ID,
+                PROFILE_ID,
+                "JOB",
+                new MonitoringProfileAnalysisSettings(List.of("java", "kafka"), 1),
+                Optional.empty());
     }
 }

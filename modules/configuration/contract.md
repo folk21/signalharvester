@@ -12,7 +12,7 @@ Own persisted source and monitoring-profile configuration without leaking persis
 ## Owned responsibilities
 
 - source configuration lifecycle and validation;
-- monitoring-profile lifecycle, source membership, interval, and criteria configuration;
+- monitoring-profile lifecycle, source membership, interval, criteria, and typed Analysis settings configuration;
 - configuration-owned PostgreSQL schema and migrations;
 - effective source configuration consumed by collection;
 - source-management REST implementation.
@@ -36,7 +36,8 @@ Published contract data remains in the same package because it is part of the pr
 - `SourceType`;
 - `ConfiguredSource`;
 - `MonitoringProfileId`;
-- `ConfiguredMonitoringProfile`.
+- `ConfiguredMonitoringProfile`;
+- `MonitoringProfileAnalysisSettings`.
 
 Configuration administration is an internal application boundary under `configuration.application`; its command/interface types are intentionally not published to other functional modules. Consumers should read the Java files above rather than relying on duplicated method signatures in this document.
 
@@ -55,7 +56,7 @@ No configuration event contract is currently implemented.
 ## Owned data
 
 - PostgreSQL schema `configuration`;
-- source/source-settings tables and monitoring-profile membership/criteria tables created by configuration-owned Flyway migrations.
+- source/source-settings tables plus monitoring-profile, membership, criteria, and Analysis-settings tables created by configuration-owned Flyway migrations.
 
 Other modules must not query or mutate these tables directly.
 
@@ -76,6 +77,8 @@ Do not expose repository, JDBC, Micronaut HTTP, or persistence types through the
 - `SourceId` is the stable source identity;
 - `MonitoringProfileId` is the stable monitoring-profile identity;
 - a monitoring profile references at least one existing source;
+- effective Analysis settings contain normalized unique keywords and a positive threshold no greater than the keyword count;
+- new/updated profiles persist effective Analysis settings; legacy rows without explicit settings resolve compatibility defaults until their next update;
 - source names are not unique identities;
 - configured-source writes are transactional;
 - persisted source URLs do not imply outbound network authorization.

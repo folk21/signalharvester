@@ -11,6 +11,7 @@ import io.signalharvester.collection.run.CollectionRunRequest;
 import io.signalharvester.collection.run.CollectionRunResult;
 import io.signalharvester.collection.run.CollectionRunner;
 import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
+import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.SourceType;
 import io.signalharvester.configuration.application.MonitoringProfileConfigurationCommand;
 import io.signalharvester.configuration.application.MonitoringProfileConfigurationOperations;
@@ -131,7 +132,7 @@ class CollectionAnalysisIntegrationTest {
                 Map.entry("signalharvester.results.enabled", false),
                 Map.entry(
                         "signalharvester.analysis.keyword-rules.keywords",
-                        List.of("java", "kafka", "postgresql")),
+                        List.of("legacy-default-only")),
                 Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1),
                 Map.entry("signalharvester.collection.max-concurrency", 2),
                 Map.entry("signalharvester.collection.scheduler.enabled", false)));
@@ -168,7 +169,9 @@ class CollectionAnalysisIntegrationTest {
                 true,
                 5,
                 List.of(source.id()),
-                Map.of()));
+                Map.of(),
+                Optional.of(new MonitoringProfileAnalysisSettings(
+                        List.of("java", "kafka", "postgresql"), 1))));
         profileId = profile.id().value().toString();
 
         CollectionRunner collection = context.getBean(CollectionRunner.class);

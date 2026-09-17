@@ -38,7 +38,7 @@ The operational controller depends on the internal `AnalysisItemInspectionQuery`
 
 ### Events
 
-Consumes versioned `RawItemDiscovered` events and produces versioned `ItemAnalyzed` / `ItemRejected` events defined under `contracts/event-contracts/src/main/proto/`.
+Consumes versioned `RawItemDiscovered` events, including the effective Analysis-settings snapshot when present, and produces versioned `ItemAnalyzed` / `ItemRejected` events defined under `contracts/event-contracts/src/main/proto/`.
 
 Kafka/Protobuf adapters remain internal implementation details.
 
@@ -65,6 +65,8 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 ## Important invariants
 
 - deduplication identity is scoped by monitoring profile;
+- deterministic classification uses the immutable settings snapshot carried by the raw event and does not synchronously query Configuration;
+- deployment-global keyword rules are a compatibility fallback only for legacy raw events without a settings snapshot;
 - raw Kafka offsets are committed only after the Analysis state/outbox transaction commits or acknowledged Analysis dead-letter publication;
 - deterministic decode/key/mapping failures are dead-lettered without retry, while application failures use a bounded retry policy;
 - DLQ publication failure leaves the source offset uncommitted;

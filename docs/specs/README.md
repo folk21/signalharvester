@@ -56,7 +56,7 @@ Rules:
 
 Current implementation focus:
 
-- none. `SCALABILITY.KAFKA_CONSUMERS` completed live acceptance on 2026-09-17 and is archived. Activate the next bounded backend sub-spec only after its design/acceptance boundary is defined.
+- [`active/subspecs/backend-profile-owned-analysis-settings.md`](active/subspecs/backend-profile-owned-analysis-settings.md) — verification-pending profile-owned typed Analysis settings and immutable raw-event settings snapshots.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, and external-source access security are archived.
 
@@ -156,7 +156,7 @@ Umbrella:
 
 Current implementation focus:
 
-- none. The last bounded backend focus, `SCALABILITY.KAFKA_CONSUMERS`, is accepted and archived.
+- [`active/subspecs/backend-profile-owned-analysis-settings.md`](active/subspecs/backend-profile-owned-analysis-settings.md) — current verification-pending backend focus.
 
 Active supporting tracks:
 
@@ -201,9 +201,8 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-Likely next bounded backend specs include product refinements such as:
+Likely next bounded backend specs after the current profile-owned Analysis settings slice include product refinements such as:
 
-- profile-owned analysis settings;
 - controlled replay operations;
 - Results search/pagination;
 - scheduling refinements.

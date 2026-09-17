@@ -141,7 +141,7 @@ class KubernetesAssetsTest(unittest.TestCase):
         self.assertTrue((archive / "backend-system-resilience-acceptance.md").exists())
         self.assertFalse((active / "backend-kafka-consumer-horizontal-scaling.md").exists())
         self.assertTrue((archive / "backend-kafka-consumer-horizontal-scaling.md").exists())
-        self.assertNotIn("current_focus:", umbrella)
+        self.assertNotIn("current_focus: subspecs/backend-kafka-consumer-horizontal-scaling.md", umbrella)
 
     def test_backend_dockerfile_builds_distribution_and_runs_non_root(self):
         dockerfile = (ROOT / "app" / "Dockerfile").read_text()

@@ -14,13 +14,13 @@ Implemented processing includes:
 - `RawItemDiscovered` Kafka consumption and adapter mapping;
 - deterministic URL/text normalization and stable normalized item identity;
 - PostgreSQL/Flyway-backed duplicate claims scoped by monitoring profile;
-- configurable deterministic keyword analysis;
+- stateless deterministic keyword analysis driven by the immutable settings snapshot in each raw event;
 - transactional PostgreSQL staging and lease-driven Kafka publication of `ItemAnalyzed` and duplicate `ItemRejected`;
 - unit, PostgreSQL Testcontainers, and cross-module Kafka integration coverage.
 
-The initial analyzer uses deterministic keyword matching and does not require an external AI provider. Generated Protobuf messages and Kafka client types remain in the Kafka adapter layer; core normalization, persistence, and analyzer code use analysis-owned Java models.
+The initial analyzer uses deterministic keyword matching and does not require an external AI provider. Generated Protobuf messages and Kafka client types remain in the Kafka adapter layer; core normalization, persistence, and analyzer code use Analysis-owned Java models. `RawItemDiscovered.analysis_settings` is mapped into an immutable Analysis-owned value before processing. The deployment-global keyword configuration remains only as a compatibility fallback for legacy raw events that predate this snapshot.
 
-Monitoring-profile-owned analysis settings, richer category-specific normalization, and controlled DLQ replay remain future work.
+Richer category-specific normalization and controlled DLQ replay remain future work.
 
 ## Operational inspection
 
