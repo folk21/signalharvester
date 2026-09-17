@@ -83,7 +83,7 @@ After that baseline passes, run the controlled resilience acceptance:
 python3 infra/kubernetes/resilience/run_acceptance.py
 ```
 
-The resilience harness is opt-in because it intentionally injects failures and restarts. Read [`resilience/README.md`](resilience/README.md) before running it.
+The resilience harness is opt-in because it intentionally injects failures and restarts. Read [`resilience/README.md`](resilience/README.md) before running it. After that workflow passes, `python3 infra/kubernetes/scaling/run_acceptance.py` demonstrates partition-bounded Kafka worker scaling; see [`scaling/README.md`](scaling/README.md).
 
 ## Access local services
 

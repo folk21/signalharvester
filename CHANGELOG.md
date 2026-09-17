@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-17 — Added live Kafka consumer horizontal-scaling acceptance that builds deterministic backlog, scales the modular-monolith backend from one to three replicas, verifies shared-group partition ownership, backlog drain, persistence completeness, outbox completion, and DLQ stability.
+- 2026-09-17 — Accepted the backend Kubernetes/observability deployment and system resilience stages after the developer completed the routine and live-cluster verification workflows.
 - 2026-09-16 — Added an opt-in Kubernetes resilience acceptance harness for backend restart, PostgreSQL retry/DLQ, Kafka lag recovery, Analysis outbox recovery, multi-replica scheduler leases, Redpanda restart recovery, authorization boundaries, and observability evidence.
 - 2026-09-16 — Added a verification-pending Kubernetes backend/infrastructure stack with non-root backend packaging, PostgreSQL/Redpanda, explicit topic provisioning, Prometheus/Loki/Tempo/Grafana observability, Alloy log collection, kube-state-metrics, provisioned dashboards, and deterministic/live deployment verification tooling.
 - 2026-09-16 — Accepted external-source destination authorization after the developer repository gate passed.

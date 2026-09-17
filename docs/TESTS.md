@@ -265,10 +265,21 @@ The live script waits for the backend/infrastructure rollouts and topic-provisio
 
 ## Kubernetes system resilience acceptance
 
-The next opt-in live gate exercises controlled failure/recovery behavior against the same cluster:
+The accepted opt-in resilience gate exercises controlled failure/recovery behavior against the same cluster:
 
 ```bash
 python3 infra/kubernetes/resilience/run_acceptance.py
 ```
 
 It is intentionally separate from `./run_checks.sh` because it restarts containers and StatefulSets, temporarily changes backend Deployment environment variables, injects Kafka traffic, and uses test-only PostgreSQL state manipulation. Deterministic parsing/asset checks for the harness are included in `./infra/kubernetes/run_tests.sh`. The live run covers stateless JWT behavior across a backend restart, slow-source availability, retry/DLQ during PostgreSQL outage, Analysis lag generation/drain, Analysis outbox recovery, multi-replica scheduler lease behavior, Redpanda restart recovery, and Prometheus/Loki/Tempo evidence.
+
+
+## Kubernetes Kafka consumer scaling acceptance
+
+After the backend/infrastructure and resilience live gates have passed, run the opt-in scaling workflow:
+
+```bash
+python3 infra/kubernetes/scaling/run_acceptance.py
+```
+
+The runner temporarily scales the backend Deployment to one replica, creates a deterministic bounded Kafka backlog through normal Source/Collection APIs, restores one Analysis consumer, then scales the same modular-monolith Deployment to three replicas. It verifies shared consumer-group membership, all three raw-event partition assignments, lag reduction/drain without offset manipulation, durable Analysis/Results completeness, outbox completion, DLQ stability, and HTTP availability. It restores the original replica count and temporary environment configuration on exit. Parser/asset coverage stays in `./infra/kubernetes/run_tests.sh`; the live workflow remains outside `./run_checks.sh`.

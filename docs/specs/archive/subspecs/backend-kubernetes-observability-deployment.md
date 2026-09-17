@@ -3,14 +3,14 @@ type: Specification
 title: Backend Kubernetes and infrastructure observability deployment
 description: Package the backend for Kubernetes, provide local PostgreSQL/Redpanda and Prometheus/Loki/Tempo/Grafana infrastructure, and establish reproducible deployment verification.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Backend Kubernetes and infrastructure observability deployment
 
 ## Status
 
-Implementation complete for the backend-owned deployment boundary. The routine repository gate has passed in the developer environment; live Kubernetes verification is still pending. Full umbrella `DEPLOYMENT.KUBERNETES` acceptance additionally requires a real frontend image from the separate `signalharvester-web` repository.
+Accepted for the backend-owned deployment boundary on 2026-09-17 after the routine repository gate, live Kubernetes verification, and the system resilience acceptance workflow passed in the developer environment. Full umbrella `DEPLOYMENT.KUBERNETES` acceptance still additionally requires a real frontend image from the separate `signalharvester-web` repository.
 
 ## Feature scope
 
@@ -39,7 +39,7 @@ The repository now contains:
 - deterministic repository tests for infrastructure assets plus a live-cluster verification script;
 - a separate frontend workload boundary that expects a real image owned by `signalharvester-web`.
 
-The developer reported the routine repository tests passing on 2026-09-16. No live local Kubernetes acceptance has yet been reported, so rollout, telemetry, and real workload requirements remain verification-pending.
+The routine repository gate passed on 2026-09-16, and the developer completed the required live local Kubernetes and resilience acceptance workflows on 2026-09-17. The backend-owned rollout, telemetry, and real-workload requirements are therefore accepted.
 
 ## Requirements
 

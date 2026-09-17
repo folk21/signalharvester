@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-system-resilience-acceptance.md
+current_focus: subspecs/backend-kafka-consumer-horizontal-scaling.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -12,7 +12,7 @@ current_focus: subspecs/backend-system-resilience-acceptance.md
 
 Active umbrella specification for the initial SignalHarvester product target.
 
-The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, `ANALYSIS.OUTBOX`, `OBSERVABILITY.APPLICATION`, backend authentication/RBAC, and `SECURITY.EXTERNAL_SOURCE_ACCESS`. The current implementation focus is [`backend-system-resilience-acceptance.md`](subspecs/backend-system-resilience-acceptance.md), which exercises the deployed multi-replica backend under controlled restart, lag, persistence outage, outbox, scheduler, authorization, and recovery scenarios. The backend-owned Kubernetes/observability deployment spec remains active and verification-pending until the same local cluster satisfies its live acceptance requirements.
+The accepted backend baseline now includes configuration, collection, Analysis, Results, Event Observation, Processing Flow, bounded Kafka retry/DLQ handling, `ANALYSIS.OUTBOX`, `OBSERVABILITY.APPLICATION`, backend authentication/RBAC, `SECURITY.EXTERNAL_SOURCE_ACCESS`, the backend-owned Kubernetes/observability deployment, and controlled live system resilience acceptance. The current implementation focus is [`backend-kafka-consumer-horizontal-scaling.md`](subspecs/backend-kafka-consumer-horizontal-scaling.md), which demonstrates R26/S9 by increasing compatible Kafka consumer instances while backlog exists and verifying partition-bounded drain without changing processing semantics.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository even after the backend-owned cluster stack is verified.
 

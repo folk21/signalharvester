@@ -7,6 +7,7 @@ data:
   server.py: |
     import time
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import parse_qs, urlsplit
 
     FEEDS = {
         "/baseline.xml": [
@@ -37,6 +38,17 @@ data:
         ],
     }
 
+    def scaling_entries(path, count):
+        label = path.removeprefix("/scale/").removesuffix(".xml").replace("/", "-")
+        return [
+            (
+                f"scale-{label}-{index:04d}",
+                f"Scaling Java Kafka item {label}-{index:04d}",
+                f"Java Kafka PostgreSQL backend scaling fixture {label}-{index:04d}",
+            )
+            for index in range(count)
+        ]
+
     def feed_xml(path, entries):
         items = []
         for guid, title, description in entries:
@@ -59,7 +71,8 @@ data:
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            path = self.path.split("?", 1)[0]
+            parsed = urlsplit(self.path)
+            path = parsed.path
             if path == "/healthz":
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain")
@@ -67,6 +80,17 @@ data:
                 self.wfile.write(b"ok")
                 return
             entries = FEEDS.get(path)
+            if entries is None and path.startswith("/scale/") and path.endswith(".xml"):
+                values = parse_qs(parsed.query).get("items", ["500"])
+                try:
+                    count = int(values[0])
+                except ValueError:
+                    self.send_error(400, "items must be an integer")
+                    return
+                if count < 1 or count > 500:
+                    self.send_error(400, "items must be between 1 and 500")
+                    return
+                entries = scaling_entries(path, count)
             if entries is None:
                 self.send_error(404)
                 return
