@@ -40,6 +40,7 @@ spec:
         - name: redpanda
           image: docker.redpanda.com/redpandadata/redpanda:v26.2.2
           command:
+            - /usr/bin/rpk
             - redpanda
             - start
             - --kafka-addr
@@ -67,7 +68,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - rpk cluster health --brokers localhost:9092 | grep -E 'Healthy:.+true'
+                - rpk cluster health -X admin.hosts=localhost:9644 >/dev/null
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 18

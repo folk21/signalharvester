@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
@@ -43,7 +44,8 @@ class ConsumerGroupSnapshot:
     """Summarizes consumer-group lag and active partition ownership from rpk JSON."""
 
     member_count: int
-    clients: frozenset[str]
+    member_ids: frozenset[str]
+    client_ids: frozenset[str]
     assignments: dict[str, frozenset[tuple[str, int]]]
     lag: int
 
@@ -116,13 +118,15 @@ def parse_consumer_group_snapshot(payload: str) -> ConsumerGroupSnapshot:
     if not rows:
         raise AcceptanceError(f"rpk group JSON contained no partition lag rows: {payload}")
 
-    clients: set[str] = set()
+    member_ids: set[str] = set()
+    client_ids: set[str] = set()
     assignments: dict[str, set[tuple[str, int]]] = {}
     lag = 0
     for row in rows:
         lag_value = _lookup(row, "lag")
         partition_value = _lookup(row, "partition")
         topic_value = _lookup(row, "topic")
+        member_value = _lookup(row, "member_id", "memberid", "member")
         client_value = _lookup(row, "client_id", "clientid", "client")
         if isinstance(lag_value, (int, float)):
             lag += max(0, int(lag_value))
@@ -130,17 +134,34 @@ def parse_consumer_group_snapshot(payload: str) -> ConsumerGroupSnapshot:
             continue
         if not isinstance(topic_value, str):
             topic_value = ""
+
+        member_id = None
+        if isinstance(member_value, str) and member_value.strip() and member_value != "-":
+            member_id = member_value.strip()
+            member_ids.add(member_id)
         if isinstance(client_value, str) and client_value.strip() and client_value != "-":
-            client = client_value.strip()
-            clients.add(client)
-            assignments.setdefault(client, set()).add((topic_value, partition_value))
+            client_ids.add(client_value.strip())
+
+        # Kafka group membership is identified by MEMBER-ID. client.id is only diagnostic
+        # metadata and may legitimately be identical across backend replicas.
+        assignment_key = member_id
+        if assignment_key is None and isinstance(client_value, str) and client_value.strip() and client_value != "-":
+            assignment_key = client_value.strip()
+        if assignment_key is not None:
+            assignments.setdefault(assignment_key, set()).add((topic_value, partition_value))
 
     member_value = data.get("members") if isinstance(data, dict) else None
-    member_count = int(member_value) if isinstance(member_value, int) else len(clients)
+    if isinstance(member_value, int):
+        member_count = member_value
+    elif isinstance(member_value, list):
+        member_count = len(member_value)
+    else:
+        member_count = len(member_ids) if member_ids else len(assignments)
     return ConsumerGroupSnapshot(
         member_count=member_count,
-        clients=frozenset(clients),
-        assignments={client: frozenset(values) for client, values in assignments.items()},
+        member_ids=frozenset(member_ids),
+        client_ids=frozenset(client_ids),
+        assignments={member: frozenset(values) for member, values in assignments.items()},
         lag=lag,
     )
 
@@ -163,9 +184,12 @@ def wait_group_members(
     def ready() -> bool:
         nonlocal snapshot
         snapshot = consumer_group_snapshot(runner, group)
-        return snapshot.member_count >= expected and len(snapshot.clients) >= expected
+        return snapshot.member_count >= expected and len(snapshot.member_ids) >= expected
 
-    resilience.wait_until(f"{group} to reach {expected} active clients", timeout, 1.0, ready)
+    try:
+        resilience.wait_until(f"{group} to reach {expected} active members", timeout, 1.0, ready)
+    except AcceptanceError as failure:
+        raise AcceptanceError(f"{failure}; last snapshot={snapshot}") from failure
     assert snapshot is not None
     return snapshot
 
@@ -219,39 +243,47 @@ def pending_outbox_count(runner: CommandRunner) -> int:
     return int(value)
 
 
+@contextlib.contextmanager
+def authenticated_admin_session(
+    runner: CommandRunner,
+    backend_port: int,
+    http_timeout: float,
+):
+    """Opens a fresh backend tunnel that never spans a backend rollout."""
+
+    with resilience.port_forward(runner, "service/signalharvester-backend", backend_port, 8080):
+        base_url = f"http://127.0.0.1:{backend_port}"
+        resilience.wait_until(
+            "backend readiness through port-forward",
+            30,
+            0.5,
+            lambda: resilience.public_get(base_url + "/health/readiness")[0] == 200,
+        )
+        bootstrap_username = resilience.read_runtime_secret(
+            runner, "SIGNALHARVESTER_BOOTSTRAP_ADMIN_USERNAME"
+        )
+        bootstrap_password = resilience.read_runtime_secret(
+            runner, "SIGNALHARVESTER_BOOTSTRAP_ADMIN_PASSWORD"
+        )
+        admin = ApiSession(base_url, http_timeout)
+        admin.login(bootstrap_username, bootstrap_password)
+        yield admin
+
+
 def verify_scaling(
     runner: CommandRunner,
     env_guard: BackendEnvironmentGuard,
     replica_guard: BackendReplicaGuard,
-    admin: ApiSession,
-    tracker: ResourceTracker,
     *,
-    source_count: int,
-    items_per_source: int,
+    profile_id: str,
+    expected: int,
+    dlq_before: int,
+    outbox_before: int,
     target_replicas: int,
     timeout: float,
 ) -> None:
     if target_replicas != 3:
         raise AcceptanceError("the current local scaling contract uses exactly three Kafka partitions and three replicas")
-
-    print("==> Establish one-replica scaling baseline")
-    replica_guard.set(1)
-    env_guard.set("SIGNALHARVESTER_ANALYSIS_ENABLED", "false")
-
-    source_ids = [
-        tracker.source(f"/scale/{index:02d}.xml?items={items_per_source}", f"scale-{index:02d}")
-        for index in range(source_count)
-    ]
-    profile_id = create_scaling_profile(admin, tracker, source_ids)
-    expected = source_count * items_per_source
-    dlq_before = resilience.rpk_topic_record_count(runner, ANALYSIS_DLQ_TOPIC)
-    outbox_before = pending_outbox_count(runner)
-
-    print(f"==> Generate bounded backlog ({source_count} sources x {items_per_source} items = {expected})")
-    run = resilience.run_collection(admin, profile_id)
-    published = int(run.get("publishedCount", 0))
-    if published != expected:
-        raise AcceptanceError(f"scaling fixture published {published} items, expected {expected}: {run!r}")
 
     resilience.wait_until(
         "positive Analysis lag while the consumer is disabled",
@@ -289,7 +321,8 @@ def verify_scaling(
     if any(not assignments for assignments in analysis_scaled.assignments.values()):
         raise AcceptanceError(f"an Analysis scaling client had no partition assignment: {analysis_scaled.assignments}")
 
-    print(f"    Analysis clients: {sorted(analysis_scaled.clients)}")
+    print(f"    Analysis member IDs: {sorted(analysis_scaled.member_ids)}")
+    print(f"    Analysis client IDs: {sorted(analysis_scaled.client_ids)}")
     print(f"    Analysis assignments: {analysis_scaled.assignments}")
     print(f"    Results active clients: {results_scaled.member_count}")
     print(f"    Event Observation active clients: {observation_scaled.member_count}")
@@ -329,10 +362,6 @@ def verify_scaling(
     dlq_after = resilience.rpk_topic_record_count(runner, ANALYSIS_DLQ_TOPIC)
     if dlq_after != dlq_before:
         raise AcceptanceError(f"Analysis DLQ advanced during healthy scaling: {dlq_before} -> {dlq_after}")
-
-    status, body = admin.request("GET", "/api/v1/admin/collection-runs?limit=1")
-    if status != 200:
-        raise AcceptanceError(f"authenticated HTTP availability failed after scale-up: HTTP {status} {body!r}")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -376,34 +405,54 @@ def main(argv: list[str] | None = None) -> int:
         combined = ",".join(value for value in (existing_allowed, cidr) if value)
         env_guard.set("SIGNALHARVESTER_COLLECTION_OUTBOUND_ALLOWED_CIDRS", combined)
 
-        with resilience.port_forward(runner, "service/signalharvester-backend", args.backend_port, 8080):
-            base_url = f"http://127.0.0.1:{args.backend_port}"
-            resilience.wait_until(
-                "backend readiness through port-forward",
-                30,
-                0.5,
-                lambda: resilience.public_get(base_url + "/health/readiness")[0] == 200,
-            )
-            bootstrap_username = resilience.read_runtime_secret(
-                runner, "SIGNALHARVESTER_BOOTSTRAP_ADMIN_USERNAME"
-            )
-            bootstrap_password = resilience.read_runtime_secret(
-                runner, "SIGNALHARVESTER_BOOTSTRAP_ADMIN_PASSWORD"
-            )
-            admin = ApiSession(base_url, args.http_timeout)
-            admin.login(bootstrap_username, bootstrap_password)
+        print("==> Establish one-replica scaling baseline")
+        replica_guard.set(1)
+        env_guard.set("SIGNALHARVESTER_ANALYSIS_ENABLED", "false")
+
+        with authenticated_admin_session(runner, args.backend_port, args.http_timeout) as admin:
             tracker = ResourceTracker(admin)
-            verify_scaling(
-                runner,
-                env_guard,
-                replica_guard,
-                admin,
-                tracker,
-                source_count=args.sources,
-                items_per_source=args.items_per_source,
-                target_replicas=args.target_replicas,
-                timeout=args.scenario_timeout,
+            source_ids = [
+                tracker.source(f"/scale/{index:02d}.xml?items={args.items_per_source}", f"scale-{index:02d}")
+                for index in range(args.sources)
+            ]
+            profile_id = create_scaling_profile(admin, tracker, source_ids)
+            expected = args.sources * args.items_per_source
+            dlq_before = resilience.rpk_topic_record_count(runner, ANALYSIS_DLQ_TOPIC)
+            outbox_before = pending_outbox_count(runner)
+
+            print(
+                f"==> Generate bounded backlog "
+                f"({args.sources} sources x {args.items_per_source} items = {expected})"
             )
+            run = resilience.run_collection(admin, profile_id, timeout=args.scenario_timeout)
+            published = int(run.get("publishedCount", 0))
+            if published != expected:
+                raise AcceptanceError(
+                    f"scaling fixture published {published} items, expected {expected}: {run!r}"
+                )
+
+        verify_scaling(
+            runner,
+            env_guard,
+            replica_guard,
+            profile_id=profile_id,
+            expected=expected,
+            dlq_before=dlq_before,
+            outbox_before=outbox_before,
+            target_replicas=args.target_replicas,
+            timeout=args.scenario_timeout,
+        )
+
+        with authenticated_admin_session(runner, args.backend_port, args.http_timeout) as admin:
+            status, body = admin.request("GET", "/api/v1/admin/collection-runs?limit=1")
+            if status != 200:
+                raise AcceptanceError(
+                    f"authenticated HTTP availability failed after scale-up: HTTP {status} {body!r}"
+                )
+            assert tracker is not None
+            tracker.admin = admin
+            tracker.cleanup()
+            tracker = None
 
         print("Kafka consumer horizontal scaling acceptance passed.")
         return 0
@@ -411,12 +460,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {failure}", file=sys.stderr)
         return 1
     finally:
-        if tracker is not None:
-            tracker.cleanup()
         if env_guard is not None:
             env_guard.restore()
         if replica_guard is not None:
             replica_guard.restore()
+        if tracker is not None:
+            try:
+                with authenticated_admin_session(runner, args.backend_port, args.http_timeout) as cleanup_admin:
+                    tracker.admin = cleanup_admin
+                    tracker.cleanup()
+            except Exception as failure:  # noqa: BLE001 - cleanup must not hide the acceptance result
+                print(f"WARNING: scaling resource cleanup failed: {failure}", file=sys.stderr)
         if fixture_applied:
             runner.kubectl("delete", "-f", str(resilience.FIXTURE_MANIFEST), "--ignore-not-found=true", check=False)
 

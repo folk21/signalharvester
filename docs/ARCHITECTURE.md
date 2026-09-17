@@ -279,7 +279,7 @@ Full platform Kubernetes acceptance still depends on the separately owned real f
 
 Application Event Explorer and Processing Flow explain retained domain/event evidence. Infrastructure telemetry explains aggregate runtime health and distributed timing. These views complement each other.
 
-The current deployment-related verification-pending work is `SCALABILITY.KAFKA_CONSUMERS`, not the Kubernetes/observability stack itself.
+`SCALABILITY.KAFKA_CONSUMERS` is accepted on the existing modular-monolith Deployment. Live verification demonstrated three Analysis consumer-group members owning the three raw-event partitions while backlog drained to zero.
 
 ## Future extraction
 

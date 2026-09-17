@@ -299,7 +299,7 @@ The default scaling run:
 2. confirms positive Analysis lag with one worker;
 3. scales the existing backend Deployment to three replicas;
 4. verifies three active Analysis consumers own the three raw-event partitions;
-5. verifies Results and Event Observation also have three active clients;
+5. verifies Results and Event Observation also have at least three active consumer-group members;
 6. waits for the backlog to drain;
 7. verifies durable Analysis/Results completeness, outbox completion, and DLQ stability;
 8. restores the original replica count.

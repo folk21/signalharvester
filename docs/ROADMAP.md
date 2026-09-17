@@ -21,9 +21,10 @@ The following platform work is also accepted:
 - `SECURITY.EXTERNAL_SOURCE_ACCESS`;
 - backend-owned `DEPLOYMENT.KUBERNETES`;
 - `OBSERVABILITY.INFRASTRUCTURE`;
-- live system resilience acceptance.
+- live system resilience acceptance;
+- `SCALABILITY.KAFKA_CONSUMERS` with live one-to-three replica backlog-drain acceptance.
 
-The current bounded backend focus is `SCALABILITY.KAFKA_CONSUMERS`.
+No new bounded backend implementation sub-spec is active yet.
 
 Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
@@ -67,15 +68,15 @@ Accepted deployment/system work:
 - `OBSERVABILITY.INFRASTRUCTURE`;
 - controlled live resilience acceptance for restart, persistence outage, retry/DLQ, lag recovery, outbox recovery, scheduler leases, authorization, and telemetry evidence.
 
-Current verification-pending work:
+Accepted scaling work:
 
-- `SCALABILITY.KAFKA_CONSUMERS` — live scale from one to three backend replicas while Analysis lag exists, with shared-group partition ownership and semantic-completeness checks.
+- `SCALABILITY.KAFKA_CONSUMERS` — live scale from one to three backend replicas while Analysis lag exists, with three distinct Analysis group members owning the three raw-event partitions and final lag draining to zero.
 
 ## Next backend stages
 
-1. Execute and accept Kafka consumer horizontal-scaling verification.
-2. Choose the next product refinement from current needs such as profile-owned analysis settings, controlled replay operations, Results search/pagination, or scheduling refinement.
-3. Consider KEDA only after manual horizontal scaling is accepted and an autoscaling policy is justified.
+1. Define the next bounded backend refinement. Profile-owned analysis settings are the leading candidate because they complete monitoring-profile ownership of deterministic analysis behavior.
+2. Follow with another product refinement such as controlled replay operations, Results search/pagination, or scheduling refinement.
+3. Consider KEDA only if an autoscaling policy is justified by operational needs; manual horizontal scaling is already accepted.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
 

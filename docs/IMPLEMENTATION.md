@@ -511,7 +511,7 @@ The opt-in `infra/kubernetes/scaling/run_acceptance.py` workflow:
 8. checks authenticated HTTP availability;
 9. restores temporary deployment state.
 
-Implementation is complete. Developer live-cluster acceptance remains pending.
+Live developer acceptance is complete. The accepted run established positive Analysis lag with one worker, scaled the existing backend Deployment to three replicas, observed three distinct Analysis group members owning raw-event partitions `0`, `1`, and `2`, and drained Analysis lag to zero. Results and Event Observation also exposed multi-replica consumer membership, while durable completeness, outbox, DLQ, and authenticated HTTP checks passed.
 
 ## Testing implementation
 
@@ -543,6 +543,6 @@ See:
 - Results provide bounded REST filters. Cursor pagination and full-text search are not implemented.
 - Processing Flow cannot prove Results persistence until an observation signal exists for that stage.
 - Backend-owned Kubernetes/infrastructure deployment and resilience acceptance are verified. Full platform R24 still requires a real frontend image from `signalharvester-web`.
-- Kafka consumer horizontal scaling is implemented but remains verification-pending until live developer execution.
+- Kafka consumer horizontal scaling is accepted for the current three-partition local topic contract. Parallelism remains bounded by partition capacity; autoscaling is not implemented.
 - There is no cross-resource exactly-once guarantee between PostgreSQL and Kafka.
 - Controlled DLQ replay tooling/UI is not implemented. Failed records remain operator-managed in versioned dead-letter topics.

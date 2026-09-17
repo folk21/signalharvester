@@ -4,7 +4,6 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-kafka-consumer-horizontal-scaling.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -23,11 +22,10 @@ The accepted backend baseline includes:
 - backend authentication/RBAC;
 - `SECURITY.EXTERNAL_SOURCE_ACCESS`;
 - backend-owned Kubernetes/infrastructure observability;
-- controlled live system resilience acceptance.
+- controlled live system resilience acceptance;
+- accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-The current implementation focus is [`backend-kafka-consumer-horizontal-scaling.md`](subspecs/backend-kafka-consumer-horizontal-scaling.md).
-
-It demonstrates R26/S9 by increasing compatible Kafka consumer instances while backlog exists. Acceptance verifies partition-bounded drain without changing processing semantics.
+No bounded backend implementation sub-spec is currently selected as `current_focus`. The next backend refinement should be activated only after its design and acceptance boundary are defined.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository.
 
@@ -103,7 +101,6 @@ Accepted backend capabilities already cover the main functional pipeline:
 
 Major unresolved work in this umbrella includes:
 
-- developer acceptance of `SCALABILITY.KAFKA_CONSUMERS`;
 - `PRESENTATION.VIEWER_RESULTS` in the companion frontend;
 - a real frontend Kubernetes image from `signalharvester-web`;
 - final cross-repository umbrella acceptance after those remaining pieces are integrated.
@@ -905,7 +902,7 @@ Instead, the implementation must support a repeatable demonstration. Concurrent 
 
 The umbrella implementation should proceed through bounded sub-specifications rather than attempting the entire target in one increment.
 
-Recommended sequence. Accepted items remain listed to show delivery history. The current active slice is step 15.
+Recommended sequence. Accepted items remain listed to show delivery history. No new bounded backend slice is currently selected after step 15 acceptance.
 
 1. Define backend module boundaries, the Protocol Buffers event envelope, core domain contracts, and PostgreSQL schema strategy.
 2. Implement the first vertical slice: one configured source -> collection -> Kafka -> normalization/deduplication -> analysis -> PostgreSQL.
@@ -921,5 +918,5 @@ Recommended sequence. Accepted items remain listed to show delivery history. The
 12. Extend the companion frontend specification with a consumer-facing `VIEWER` result experience and integrate it with the accepted authentication/RBAC contract. **Pending in `signalharvester-web`.**
 13. Run the backend/infrastructure slice in local Kubernetes and add Prometheus/Loki/Tempo/Grafana observability. **Accepted for backend-owned scope.**
 14. Add controlled restart, lag, slow-source, retry, authorization, outbox-recovery, and recovery demonstrations. **Accepted.**
-15. Add horizontal Kafka consumer scaling within partition limits. **Implementation complete; live developer verification pending.** KEDA remains optional future work.
+15. Add horizontal Kafka consumer scaling within partition limits. **Accepted on 2026-09-17 after live one-to-three replica backlog-drain verification.** KEDA remains optional future work.
 16. Complete cross-repository umbrella acceptance after the frontend image and remaining viewer experience are integrated. Then move stable implementation truth into current-state documentation and archive completed sub-specifications.

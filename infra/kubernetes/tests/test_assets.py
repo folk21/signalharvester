@@ -45,6 +45,27 @@ class KubernetesAssetsTest(unittest.TestCase):
             self.assertNotIn(":latest", image)
             self.assertIn(":", image, image)
 
+    def test_redpanda_uses_current_rpk_cli_contract(self):
+        redpanda = (K8S / "redpanda.yaml").read_text()
+        provisioner = (K8S / "topic-provisioner.yaml").read_text()
+        self.assertIn("- /usr/bin/rpk\n            - redpanda\n            - start", redpanda)
+        self.assertIn("rpk cluster health -X admin.hosts=localhost:9644", redpanda)
+        self.assertIn("rpk cluster health -X admin.hosts=redpanda:9644", provisioner)
+        self.assertIn(
+            "rpk cluster config set enable_consumer_group_metrics "
+            "'[\"group\",\"partition\",\"consumer_lag\"]' -X admin.hosts=redpanda:9644",
+            provisioner,
+        )
+        self.assertIn('rpk topic describe "$topic" -X brokers=redpanda:9092', provisioner)
+        self.assertIn('rpk topic create "$topic" --partitions 3 --replicas 1 -X brokers=redpanda:9092', provisioner)
+        self.assertNotIn("rpk cluster health -X brokers=", provisioner)
+        self.assertNotRegex(
+            provisioner,
+            r"rpk cluster config set enable_consumer_group_metrics .* -X brokers=",
+        )
+        self.assertNotIn("--brokers", redpanda)
+        self.assertNotIn("--brokers", provisioner)
+
     def test_observability_stack_is_wired(self):
         prometheus = (K8S / "observability" / "prometheus.yml").read_text()
         tempo = (K8S / "observability" / "tempo-config.yaml").read_text()
@@ -108,7 +129,7 @@ class KubernetesAssetsTest(unittest.TestCase):
             manifest = (K8S / "observability" / filename).read_text()
             self.assertIn(fs_group, manifest, filename)
 
-    def test_spec_lifecycle_points_to_kafka_scaling_stage(self):
+    def test_spec_lifecycle_archives_accepted_kafka_scaling_stage(self):
         active = ROOT / "docs" / "specs" / "active" / "subspecs"
         archive = ROOT / "docs" / "specs" / "archive" / "subspecs"
         umbrella = (ROOT / "docs" / "specs" / "active" / "spec-signal-harvester-platform.md").read_text()
@@ -118,8 +139,9 @@ class KubernetesAssetsTest(unittest.TestCase):
         self.assertFalse((active / "backend-system-resilience-acceptance.md").exists())
         self.assertTrue((archive / "backend-kubernetes-observability-deployment.md").exists())
         self.assertTrue((archive / "backend-system-resilience-acceptance.md").exists())
-        self.assertTrue((active / "backend-kafka-consumer-horizontal-scaling.md").exists())
-        self.assertIn("current_focus: subspecs/backend-kafka-consumer-horizontal-scaling.md", umbrella)
+        self.assertFalse((active / "backend-kafka-consumer-horizontal-scaling.md").exists())
+        self.assertTrue((archive / "backend-kafka-consumer-horizontal-scaling.md").exists())
+        self.assertNotIn("current_focus:", umbrella)
 
     def test_backend_dockerfile_builds_distribution_and_runs_non_root(self):
         dockerfile = (ROOT / "app" / "Dockerfile").read_text()

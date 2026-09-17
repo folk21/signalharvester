@@ -474,4 +474,4 @@ The runner:
 7. verifies durable Analysis/Results completeness, outbox completion, DLQ stability, and HTTP availability;
 8. restores the original replica count and temporary environment configuration.
 
-Parser/asset coverage stays in `./infra/kubernetes/run_tests.sh`. The live workflow remains outside `./run_checks.sh`.
+Parser/asset coverage stays in `./infra/kubernetes/run_tests.sh`. The live workflow remains outside `./run_checks.sh`. Developer acceptance completed on 2026-09-17 with three distinct Analysis members assigned to raw-event partitions `0`, `1`, and `2`, positive one-replica lag, and final lag `0`.

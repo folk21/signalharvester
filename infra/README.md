@@ -13,7 +13,7 @@ description: Entry point for local Docker Compose, Kubernetes deployment, and ob
 
 ## Current state
 
-Repository-owned Docker Compose provides the lightweight local PostgreSQL and Kafka-compatible Redpanda development path. A verification-pending Kubernetes stack now packages the backend with PostgreSQL, Redpanda, Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana. The separate frontend repository still owns its image; `kubernetes/frontend/` defines only the runtime boundary needed for later full platform acceptance.
+Repository-owned Docker Compose provides the lightweight local PostgreSQL and Kafka-compatible Redpanda development path. The accepted backend-owned Kubernetes stack packages the backend with PostgreSQL, Redpanda, Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana. Its live acceptance also verifies controlled resilience and partition-bounded Kafka consumer scaling. The separate frontend repository still owns its image; `kubernetes/frontend/` defines only the runtime boundary needed for later full platform acceptance.
 
 Start the local infrastructure from the repository root with built-in safe development defaults:
 
