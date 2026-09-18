@@ -30,7 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Verifies PostgreSQL persistence used by {@link JdbcCollectionRunHistoryStore}, including transaction
+ * Verifies PostgreSQL persistence used by {@link JdbiCollectionRunHistoryStore}, including transaction
  * participation, atomic writes, deterministic recent-history ordering, and restart durability.
  *
  * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-rss-atom-extraction}.</p>

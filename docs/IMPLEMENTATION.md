@@ -78,7 +78,7 @@ Configuration administration is an internal application boundary used by module-
 
 `SourceConfigurationManager` implements both the internal administration boundary and the published provider contract.
 
-PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. The Configuration persistence pilot uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while preserving those application transaction boundaries. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
+PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. The verified Configuration persistence pilot uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while preserving those application transaction boundaries. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
 
 See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md).
 
@@ -149,6 +149,8 @@ Scheduling polls enabled profiles and uses short transactional PostgreSQL claims
 
 A profile becomes due one configured interval after it is first observed. Completion schedules the next run from terminal completion time.
 
+Collection run-history and scheduler persistence now use Micronaut-managed Jdbi, named bindings, module-owned classpath SQL resources, and Jdbi batches/list binding while preserving the existing application-owned transaction boundaries and PostgreSQL lease semantics.
+
 See [`../modules/collection/README.md`](../modules/collection/README.md) and [`../modules/collection/contract.md`](../modules/collection/contract.md).
 
 ## Analysis module
@@ -169,6 +171,8 @@ The raw-item processing path remains event-driven and internal. Analysis publish
 PostgreSQL schema `analysis` is created by `db/migration/analysis/V2__create_normalized_item_claims.sql`. `V10__create_analysis_event_outbox.sql` adds the Analysis transactional outbox.
 
 Logical normalized identity excludes Monitoring Profile ID. Duplicate claims are scoped by `(monitoringProfileId, normalizedItemId)`.
+
+Analysis deduplication, bounded inspection, and transactional-outbox persistence now use Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources. Deduplication/outbox operations explicitly require the existing application-owned transaction and the outbox keeps its PostgreSQL `FOR UPDATE SKIP LOCKED` lease semantics.
 
 The Analysis listener disables automatic offset commit.
 
@@ -340,6 +344,8 @@ No login/session table exists.
 Disabling an account blocks future credential authentication. Already-issued JWTs remain valid until their short expiry.
 
 Administrative updates cannot disable or demote the last enabled `ADMIN`. The persistence boundary serializes these updates before evaluating that invariant.
+
+Security identity and role persistence now uses Micronaut-managed Jdbi with named bindings, module-owned classpath SQL resources, and batched role replacement while retaining the application-owned transaction and explicit PostgreSQL table lock used for the last-enabled-ADMIN invariant.
 
 The first administrator can be created from deployment-provided bootstrap credentials only when no enabled ADMIN exists. The repository contains no default administrator credential.
 

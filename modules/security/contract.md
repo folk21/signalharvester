@@ -56,7 +56,7 @@ There is intentionally no login-session or JWT-session table.
 
 ## Dependencies
 
-The module depends on Micronaut HTTP/security, JDBC transaction/Flyway infrastructure, and PostgreSQL runtime support. It has no synchronous dependency on another functional module.
+The module depends on Micronaut HTTP/security, Jdbi over Micronaut JDBC transaction infrastructure, Flyway, and PostgreSQL runtime support. It has no synchronous dependency on another functional module.
 
 ## Forbidden access
 

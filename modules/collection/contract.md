@@ -80,7 +80,7 @@ Other functional modules must not depend on collection `run`, `source`, `sourcet
 - completed fetch payloads are terminally handled with backpressure, so raw response bodies are retained only within the bounded in-flight concurrency window rather than for the full run;
 - terminal run outcomes preserve configured-source order and per-source item order, while Kafka publication follows fetch completion and must not be treated as a global source-order guarantee;
 - completed run history is operational state, not an atomic substitute for Kafka delivery guarantees;
-- run-history reads and writes execute inside short application-owned JDBC transactions; persistence adapters require an active transaction and never self-commit.
+- run-history reads and writes execute inside short application-owned database transactions; Jdbi persistence adapters require an active transaction and never self-commit.
 
 ## Extension points
 

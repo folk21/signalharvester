@@ -12,7 +12,7 @@ parent: ../spec-signal-harvester-platform.md
 
 Current backend refactoring focus before further product feature work.
 
-The first implementation slice is the Configuration-module pilot. Later slices migrate the remaining module-owned JDBC adapters only after the pilot preserves the existing behavior and transaction guarantees.
+The Configuration-module pilot is accepted after the canonical repository gate passed in the developer environment. The current verification-pending slice migrates Security, Analysis, and Collection using the same transaction-preserving Jdbi conventions.
 
 ## Feature scope
 
@@ -20,6 +20,13 @@ This refactoring does not introduce a new product capability or feature ID. It p
 
 - `CONFIGURATION.SOURCES`;
 - `CONFIGURATION.MONITORING_PROFILES`;
+- `SECURITY.IDENTITY_ROLES`;
+- `SECURITY.AUTHENTICATION`;
+- `ANALYSIS.DEDUPLICATION`;
+- `ANALYSIS.OUTBOX`;
+- `DIAGNOSTICS.ANALYSIS_INSPECTION`;
+- `COLLECTION.RUNS`;
+- `COLLECTION.SCHEDULING`;
 - `TESTING.DETERMINISTIC_LOCAL` for regression protection.
 
 ## Goal
@@ -30,7 +37,7 @@ Jdbi becomes the lightweight SQL execution/mapping boundary. SQL remains explici
 
 ## Current state
 
-Persistence adapters currently use direct JDBC with a mixture of Java text blocks, string constants, inline SQL, positional `PreparedStatement` bindings, manual `ResultSet` mapping, and dynamic string construction.
+The verified Configuration slice already uses Jdbi. The current Security / Analysis / Collection slice removes their remaining direct statement plumbing; Event Observation and Results still contain direct JDBC until later slices. Those remaining adapters mix Java text blocks, string constants, inline SQL, positional bindings, manual result mapping, and dynamic string construction.
 
 The existing architecture already has the correct higher-level boundary: application use cases own Micronaut `TransactionOperations<Connection>` transactions and repositories own persistence details. This refactoring must preserve that boundary.
 
@@ -124,21 +131,25 @@ The first slice must:
 
 ## Validation
 
-For the Configuration pilot:
+The Configuration pilot passed the canonical repository gate in the developer environment.
 
-1. compile and run Configuration unit tests;
-2. run Configuration PostgreSQL integration tests, including create/update rollback cases;
-3. verify Source and Monitoring Profile HTTP integration tests;
-4. run `./run_checks.sh`;
-5. report any dependency-analysis changes separately rather than weakening quality checks.
+For the current Security / Analysis / Collection slice:
+
+1. compile the three migrated modules;
+2. run Security PostgreSQL/authentication integration tests;
+3. run Analysis deduplication, inspection, outbox, Kafka/PostgreSQL integration tests;
+4. run Collection run-history and scheduler PostgreSQL integration tests;
+5. verify transaction-ownership regression tests still reject direct persistence access outside application-owned transactions where required;
+6. run `./run_checks.sh`;
+7. report any dependency-analysis changes separately rather than weakening quality checks.
 
 Later slices add the owning module's focused tests before the canonical gate.
 
 ## Implementation tasks
 
-1. Complete and verify the Configuration pilot.
-2. Review the resulting Jdbi conventions and remove any unnecessary abstraction before copying the pattern.
-3. Migrate Security, Analysis, and Collection in the smallest coherent batches.
+1. Configuration pilot — completed and verified.
+2. Jdbi convention review — completed; retain explicit row mapping, classpath SQL resources, named bindings, and application-owned transactions without a shared persistence abstraction.
+3. Security / Analysis / Collection migration — implemented, verification pending.
 4. Migrate Event Observation.
 5. Review Results dynamic SQL against plain Jdbi templating versus Jdbi StringTemplate 4, then migrate Results.
 6. Update stable implementation documentation and archive this specification only after all intended persistence adapters are migrated and verified.

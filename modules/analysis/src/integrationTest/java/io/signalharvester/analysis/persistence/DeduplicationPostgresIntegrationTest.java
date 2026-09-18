@@ -33,7 +33,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Verifies durable behavior of {@link io.signalharvester.analysis.persistence.JdbcDeduplicationClaimRepository}
+ * Verifies durable behavior of {@link io.signalharvester.analysis.persistence.JdbiDeduplicationClaimRepository}
  * and {@link AnalysisItemInspectionService} against real PostgreSQL, including filtering and ordering.
  *
  * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>

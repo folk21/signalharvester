@@ -9,7 +9,7 @@ The authoritative ownership and integration boundary is [`contract.md`](contract
 
 ## Current implementation
 
-The security module owns persisted application identities in PostgreSQL and exposes the blocking authentication provider used by Micronaut Security when the `security` environment is enabled.
+The security module owns persisted application identities in PostgreSQL and exposes the blocking authentication provider used by Micronaut Security when the `security` environment is enabled. Security-owned SQL executes through Micronaut-managed Jdbi with named bindings and classpath SQL resources while application services retain transaction ownership.
 
 The initial identity model supports:
 

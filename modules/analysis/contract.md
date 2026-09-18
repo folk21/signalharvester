@@ -70,9 +70,9 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 - raw Kafka offsets are committed only after the Analysis state/outbox transaction commits or acknowledged Analysis dead-letter publication;
 - deterministic decode/key/mapping failures are dead-lettered without retry, while application failures use a bounded retry policy;
 - DLQ publication failure leaves the source offset uncommitted;
-- deduplication writes require an active application-owned JDBC transaction;
+- deduplication writes require an active application-owned database transaction and Jdbi adapters must not self-commit;
 - a successful raw-item transaction commits the deduplication claim/update and exact serialized terminal event outbox row atomically before the source offset is committed;
-- Kafka publication happens outside JDBC transactions through bounded expiring outbox leases;
+- Kafka publication happens outside database transactions through bounded expiring outbox leases;
 - a post-ack publication-marker failure may republish the same event id/payload, so downstream persistence remains idempotent;
 - terminal input failures advance only after acknowledged Analysis dead-letter publication;
 - operator recovery validates the current Analysis consumer group and raw input topic, requires exact dead-letter-id confirmation, reuses the normal decoder/processor, and never republishes the shared raw topic or rewrites source offsets.
