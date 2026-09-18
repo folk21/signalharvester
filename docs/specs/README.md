@@ -56,7 +56,7 @@ Rules:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-profile-owned-analysis-settings.md`](active/subspecs/backend-profile-owned-analysis-settings.md) — verification-pending profile-owned typed Analysis settings and immutable raw-event settings snapshots.
+- [`active/subspecs/backend-results-production-browsing.md`](active/subspecs/backend-results-production-browsing.md) — verification-pending backward-compatible keyset pagination and indexed text search for Results browsing.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, and external-source access security are archived.
 
@@ -156,7 +156,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-profile-owned-analysis-settings.md`](active/subspecs/backend-profile-owned-analysis-settings.md) — current verification-pending backend focus.
+- [`active/subspecs/backend-results-production-browsing.md`](active/subspecs/backend-results-production-browsing.md) — current verification-pending backend focus.
 
 Active supporting tracks:
 
@@ -164,6 +164,10 @@ Active supporting tracks:
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
 
 ## Recently completed sub-specifications
+
+Accepted on 2026-09-18:
+
+- [`archive/subspecs/backend-profile-owned-analysis-settings.md`](archive/subspecs/backend-profile-owned-analysis-settings.md) — typed Monitoring Profile Analysis settings and immutable raw-event settings snapshots; accepted after the canonical repository gate passed.
 
 Accepted on 2026-09-17:
 
@@ -201,10 +205,9 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-Likely next bounded backend specs after the current profile-owned Analysis settings slice include product refinements such as:
+Likely next bounded backend specs after the current Results browsing slice include product refinements such as:
 
 - controlled replay operations;
-- Results search/pagination;
 - scheduling refinements.
 
 These are candidates, not active commitments.

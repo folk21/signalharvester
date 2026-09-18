@@ -523,8 +523,22 @@ paths:
       tags:
       - Results
       operationId: listResults
-      summary: List recent analyzed results
+      summary: Browse analyzed results
       parameters:
+      - name: cursor
+        in: query
+        description: Opaque keyset cursor returned in the previous response X-Next-Cursor header.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 1024
+      - name: search
+        in: query
+        description: PostgreSQL web-style full-text search over result title and normalized content.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
       - name: limit
         in: query
         schema:
@@ -564,7 +578,12 @@ paths:
           format: date-time
       responses:
         '200':
-          description: Recent analyzed results matching the supplied filters
+          description: Analyzed results matching the supplied filters, search expression, and optional keyset cursor
+          headers:
+            X-Next-Cursor:
+              description: Opaque cursor for the next page. Absent when the returned page is final.
+              schema:
+                type: string
           content:
             application/json:
               schema:

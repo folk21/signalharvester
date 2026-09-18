@@ -129,7 +129,7 @@ The implemented backend foundation includes the following capability groups.
 - Transactional-outbox staging of `ItemAnalyzed` and `ItemRejected`.
 - Operational APIs for Collection Runs and bounded Analysis inspection.
 - Results-owned PostgreSQL materialization with idempotent at-least-once consumption.
-- Bounded Results REST browsing and profile-scoped detail.
+- Results REST browsing with bounded filters, indexed text search, opaque keyset continuation, and profile-scoped detail.
 - Resumable Results SSE backed by durable PostgreSQL cursors and `Last-Event-ID`.
 
 ### Diagnostics, reliability, and observability
@@ -156,7 +156,7 @@ The default host-run local profile remains an explicitly trusted unauthenticated
 
 The `security` environment enables authentication/RBAC and restrictive outbound-source policy.
 
-`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. The current verification-pending backend focus is profile-owned typed Analysis settings under `CONFIGURATION.MONITORING_PROFILES` and `ANALYSIS.CLASSIFICATION`.
+`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. Profile-owned typed Analysis settings are also accepted. The current verification-pending backend focus extends `RESULTS.BROWSING` with backward-compatible keyset pagination and indexed text search.
 
 Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
 

@@ -21,7 +21,7 @@ It currently defines:
 - persisted-source diagnostic testing with bounded extraction previews and explicit fetch/extraction outcomes;
 - manual collection-run execution plus bounded durable run-history reads;
 - read-only inspection of analysis-owned normalized-item/deduplication state;
-- bounded public Results feed and profile-scoped result-detail reads;
+- backward-compatible public Results array browsing with bounded filters, indexed text search, opaque keyset continuation through `X-Next-Cursor`, and profile-scoped result-detail reads;
 - resumable Results `text/event-stream` delivery with numeric SSE cursors and `Last-Event-ID` reconnection;
 - bounded technical event-observation history with event/correlation/run/item/trace filters;
 - resumable technical event-observation SSE with decoded JSON payload metadata for Event Explorer clients.

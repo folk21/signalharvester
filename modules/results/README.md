@@ -17,8 +17,10 @@ The Kafka listener disables automatic offset commit. Deterministic transport/key
 
 `ResultQueryService` owns short read-only JDBC transactions over the same Results schema. The public REST adapter exposes:
 
-- `GET /api/v1/results` — newest-first bounded result feed with optional monitoring-profile, source, information-category, relevance, classification, and analyzed-time filters;
+- `GET /api/v1/results` — newest-first result feed with optional monitoring-profile, source, information-category, relevance, classification, analyzed-time, and text-search filters; the JSON body remains `ResultSummary[]`, while `X-Next-Cursor` carries opaque keyset continuation when another page exists;
 - `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` — detailed result content, attributes, ordered tags, and provenance.
+
+REST pagination uses the deterministic order `analyzedAt DESC`, `monitoringProfileId ASC`, `normalizedItemId ASC`. Cursors are URL-safe, versioned, and bound to the filters/search expression that produced them; clients may change only `limit` between pages. Search uses PostgreSQL `websearch_to_tsquery` with the `simple` configuration over title and normalized content. `V14` adds the browse-order and GIN search indexes. The endpoint remains a current-projection view, so concurrent Result updates may move a logical item relative to a previously issued page cursor.
 
 The feed intentionally omits `normalizedContent` so a bounded list query does not return every potentially large payload; normalized attributes remain available for browsing. Detailed content is loaded only for a point lookup. Feed tag retrieval is performed in the same bounded SQL query rather than through per-result N+1 reads.
 
@@ -44,8 +46,6 @@ The consumed topics are the existing `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC`
 
 ## Known limitations
 
-- result browsing uses a bounded recent-result limit rather than cursor pagination;
-- no full-text search;
 - rejected-result persistence remains internal operational state and is not exposed by this product API;
 - no transactional outbox/exactly-once cross-resource guarantee;
 - automatic replay of dead-lettered records is intentionally not implemented yet.

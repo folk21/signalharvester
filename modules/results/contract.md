@@ -16,7 +16,7 @@ Own durable user-facing analyzed-result projections and their read boundary, whi
 - materialize analyzed results idempotently;
 - retain rejected source-event outcomes without creating duplicate rows on redelivery;
 - own Results JDBC transactions and PostgreSQL schema;
-- expose bounded read-only REST browsing/detail access over analyzed results;
+- expose backward-compatible read-only REST browsing/detail access with bounded filters, keyset continuation, and indexed text search;
 - expose resumable browser live delivery over committed analyzed projections through SSE.
 
 ## Public integration surface
@@ -29,7 +29,7 @@ None. Results currently has no synchronous functional-module consumer, so no `ap
 
 The authoritative contract is `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`:
 
-- `GET /api/v1/results` — compact newest-first analyzed-result feed with bounded filters;
+- `GET /api/v1/results` — compact newest-first analyzed-result feed with bounded filters, optional text search, and opaque keyset continuation through `X-Next-Cursor`;
 - `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` — detailed profile-scoped analyzed result;
 - `GET /api/v1/results/stream` — filtered resumable SSE updates over committed analyzed projections.
 
@@ -43,13 +43,14 @@ Generated Protobuf classes remain inside the Kafka adapter boundary.
 
 ## Owned data
 
-PostgreSQL schema `results`, created by `db/migration/results/V4__create_result_projections.sql`:
+PostgreSQL schema `results`, created by `db/migration/results/V4__create_result_projections.sql` and extended by later Results-owned migrations:
 
 - `results.analyzed_items` — one current projection per monitoring-profile/logical-item identity;
 - `results.analyzed_item_attributes` — normalized result attributes;
 - `results.analyzed_item_tags` — ordered analysis tags;
 - `results.rejected_items` — terminal rejection records keyed by upstream source-event identity;
-- `results.live_result_cursors` plus `results.live_result_event_id_seq` — one durable monotonic live-delivery cursor per current logical analyzed result.
+- `results.live_result_cursors` plus `results.live_result_event_id_seq` — one durable monotonic live-delivery cursor per current logical analyzed result;
+- `V14__add_result_browsing_indexes.sql` — deterministic browse-order and GIN full-text indexes for REST browsing.
 
 Other modules must not query or mutate these tables directly.
 
@@ -77,7 +78,10 @@ Do not import Analysis implementation/application/persistence types or read the 
 - a failed Results DLQ publication leaves the source offset uncommitted;
 - exhausted projection failures advance the consumed offset only after acknowledged Results dead-letter publication;
 - write and read repositories participate in application-owned JDBC transactions;
-- result-feed limit is bounded to `1..200` and ordered deterministically newest first;
+- result-feed limit is bounded to `1..200` and ordered by `analyzedAt DESC`, `monitoringProfileId ASC`, `normalizedItemId ASC`;
+- page cursors encode the last sort key and are bound to all query criteria except page size;
+- REST page cursors are distinct from numeric SSE `Last-Event-ID` cursors;
+- search is bounded and uses PostgreSQL full-text search over title and normalized content within Results-owned tables;
 - feed retrieval must avoid per-result N+1 persistence reads;
 - detailed result lookup is profile-scoped because normalized identity is profile-scoped;
 - Results does not provide distributed exactly-once processing; it achieves retry safety through idempotent projection keys.

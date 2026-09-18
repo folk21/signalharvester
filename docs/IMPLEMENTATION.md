@@ -228,8 +228,10 @@ This is an at-least-once/idempotent-consumer model. It does not claim distribute
 
 The read model exposes:
 
-- `GET /api/v1/results` — bounded recent results with profile, source, category, relevance, classification, and time filters; large normalized content is excluded from the list representation;
+- `GET /api/v1/results` — backward-compatible `ResultSummary[]` browsing with profile, source, category, relevance, classification, analyzed-time, and text-search filters; opaque criteria-bound keyset continuation is returned through `X-Next-Cursor` when another page exists; large normalized content remains excluded from the list representation;
 - `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` — detailed content, attributes, tags, and provenance for one profile-scoped logical result.
+
+Results REST pagination uses the existing deterministic order `analyzedAt DESC`, `monitoringProfileId ASC`, `normalizedItemId ASC` rather than SQL OFFSET. Search uses PostgreSQL `websearch_to_tsquery` with the explicit `simple` configuration over title and normalized content. `V14` adds the composite browsing-order and GIN full-text indexes. Page cursors are independent from the numeric SSE cursor and are bound to all browsing criteria except page size.
 
 `GET /api/v1/results/stream` exposes Results-owned SSE.
 
@@ -541,7 +543,6 @@ See:
 ## Known limitations
 
 - Interval scheduling is implemented. Cron/calendar scheduling and missed-interval catch-up are not.
-- Results provide bounded REST filters. Cursor pagination and full-text search are not implemented.
 - Processing Flow cannot prove Results persistence until an observation signal exists for that stage.
 - Backend-owned Kubernetes/infrastructure deployment and resilience acceptance are verified. Full platform R24 still requires a real frontend image from `signalharvester-web`.
 - Kafka consumer horizontal scaling is accepted for the current three-partition local topic contract. Parallelism remains bounded by partition capacity; autoscaling is not implemented.

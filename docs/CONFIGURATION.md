@@ -106,7 +106,7 @@ Activating the `security` environment loads `application-security.properties`. T
 - applies the explicit endpoint/role matrix;
 - enables signed double-submit CSRF.
 
-CORS stays disabled unless `SIGNALHARVESTER_CORS_ENABLED=true`. Credentialed CORS uses one configured origin, never `*`.
+CORS stays disabled unless `SIGNALHARVESTER_CORS_ENABLED=true`. Credentialed CORS uses one configured origin, never `*`. The Results `X-Next-Cursor` response header is exposed so a separately hosted browser frontend can follow paginated Results.
 
 The browser JWT cookie is HttpOnly and `SameSite=Strict`. The readable `XSRF-TOKEN` cookie contains only CSRF proof. JSON/form mutations return that proof in `X-CSRF-TOKEN`.
 

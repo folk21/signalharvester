@@ -149,9 +149,10 @@ Idempotent projection keys absorb normal at-least-once redelivery, including del
 
 Results also owns the public read-only `/api/v1/results` boundary:
 
-- list queries are bounded and newest-first;
-- supported product filters are applied in Results persistence/query logic;
-- list reads avoid per-result N+1 queries;
+- list queries use deterministic newest-first keyset order and bounded page sizes;
+- opaque REST page cursors are criteria-bound and separate from SSE resume cursors;
+- supported product filters and text search are applied in Results persistence/query logic;
+- list reads avoid per-result N+1 database round trips;
 - point detail lookup is monitoring-profile scoped;
 - detail returns persisted content, normalized attributes/tags, and provenance.
 
