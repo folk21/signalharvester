@@ -1,5 +1,6 @@
 package io.signalharvester.analysis.persistence;
 
+import io.signalharvester.common.persistence.SqlResources;
 import io.signalharvester.analysis.application.AnalysisItemInspection;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -16,8 +17,9 @@ import org.jdbi.v3.core.statement.Query;
 @Singleton
 public final class JdbiAnalysisItemInspectionRepository implements AnalysisItemInspectionRepository {
 
-    private static final String FIND_RECENT_SQL = AnalysisPersistenceSql.inspection("find-recent");
-    private static final String FIND_SQL = AnalysisPersistenceSql.inspection("find");
+    private static final String SQL_PATH = "analysis/inspection";
+    private static final String FIND_RECENT_SQL = SqlResources.load(SQL_PATH, "find-recent");
+    private static final String FIND_SQL = SqlResources.load(SQL_PATH, "find");
 
     private final Jdbi jdbi;
 

@@ -1,5 +1,6 @@
 package io.signalharvester.configuration.persistence;
 
+import io.signalharvester.common.persistence.SqlResources;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.api.SourceType;
@@ -25,14 +26,15 @@ import org.jdbi.v3.core.statement.Update;
 @Singleton
 public final class JdbiSourceRepository implements SourceRepository {
 
-    private static final String FIND_ALL_SQL = ConfigurationSql.source("find-all");
-    private static final String FIND_ENABLED_SQL = ConfigurationSql.source("find-enabled");
-    private static final String FIND_BY_ID_SQL = ConfigurationSql.source("find-by-id");
-    private static final String INSERT_SQL = ConfigurationSql.source("insert");
-    private static final String UPDATE_SQL = ConfigurationSql.source("update");
-    private static final String DELETE_SQL = ConfigurationSql.source("delete");
-    private static final String DELETE_SETTINGS_SQL = ConfigurationSql.source("delete-settings");
-    private static final String INSERT_SETTING_SQL = ConfigurationSql.source("insert-setting");
+    private static final String SQL_PATH = "configuration/source";
+    private static final String FIND_ALL_SQL = SqlResources.load(SQL_PATH, "find-all");
+    private static final String FIND_ENABLED_SQL = SqlResources.load(SQL_PATH, "find-enabled");
+    private static final String FIND_BY_ID_SQL = SqlResources.load(SQL_PATH, "find-by-id");
+    private static final String INSERT_SQL = SqlResources.load(SQL_PATH, "insert");
+    private static final String UPDATE_SQL = SqlResources.load(SQL_PATH, "update");
+    private static final String DELETE_SQL = SqlResources.load(SQL_PATH, "delete");
+    private static final String DELETE_SETTINGS_SQL = SqlResources.load(SQL_PATH, "delete-settings");
+    private static final String INSERT_SETTING_SQL = SqlResources.load(SQL_PATH, "insert-setting");
 
     private final Jdbi jdbi;
 

@@ -1,5 +1,6 @@
 package io.signalharvester.configuration.persistence;
 
+import io.signalharvester.common.persistence.SqlResources;
 import io.signalharvester.configuration.api.ConfiguredMonitoringProfile;
 import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.MonitoringProfileId;
@@ -24,25 +25,26 @@ import org.jdbi.v3.core.statement.Update;
 @Singleton
 public final class JdbiMonitoringProfileRepository implements MonitoringProfileRepository {
 
-    private static final String FIND_ALL_SQL = ConfigurationSql.monitoringProfile("find-all");
-    private static final String FIND_ENABLED_SQL = ConfigurationSql.monitoringProfile("find-enabled");
-    private static final String FIND_BY_ID_SQL = ConfigurationSql.monitoringProfile("find-by-id");
-    private static final String INSERT_SQL = ConfigurationSql.monitoringProfile("insert");
-    private static final String UPDATE_SQL = ConfigurationSql.monitoringProfile("update");
-    private static final String DELETE_SQL = ConfigurationSql.monitoringProfile("delete");
-    private static final String REFERENCES_SOURCE_SQL = ConfigurationSql.monitoringProfile("references-source");
-    private static final String LOAD_SOURCES_SQL = ConfigurationSql.monitoringProfile("load-sources");
-    private static final String LOAD_CRITERIA_SQL = ConfigurationSql.monitoringProfile("load-criteria");
+    private static final String SQL_PATH = "configuration/monitoring-profile";
+    private static final String FIND_ALL_SQL = SqlResources.load(SQL_PATH, "find-all");
+    private static final String FIND_ENABLED_SQL = SqlResources.load(SQL_PATH, "find-enabled");
+    private static final String FIND_BY_ID_SQL = SqlResources.load(SQL_PATH, "find-by-id");
+    private static final String INSERT_SQL = SqlResources.load(SQL_PATH, "insert");
+    private static final String UPDATE_SQL = SqlResources.load(SQL_PATH, "update");
+    private static final String DELETE_SQL = SqlResources.load(SQL_PATH, "delete");
+    private static final String REFERENCES_SOURCE_SQL = SqlResources.load(SQL_PATH, "references-source");
+    private static final String LOAD_SOURCES_SQL = SqlResources.load(SQL_PATH, "load-sources");
+    private static final String LOAD_CRITERIA_SQL = SqlResources.load(SQL_PATH, "load-criteria");
     private static final String LOAD_ANALYSIS_KEYWORDS_SQL =
-            ConfigurationSql.monitoringProfile("load-analysis-keywords");
-    private static final String DELETE_SOURCES_SQL = ConfigurationSql.monitoringProfile("delete-sources");
-    private static final String DELETE_CRITERIA_SQL = ConfigurationSql.monitoringProfile("delete-criteria");
+            SqlResources.load(SQL_PATH, "load-analysis-keywords");
+    private static final String DELETE_SOURCES_SQL = SqlResources.load(SQL_PATH, "delete-sources");
+    private static final String DELETE_CRITERIA_SQL = SqlResources.load(SQL_PATH, "delete-criteria");
     private static final String DELETE_ANALYSIS_KEYWORDS_SQL =
-            ConfigurationSql.monitoringProfile("delete-analysis-keywords");
-    private static final String INSERT_SOURCE_SQL = ConfigurationSql.monitoringProfile("insert-source");
-    private static final String INSERT_CRITERION_SQL = ConfigurationSql.monitoringProfile("insert-criterion");
+            SqlResources.load(SQL_PATH, "delete-analysis-keywords");
+    private static final String INSERT_SOURCE_SQL = SqlResources.load(SQL_PATH, "insert-source");
+    private static final String INSERT_CRITERION_SQL = SqlResources.load(SQL_PATH, "insert-criterion");
     private static final String INSERT_ANALYSIS_KEYWORD_SQL =
-            ConfigurationSql.monitoringProfile("insert-analysis-keyword");
+            SqlResources.load(SQL_PATH, "insert-analysis-keyword");
 
     private final Jdbi jdbi;
     private final MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults;

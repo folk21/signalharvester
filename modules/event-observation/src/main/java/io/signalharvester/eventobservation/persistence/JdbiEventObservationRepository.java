@@ -1,5 +1,6 @@
 package io.signalharvester.eventobservation.persistence;
 
+import io.signalharvester.common.persistence.SqlResources;
 import io.signalharvester.eventobservation.application.EventObservationCriteria;
 import io.signalharvester.eventobservation.model.ObservedEvent;
 import io.signalharvester.eventobservation.model.ObservedEventInput;
@@ -24,11 +25,12 @@ import org.jdbi.v3.core.statement.Update;
 @Singleton
 public final class JdbiEventObservationRepository implements EventObservationRepository {
 
-    private static final String INSERT_SQL = EventObservationSql.get("insert");
-    private static final String PRUNE_SQL = EventObservationSql.get("prune");
-    private static final String FIND_RECENT_SQL = EventObservationSql.get("find-recent");
-    private static final String CURRENT_CURSOR_SQL = EventObservationSql.get("current-cursor");
-    private static final String FIND_AFTER_SQL = EventObservationSql.get("find-after");
+    private static final String SQL_PATH = "event-observation";
+    private static final String INSERT_SQL = SqlResources.load(SQL_PATH, "insert");
+    private static final String PRUNE_SQL = SqlResources.load(SQL_PATH, "prune");
+    private static final String FIND_RECENT_SQL = SqlResources.load(SQL_PATH, "find-recent");
+    private static final String CURRENT_CURSOR_SQL = SqlResources.load(SQL_PATH, "current-cursor");
+    private static final String FIND_AFTER_SQL = SqlResources.load(SQL_PATH, "find-after");
 
     private final Jdbi jdbi;
 

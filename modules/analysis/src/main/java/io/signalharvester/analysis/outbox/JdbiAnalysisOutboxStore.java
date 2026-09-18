@@ -1,5 +1,7 @@
 package io.signalharvester.analysis.outbox;
 
+import io.signalharvester.common.persistence.SqlResources;
+
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.ResultSet;
@@ -18,10 +20,11 @@ import org.jdbi.v3.core.statement.Update;
 @Singleton
 public final class JdbiAnalysisOutboxStore implements AnalysisOutboxStore {
 
-    private static final String INSERT_SQL = AnalysisOutboxSql.get("insert");
-    private static final String CLAIM_SQL = AnalysisOutboxSql.get("claim");
-    private static final String MARK_PUBLISHED_SQL = AnalysisOutboxSql.get("mark-published");
-    private static final String MARK_FAILED_SQL = AnalysisOutboxSql.get("mark-failed");
+    private static final String SQL_PATH = "analysis/outbox";
+    private static final String INSERT_SQL = SqlResources.load(SQL_PATH, "insert");
+    private static final String CLAIM_SQL = SqlResources.load(SQL_PATH, "claim");
+    private static final String MARK_PUBLISHED_SQL = SqlResources.load(SQL_PATH, "mark-published");
+    private static final String MARK_FAILED_SQL = SqlResources.load(SQL_PATH, "mark-failed");
 
     private final Jdbi jdbi;
 

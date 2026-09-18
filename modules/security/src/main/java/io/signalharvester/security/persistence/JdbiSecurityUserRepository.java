@@ -1,5 +1,6 @@
 package io.signalharvester.security.persistence;
 
+import io.signalharvester.common.persistence.SqlResources;
 import io.signalharvester.security.model.IdentityType;
 import io.signalharvester.security.model.UserAccount;
 import io.signalharvester.security.model.UserId;
@@ -24,18 +25,19 @@ import org.jdbi.v3.core.statement.Update;
 @Singleton
 public final class JdbiSecurityUserRepository implements SecurityUserRepository {
 
-    private static final String FIND_ALL_SQL = SecuritySql.user("find-all");
-    private static final String FIND_BY_ID_SQL = SecuritySql.user("find-by-id");
-    private static final String FIND_BY_USERNAME_SQL = SecuritySql.user("find-by-username");
-    private static final String FIND_CREDENTIALS_BY_USERNAME_SQL = SecuritySql.user("find-credentials-by-username");
-    private static final String ANY_ENABLED_ADMIN_SQL = SecuritySql.user("any-enabled-admin");
-    private static final String LOCK_ADMINISTRATOR_STATE_SQL = SecuritySql.user("lock-administrator-state");
-    private static final String ANY_OTHER_ENABLED_ADMIN_SQL = SecuritySql.user("any-other-enabled-admin");
-    private static final String INSERT_SQL = SecuritySql.user("insert");
-    private static final String UPDATE_SQL = SecuritySql.user("update");
-    private static final String FIND_ROLES_SQL = SecuritySql.user("find-roles");
-    private static final String DELETE_ROLES_SQL = SecuritySql.user("delete-roles");
-    private static final String INSERT_ROLE_SQL = SecuritySql.user("insert-role");
+    private static final String SQL_PATH = "security/user";
+    private static final String FIND_ALL_SQL = SqlResources.load(SQL_PATH, "find-all");
+    private static final String FIND_BY_ID_SQL = SqlResources.load(SQL_PATH, "find-by-id");
+    private static final String FIND_BY_USERNAME_SQL = SqlResources.load(SQL_PATH, "find-by-username");
+    private static final String FIND_CREDENTIALS_BY_USERNAME_SQL = SqlResources.load(SQL_PATH, "find-credentials-by-username");
+    private static final String ANY_ENABLED_ADMIN_SQL = SqlResources.load(SQL_PATH, "any-enabled-admin");
+    private static final String LOCK_ADMINISTRATOR_STATE_SQL = SqlResources.load(SQL_PATH, "lock-administrator-state");
+    private static final String ANY_OTHER_ENABLED_ADMIN_SQL = SqlResources.load(SQL_PATH, "any-other-enabled-admin");
+    private static final String INSERT_SQL = SqlResources.load(SQL_PATH, "insert");
+    private static final String UPDATE_SQL = SqlResources.load(SQL_PATH, "update");
+    private static final String FIND_ROLES_SQL = SqlResources.load(SQL_PATH, "find-roles");
+    private static final String DELETE_ROLES_SQL = SqlResources.load(SQL_PATH, "delete-roles");
+    private static final String INSERT_ROLE_SQL = SqlResources.load(SQL_PATH, "insert-role");
 
     private final Jdbi jdbi;
 

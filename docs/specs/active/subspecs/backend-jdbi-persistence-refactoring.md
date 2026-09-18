@@ -12,7 +12,7 @@ parent: ../spec-signal-harvester-platform.md
 
 Current backend refactoring focus before further product feature work.
 
-The Configuration and Security / Analysis / Collection slices are accepted after their canonical repository gates passed in the developer environment. The current verification-pending slice migrates Event Observation using the same transaction-preserving Jdbi conventions.
+The Configuration, Security / Analysis / Collection, and Event Observation slices are accepted after their canonical repository gates passed in the developer environment. Results is the remaining migration slice.
 
 ## Feature scope
 
@@ -38,7 +38,7 @@ Jdbi becomes the lightweight SQL execution/mapping boundary. SQL remains explici
 
 ## Current state
 
-The verified Configuration, Security, Analysis, and Collection slices already use Jdbi. The current Event Observation slice removes its remaining direct statement plumbing; Results remains on direct JDBC until the final slice. The remaining Results adapters mix Java text blocks, string constants, inline SQL, positional bindings, manual result mapping, and dynamic string construction.
+The verified Configuration, Security, Analysis, Collection, and Event Observation slices already use Jdbi. Results remains on direct JDBC until the final slice. Its adapters mix Java text blocks, string constants, inline SQL, positional bindings, manual result mapping, and dynamic string construction.
 
 The existing architecture already has the correct higher-level boundary: application use cases own Micronaut `TransactionOperations<Connection>` transactions and repositories own persistence details. This refactoring must preserve that boundary.
 
@@ -67,7 +67,7 @@ Jdbi operations must participate in those transactions through Micronaut's Jdbi/
 
 SQL must remain visible and reviewable. Prefer named bind parameters over positional JDBC indexes.
 
-Static or substantial SQL should live in module-owned classpath `.sql` resources when externalization improves readability. Small statements may remain local only when doing so is clearly simpler than creating a resource.
+Static or substantial SQL should live in module-owned classpath `.sql` resources when externalization improves readability. Small statements may remain local only when doing so is clearly simpler than creating a resource. Resolve those resources through the single shared `SqlResources` utility in `common`; persistence adapters supply their module-owned SQL directory and statement name. Do not create module-specific SQL locator/facade classes.
 
 SQL values must use bind parameters. SQL templating must not interpolate untrusted values as SQL syntax.
 
@@ -144,16 +144,7 @@ The Event Observation slice must:
 
 ## Validation
 
-The Configuration and Security / Analysis / Collection slices passed the canonical repository gate in the developer environment.
-
-For the current Event Observation slice:
-
-1. compile the migrated module;
-2. run Event Observation PostgreSQL/Kafka integration tests covering idempotency, retention, filtering, live cursors, and controlled recovery;
-3. verify direct repository access outside an application-owned transaction is rejected;
-4. verify static Jdbi query resources preserve deterministic ordering and filter semantics without StringTemplate;
-5. run `./run_checks.sh`;
-6. report any dependency-analysis changes separately rather than weakening quality checks.
+The Configuration, Security / Analysis / Collection, and Event Observation slices passed the canonical repository gate in the developer environment.
 
 The final Results slice adds its focused browsing/live/projection tests before the canonical gate.
 
@@ -162,6 +153,6 @@ The final Results slice adds its focused browsing/live/projection tests before t
 1. Configuration pilot — completed and verified.
 2. Jdbi convention review — completed; retain explicit row mapping, classpath SQL resources, named bindings, and application-owned transactions without a shared persistence abstraction.
 3. Security / Analysis / Collection migration — completed and verified.
-4. Event Observation migration — implemented, verification pending.
+4. Event Observation migration — completed and verified.
 5. Review Results dynamic SQL against plain Jdbi composition versus Jdbi StringTemplate 4, then migrate Results.
 6. Update stable implementation documentation and archive this specification only after all intended persistence adapters are migrated and verified.

@@ -169,7 +169,7 @@ class SecurityAuthorizationIntegrationTest {
         String humanPassword = "user-only-password-for-integration";
         String botPassword = "bot-only-password-for-integration";
 
-        assertEquals(201, admin.send("POST", "/api/v1/admin/users", """
+        HttpResponse<String> createdHuman = admin.send("POST", "/api/v1/admin/users", """
                 {
                   "username": "%s",
                   "password": "%s",
@@ -177,8 +177,11 @@ class SecurityAuthorizationIntegrationTest {
                   "enabled": true,
                   "roles": []
                 }
-                """.formatted(humanName, humanPassword), true).statusCode());
-        assertEquals(201, admin.send("POST", "/api/v1/admin/users", """
+                """.formatted(humanName, humanPassword), true);
+        assertEquals(201, createdHuman.statusCode(),
+                () -> "Human creation failed: " + createdHuman.statusCode() + " " + createdHuman.body());
+
+        HttpResponse<String> createdBot = admin.send("POST", "/api/v1/admin/users", """
                 {
                   "username": "%s",
                   "password": "%s",
@@ -186,7 +189,9 @@ class SecurityAuthorizationIntegrationTest {
                   "enabled": true,
                   "roles": []
                 }
-                """.formatted(botName, botPassword), true).statusCode());
+                """.formatted(botName, botPassword), true);
+        assertEquals(201, createdBot.statusCode(),
+                () -> "BOT creation failed: " + createdBot.statusCode() + " " + createdBot.body());
 
         Client human = login(humanName, humanPassword);
         HttpResponse<String> humanPrincipal = human.send("GET", "/api/v1/auth/me", null, false);

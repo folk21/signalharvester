@@ -345,7 +345,7 @@ Disabling an account blocks future credential authentication. Already-issued JWT
 
 Administrative updates cannot disable or demote the last enabled `ADMIN`. The persistence boundary serializes these updates before evaluating that invariant.
 
-Security identity and role persistence now uses Micronaut-managed Jdbi with named bindings, module-owned classpath SQL resources, and batched role replacement while retaining the application-owned transaction and explicit PostgreSQL table lock used for the last-enabled-ADMIN invariant.
+Security identity and role persistence now uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while retaining the application-owned transaction and explicit PostgreSQL table lock used for the last-enabled-ADMIN invariant.
 
 The first administrator can be created from deployment-provided bootstrap credentials only when no enabled ADMIN exists. The repository contains no default administrator credential.
 

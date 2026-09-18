@@ -1,5 +1,7 @@
 package io.signalharvester.collection.scheduling;
 
+import io.signalharvester.common.persistence.SqlResources;
+
 import io.signalharvester.configuration.api.MonitoringProfileId;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -15,11 +17,12 @@ import org.jdbi.v3.core.Jdbi;
 @Singleton
 public final class JdbiProfileScheduleStateStore implements ProfileScheduleStateStore {
 
-    private static final String INSERT_STATE_SQL = CollectionScheduleSql.get("insert-state");
-    private static final String RESCHEDULE_INTERVAL_SQL = CollectionScheduleSql.get("reschedule-interval");
-    private static final String CLAIM_SQL = CollectionScheduleSql.get("claim");
-    private static final String RENEW_SQL = CollectionScheduleSql.get("renew");
-    private static final String COMPLETE_SQL = CollectionScheduleSql.get("complete");
+    private static final String SQL_PATH = "collection/schedule";
+    private static final String INSERT_STATE_SQL = SqlResources.load(SQL_PATH, "insert-state");
+    private static final String RESCHEDULE_INTERVAL_SQL = SqlResources.load(SQL_PATH, "reschedule-interval");
+    private static final String CLAIM_SQL = SqlResources.load(SQL_PATH, "claim");
+    private static final String RENEW_SQL = SqlResources.load(SQL_PATH, "renew");
+    private static final String COMPLETE_SQL = SqlResources.load(SQL_PATH, "complete");
 
     private final Jdbi jdbi;
 

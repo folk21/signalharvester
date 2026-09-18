@@ -1,5 +1,6 @@
 package io.signalharvester.analysis.persistence;
 
+import io.signalharvester.common.persistence.SqlResources;
 import io.signalharvester.analysis.model.NormalizedContentItem;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -17,8 +18,9 @@ import org.jdbi.v3.core.statement.Update;
 @Singleton
 public final class JdbiDeduplicationClaimRepository implements DeduplicationClaimRepository {
 
-    private static final String TRY_CLAIM_SQL = AnalysisPersistenceSql.deduplication("try-claim");
-    private static final String RECORD_DUPLICATE_SQL = AnalysisPersistenceSql.deduplication("record-duplicate");
+    private static final String SQL_PATH = "analysis/deduplication";
+    private static final String TRY_CLAIM_SQL = SqlResources.load(SQL_PATH, "try-claim");
+    private static final String RECORD_DUPLICATE_SQL = SqlResources.load(SQL_PATH, "record-duplicate");
 
     private final Jdbi jdbi;
 

@@ -1,5 +1,6 @@
 package io.signalharvester.collection.persistence;
 
+import io.signalharvester.common.persistence.SqlResources;
 import io.signalharvester.collection.run.CollectionRunHistory;
 import io.signalharvester.collection.run.CollectionRunHistoryStore;
 import io.signalharvester.collection.run.CollectionRunResult;
@@ -30,12 +31,13 @@ import org.jdbi.v3.core.statement.PreparedBatch;
 @Singleton
 public final class JdbiCollectionRunHistoryStore implements CollectionRunHistoryStore {
 
-    private static final String INSERT_RUN_SQL = CollectionRunSql.get("insert-run");
-    private static final String INSERT_SOURCE_SQL = CollectionRunSql.get("insert-source");
-    private static final String FIND_RECENT_RUNS_SQL = CollectionRunSql.get("find-recent-runs");
-    private static final String FIND_RUN_BY_ID_SQL = CollectionRunSql.get("find-run-by-id");
-    private static final String FIND_SOURCES_BY_RUN_ID_SQL = CollectionRunSql.get("find-sources-by-run-id");
-    private static final String FIND_SOURCES_BY_RUN_IDS_SQL = CollectionRunSql.get("find-sources-by-run-ids");
+    private static final String SQL_PATH = "collection/run-history";
+    private static final String INSERT_RUN_SQL = SqlResources.load(SQL_PATH, "insert-run");
+    private static final String INSERT_SOURCE_SQL = SqlResources.load(SQL_PATH, "insert-source");
+    private static final String FIND_RECENT_RUNS_SQL = SqlResources.load(SQL_PATH, "find-recent-runs");
+    private static final String FIND_RUN_BY_ID_SQL = SqlResources.load(SQL_PATH, "find-run-by-id");
+    private static final String FIND_SOURCES_BY_RUN_ID_SQL = SqlResources.load(SQL_PATH, "find-sources-by-run-id");
+    private static final String FIND_SOURCES_BY_RUN_IDS_SQL = SqlResources.load(SQL_PATH, "find-sources-by-run-ids");
 
     private final Jdbi jdbi;
 

@@ -62,6 +62,11 @@ class EventObservationKafkaPostgresIntegrationTest {
     private static final String GROUP = "signalharvester-event-observation-it";
     private static final String DEAD_LETTER_TOPIC = "signalharvester.event-observation.dead-letter.v1.it";
     private static final String NORMALIZED_ID = "c".repeat(64);
+    private static final String FLOW_RUN_ID = "run-jdbi-flow";
+    private static final String FLOW_RAW_ITEM_ID = "raw-jdbi-flow";
+    private static final String FLOW_NORMALIZED_ID = "d".repeat(64);
+    private static final String FLOW_RAW_EVENT_ID = "raw-event-jdbi-flow";
+    private static final String FLOW_ANALYZED_EVENT_ID = "analyzed-event-jdbi-flow";
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
@@ -161,27 +166,41 @@ class EventObservationKafkaPostgresIntegrationTest {
     /** Preserve live-cursor ordering and Processing Flow filters through the Jdbi query adapter. */
     @Test
     void shouldQueryLiveCursorAndProcessingFlowThroughJdbiPersistence() throws Exception {
-        send(RAW_TOPIC, "raw-1", rawEvent());
-        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 1L);
-        send(ANALYZED_TOPIC, NORMALIZED_ID, analyzedEvent());
-        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 2L);
+        send(RAW_TOPIC, FLOW_RAW_ITEM_ID, flowRawEvent());
+        awaitSqlValue(
+                "SELECT count(*) FROM event_observation.observed_events WHERE event_id='"
+                        + FLOW_RAW_EVENT_ID + "'",
+                1L);
+        send(ANALYZED_TOPIC, FLOW_NORMALIZED_ID, flowAnalyzedEvent());
+        awaitSqlValue(
+                "SELECT count(*) FROM event_observation.observed_events WHERE event_id='"
+                        + FLOW_ANALYZED_EVENT_ID + "'",
+                1L);
 
         EventObservationQuery query = context.getBean(EventObservationQuery.class);
         long watermark = query.currentCursor();
-        var batch = query.pollAfter(0, emptyCriteria(), 10);
+        EventObservationCriteria flowCriteria = new EventObservationCriteria(
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(FLOW_RUN_ID),
+                Optional.empty(),
+                Optional.empty());
+        var batch = query.pollAfter(0, flowCriteria, 10);
 
         assertEquals(watermark, batch.nextCursor());
         assertEquals(
-                List.of("raw-event", "analyzed-event"),
+                List.of(FLOW_RAW_EVENT_ID, FLOW_ANALYZED_EVENT_ID),
                 batch.events().stream().map(event -> event.eventId()).toList());
 
         ProcessingFlowQuery flows = context.getBean(ProcessingFlowQuery.class);
-        var runFlow = flows.collectionRun("run-1");
-        assertEquals("run-1", runFlow.collectionRunId());
+        var runFlow = flows.collectionRun(FLOW_RUN_ID);
+        assertEquals(FLOW_RUN_ID, runFlow.collectionRunId());
         assertEquals(2, runFlow.observedEventCount());
 
-        var itemFlow = flows.item("run-1", NORMALIZED_ID);
-        assertEquals(Optional.of(NORMALIZED_ID), itemFlow.itemId());
+        var itemFlow = flows.item(FLOW_RUN_ID, FLOW_NORMALIZED_ID);
+        assertEquals(Optional.of(FLOW_NORMALIZED_ID), itemFlow.itemId());
         assertTrue(itemFlow.observedEventCount() >= 1);
     }
 
@@ -287,17 +306,6 @@ class EventObservationKafkaPostgresIntegrationTest {
         assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
     }
 
-    private static EventObservationCriteria emptyCriteria() {
-        return new EventObservationCriteria(
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty());
-    }
-
     private static RawItemDiscovered rawEvent() {
         return RawItemDiscovered.newBuilder()
                 .setEnvelope(envelope("raw-event", "collection.raw-item-discovered.v1", "collection"))
@@ -333,6 +341,48 @@ class EventObservationKafkaPostgresIntegrationTest {
                 .build();
     }
 
+    private static RawItemDiscovered flowRawEvent() {
+        return RawItemDiscovered.newBuilder()
+                .setEnvelope(envelope(
+                        FLOW_RAW_EVENT_ID,
+                        "collection.raw-item-discovered.v1",
+                        "collection",
+                        FLOW_RUN_ID))
+                .setRawItemId(FLOW_RAW_ITEM_ID)
+                .setSourceId("source-jdbi-flow")
+                .setMonitoringProfileId("profile-jdbi-flow")
+                .setInformationCategory("JOB")
+                .setTitle("Jdbi Flow")
+                .setUrl("https://example.test/jobs/jdbi-flow")
+                .setContent("Java Kafka")
+                .setContentType("text/plain")
+                .build();
+    }
+
+    private static ItemAnalyzed flowAnalyzedEvent() {
+        return ItemAnalyzed.newBuilder()
+                .setEnvelope(envelope(
+                        FLOW_ANALYZED_EVENT_ID,
+                        "analysis.item-analyzed.v1",
+                        "analysis",
+                        FLOW_RUN_ID))
+                .setSourceEventId(FLOW_RAW_EVENT_ID)
+                .setRawItemId(FLOW_RAW_ITEM_ID)
+                .setNormalizedItemId(FLOW_NORMALIZED_ID)
+                .setSourceId("source-jdbi-flow")
+                .setMonitoringProfileId("profile-jdbi-flow")
+                .setInformationCategory("JOB")
+                .setUrl("https://example.test/jobs/jdbi-flow")
+                .setNormalizedContent("Java Kafka")
+                .setContentType("text/plain")
+                .setRelevant(true)
+                .setClassification("MATCHED")
+                .setScore(90)
+                .setExplanation("Matched Jdbi flow")
+                .setAnalyzer("keyword-v1")
+                .build();
+    }
+
     private static ItemRejected rejectedEvent() {
         return ItemRejected.newBuilder()
                 .setEnvelope(envelope("rejected-event", "analysis.item-rejected.v1", "analysis"))
@@ -348,11 +398,16 @@ class EventObservationKafkaPostgresIntegrationTest {
     }
 
     private static EventEnvelope envelope(String eventId, String eventType, String producer) {
+        return envelope(eventId, eventType, producer, "run-1");
+    }
+
+    private static EventEnvelope envelope(
+            String eventId, String eventType, String producer, String correlationId) {
         return EventEnvelope.newBuilder()
                 .setEventId(eventId)
                 .setEventType(eventType)
                 .setOccurredAt(Timestamp.newBuilder().setSeconds(1_700_000_000L).build())
-                .setCorrelationId("run-1")
+                .setCorrelationId(correlationId)
                 .setTraceparent("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01")
                 .setProducer(producer)
                 .setSchemaVersion("v1")

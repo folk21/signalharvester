@@ -8,7 +8,7 @@ description: Notable project changes organized by release state, with each chang
 ## Unreleased
 
 - 2026-09-18 — Accepted the Security / Analysis / Collection Jdbi slice after correcting nullable Collection batch typing and bounded Security role replacement, then passing the canonical repository gate.
-- 2026-09-18 — Migrated Event Observation persistence to verification-pending Jdbi adapters with module-owned SQL resources, named criteria bindings, static bounded history/live queries, and explicit application-owned transaction enforcement.
+- 2026-09-18 — Migrated Event Observation persistence to verified Jdbi adapters with module-owned SQL resources, named criteria bindings, static bounded history/live queries, and explicit application-owned transaction enforcement.
 - 2026-09-18 — Extended the verification-pending Jdbi persistence migration through Security, Analysis, and Collection with named bindings, module-owned SQL resources, transaction-ownership guards, Jdbi batches, and safe bounded list binding.
 - 2026-09-18 — Started the staged Jdbi persistence refactoring with a Configuration-module pilot using Micronaut-managed Jdbi, named bindings, classpath SQL resources, and preserved application-owned transactions.
 - 2026-09-18 — Accepted controlled ADMIN dead-letter recovery after the developer confirmed the canonical repository gate passed.

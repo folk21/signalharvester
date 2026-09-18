@@ -16,6 +16,7 @@ micronaut {
 }
 
 dependencies {
+    implementation(project(":common"))
     annotationProcessor("io.micronaut:micronaut-inject-java")
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
     annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
