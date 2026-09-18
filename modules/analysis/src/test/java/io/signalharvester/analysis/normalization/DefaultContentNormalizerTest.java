@@ -11,6 +11,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -41,12 +42,12 @@ class DefaultContentNormalizerTest {
     void shouldNormalizeWhitespaceUrlAndFallbackIdentityDeterministically() {
         NormalizedContentItem first = normalizer.normalize(raw(
                 PROFILE_A,
-                Optional.empty(),
+                null,
                 URI.create("HTTPS://Example.TEST:443/jobs/../jobs/42"),
                 "  Java   backend\nKafka  "));
         NormalizedContentItem second = normalizer.normalize(raw(
                 PROFILE_B,
-                Optional.empty(),
+                null,
                 URI.create("https://example.test/jobs/42"),
                 "Java backend Kafka"));
 
@@ -62,7 +63,7 @@ class DefaultContentNormalizerTest {
     void shouldPreserveExistingPercentEncodingDuringUrlNormalization() {
         NormalizedContentItem normalized = normalizer.normalize(raw(
                 PROFILE_A,
-                Optional.empty(),
+                null,
                 URI.create("HTTPS://Example.TEST:443/jobs/a%2Fb?q=java%20backend"),
                 "Java"));
 
@@ -75,7 +76,7 @@ class DefaultContentNormalizerTest {
     @Test
     void shouldRejectNonHttpRawItemUrlBeforeNormalization() {
         assertThrows(IllegalArgumentException.class, () -> raw(
-                PROFILE_A, Optional.empty(), URI.create("file:///tmp/jobs"), "Java"));
+                PROFILE_A, null, URI.create("file:///tmp/jobs"), "Java"));
     }
 
     /**
@@ -85,17 +86,17 @@ class DefaultContentNormalizerTest {
     void shouldPreferStableExternalIdentityOverContentFingerprint() {
         NormalizedContentItem first = normalizer.normalize(raw(
                 PROFILE_A,
-                Optional.of(" external-42 "),
+                " external-42 ",
                 URI.create("https://example.test/jobs/42"),
                 "Original content"));
         NormalizedContentItem changed = normalizer.normalize(raw(
                 PROFILE_A,
-                Optional.of("external-42"),
+                "external-42",
                 URI.create("https://example.test/jobs/42?revision=2"),
                 "Changed content"));
         NormalizedContentItem otherExternalId = normalizer.normalize(raw(
                 PROFILE_A,
-                Optional.of("external-43"),
+                "external-43",
                 URI.create("https://example.test/jobs/42"),
                 "Original content"));
 
@@ -105,9 +106,12 @@ class DefaultContentNormalizerTest {
 
     private static DiscoveredRawItem raw(
             String profileId,
-            Optional<String> externalId,
+            String externalId,
             URI url,
             String content) {
+        Objects.requireNonNull(profileId, "profileId");
+        Objects.requireNonNull(url, "url");
+        Objects.requireNonNull(content, "content");
         return new DiscoveredRawItem(
                 SOURCE_EVENT_ID,
                 RUN_ID,
@@ -118,7 +122,7 @@ class DefaultContentNormalizerTest {
                 profileId,
                 "JOB",
                 new KeywordAnalysisSettings(List.of("java"), 1),
-                externalId,
+                Optional.ofNullable(externalId),
                 Optional.of("  Senior   Java Engineer "),
                 url,
                 content,

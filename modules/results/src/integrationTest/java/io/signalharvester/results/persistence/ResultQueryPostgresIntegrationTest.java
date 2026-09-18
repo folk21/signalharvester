@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,15 +85,15 @@ class ResultQueryPostgresIntegrationTest {
     @Test
     void shouldFilterRecentResultsAcrossSupportedDimensions() {
         ResultQuery query = context.getBean(ResultQuery.class);
-        ResultQueryCriteria criteria = new ResultQueryCriteria(
-                10,
-                Optional.of(PROFILE_A),
-                Optional.of(SOURCE_A),
-                Optional.of("JOB"),
-                Optional.of(true),
-                Optional.of("MATCHED"),
-                Optional.of(Instant.parse("2026-09-13T10:00:00Z")),
-                Optional.of(Instant.parse("2026-09-13T10:30:00Z")));
+        ResultQueryCriteria criteria = queryCriteria(10)
+                .profile(PROFILE_A)
+                .source(SOURCE_A)
+                .category("JOB")
+                .relevant(true)
+                .classification("MATCHED")
+                .analyzedFrom(Instant.parse("2026-09-13T10:00:00Z"))
+                .analyzedTo(Instant.parse("2026-09-13T10:30:00Z"))
+                .build();
 
         List<ResultSummary> results = query.browse(criteria).results();
 
@@ -107,15 +108,7 @@ class ResultQueryPostgresIntegrationTest {
     @Test
     void shouldOrderNewestFirstAndApplyLimit() {
         ResultQuery query = context.getBean(ResultQuery.class);
-        ResultQueryCriteria criteria = new ResultQueryCriteria(
-                2,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty());
+        ResultQueryCriteria criteria = queryCriteria(2).build();
 
         List<ResultSummary> results = query.browse(criteria).results();
 
@@ -126,11 +119,11 @@ class ResultQueryPostgresIntegrationTest {
     @Test
     void shouldTraverseKeysetPagesAndAllowLimitChange() {
         ResultQuery query = context.getBean(ResultQuery.class);
-        ResultQueryCriteria firstCriteria = criteria(1, Optional.empty(), Optional.empty());
+        ResultQueryCriteria firstCriteria = criteria(1, null, null);
 
         ResultPage first = query.browse(firstCriteria);
         String cursor = first.nextCursor().orElseThrow();
-        ResultPage second = query.browse(criteria(2, Optional.of(cursor), Optional.empty()));
+        ResultPage second = query.browse(criteria(2, cursor, null));
 
         assertEquals(List.of(ITEM_C), first.results().stream().map(ResultSummary::normalizedItemId).toList());
         assertEquals(List.of(ITEM_B, ITEM_A), second.results().stream().map(ResultSummary::normalizedItemId).toList());
@@ -144,17 +137,24 @@ class ResultQueryPostgresIntegrationTest {
         Instant tiedAt = Instant.parse("2026-09-13T10:40:00Z");
         String itemD = "d".repeat(64);
         String itemE = "e".repeat(64);
-        projector.projectAnalyzed(result(
-                "analysis-d", "source-event-d", "raw-d", itemD, SOURCE_A, PROFILE_A, "JOB", true, "MATCHED", 70,
-                tiedAt, List.of("java"), Map.of(), "run-d"));
-        projector.projectAnalyzed(result(
-                "analysis-e", "source-event-e", "raw-e", itemE, SOURCE_A, PROFILE_B, "JOB", true, "MATCHED", 65,
-                tiedAt, List.of("java"), Map.of(), "run-e"));
+        projector.projectAnalyzed(analyzedResult("analysis-d", "source-event-d", "raw-d", itemD)
+                .score(70)
+                .analyzedAt(tiedAt)
+                .tags(List.of("java"))
+                .correlationId("run-d")
+                .build());
+        projector.projectAnalyzed(analyzedResult("analysis-e", "source-event-e", "raw-e", itemE)
+                .profile(PROFILE_B)
+                .score(65)
+                .analyzedAt(tiedAt)
+                .tags(List.of("java"))
+                .correlationId("run-e")
+                .build());
 
         ResultQuery query = context.getBean(ResultQuery.class);
-        ResultPage first = query.browse(criteria(2, Optional.empty(), Optional.empty()));
-        ResultPage second = query.browse(criteria(2, first.nextCursor(), Optional.empty()));
-        ResultPage third = query.browse(criteria(2, second.nextCursor(), Optional.empty()));
+        ResultPage first = query.browse(criteria(2, null, null));
+        ResultPage second = query.browse(criteria(2, first.nextCursor().orElse(null), null));
+        ResultPage third = query.browse(criteria(2, second.nextCursor().orElse(null), null));
 
         assertEquals(List.of(ITEM_C, ITEM_B), ids(first));
         assertEquals(List.of(itemD, itemE), ids(second));
@@ -166,39 +166,39 @@ class ResultQueryPostgresIntegrationTest {
     @Test
     void shouldSearchResultsAndBindCursorToQueryCriteria() {
         AnalysisOutcomeProjector projector = context.getBean(AnalysisOutcomeProjector.class);
-        projector.projectAnalyzed(resultWithContent(
-                "analysis-a-search", "source-event-a-search", "raw-a-search", ITEM_A, SOURCE_A, PROFILE_A,
-                "JOB", true, "MATCHED", 91, Instant.parse("2026-09-13T12:00:00Z"),
-                "Senior Java Platform Engineer", "Distributed systems and stream processing", "run-a-search"));
-        projector.projectAnalyzed(resultWithContent(
-                "analysis-c-search", "source-event-c-search", "raw-c-search", ITEM_C, SOURCE_A, PROFILE_B,
-                "JOB", true, "MATCHED", 76, Instant.parse("2026-09-13T11:30:00Z"),
-                "Kafka Platform Engineer", "Distributed systems observability", "run-c-search"));
+        projector.projectAnalyzed(analyzedResult("analysis-a-search", "source-event-a-search", "raw-a-search", ITEM_A)
+                .score(91)
+                .analyzedAt(Instant.parse("2026-09-13T12:00:00Z"))
+                .title("Senior Java Platform Engineer")
+                .content("Distributed systems and stream processing")
+                .correlationId("run-a-search")
+                .build());
+        projector.projectAnalyzed(analyzedResult("analysis-c-search", "source-event-c-search", "raw-c-search", ITEM_C)
+                .profile(PROFILE_B)
+                .score(76)
+                .analyzedAt(Instant.parse("2026-09-13T11:30:00Z"))
+                .title("Kafka Platform Engineer")
+                .content("Distributed systems observability")
+                .correlationId("run-c-search")
+                .build());
 
         ResultQuery query = context.getBean(ResultQuery.class);
-        ResultQueryCriteria firstCriteria = criteria(1, Optional.empty(), Optional.of("distributed systems"));
+        ResultQueryCriteria firstCriteria = criteria(1, null, "distributed systems");
         ResultPage first = query.browse(firstCriteria);
-        ResultPage second = query.browse(criteria(1, first.nextCursor(), Optional.of("distributed systems")));
+        ResultPage second = query.browse(criteria(1, first.nextCursor().orElse(null), "distributed systems"));
 
         assertEquals(List.of(ITEM_A), ids(first));
         assertEquals(List.of(ITEM_C), ids(second));
         assertTrue(second.nextCursor().isEmpty());
 
-        ResultQueryCriteria sourceBSearch = new ResultQueryCriteria(
-                10,
-                Optional.empty(),
-                Optional.of(SOURCE_B),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of("distributed systems"),
-                Optional.empty());
+        ResultQueryCriteria sourceBSearch = queryCriteria(10)
+                .source(SOURCE_B)
+                .search("distributed systems")
+                .build();
         assertTrue(query.browse(sourceBSearch).results().isEmpty());
 
         String cursor = first.nextCursor().orElseThrow();
-        ResultQueryCriteria changedSearch = criteria(1, Optional.of(cursor), Optional.of("kafka"));
+        ResultQueryCriteria changedSearch = criteria(1, cursor, "kafka");
         assertThrows(InvalidResultQueryException.class, () -> query.browse(changedSearch));
     }
 
@@ -235,10 +235,13 @@ class ResultQueryPostgresIntegrationTest {
         AnalysisOutcomeProjector projector = context.getBean(AnalysisOutcomeProjector.class);
         long initialCursor = live.currentCursor();
 
-        AnalyzedResult updated = result(
-                "analysis-a-2", "source-event-a-2", "raw-a-2", ITEM_A, SOURCE_A, PROFILE_A, "JOB", true, "MATCHED", 95,
-                Instant.parse("2026-09-13T11:10:00Z"), List.of("java", "kafka", "postgresql"),
-                Map.of("location", "Remote"), "run-a-2");
+        AnalyzedResult updated = analyzedResult("analysis-a-2", "source-event-a-2", "raw-a-2", ITEM_A)
+                .score(95)
+                .analyzedAt(Instant.parse("2026-09-13T11:10:00Z"))
+                .tags(List.of("java", "kafka", "postgresql"))
+                .attributes(Map.of("location", "Remote"))
+                .correlationId("run-a-2")
+                .build();
         projector.projectAnalyzed(updated);
 
         ResultLiveBatch batch = live.pollAfter(
@@ -271,21 +274,12 @@ class ResultQueryPostgresIntegrationTest {
     void shouldRejectDirectRepositoryAccessOutsideApplicationOwnedTransaction() {
         JdbiResultQueryRepository queryRepository = context.getBean(JdbiResultQueryRepository.class);
         JdbiResultProjectionRepository projectionRepository = context.getBean(JdbiResultProjectionRepository.class);
-        AnalyzedResult result = result(
-                "analysis-direct",
-                "source-event-direct",
-                "raw-direct",
-                "d".repeat(64),
-                SOURCE_A,
-                PROFILE_A,
-                "JOB",
-                true,
-                "MATCHED",
-                50,
-                Instant.parse("2026-09-13T12:30:00Z"),
-                List.of("java"),
-                Map.of(),
-                "run-direct");
+        AnalyzedResult result = analyzedResult(
+                        "analysis-direct", "source-event-direct", "raw-direct", "d".repeat(64))
+                .analyzedAt(Instant.parse("2026-09-13T12:30:00Z"))
+                .tags(List.of("java"))
+                .correlationId("run-direct")
+                .build();
 
         assertThrows(ResultsPersistenceException.class, queryRepository::currentCursor);
         assertThrows(ResultsPersistenceException.class, () -> projectionRepository.upsertAnalyzed(result));
@@ -297,21 +291,13 @@ class ResultQueryPostgresIntegrationTest {
         String normalizedItemId = "d".repeat(64);
         // PostgreSQL text rejects zero bytes, forcing the child tag write to fail without schema DDL or lock waits.
         String postgresInvalidTag = "force" + (char) 0 + "persistence-failure";
-        AnalyzedResult failing = result(
-                "analysis-rollback",
-                "source-event-rollback",
-                "raw-rollback",
-                normalizedItemId,
-                SOURCE_A,
-                PROFILE_A,
-                "JOB",
-                true,
-                "MATCHED",
-                50,
-                Instant.parse("2026-09-13T12:30:00Z"),
-                List.of(postgresInvalidTag),
-                Map.of("location", "Remote"),
-                "run-rollback");
+        AnalyzedResult failing = analyzedResult(
+                        "analysis-rollback", "source-event-rollback", "raw-rollback", normalizedItemId)
+                .analyzedAt(Instant.parse("2026-09-13T12:30:00Z"))
+                .tags(List.of(postgresInvalidTag))
+                .attributes(Map.of("location", "Remote"))
+                .correlationId("run-rollback")
+                .build();
 
         AnalysisOutcomeProjector projector = context.getBean(AnalysisOutcomeProjector.class);
         assertThrows(ResultsPersistenceException.class, () -> projector.projectAnalyzed(failing));
@@ -360,19 +346,12 @@ class ResultQueryPostgresIntegrationTest {
         assertFalse(query.find(PROFILE_B, ITEM_A).isPresent());
     }
 
-    private static ResultQueryCriteria criteria(
-            int limit, Optional<String> cursor, Optional<String> search) {
-        return new ResultQueryCriteria(
-                limit,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                search,
-                cursor);
+    private static ResultQueryCriteria criteria(int limit, String cursor, String search) {
+        return queryCriteria(limit).cursor(cursor).search(search).build();
+    }
+
+    private static ResultQueryCriteriaBuilder queryCriteria(int limit) {
+        return new ResultQueryCriteriaBuilder(limit);
     }
 
     private static List<String> ids(ResultPage page) {
@@ -381,98 +360,227 @@ class ResultQueryPostgresIntegrationTest {
 
     private void seedResults() {
         AnalysisOutcomeProjector projector = context.getBean(AnalysisOutcomeProjector.class);
-        projector.projectAnalyzed(result(
-                "analysis-a", "source-event-a", "raw-a", ITEM_A, SOURCE_A, PROFILE_A, "JOB", true, "MATCHED", 90,
-                Instant.parse("2026-09-13T10:10:00Z"), List.of("java", "kafka"),
-                Map.of("location", "Remote", "organization", "Example Corp"), "run-a"));
-        projector.projectAnalyzed(result(
-                "analysis-b", "source-event-b", "raw-b", ITEM_B, SOURCE_B, PROFILE_A, "NEWS", false, "UNMATCHED", 0,
-                Instant.parse("2026-09-13T10:40:00Z"), List.of(), Map.of(), "run-b"));
-        projector.projectAnalyzed(result(
-                "analysis-c", "source-event-c", "raw-c", ITEM_C, SOURCE_A, PROFILE_B, "JOB", true, "MATCHED", 75,
-                Instant.parse("2026-09-13T11:00:00Z"), List.of("java"), Map.of("location", "Berlin"), "run-c"));
+        projector.projectAnalyzed(analyzedResult("analysis-a", "source-event-a", "raw-a", ITEM_A)
+                .score(90)
+                .analyzedAt(Instant.parse("2026-09-13T10:10:00Z"))
+                .tags(List.of("java", "kafka"))
+                .attributes(Map.of("location", "Remote", "organization", "Example Corp"))
+                .correlationId("run-a")
+                .build());
+        projector.projectAnalyzed(analyzedResult("analysis-b", "source-event-b", "raw-b", ITEM_B)
+                .source(SOURCE_B)
+                .category("NEWS")
+                .relevant(false)
+                .classification("UNMATCHED")
+                .score(0)
+                .analyzedAt(Instant.parse("2026-09-13T10:40:00Z"))
+                .tags(List.of())
+                .correlationId("run-b")
+                .build());
+        projector.projectAnalyzed(analyzedResult("analysis-c", "source-event-c", "raw-c", ITEM_C)
+                .profile(PROFILE_B)
+                .score(75)
+                .analyzedAt(Instant.parse("2026-09-13T11:00:00Z"))
+                .tags(List.of("java"))
+                .attributes(Map.of("location", "Berlin"))
+                .correlationId("run-c")
+                .build());
     }
 
-    private static AnalyzedResult resultWithContent(
-            String analysisEventId,
-            String sourceEventId,
-            String rawItemId,
-            String normalizedItemId,
-            String sourceId,
-            String profileId,
-            String category,
-            boolean relevant,
-            String classification,
-            int score,
-            Instant analyzedAt,
-            String title,
-            String normalizedContent,
-            String correlationId) {
-        return new AnalyzedResult(
-                analysisEventId,
-                sourceEventId,
-                rawItemId,
-                normalizedItemId,
-                sourceId,
-                profileId,
-                category,
-                Optional.of("external-" + rawItemId),
-                Optional.of(title),
-                "https://example.test/items/" + rawItemId,
-                normalizedContent,
-                "text/plain",
-                Map.of(),
-                relevant,
-                classification,
-                score,
-                List.of("java"),
-                "Deterministic explanation",
-                "keyword-v1",
-                Optional.of(analyzedAt.minusSeconds(60)),
-                analyzedAt,
-                correlationId,
-                Optional.empty());
+    private static AnalyzedResultBuilder analyzedResult(
+            String analysisEventId, String sourceEventId, String rawItemId, String normalizedItemId) {
+        return new AnalyzedResultBuilder(analysisEventId, sourceEventId, rawItemId, normalizedItemId);
     }
 
-    private static AnalyzedResult result(
-            String analysisEventId,
-            String sourceEventId,
-            String rawItemId,
-            String normalizedItemId,
-            String sourceId,
-            String profileId,
-            String category,
-            boolean relevant,
-            String classification,
-            int score,
-            Instant analyzedAt,
-            List<String> tags,
-            Map<String, String> attributes,
-            String correlationId) {
-        return new AnalyzedResult(
-                analysisEventId,
-                sourceEventId,
-                rawItemId,
-                normalizedItemId,
-                sourceId,
-                profileId,
-                category,
-                Optional.of("external-" + rawItemId),
-                Optional.of("Title " + rawItemId),
-                "https://example.test/items/" + rawItemId,
-                "Java Kafka PostgreSQL",
-                "text/plain",
-                attributes,
-                relevant,
-                classification,
-                score,
-                tags,
-                "Deterministic explanation",
-                "keyword-v1",
-                Optional.of(analyzedAt.minusSeconds(60)),
-                analyzedAt,
-                correlationId,
-                Optional.empty());
+    private static final class AnalyzedResultBuilder {
+        private final String analysisEventId;
+        private final String sourceEventId;
+        private final String rawItemId;
+        private final String normalizedItemId;
+        private String sourceId = SOURCE_A;
+        private String profileId = PROFILE_A;
+        private String category = "JOB";
+        private boolean relevant = true;
+        private String classification = "MATCHED";
+        private int score = 50;
+        private Instant analyzedAt = Instant.parse("2026-09-13T12:00:00Z");
+        private List<String> tags = List.of("java");
+        private Map<String, String> attributes = Map.of();
+        private String title;
+        private String content = "Java Kafka PostgreSQL";
+        private String correlationId = "run-default";
+
+        private AnalyzedResultBuilder(
+                String analysisEventId, String sourceEventId, String rawItemId, String normalizedItemId) {
+            this.analysisEventId = Objects.requireNonNull(analysisEventId, "analysisEventId");
+            this.sourceEventId = Objects.requireNonNull(sourceEventId, "sourceEventId");
+            this.rawItemId = Objects.requireNonNull(rawItemId, "rawItemId");
+            this.normalizedItemId = Objects.requireNonNull(normalizedItemId, "normalizedItemId");
+            this.title = "Title " + rawItemId;
+        }
+
+        private AnalyzedResultBuilder source(String value) {
+            sourceId = Objects.requireNonNull(value, "sourceId");
+            return this;
+        }
+
+        private AnalyzedResultBuilder profile(String value) {
+            profileId = Objects.requireNonNull(value, "profileId");
+            return this;
+        }
+
+        private AnalyzedResultBuilder category(String value) {
+            category = Objects.requireNonNull(value, "category");
+            return this;
+        }
+
+        private AnalyzedResultBuilder relevant(boolean value) {
+            relevant = value;
+            return this;
+        }
+
+        private AnalyzedResultBuilder classification(String value) {
+            classification = Objects.requireNonNull(value, "classification");
+            return this;
+        }
+
+        private AnalyzedResultBuilder score(int value) {
+            score = value;
+            return this;
+        }
+
+        private AnalyzedResultBuilder analyzedAt(Instant value) {
+            analyzedAt = Objects.requireNonNull(value, "analyzedAt");
+            return this;
+        }
+
+        private AnalyzedResultBuilder tags(List<String> value) {
+            tags = Objects.requireNonNull(value, "tags");
+            return this;
+        }
+
+        private AnalyzedResultBuilder attributes(Map<String, String> value) {
+            attributes = Objects.requireNonNull(value, "attributes");
+            return this;
+        }
+
+        private AnalyzedResultBuilder title(String value) {
+            title = Objects.requireNonNull(value, "title");
+            return this;
+        }
+
+        private AnalyzedResultBuilder content(String value) {
+            content = Objects.requireNonNull(value, "content");
+            return this;
+        }
+
+        private AnalyzedResultBuilder correlationId(String value) {
+            correlationId = Objects.requireNonNull(value, "correlationId");
+            return this;
+        }
+
+        private AnalyzedResult build() {
+            return new AnalyzedResult(
+                    analysisEventId,
+                    sourceEventId,
+                    rawItemId,
+                    normalizedItemId,
+                    sourceId,
+                    profileId,
+                    category,
+                    Optional.of("external-" + rawItemId),
+                    Optional.of(title),
+                    "https://example.test/items/" + rawItemId,
+                    content,
+                    "text/plain",
+                    attributes,
+                    relevant,
+                    classification,
+                    score,
+                    tags,
+                    "Deterministic explanation",
+                    "keyword-v1",
+                    Optional.of(analyzedAt.minusSeconds(60)),
+                    analyzedAt,
+                    correlationId,
+                    Optional.empty());
+        }
+    }
+
+    private static final class ResultQueryCriteriaBuilder {
+        private final int limit;
+        private String monitoringProfileId;
+        private String sourceId;
+        private String informationCategory;
+        private Boolean relevant;
+        private String classification;
+        private Instant analyzedFrom;
+        private Instant analyzedTo;
+        private String search;
+        private String cursor;
+
+        private ResultQueryCriteriaBuilder(int limit) {
+            this.limit = limit;
+        }
+
+        private ResultQueryCriteriaBuilder profile(String value) {
+            monitoringProfileId = value;
+            return this;
+        }
+
+        private ResultQueryCriteriaBuilder source(String value) {
+            sourceId = value;
+            return this;
+        }
+
+        private ResultQueryCriteriaBuilder category(String value) {
+            informationCategory = value;
+            return this;
+        }
+
+        private ResultQueryCriteriaBuilder relevant(boolean value) {
+            relevant = value;
+            return this;
+        }
+
+        private ResultQueryCriteriaBuilder classification(String value) {
+            classification = value;
+            return this;
+        }
+
+        private ResultQueryCriteriaBuilder analyzedFrom(Instant value) {
+            analyzedFrom = value;
+            return this;
+        }
+
+        private ResultQueryCriteriaBuilder analyzedTo(Instant value) {
+            analyzedTo = value;
+            return this;
+        }
+
+        private ResultQueryCriteriaBuilder search(String value) {
+            search = value;
+            return this;
+        }
+
+        private ResultQueryCriteriaBuilder cursor(String value) {
+            cursor = value;
+            return this;
+        }
+
+        private ResultQueryCriteria build() {
+            return new ResultQueryCriteria(
+                    limit,
+                    Optional.ofNullable(monitoringProfileId),
+                    Optional.ofNullable(sourceId),
+                    Optional.ofNullable(informationCategory),
+                    Optional.ofNullable(relevant),
+                    Optional.ofNullable(classification),
+                    Optional.ofNullable(analyzedFrom),
+                    Optional.ofNullable(analyzedTo),
+                    Optional.ofNullable(search),
+                    Optional.ofNullable(cursor));
+        }
     }
 
     private static long sqlLong(String sql) throws Exception {

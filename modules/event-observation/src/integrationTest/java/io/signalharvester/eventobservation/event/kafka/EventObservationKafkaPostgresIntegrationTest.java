@@ -19,6 +19,7 @@ import io.signalharvester.events.analysis.v1.ItemRejected;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import io.signalharvester.events.common.v1.EventEnvelope;
 import io.signalharvester.events.failure.v1.DeadLetterEvent;
+import io.signalharvester.testing.Await;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -440,15 +441,12 @@ class EventObservationKafkaPostgresIntegrationTest {
     }
 
     private static void awaitSqlValue(String sql, long expected) throws Exception {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
-        while (Instant.now().isBefore(deadline)) {
-            long actual = sqlLong(sql);
-            if (actual == expected) {
-                return;
-            }
-            Thread.sleep(100);
-        }
-        throw new AssertionError("Timed out waiting for SQL value " + expected + ": " + sql);
+        Await.until(
+                "SQL value " + expected + " for " + sql,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> sqlLong(sql),
+                actual -> actual == expected);
     }
 
     private static void executeUpdate(String sql) throws Exception {

@@ -14,6 +14,7 @@ import io.signalharvester.results.application.ResultQuery;
 import io.signalharvester.results.application.ResultQueryCriteria;
 import io.signalharvester.results.application.ResultQueryService;
 import io.signalharvester.results.application.ResultSummary;
+import io.signalharvester.results.testing.ResultSummaryFixture;
 import jakarta.inject.Singleton;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -147,23 +148,13 @@ class ResultControllerTest {
     }
 
     private static ResultSummary summary() {
-        return new ResultSummary(
-                PROFILE_ID,
-                NORMALIZED_ITEM_ID,
-                SOURCE_ID,
-                "JOB",
-                Optional.empty(),
-                Optional.of("Senior Java Engineer"),
-                "https://example.test/jobs/1",
-                true,
-                "MATCHED",
-                90,
-                Map.of("location", "Remote"),
-                List.of("java", "kafka"),
-                "Matched deterministic keywords",
-                "keyword-v1",
-                Optional.empty(),
-                ANALYZED_AT);
+        return ResultSummaryFixture.resultSummary(PROFILE_ID, NORMALIZED_ITEM_ID)
+                .source(SOURCE_ID)
+                .attributes(Map.of("location", "Remote"))
+                .tags(List.of("java", "kafka"))
+                .explanation("Matched deterministic keywords")
+                .analyzedAt(ANALYZED_AT)
+                .build();
     }
 
     private static ResultDetail detail() {

@@ -51,7 +51,7 @@ class SourceTestServiceTest {
                 item("first", "abcdefgh"),
                 item("second", "ijklmnop"));
         SourceTestService service = new SourceTestService(
-                provider(Optional.of(source)), client, extractor, configuration(1, 4));
+                provider(source), client, extractor, configuration(1, 4));
 
         SourceTestResult result = service.test(SOURCE_ID);
 
@@ -73,7 +73,7 @@ class SourceTestServiceTest {
             throw new SourceFetchException(configuredSource.id(), configuredSource.location(), 429, Optional.of("60"));
         };
         SourceTestService service = new SourceTestService(
-                provider(Optional.of(source(true))), client, (configuredSource, content) -> List.of(), configuration(5, 500));
+                provider(source(true)), client, (configuredSource, content) -> List.of(), configuration(5, 500));
 
         SourceTestResult result = service.test(SOURCE_ID);
 
@@ -94,7 +94,7 @@ class SourceTestServiceTest {
                     "External source destination blocked by outbound access policy");
         };
         SourceTestService service = new SourceTestService(
-                provider(Optional.of(source(true))), client, (configuredSource, content) -> List.of(), configuration(5, 500));
+                provider(source(true)), client, (configuredSource, content) -> List.of(), configuration(5, 500));
 
         SourceTestResult result = service.test(SOURCE_ID);
 
@@ -111,7 +111,7 @@ class SourceTestServiceTest {
             throw new SourceItemExtractionException(configuredSource.id(), "invalid selector");
         };
         SourceTestService service = new SourceTestService(
-                provider(Optional.of(source(true))), ignored -> fetchedContent(), extractor, configuration(5, 500));
+                provider(source(true)), ignored -> fetchedContent(), extractor, configuration(5, 500));
 
         SourceTestResult result = service.test(SOURCE_ID);
 
@@ -125,7 +125,7 @@ class SourceTestServiceTest {
     @Test
     void shouldRejectMissingSource() {
         SourceTestService service = new SourceTestService(
-                provider(Optional.empty()), ignored -> fetchedContent(), (source, content) -> List.of(), configuration(5, 500));
+                provider(null), ignored -> fetchedContent(), (source, content) -> List.of(), configuration(5, 500));
 
         assertThrows(SourceTestSourceNotFoundException.class, () -> service.test(SOURCE_ID));
     }
@@ -144,16 +144,16 @@ class SourceTestServiceTest {
         };
     }
 
-    private static SourceConfigurationProvider provider(Optional<ConfiguredSource> source) {
+    private static SourceConfigurationProvider provider(ConfiguredSource source) {
         return new SourceConfigurationProvider() {
             @Override
             public Optional<ConfiguredSource> findSource(SourceId sourceId) {
-                return SOURCE_ID.equals(sourceId) ? source : Optional.empty();
+                return SOURCE_ID.equals(sourceId) ? Optional.ofNullable(source) : Optional.empty();
             }
 
             @Override
             public List<ConfiguredSource> findEnabledSources() {
-                return source.filter(ConfiguredSource::enabled).stream().toList();
+                return Optional.ofNullable(source).filter(ConfiguredSource::enabled).stream().toList();
             }
         };
     }

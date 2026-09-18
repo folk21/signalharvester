@@ -14,6 +14,7 @@ import io.signalharvester.results.application.ResultLiveQuery;
 import io.signalharvester.results.application.ResultLiveQueryService;
 import io.signalharvester.results.application.ResultLiveUpdate;
 import io.signalharvester.results.application.ResultSummary;
+import io.signalharvester.results.testing.ResultSummaryFixture;
 import jakarta.inject.Singleton;
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -188,23 +189,17 @@ class ResultLiveControllerTest {
     }
 
     private static ResultSummary summary() {
-        return new ResultSummary(
-                PROFILE_ID,
-                NORMALIZED_ITEM_ID,
-                SOURCE_ID,
-                "JOB",
-                Optional.of("external-live"),
-                Optional.of("Live Java Engineer"),
-                "https://example.test/jobs/live",
-                true,
-                "MATCHED",
-                95,
-                Map.of("location", "Remote"),
-                List.of("java"),
-                "Matched java",
-                "keyword-v1",
-                Optional.empty(),
-                Instant.parse("2026-09-14T10:00:00Z"));
+        return ResultSummaryFixture.resultSummary(PROFILE_ID, NORMALIZED_ITEM_ID)
+                .source(SOURCE_ID)
+                .externalId("external-live")
+                .title("Live Java Engineer")
+                .url("https://example.test/jobs/live")
+                .score(95)
+                .attributes(Map.of("location", "Remote"))
+                .tags(List.of("java"))
+                .explanation("Matched java")
+                .analyzedAt(Instant.parse("2026-09-14T10:00:00Z"))
+                .build();
     }
 
     @Singleton

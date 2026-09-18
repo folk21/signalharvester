@@ -73,7 +73,7 @@ class ProcessingFlowControllerTest {
 
         TestProcessingFlowQuery query = server.getApplicationContext().getBean(TestProcessingFlowQuery.class);
         assertEquals("run-1", query.lastCollectionRunId());
-        assertEquals(Optional.of("norm-1"), query.lastItemId());
+        assertEquals("norm-1", query.lastItemId());
         assertTrue(query.lastThread().isVirtual());
         assertFalse(query.lastThread().getName().contains("EventLoop"));
     }
@@ -91,7 +91,7 @@ class ProcessingFlowControllerTest {
                 HttpResponse.BodyHandlers.ofString());
     }
 
-    private static ProcessingFlow flow(ProcessingFlow.Scope scope, Optional<String> itemId) {
+    private static ProcessingFlow flow(ProcessingFlow.Scope scope, String itemId) {
         ProcessingFlow.Node analysis = new ProcessingFlow.Node(
                 "event:analysis-1:analysis",
                 "raw-event-1",
@@ -114,7 +114,7 @@ class ProcessingFlowControllerTest {
         return new ProcessingFlow(
                 scope,
                 "run-1",
-                itemId,
+                Optional.ofNullable(itemId),
                 ProcessingFlow.State.TERMINAL_EVENT_REACHED,
                 2,
                 List.of("0123456789abcdef0123456789abcdef"),
@@ -141,7 +141,7 @@ class ProcessingFlowControllerTest {
             if ("missing".equals(collectionRunId)) {
                 throw new ProcessingFlowNotFoundException("missing");
             }
-            return flow(ProcessingFlow.Scope.COLLECTION_RUN, Optional.empty());
+            return flow(ProcessingFlow.Scope.COLLECTION_RUN, null);
         }
 
         @Override
@@ -150,7 +150,7 @@ class ProcessingFlowControllerTest {
             if ("missing".equals(itemId)) {
                 throw new ProcessingFlowNotFoundException("missing");
             }
-            return flow(ProcessingFlow.Scope.ITEM, Optional.of(itemId));
+            return flow(ProcessingFlow.Scope.ITEM, itemId);
         }
 
         private void capture(String collectionRunId, String itemId) {
@@ -163,8 +163,8 @@ class ProcessingFlowControllerTest {
             return collectionRunId.get();
         }
 
-        Optional<String> lastItemId() {
-            return Optional.ofNullable(itemId.get());
+        String lastItemId() {
+            return itemId.get();
         }
 
         Thread lastThread() {

@@ -2,6 +2,7 @@ package io.signalharvester.analysis.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micronaut.context.ApplicationContext;
@@ -71,8 +72,8 @@ class AnalysisItemInspectionControllerTest {
 
         TestAnalysisItemInspectionQuery query = server.getApplicationContext().getBean(TestAnalysisItemInspectionQuery.class);
         assertEquals(50, query.lastLimit());
-        assertEquals(Optional.empty(), query.lastProfile());
-        assertEquals(Optional.empty(), query.lastSource());
+        assertNull(query.lastProfile());
+        assertNull(query.lastSource());
         assertTrue(query.lastThread().isVirtual());
         assertFalse(query.lastThread().getName().contains("EventLoop"));
 
@@ -80,8 +81,8 @@ class AnalysisItemInspectionControllerTest {
                 + "&sourceId=" + SOURCE_ID;
         assertEquals(200, send("GET", path, null).statusCode());
         assertEquals(10, query.lastLimit());
-        assertEquals(Optional.of(PROFILE_ID), query.lastProfile());
-        assertEquals(Optional.of(SOURCE_ID), query.lastSource());
+        assertEquals(PROFILE_ID, query.lastProfile());
+        assertEquals(SOURCE_ID, query.lastSource());
 
         HttpResponse<String> fetched = send(
                 "GET",
@@ -156,8 +157,8 @@ class AnalysisItemInspectionControllerTest {
     @Requires(property = "spec.name", value = SPEC_NAME)
     static final class TestAnalysisItemInspectionQuery implements AnalysisItemInspectionQuery {
         private final AtomicInteger lastLimit = new AtomicInteger();
-        private final AtomicReference<Optional<String>> lastProfile = new AtomicReference<>(Optional.empty());
-        private final AtomicReference<Optional<String>> lastSource = new AtomicReference<>(Optional.empty());
+        private final AtomicReference<String> lastProfile = new AtomicReference<>();
+        private final AtomicReference<String> lastSource = new AtomicReference<>();
         private final AtomicReference<Thread> lastThread = new AtomicReference<>();
 
         @Override
@@ -166,8 +167,8 @@ class AnalysisItemInspectionControllerTest {
                 Optional<String> monitoringProfileId,
                 Optional<String> sourceId) {
             lastLimit.set(limit);
-            lastProfile.set(monitoringProfileId);
-            lastSource.set(sourceId);
+            lastProfile.set(monitoringProfileId.orElse(null));
+            lastSource.set(sourceId.orElse(null));
             lastThread.set(Thread.currentThread());
             return List.of(inspection());
         }
@@ -184,11 +185,11 @@ class AnalysisItemInspectionControllerTest {
             return lastLimit.get();
         }
 
-        Optional<String> lastProfile() {
+        String lastProfile() {
             return lastProfile.get();
         }
 
-        Optional<String> lastSource() {
+        String lastSource() {
             return lastSource.get();
         }
 

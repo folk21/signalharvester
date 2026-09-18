@@ -13,6 +13,7 @@ import io.signalharvester.events.common.v1.EventEnvelope;
 import io.signalharvester.events.failure.v1.DeadLetterEvent;
 import io.signalharvester.results.application.DeadLetterRecovery;
 import io.signalharvester.results.application.DeadLetterRecoveryException;
+import io.signalharvester.testing.Await;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -367,29 +368,21 @@ class ResultsKafkaPostgresIntegrationTest {
     }
 
     private static void awaitSqlValue(String sql, long expected) throws Exception {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
-        long actual = Long.MIN_VALUE;
-        while (Instant.now().isBefore(deadline)) {
-            actual = sqlLong(sql);
-            if (actual == expected) {
-                return;
-            }
-            Thread.sleep(100);
-        }
-        throw new AssertionError("Timed out waiting for SQL value " + expected + ", last=" + actual + ", sql=" + sql);
+        Await.until(
+                "SQL value " + expected + " for " + sql,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> sqlLong(sql),
+                actual -> actual == expected);
     }
 
     private static void awaitSqlString(String sql, String expected) throws Exception {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
-        String actual = null;
-        while (Instant.now().isBefore(deadline)) {
-            actual = sqlStringOrNull(sql);
-            if (expected.equals(actual)) {
-                return;
-            }
-            Thread.sleep(100);
-        }
-        throw new AssertionError("Timed out waiting for SQL value " + expected + ", last=" + actual + ", sql=" + sql);
+        Await.until(
+                "SQL value " + expected + " for " + sql,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> sqlStringOrNull(sql),
+                expected::equals);
     }
 
     private static long sqlLong(String sql) throws Exception {
