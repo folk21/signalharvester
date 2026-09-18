@@ -32,10 +32,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Verifies {@link JdbcResultQueryRepository} filtering, keyset pagination, text search, indexes, and detailed child
+ * Verifies {@link JdbiResultQueryRepository} filtering, keyset pagination, text search, indexes, and detailed child
  * projection loading against the real Results PostgreSQL schema.
  *
- * <p>Related feature: {@code RESULTS.BROWSING}.</p>
+ * <p>Related features: {@code RESULTS.MATERIALIZATION}, {@code RESULTS.BROWSING}, {@code RESULTS.LIVE}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class ResultQueryPostgresIntegrationTest {
@@ -266,6 +266,82 @@ class ResultQueryPostgresIntegrationTest {
         assertEquals(deliveredCursor, live.pollAfter(Long.MAX_VALUE, noFilters, 10).nextCursor());
     }
 
+    /** Preserve the application-owned transaction boundary for direct Jdbi persistence adapter access. */
+    @Test
+    void shouldRejectDirectRepositoryAccessOutsideApplicationOwnedTransaction() {
+        JdbiResultQueryRepository queryRepository = context.getBean(JdbiResultQueryRepository.class);
+        JdbiResultProjectionRepository projectionRepository = context.getBean(JdbiResultProjectionRepository.class);
+        AnalyzedResult result = result(
+                "analysis-direct",
+                "source-event-direct",
+                "raw-direct",
+                "d".repeat(64),
+                SOURCE_A,
+                PROFILE_A,
+                "JOB",
+                true,
+                "MATCHED",
+                50,
+                Instant.parse("2026-09-13T12:30:00Z"),
+                List.of("java"),
+                Map.of(),
+                "run-direct");
+
+        assertThrows(ResultsPersistenceException.class, queryRepository::currentCursor);
+        assertThrows(ResultsPersistenceException.class, () -> projectionRepository.upsertAnalyzed(result));
+    }
+
+    /** Roll back the parent projection and live cursor when a child collection write fails. */
+    @Test
+    void shouldRollbackAnalyzedProjectionWhenChildWriteFails() throws Exception {
+        String normalizedItemId = "d".repeat(64);
+        // PostgreSQL text rejects zero bytes, forcing the child tag write to fail without schema DDL or lock waits.
+        String postgresInvalidTag = "force" + (char) 0 + "persistence-failure";
+        AnalyzedResult failing = result(
+                "analysis-rollback",
+                "source-event-rollback",
+                "raw-rollback",
+                normalizedItemId,
+                SOURCE_A,
+                PROFILE_A,
+                "JOB",
+                true,
+                "MATCHED",
+                50,
+                Instant.parse("2026-09-13T12:30:00Z"),
+                List.of(postgresInvalidTag),
+                Map.of("location", "Remote"),
+                "run-rollback");
+
+        AnalysisOutcomeProjector projector = context.getBean(AnalysisOutcomeProjector.class);
+        assertThrows(ResultsPersistenceException.class, () -> projector.projectAnalyzed(failing));
+
+        assertEquals(0L, sqlLong("""
+                SELECT count(*)
+                  FROM results.analyzed_items
+                 WHERE monitoring_profile_id = 'profile-a'
+                   AND normalized_item_id = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
+                """));
+        assertEquals(0L, sqlLong("""
+                SELECT count(*)
+                  FROM results.analyzed_item_attributes
+                 WHERE monitoring_profile_id = 'profile-a'
+                   AND normalized_item_id = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
+                """));
+        assertEquals(0L, sqlLong("""
+                SELECT count(*)
+                  FROM results.analyzed_item_tags
+                 WHERE monitoring_profile_id = 'profile-a'
+                   AND normalized_item_id = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
+                """));
+        assertEquals(0L, sqlLong("""
+                SELECT count(*)
+                  FROM results.live_result_cursors
+                 WHERE monitoring_profile_id = 'profile-a'
+                   AND normalized_item_id = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
+                """));
+    }
+
     /**
      * Load detailed content, attributes, tags, provenance, and return empty for a missing profile-scoped item.
      */
@@ -397,6 +473,16 @@ class ResultQueryPostgresIntegrationTest {
                 analyzedAt,
                 correlationId,
                 Optional.empty());
+    }
+
+    private static long sqlLong(String sql) throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                var rows = statement.executeQuery(sql)) {
+            assertTrue(rows.next());
+            return rows.getLong(1);
+        }
     }
 
     private static void resetDatabase() throws Exception {

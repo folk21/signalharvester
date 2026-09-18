@@ -16,6 +16,7 @@ micronaut {
 }
 
 dependencies {
+    implementation(project(":common"))
     annotationProcessor("io.micronaut:micronaut-inject-java")
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
     annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
@@ -32,6 +33,7 @@ dependencies {
     implementation("io.opentelemetry:opentelemetry-api")
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("io.micronaut.data:micronaut-data-tx-jdbc")
+    implementation("io.micronaut.sql:micronaut-jdbi")
     implementation("io.micronaut.validation:micronaut-validation")
 
     runtimeOnly("io.micronaut.sql:micronaut-jdbc-hikari")

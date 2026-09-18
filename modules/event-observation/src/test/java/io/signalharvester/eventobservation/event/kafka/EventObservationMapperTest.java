@@ -11,7 +11,11 @@ import io.signalharvester.events.common.v1.EventEnvelope;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
-/** Verifies stable diagnostic decoding of the currently published Protobuf event families. */
+/**
+ * Verifies stable diagnostic decoding of the currently published Protobuf event families.
+ *
+ * <p>Feature: {@code DIAGNOSTICS.EVENT_OBSERVATION}.</p>
+ */
 class EventObservationMapperTest {
 
     private static final Instant OBSERVED_AT = Instant.parse("2026-09-14T12:00:00Z");

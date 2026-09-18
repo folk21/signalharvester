@@ -22,7 +22,11 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
-/** Verifies {@link TransactionalAnalysisOutbox} serializes stable terminal events before persistence. */
+/**
+ * Verifies {@link TransactionalAnalysisOutbox} serializes stable terminal events before persistence.
+ *
+ * <p>Features: {@code ANALYSIS.OUTBOX}, {@code EVENTING.CORRELATION}.</p>
+ */
 class TransactionalAnalysisOutboxTest {
 
     private static final Instant EVENT_TIME = Instant.parse("2026-09-15T12:00:00Z");

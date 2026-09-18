@@ -18,7 +18,11 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** Verifies configuration-driven REST JSON extraction through RFC 6901 pointers and item bounds. */
+/**
+ * Verifies configuration-driven REST JSON extraction through RFC 6901 pointers and item bounds.
+ *
+ * <p>Feature: {@code COLLECTION.ADAPTERS}.</p>
+ */
 class JsonSourceItemExtractorTest {
 
     private static final SourceId SOURCE_ID = SourceId.of(

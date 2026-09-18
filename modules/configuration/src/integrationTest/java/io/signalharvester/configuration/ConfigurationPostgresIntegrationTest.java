@@ -33,6 +33,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * covering Flyway setup, CRUD transactions, rollback behavior, provider reads, and restart durability.
  *
  * <p>Related specification: {@code backend-configuration-persistence-rest}.</p>
+ *
+ * <p>Feature: {@code CONFIGURATION.SOURCES}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class ConfigurationPostgresIntegrationTest {

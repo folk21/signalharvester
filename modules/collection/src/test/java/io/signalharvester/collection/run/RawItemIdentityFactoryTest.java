@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
  * provenance changes must preserve or change raw-item identity.
  *
  * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-rss-atom-extraction}.</p>
+ *
+ * <p>Features: {@code EVENTING.CORRELATION}, {@code RELIABILITY.IDEMPOTENCY}.</p>
  */
 class RawItemIdentityFactoryTest {
 

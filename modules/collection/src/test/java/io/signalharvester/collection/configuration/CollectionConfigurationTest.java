@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
  * concurrency and external-source resource limits.
  *
  * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ *
+ * <p>Features: {@code RUNTIME.CONCURRENCY}, {@code EVENTING.PIPELINE}.</p>
  */
 class CollectionConfigurationTest {
 

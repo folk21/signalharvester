@@ -48,6 +48,8 @@ import org.junit.jupiter.api.Test;
  * behavior, partial failures, run correlation, and deterministic terminal-result ordering.
  *
  * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-rss-atom-extraction}.</p>
+ *
+ * <p>Features: {@code COLLECTION.RUNS}, {@code EVENTING.CORRELATION}.</p>
  */
 class CollectionRunServiceTest {
 

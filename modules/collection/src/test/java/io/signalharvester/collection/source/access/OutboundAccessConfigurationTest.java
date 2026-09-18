@@ -7,7 +7,11 @@ import io.micronaut.context.ApplicationContext;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Verifies outbound-access configuration binding and fail-fast CIDR validation. */
+/**
+ * Verifies outbound-access configuration binding and fail-fast CIDR validation.
+ *
+ * <p>Feature: {@code SECURITY.EXTERNAL_SOURCE_ACCESS}.</p>
+ */
 class OutboundAccessConfigurationTest {
 
     /** Default collection mode remains explicitly trusted-local for existing deterministic workflows. */

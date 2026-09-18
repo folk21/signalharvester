@@ -10,7 +10,7 @@ import java.sql.Connection;
 import java.util.Objects;
 
 /**
- * Owns the JDBC transaction for idempotent analysis-outcome projection into Results persistence.
+ * Owns the application transaction for idempotent analysis-outcome projection into Results persistence.
  */
 @Singleton
 public final class ResultProjectionService implements AnalysisOutcomeProjector {

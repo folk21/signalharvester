@@ -37,9 +37,15 @@ The application uses:
 - HTTP port `SIGNALHARVESTER_HTTP_PORT`, default `8080`;
 - Micronaut's Virtual-Thread-backed blocking executor on Java 21.
 
-Synchronous REST controllers that invoke JDBC or blocking collection work use `@ExecuteOn(TaskExecutors.BLOCKING)`.
+Synchronous REST controllers that invoke database work or blocking collection work use `@ExecuteOn(TaskExecutors.BLOCKING)`.
 
-Results and Event Observation SSE controllers remain streaming `Publisher` boundaries. Their PostgreSQL polling is submitted to the blocking executor instead of running JDBC on the Netty event loop.
+Results and Event Observation SSE controllers remain streaming `Publisher` boundaries. Their PostgreSQL polling is submitted to the blocking executor instead of running database work on the Netty event loop.
+
+## Persistence execution convention
+
+All functional-module runtime SQL now executes through Micronaut-managed Jdbi. Application services continue to own `TransactionOperations<Connection>` boundaries; Jdbi adapters participate in those transactions and reject self-committing access where the module contract requires an active transaction. Security keeps its administrator lock/read/check/update sequence on one transaction-bound Jdbi handle so PostgreSQL session scope matches the pre-refactoring behavior.
+
+Substantial statements live in module-owned classpath `.sql` resources and are resolved through the single shared `SqlResources` utility from `common`. Values use named bindings. Results browsing and filtered live polling are the only current structural-template use: Jdbi StringTemplate 4 selects trusted static predicate blocks while request values remain ordinary named bindings. Focused row-mapper callbacks may read JDBC `ResultSet`/driver value types for explicit domain conversion; repositories no longer own low-level JDBC statement or connection lifecycle.
 
 ## Current implemented flow
 
@@ -78,7 +84,7 @@ Configuration administration is an internal application boundary used by module-
 
 `SourceConfigurationManager` implements both the internal administration boundary and the published provider contract.
 
-PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. Persistence adapters own JDBC SQL and resource handling. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
+PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. Configuration persistence uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while preserving those application transaction boundaries. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
 
 See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md).
 
@@ -149,6 +155,8 @@ Scheduling polls enabled profiles and uses short transactional PostgreSQL claims
 
 A profile becomes due one configured interval after it is first observed. Completion schedules the next run from terminal completion time.
 
+Collection run-history and scheduler persistence now use Micronaut-managed Jdbi, named bindings, module-owned classpath SQL resources, and Jdbi batches/list binding while preserving the existing application-owned transaction boundaries and PostgreSQL lease semantics.
+
 See [`../modules/collection/README.md`](../modules/collection/README.md) and [`../modules/collection/contract.md`](../modules/collection/contract.md).
 
 ## Analysis module
@@ -170,6 +178,8 @@ PostgreSQL schema `analysis` is created by `db/migration/analysis/V2__create_nor
 
 Logical normalized identity excludes Monitoring Profile ID. Duplicate claims are scoped by `(monitoringProfileId, normalizedItemId)`.
 
+Analysis deduplication, bounded inspection, and transactional-outbox persistence now use Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources. Deduplication/outbox operations explicitly require the existing application-owned transaction and the outbox keeps its PostgreSQL `FOR UPDATE SKIP LOCKED` lease semantics.
+
 The Analysis listener disables automatic offset commit.
 
 Failure behavior is explicit:
@@ -179,7 +189,7 @@ Failure behavior is explicit:
 - retry exhaustion publishes the original input plus deterministic source-position dead-letter identity and failure metadata as `failure/v1/DeadLetterEvent`;
 - DLQ publication failure leaves the raw source offset uncommitted.
 
-The verification-pending controlled recovery boundary can inspect a concrete Analysis DLQ partition/offset and replay the stored original key/payload through the same `RawItemKafkaRecordDecoder` and `RawItemProcessor`. It validates the current consumer group and allowed source topic, requires explicit dead-letter-id confirmation, and does not republish `RawItemDiscovered` or rewrite source offsets. Results and Event Observation use the same owner-local pattern through their own decoders and application boundaries.
+The accepted controlled recovery boundary can inspect a concrete Analysis DLQ partition/offset and replay the stored original key/payload through the same `RawItemKafkaRecordDecoder` and `RawItemProcessor`. It validates the current consumer group and allowed source topic, requires explicit dead-letter-id confirmation, and does not republish `RawItemDiscovered` or rewrite source offsets. Results and Event Observation use the same owner-local pattern through their own decoders and application boundaries.
 
 Successful application processing means that two pieces of state commit atomically in PostgreSQL:
 
@@ -210,9 +220,9 @@ See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../mo
 
 Generated Protobuf messages stay inside the Kafka adapter. They are mapped to immutable Results-owned models before application or persistence logic.
 
-`ResultProjectionService` owns the JDBC transaction.
+`ResultProjectionService` owns the application transaction.
 
-`JdbcResultProjectionRepository` uses the transaction-aware default connection. It upserts analyzed projections by `(monitoringProfileId, normalizedItemId)`.
+`JdbiResultProjectionRepository` uses Micronaut-managed Jdbi inside that transaction. Projection SQL lives in Results-owned classpath resources with named bindings. It upserts analyzed projections by `(monitoringProfileId, normalizedItemId)` and replaces attributes/tags before advancing the live cursor in the same transaction.
 
 Tags and attributes are replaced atomically with the parent projection.
 
@@ -226,7 +236,7 @@ The Results listener disables automatic Kafka commit:
 
 This is an at-least-once/idempotent-consumer model. It does not claim distributed exactly-once processing.
 
-`ResultQueryService` owns short read-only JDBC transactions for the public Results REST API.
+`ResultQueryService` owns short read-only application transactions for the public Results REST API. `JdbiResultQueryRepository` keeps static/detail SQL in Results-owned resources. The two structurally dynamic paths — REST browsing and filtered live polling — use Jdbi StringTemplate 4 only to include active predicates; all user values remain named bind parameters.
 
 The read model exposes:
 
@@ -247,7 +257,7 @@ SSE behavior is:
 - disconnected updates to one logical result may collapse to the latest projection;
 - resume cursors ahead of current durable state are normalized to the current watermark.
 
-JDBC polling runs on the blocking executor while the controller remains a streaming `Publisher` boundary.
+Jdbi-backed polling runs on the blocking executor while the controller remains a streaming `Publisher` boundary.
 
 The cursor table is shared PostgreSQL state. The Kafka consumer and SSE client can therefore be served by different backend replicas.
 
@@ -265,7 +275,7 @@ The listener applies the same bounded retry/dead-letter split as the other busin
 - recording failures retry;
 - source offsets advance only after recording or acknowledged DLQ publication.
 
-PostgreSQL schema `event_observation` is created by `V9__create_event_observation_history.sql`.
+PostgreSQL schema `event_observation` is created by `V9__create_event_observation_history.sql`. Event Observation persistence now uses Micronaut-managed Jdbi inside application-owned transactions; static insert, retention, cursor, and bounded history/live queries live in module-owned classpath SQL resources with named bindings.
 
 `observed_events` stores:
 
@@ -340,6 +350,8 @@ No login/session table exists.
 Disabling an account blocks future credential authentication. Already-issued JWTs remain valid until their short expiry.
 
 Administrative updates cannot disable or demote the last enabled `ADMIN`. The persistence boundary serializes these updates before evaluating that invariant.
+
+Security identity and role persistence now uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while retaining the application-owned transaction and explicit PostgreSQL table lock used for the last-enabled-ADMIN invariant. The lock-sensitive read/check/update sequence executes on one transaction-bound Jdbi handle so its connection/session scope matches the pre-Jdbi persistence behavior.
 
 The first administrator can be created from deployment-provided bootstrap credentials only when no enabled ADMIN exists. The repository contains no default administrator credential.
 
@@ -549,4 +561,4 @@ See:
 - Backend-owned Kubernetes/infrastructure deployment and resilience acceptance are verified. Full platform R24 still requires a real frontend image from `signalharvester-web`.
 - Kafka consumer horizontal scaling is accepted for the current three-partition local topic contract. Parallelism remains bounded by partition capacity; autoscaling is not implemented.
 - There is no cross-resource exactly-once guarantee between PostgreSQL and Kafka.
-- Controlled owner-specific DLQ inspection/replay is verification-pending; automatic/bulk replay and replay UI remain unimplemented.
+- Controlled owner-specific DLQ inspection/replay is accepted; automatic/bulk replay and replay UI remain unimplemented.

@@ -37,6 +37,8 @@ import org.junit.jupiter.api.Test;
  * peer failure isolation, and abort behavior for unexpected worker failures.
  *
  * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ *
+ * <p>Features: {@code RUNTIME.CONCURRENCY}, {@code COLLECTION.RUNS}.</p>
  */
 class SourceFetchCoordinatorTest {
 

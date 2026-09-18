@@ -52,6 +52,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * deduplication rollback when transactional outbox staging fails.
  *
  * <p>Related specifications: {@code backend-analysis-normalization-deduplication} and {@code backend-db-kafka-consistency}.</p>
+ *
+ * <p>Features: {@code ANALYSIS.DEDUPLICATION}, {@code ANALYSIS.CLASSIFICATION}, {@code ANALYSIS.OUTBOX}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class RawItemProcessingPostgresIntegrationTest {

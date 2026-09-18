@@ -33,7 +33,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Verifies Event Explorer SSE framing, filters, resume cursors, and blocking-query offload. */
+/**
+ * Verifies Event Explorer SSE framing, filters, resume cursors, and blocking-query offload.
+ *
+ * <p>Features: {@code DIAGNOSTICS.EVENT_OBSERVATION}, {@code CONTRACTS.HTTP}.</p>
+ */
 class EventObservationLiveControllerTest {
 
     private static final String SPEC_NAME = "event-observation-live-controller";

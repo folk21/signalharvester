@@ -56,7 +56,7 @@ Rules:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-controlled-dead-letter-recovery.md`](active/subspecs/backend-controlled-dead-letter-recovery.md) — verification-pending ADMIN-only owner-specific inspection and replay for Analysis, Results, and Event Observation dead-letter records.
+- none; the Jdbi persistence refactoring is accepted and archived, and the next backend action is a closure/reliability review before activating another bounded implementation sub-spec.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, and external-source access security are archived.
 
@@ -156,7 +156,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-controlled-dead-letter-recovery.md`](active/subspecs/backend-controlled-dead-letter-recovery.md) — current verification-pending backend focus.
+- none; the accepted Jdbi migration is archived and the next backend action is a closure/reliability review before activating further feature work.
 
 Active supporting tracks:
 
@@ -167,6 +167,8 @@ Active supporting tracks:
 
 Accepted on 2026-09-18:
 
+- [`archive/subspecs/backend-jdbi-persistence-refactoring.md`](archive/subspecs/backend-jdbi-persistence-refactoring.md) — repository-wide migration from direct JDBC statement plumbing to Jdbi with application-owned transactions, explicit SQL resources, bounded Results templating, and verified Security lock-session parity.
+- [`archive/subspecs/backend-controlled-dead-letter-recovery.md`](archive/subspecs/backend-controlled-dead-letter-recovery.md) — ADMIN-only owner-specific dead-letter inspection/replay; accepted after the developer confirmed the canonical repository gate passed.
 - [`archive/subspecs/backend-profile-owned-analysis-settings.md`](archive/subspecs/backend-profile-owned-analysis-settings.md) — typed Monitoring Profile Analysis settings and immutable raw-event settings snapshots; accepted after the canonical repository gate passed.
 - [`archive/subspecs/backend-results-production-browsing.md`](archive/subspecs/backend-results-production-browsing.md) — backward-compatible keyset pagination and indexed text search for Results; accepted after the canonical repository gate passed.
 
@@ -206,7 +208,7 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-Likely next bounded backend work after controlled dead-letter recovery includes:
+With the Jdbi refactoring accepted, likely bounded backend work includes:
 
 - a backend closure review for concrete remaining operational lifecycle gaps;
 - scheduling refinements only when a product requirement justifies them.

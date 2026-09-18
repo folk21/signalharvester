@@ -58,6 +58,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * external HTTP, and Kafka, including best-effort processing of enabled configured sources.
  *
  * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
+ *
+ * <p>Features: {@code COLLECTION.RUNS}, {@code EVENTING.PIPELINE}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class CollectionRunIntegrationTest {

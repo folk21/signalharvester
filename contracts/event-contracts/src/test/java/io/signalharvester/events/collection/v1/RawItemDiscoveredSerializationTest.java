@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
  * preservation of identifiers, provenance, attributes, and shared event-envelope metadata.
  *
  * <p>Related specification: {@code backend-event-contracts}.</p>
+ *
+ * <p>Features: {@code CONTRACTS.KAFKA_PROTOBUF}, {@code EVENTING.CORRELATION}.</p>
  */
 class RawItemDiscoveredSerializationTest {
 

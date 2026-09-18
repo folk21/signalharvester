@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Related specifications: {@code backend-rss-atom-extraction} and
  * {@code backend-source-test-generic-extraction}.</p>
+ *
+ * <p>Feature: {@code COLLECTION.ADAPTERS}.</p>
  */
 class DefaultSourceItemExtractorTest {
 

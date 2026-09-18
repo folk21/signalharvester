@@ -30,7 +30,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Verifies source-test HTTP mapping, missing-source handling, and blocking-executor offload. */
+/**
+ * Verifies source-test HTTP mapping, missing-source handling, and blocking-executor offload.
+ *
+ * <p>Features: {@code COLLECTION.SOURCE_TEST}, {@code CONTRACTS.HTTP}.</p>
+ */
 class SourceTestControllerTest {
 
     private static final String SPEC_NAME = "source-test-controller";

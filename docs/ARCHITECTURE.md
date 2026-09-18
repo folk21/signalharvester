@@ -73,6 +73,10 @@ Flyway migrations belong to the owning module. Direct cross-module table access 
 
 Use transactional outbox and idempotent-consumer patterns where event/data atomicity or duplicate delivery requires them.
 
+Runtime SQL execution uses Micronaut-managed Jdbi rather than repository-owned JDBC statement lifecycle management. Application use cases continue to own transaction boundaries through the existing Micronaut transaction infrastructure; persistence adapters participate in those transactions and must not introduce independent business transactions. Lock-sensitive multi-statement sequences that depend on one PostgreSQL session execute on one transaction-bound Jdbi handle.
+
+Substantial SQL remains explicit in module-owned classpath `.sql` resources and uses named bindings. The shared `common` `SqlResources` utility only resolves those resources; it does not own module SQL or business persistence semantics. SQL templating is reserved for trusted structural variation where static SQL would be less clear or planner-friendly; request values remain bind parameters. Focused Jdbi row mappers may use JDBC value types such as `ResultSet`, `Array`, or `Timestamp` for explicit conversion, but production adapters do not own `Connection`, `Statement`, or `PreparedStatement` lifecycle.
+
 ## External collection boundary
 
 Collection is configuration-driven where practical. External I/O stays behind testable boundaries.
@@ -138,7 +142,7 @@ Results consumes versioned terminal Analysis events asynchronously. It never rea
 
 The analyzed-result identity is `(monitoringProfileId, normalizedItemId)`. Rejection retry identity is the upstream `sourceEventId`.
 
-Results owns its JDBC transaction and explicit offset semantics:
+Results application services own their database transactions and explicit offset semantics:
 
 - valid records use bounded retry around projection;
 - deterministic transport/mapping failures bypass retry;
@@ -205,13 +209,13 @@ DLQ acknowledgement is part of terminal durability. A source offset never advanc
 
 If DLQ publication fails, normal Kafka redelivery remains the recovery path.
 
-Automatic/bulk DLQ replay is deliberately absent. The verification-pending controlled recovery boundary addresses one real owner-specific DLQ position at a time, validates dead-letter identity plus consumer/group/topic ownership, and reuses the owning module's normal decoder/application path. It does not republish shared source topics or rewrite consumer offsets.
+Automatic/bulk DLQ replay is deliberately absent. The accepted controlled recovery boundary addresses one real owner-specific DLQ position at a time, validates dead-letter identity plus consumer/group/topic ownership, and reuses the owning module's normal decoder/application path. It does not republish shared source topics or rewrite consumer offsets.
 
 ## HTTP server execution boundary
 
 Micronaut Netty event-loop threads must not run blocking application work.
 
-REST controllers that invoke JDBC, blocking HTTP, or other imperative blocking workflows use `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking boundary. On Java 21 this uses Virtual Threads.
+REST controllers that invoke database work, blocking HTTP, or other imperative blocking workflows use `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking boundary. On Java 21 this uses Virtual Threads.
 
 True streaming endpoints such as SSE keep their `Publisher`/reactive execution model. Do not move them to blocking execution mechanically.
 

@@ -18,9 +18,12 @@ Implemented processing includes:
 - transactional PostgreSQL staging and lease-driven Kafka publication of `ItemAnalyzed` and duplicate `ItemRejected`;
 - unit, PostgreSQL Testcontainers, and cross-module Kafka integration coverage.
 
+
+Analysis-owned PostgreSQL adapters use Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources. Application services retain transaction ownership for deduplication and outbox state, and the outbox dispatcher keeps its bounded PostgreSQL lease semantics.
+
 The initial analyzer uses deterministic keyword matching and does not require an external AI provider. Generated Protobuf messages and Kafka client types remain in the Kafka adapter layer; core normalization, persistence, and analyzer code use Analysis-owned Java models. `RawItemDiscovered.analysis_settings` is mapped into an immutable Analysis-owned value before processing. The deployment-global keyword configuration remains only as a compatibility fallback for legacy raw events that predate this snapshot.
 
-Richer category-specific normalization remains future work. Verification-pending controlled DLQ recovery can inspect a known Analysis DLQ position and replay the stored original key/payload through the same raw-record decoder and `RawItemProcessor` without republishing the shared raw topic.
+Richer category-specific normalization remains future work. Controlled DLQ recovery can inspect a known Analysis DLQ position and replay the stored original key/payload through the same raw-record decoder and `RawItemProcessor` without republishing the shared raw topic.
 
 ## Operational inspection
 

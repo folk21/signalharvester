@@ -41,6 +41,8 @@ import org.junit.jupiter.api.Test;
  * validation, response mapping, history lookup, status handling, and blocking-work offload.
  *
  * <p>Related specification: {@code backend-operational-admin-api}.</p>
+ *
+ * <p>Features: {@code COLLECTION.RUNS}, {@code CONTRACTS.HTTP}.</p>
  */
 class CollectionRunControllerTest {
 

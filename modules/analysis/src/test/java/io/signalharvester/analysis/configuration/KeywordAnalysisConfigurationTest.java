@@ -7,7 +7,11 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Verifies standalone binding and fallback values for {@link KeywordAnalysisConfiguration}. */
+/**
+ * Verifies standalone binding and fallback values for {@link KeywordAnalysisConfiguration}.
+ *
+ * <p>Feature: {@code ANALYSIS.CLASSIFICATION}.</p>
+ */
 class KeywordAnalysisConfigurationTest {
 
     /** Provide historical legacy-event defaults when the composition root does not supply overrides. */

@@ -6,7 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Verifies intrinsic normalization and threshold invariants for profile-owned Analysis settings. */
+/**
+ * Verifies intrinsic normalization and threshold invariants for profile-owned Analysis settings.
+ *
+ * <p>Features: {@code CONFIGURATION.MONITORING_PROFILES}, {@code ANALYSIS.CLASSIFICATION}.</p>
+ */
 class MonitoringProfileAnalysisSettingsTest {
 
     /** Normalize case and whitespace while preserving first-occurrence order. */

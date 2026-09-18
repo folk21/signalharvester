@@ -2,8 +2,8 @@ package io.signalharvester.results.event.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.Timestamp;
 import io.micronaut.context.ApplicationContext;
@@ -31,6 +31,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -48,6 +49,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * -> PostgreSQL path for idempotent analyzed and rejected Results projections.
  *
  * <p>Related specifications: {@code backend-results-persistence}, {@code backend-reliability-failure-handling}.</p>
+ *
+ * <p>Features: {@code RESULTS.MATERIALIZATION}, {@code RELIABILITY.IDEMPOTENCY}, {@code RELIABILITY.DEAD_LETTER}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class ResultsKafkaPostgresIntegrationTest {
@@ -184,6 +187,8 @@ class ResultsKafkaPostgresIntegrationTest {
         var metadata = producer.send(new ProducerRecord<>(DEAD_LETTER_TOPIC, deadLetterId, deadLetter.toByteArray())).get();
         producer.flush();
 
+        long sourceTopicEndOffsetBeforeReplay = topicEndOffset(ANALYZED_TOPIC);
+
         DeadLetterRecovery recovery = context.getBean(DeadLetterRecovery.class);
         DeadLetterRecovery.Inspection inspection = recovery.inspect(metadata.partition(), metadata.offset());
         assertEquals(deadLetterId, inspection.deadLetterId());
@@ -197,12 +202,43 @@ class ResultsKafkaPostgresIntegrationTest {
 
         recovery.replay(metadata.partition(), metadata.offset(), deadLetterId);
         awaitSqlValue("SELECT count(*) FROM results.analyzed_items", 1L);
+        assertEquals(sourceTopicEndOffsetBeforeReplay, topicEndOffset(ANALYZED_TOPIC));
         assertEquals(93L, sqlLong("SELECT score FROM results.analyzed_items"));
         long firstCursor = sqlLong("SELECT live_event_id FROM results.live_result_cursors");
 
         recovery.replay(metadata.partition(), metadata.offset(), deadLetterId);
         assertEquals(1L, sqlLong("SELECT count(*) FROM results.analyzed_items"));
         assertEquals(firstCursor, sqlLong("SELECT live_event_id FROM results.live_result_cursors"));
+    }
+
+    /** Reject a real Results DLQ record whose consumer owner does not match the Results module. */
+    @Test
+    void shouldRejectDeadLetterFromDifferentConsumer() throws Exception {
+        ItemAnalyzed source = analyzedEvent("analysis-event-foreign-consumer", 91, List.of("java"));
+        long sourceOffset = 124L;
+        String deadLetterId = RESULTS_GROUP + ":" + ANALYZED_TOPIC + ":0:" + sourceOffset;
+        DeadLetterEvent deadLetter = DeadLetterEvent.newBuilder()
+                .setDeadLetterId(deadLetterId)
+                .setConsumer("analysis")
+                .setConsumerGroup(RESULTS_GROUP)
+                .setSourceTopic(ANALYZED_TOPIC)
+                .setSourcePartition(0)
+                .setSourceOffset(sourceOffset)
+                .setSourceKey(NORMALIZED_ITEM_ID)
+                .setSourcePayload(com.google.protobuf.ByteString.copyFrom(source.toByteArray()))
+                .setFailureType("java.lang.IllegalStateException")
+                .setFailureMessage("foreign consumer")
+                .setAttempts(1)
+                .setRetryable(false)
+                .build();
+        var metadata = producer.send(new ProducerRecord<>(DEAD_LETTER_TOPIC, deadLetterId, deadLetter.toByteArray())).get();
+        producer.flush();
+
+        DeadLetterRecoveryException failure = assertThrows(
+                DeadLetterRecoveryException.class,
+                () -> context.getBean(DeadLetterRecovery.class).inspect(metadata.partition(), metadata.offset()));
+
+        assertEquals(DeadLetterRecoveryException.Reason.INVALID_RECORD, failure.reason());
     }
 
     /** Dead-letter a poison record and continue materializing the following record on the same partition. */
@@ -308,6 +344,17 @@ class ResultsKafkaPostgresIntegrationTest {
             }
         }
         throw new AssertionError("Timed out waiting for Kafka record with key " + expectedKey + " on " + topic);
+    }
+
+    private static long topicEndOffset(String topic) {
+        Properties properties = new Properties();
+        properties.put("bootstrap.servers", KAFKA.getBootstrapServers());
+        properties.put("key.deserializer", StringDeserializer.class.getName());
+        properties.put("value.deserializer", ByteArrayDeserializer.class.getName());
+        try (KafkaConsumer<String, byte[]> consumer = new KafkaConsumer<>(properties)) {
+            TopicPartition partition = new TopicPartition(topic, 0);
+            return consumer.endOffsets(List.of(partition), Duration.ofSeconds(5)).get(partition);
+        }
     }
 
     private static Properties producerProperties() {

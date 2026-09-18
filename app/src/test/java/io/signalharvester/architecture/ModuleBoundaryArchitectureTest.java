@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
  * {@link io.signalharvester.configuration.api.SourceConfigurationProvider}.
  *
  * <p>Related specification: {@code backend-project-structure}.</p>
+ *
+ * <p>Feature: {@code PLATFORM.MODULAR_MONOLITH}.</p>
  */
 class ModuleBoundaryArchitectureTest {
 

@@ -70,7 +70,7 @@ Collection may depend on `io.signalharvester.configuration.api..` only.
 
 Consumers must not import configuration `application`, `persistence`, or `http` packages and must not use configuration-owned database tables directly.
 
-Do not expose repository, JDBC, Micronaut HTTP, or persistence types through the Java API.
+Do not expose repository, Jdbi/JDBC, Micronaut HTTP, or persistence types through the Java API.
 
 ## Important invariants
 

@@ -14,6 +14,8 @@ import org.junit.jupiter.api.Test;
  * {@link ConfiguredSource}, including source identifiers, locations, enabled state, and settings.
  *
  * <p>Related specification: {@code backend-configuration-persistence-rest}.</p>
+ *
+ * <p>Feature: {@code CONFIGURATION.SOURCES}.</p>
  */
 class ConfiguredSourceTest {
 

@@ -8,7 +8,11 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** Verifies intrinsic monitoring-profile invariants independently from Micronaut and persistence. */
+/**
+ * Verifies intrinsic monitoring-profile invariants independently from Micronaut and persistence.
+ *
+ * <p>Feature: {@code CONFIGURATION.MONITORING_PROFILES}.</p>
+ */
 class ConfiguredMonitoringProfileTest {
     private static final SourceId SOURCE_ID = SourceId.of(UUID.fromString("10000000-0000-0000-0000-000000000001"));
     private static final MonitoringProfileAnalysisSettings ANALYSIS_SETTINGS =

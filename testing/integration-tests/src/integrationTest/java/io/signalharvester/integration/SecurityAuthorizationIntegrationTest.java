@@ -29,6 +29,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 /**
  * Protects cross-module RBAC for {@code SECURITY.AUTHORIZATION}, including VIEWER Results access and
  * the absence of implicit ADMIN-to-VIEWER role inheritance.
+ *
+ * <p>Related feature: {@code RELIABILITY.DEAD_LETTER}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -86,6 +88,10 @@ class SecurityAuthorizationIntegrationTest {
                 false).statusCode());
         assertEquals(403, viewer.send("GET", "/api/v1/admin/collection-runs?limit=1", null, false).statusCode());
         assertEquals(403, viewer.send("GET", "/api/v1/events?limit=1", null, false).statusCode());
+        assertEquals(403, viewer.send("GET", "/api/v1/admin/analysis/dead-letters/0/0", null, false).statusCode());
+        assertEquals(403, viewer.send("GET", "/api/v1/admin/results/dead-letters/0/0", null, false).statusCode());
+        assertEquals(403, viewer.send(
+                "GET", "/api/v1/admin/event-observation/dead-letters/0/0", null, false).statusCode());
 
         HttpResponse<java.util.stream.Stream<String>> stream = viewer.sendLines("/api/v1/results/stream");
         assertEquals(200, stream.statusCode());
@@ -163,7 +169,7 @@ class SecurityAuthorizationIntegrationTest {
         String humanPassword = "user-only-password-for-integration";
         String botPassword = "bot-only-password-for-integration";
 
-        assertEquals(201, admin.send("POST", "/api/v1/admin/users", """
+        HttpResponse<String> createdHuman = admin.send("POST", "/api/v1/admin/users", """
                 {
                   "username": "%s",
                   "password": "%s",
@@ -171,8 +177,11 @@ class SecurityAuthorizationIntegrationTest {
                   "enabled": true,
                   "roles": []
                 }
-                """.formatted(humanName, humanPassword), true).statusCode());
-        assertEquals(201, admin.send("POST", "/api/v1/admin/users", """
+                """.formatted(humanName, humanPassword), true);
+        assertEquals(201, createdHuman.statusCode(),
+                () -> "Human creation failed: " + createdHuman.statusCode() + " " + createdHuman.body());
+
+        HttpResponse<String> createdBot = admin.send("POST", "/api/v1/admin/users", """
                 {
                   "username": "%s",
                   "password": "%s",
@@ -180,7 +189,9 @@ class SecurityAuthorizationIntegrationTest {
                   "enabled": true,
                   "roles": []
                 }
-                """.formatted(botName, botPassword), true).statusCode());
+                """.formatted(botName, botPassword), true);
+        assertEquals(201, createdBot.statusCode(),
+                () -> "BOT creation failed: " + createdBot.statusCode() + " " + createdBot.body());
 
         Client human = login(humanName, humanPassword);
         HttpResponse<String> humanPrincipal = human.send("GET", "/api/v1/auth/me", null, false);

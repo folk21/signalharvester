@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
  * failure normalization for collection-owned extracted items.
  *
  * <p>Related specifications: {@code backend-rss-atom-extraction}, {@code backend-event-contracts}.</p>
+ *
+ * <p>Features: {@code EVENTING.PIPELINE}, {@code CONTRACTS.KAFKA_PROTOBUF}.</p>
  */
 class KafkaRawItemEventPublisherTest {
 

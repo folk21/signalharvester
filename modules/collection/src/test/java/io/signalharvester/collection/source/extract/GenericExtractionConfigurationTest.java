@@ -7,7 +7,11 @@ import io.micronaut.context.ApplicationContext;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Verifies validated runtime bounds for generic JSON and HTML extraction. */
+/**
+ * Verifies validated runtime bounds for generic JSON and HTML extraction.
+ *
+ * <p>Features: {@code COLLECTION.ADAPTERS}, {@code COLLECTION.SOURCE_TEST}.</p>
+ */
 class GenericExtractionConfigurationTest {
 
     /** Expose the default bounded candidate-item limit. */

@@ -3,6 +3,7 @@ package io.signalharvester.analysis.event.kafka;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
@@ -25,7 +26,12 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -47,6 +53,8 @@ import org.testcontainers.kafka.KafkaContainer;
 /**
  * Verifies controlled Analysis DLQ inspection and owner-local replay through
  * {@link KafkaAnalysisDeadLetterRecoveryService} against a real Kafka broker.
+ *
+ * <p>Features: {@code RELIABILITY.DEAD_LETTER}, {@code RELIABILITY.IDEMPOTENCY}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class AnalysisDeadLetterRecoveryKafkaIntegrationTest {
@@ -152,6 +160,55 @@ class AnalysisDeadLetterRecoveryKafkaIntegrationTest {
         assertEquals(DeadLetterRecoveryException.Reason.INVALID_RECORD, failure.reason());
     }
 
+    /** Reject a DLQ record whose Kafka key does not confirm the deterministic dead-letter identity. */
+    @Test
+    void shouldRejectDeadLetterWithMismatchedKafkaKey() throws Exception {
+        RawItemDiscovered source = rawEvent();
+        String deadLetterId = GROUP + ":" + RAW_TOPIC + ":0:43";
+        DeadLetterEvent deadLetter = DeadLetterEvent.newBuilder(deadLetter(deadLetterId, source))
+                .setSourceOffset(43)
+                .build();
+        var metadata = producer.send(new ProducerRecord<>(DEAD_LETTER_TOPIC, "different-id", deadLetter.toByteArray())).get();
+        producer.flush();
+
+        DeadLetterRecoveryException failure = assertThrows(
+                DeadLetterRecoveryException.class,
+                () -> context.getBean(DeadLetterRecovery.class).inspect(metadata.partition(), metadata.offset()));
+
+        assertEquals(DeadLetterRecoveryException.Reason.INVALID_RECORD, failure.reason());
+    }
+
+    /** Enforce the configured single-operation recovery concurrency limit while one replay is in progress. */
+    @Test
+    void shouldRejectConcurrentRecoveryWhenConfiguredPermitIsBusy() throws Exception {
+        RawItemDiscovered source = rawEvent();
+        String deadLetterId = GROUP + ":" + RAW_TOPIC + ":0:44";
+        DeadLetterEvent deadLetter = DeadLetterEvent.newBuilder(deadLetter(deadLetterId, source))
+                .setSourceOffset(44)
+                .build();
+        var metadata = producer.send(new ProducerRecord<>(DEAD_LETTER_TOPIC, deadLetterId, deadLetter.toByteArray())).get();
+        producer.flush();
+
+        RecordingRawItemProcessor processor = context.getBean(RecordingRawItemProcessor.class);
+        processor.blockNextReplay();
+        DeadLetterRecovery recovery = context.getBean(DeadLetterRecovery.class);
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            Future<?> replay = executor.submit(
+                    () -> recovery.replay(metadata.partition(), metadata.offset(), deadLetterId));
+            assertTrue(processor.awaitReplayStarted(), "Replay did not reach the owner processor");
+
+            DeadLetterRecoveryException busy = assertThrows(
+                    DeadLetterRecoveryException.class,
+                    () -> recovery.inspect(metadata.partition(), metadata.offset()));
+            assertEquals(DeadLetterRecoveryException.Reason.BUSY, busy.reason());
+
+            processor.releaseReplay();
+            replay.get(5, TimeUnit.SECONDS);
+        } finally {
+            processor.releaseReplay();
+        }
+    }
+
     private static DeadLetterEvent deadLetter(String deadLetterId, RawItemDiscovered source) {
         return DeadLetterEvent.newBuilder()
                 .setDeadLetterId(deadLetterId)
@@ -233,15 +290,50 @@ class AnalysisDeadLetterRecoveryKafkaIntegrationTest {
     @Requires(property = "spec.name", value = SPEC_NAME)
     static final class RecordingRawItemProcessor implements RawItemProcessor {
         private final AtomicReference<DiscoveredRawItem> lastItem = new AtomicReference<>();
+        private final AtomicReference<CountDownLatch> replayStarted = new AtomicReference<>();
+        private final AtomicReference<CountDownLatch> replayRelease = new AtomicReference<>();
 
         @Override
         public RawItemProcessingResult process(DiscoveredRawItem rawItem) {
+            CountDownLatch started = replayStarted.get();
+            CountDownLatch release = replayRelease.get();
+            if (started != null && release != null) {
+                started.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Timed out waiting to release test replay");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while waiting to release test replay", exception);
+                } finally {
+                    replayStarted.compareAndSet(started, null);
+                    replayRelease.compareAndSet(release, null);
+                }
+            }
             lastItem.set(rawItem);
             return new RawItemProcessingResult(
                     RawItemProcessingStatus.ANALYZED,
                     "a".repeat(64),
                     "analysis-recovery-it",
                     "signalharvester.analysis.item-analyzed.v1");
+        }
+
+        void blockNextReplay() {
+            replayStarted.set(new CountDownLatch(1));
+            replayRelease.set(new CountDownLatch(1));
+        }
+
+        boolean awaitReplayStarted() throws InterruptedException {
+            CountDownLatch started = replayStarted.get();
+            return started != null && started.await(5, TimeUnit.SECONDS);
+        }
+
+        void releaseReplay() {
+            CountDownLatch release = replayRelease.get();
+            if (release != null) {
+                release.countDown();
+            }
         }
 
         AtomicReference<DiscoveredRawItem> lastItem() {

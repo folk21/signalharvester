@@ -20,6 +20,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,10 +33,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Verifies durable behavior of {@link io.signalharvester.analysis.persistence.JdbcDeduplicationClaimRepository}
+ * Verifies durable behavior of {@link io.signalharvester.analysis.persistence.JdbiDeduplicationClaimRepository}
  * and {@link AnalysisItemInspectionService} against real PostgreSQL, including filtering and ordering.
  *
  * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>
+ *
+ * <p>Features: {@code ANALYSIS.DEDUPLICATION}, {@code DIAGNOSTICS.ANALYSIS_INSPECTION}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class DeduplicationPostgresIntegrationTest {
@@ -63,16 +70,7 @@ class DeduplicationPostgresIntegrationTest {
     @BeforeEach
     void setUp() throws Exception {
         resetDatabase();
-        context = ApplicationContext.run(Map.ofEntries(
-                Map.entry("datasources.default.url", POSTGRES.getJdbcUrl()),
-                Map.entry("datasources.default.username", POSTGRES.getUsername()),
-                Map.entry("datasources.default.password", POSTGRES.getPassword()),
-                Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
-                Map.entry("flyway.datasources.default.enabled", true),
-                Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/analysis"),
-                Map.entry("kafka.enabled", false),
-                Map.entry("signalharvester.analysis.keyword-rules.keywords", List.of("java")),
-                Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1)));
+        context = ApplicationContext.run(contextProperties());
     }
 
     @AfterEach
@@ -128,6 +126,37 @@ class DeduplicationPostgresIntegrationTest {
             assertEquals(PROFILE_B, resultSet.getString("monitoring_profile_id"));
             assertEquals(1, resultSet.getLong("discovery_count"));
             assertFalse(resultSet.next());
+        }
+    }
+
+    /** Allow exactly one concurrent PostgreSQL claimant for the same profile-scoped normalized identity. */
+    @Test
+    void shouldAllowOnlyOneConcurrentClaimForSameProfileItem() throws Exception {
+        try (ApplicationContext secondContext = ApplicationContext.run(contextProperties());
+                ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            DeduplicationClaimRepository firstRepository = context.getBean(DeduplicationClaimRepository.class);
+            DeduplicationClaimRepository secondRepository = secondContext.getBean(DeduplicationClaimRepository.class);
+            TransactionOperations<Connection> firstTransactions = transactions(context);
+            TransactionOperations<Connection> secondTransactions = transactions(secondContext);
+            NormalizedContentItem item = item(PROFILE_A, RAW_ITEM_1, SOURCE_EVENT_1);
+            CountDownLatch start = new CountDownLatch(1);
+
+            Future<Boolean> first = executor.submit(() -> {
+                start.await(5, TimeUnit.SECONDS);
+                return firstTransactions.executeWrite(status -> firstRepository.tryClaim(item, BASE_TIME));
+            });
+            Future<Boolean> second = executor.submit(() -> {
+                start.await(5, TimeUnit.SECONDS);
+                return secondTransactions.executeWrite(
+                        status -> secondRepository.tryClaim(item, BASE_TIME.plusMillis(1)));
+            });
+
+            start.countDown();
+            boolean firstClaimed = first.get(10, TimeUnit.SECONDS);
+            boolean secondClaimed = second.get(10, TimeUnit.SECONDS);
+
+            assertEquals(1, (firstClaimed ? 1 : 0) + (secondClaimed ? 1 : 0));
+            assertEquals(1L, sqlLong("SELECT count(*) FROM analysis.normalized_item_claims"));
         }
     }
 
@@ -243,6 +272,34 @@ class DeduplicationPostgresIntegrationTest {
 
     private static List<String> normalizedIds(List<AnalysisItemInspection> items) {
         return items.stream().map(AnalysisItemInspection::normalizedItemId).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static TransactionOperations<Connection> transactions(ApplicationContext applicationContext) {
+        return applicationContext.getBean(TransactionOperations.class, Qualifiers.byName("default"));
+    }
+
+    private static Map<String, Object> contextProperties() {
+        return Map.ofEntries(
+                Map.entry("datasources.default.url", POSTGRES.getJdbcUrl()),
+                Map.entry("datasources.default.username", POSTGRES.getUsername()),
+                Map.entry("datasources.default.password", POSTGRES.getPassword()),
+                Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
+                Map.entry("flyway.datasources.default.enabled", true),
+                Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/analysis"),
+                Map.entry("kafka.enabled", false),
+                Map.entry("signalharvester.analysis.keyword-rules.keywords", List.of("java")),
+                Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 1));
+    }
+
+    private static long sqlLong(String sql) throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet rows = statement.executeQuery(sql)) {
+            assertTrue(rows.next());
+            return rows.getLong(1);
+        }
     }
 
     private static void resetDatabase() throws Exception {

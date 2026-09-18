@@ -17,7 +17,11 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import org.junit.jupiter.api.Test;
 
-/** Protects lineage, evidence strength, and completeness semantics in {@link ProcessingFlowService}. */
+/**
+ * Protects lineage, evidence strength, and completeness semantics in {@link ProcessingFlowService}.
+ *
+ * <p>Feature: {@code DIAGNOSTICS.PROCESSING_FLOW}.</p>
+ */
 class ProcessingFlowServiceTest {
 
     private static final String RUN_ID = "run-1";

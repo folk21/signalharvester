@@ -22,6 +22,8 @@ import org.junit.jupiter.api.Test;
  * versioned raw-item event, including optional RSS/Atom metadata.
  *
  * <p>Related specifications: {@code backend-rss-atom-extraction}, {@code backend-event-contracts}.</p>
+ *
+ * <p>Features: {@code EVENTING.CORRELATION}, {@code CONTRACTS.KAFKA_PROTOBUF}.</p>
  */
 class RawItemDiscoveredMapperTest {
 

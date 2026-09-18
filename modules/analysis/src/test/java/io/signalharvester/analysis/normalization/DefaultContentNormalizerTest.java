@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
  * across equivalent content, formatting, and provenance variations.
  *
  * <p>Related specification: {@code backend-analysis-normalization-deduplication}.</p>
+ *
+ * <p>Feature: {@code ANALYSIS.NORMALIZATION}.</p>
  */
 class DefaultContentNormalizerTest {
 

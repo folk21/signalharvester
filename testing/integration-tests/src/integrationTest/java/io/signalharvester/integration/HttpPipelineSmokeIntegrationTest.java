@@ -58,6 +58,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * {@code backend-operational-admin-api}, {@code backend-source-test-generic-extraction},
  * {@code backend-results-sse-live-delivery}, {@code backend-event-observation}, and
  * {@code backend-processing-flow-reconstruction}.</p>
+ *
+ * <p>Features: {@code TESTING.DETERMINISTIC_LOCAL}, {@code EVENTING.PIPELINE}, {@code RESULTS.LIVE}, {@code DIAGNOSTICS.EVENT_OBSERVATION}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class HttpPipelineSmokeIntegrationTest {

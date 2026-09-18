@@ -15,7 +15,7 @@ Own durable user-facing analyzed-result projections and their read boundary, whi
 - map transport events into Results-owned models;
 - materialize analyzed results idempotently;
 - retain rejected source-event outcomes without creating duplicate rows on redelivery;
-- own Results JDBC transactions and PostgreSQL schema;
+- own Results application transactions and PostgreSQL schema;
 - expose backward-compatible read-only REST browsing/detail access with bounded filters, keyset continuation, and indexed text search;
 - expose resumable browser live delivery over committed analyzed projections through SSE.
 
@@ -56,7 +56,7 @@ Other modules must not query or mutate these tables directly.
 
 ## Dependencies
 
-No synchronous functional-module dependency is required. Results depends only on shared infrastructure/framework libraries and the versioned event-contract artifact.
+No synchronous functional-module dependency is required. Results depends only on the stable `common` SQL-resource utility, shared infrastructure/framework libraries, and the versioned event-contract artifact. Results SQL and row mapping remain module-local.
 
 ## Forbidden access
 
@@ -77,7 +77,7 @@ Do not import Analysis implementation/application/persistence types or read the 
 - Kafka offsets are committed only after the Results transaction commits successfully or terminal Results dead-letter publication is acknowledged;
 - a failed Results DLQ publication leaves the source offset uncommitted;
 - exhausted projection failures advance the consumed offset only after acknowledged Results dead-letter publication;
-- write and read repositories participate in application-owned JDBC transactions;
+- write and read repositories participate in application-owned transactions;
 - result-feed limit is bounded to `1..200` and ordered by `analyzedAt DESC`, `monitoringProfileId ASC`, `normalizedItemId ASC`;
 - page cursors encode the last sort key and are bound to all query criteria except page size;
 - REST page cursors are distinct from numeric SSE `Last-Event-ID` cursors;

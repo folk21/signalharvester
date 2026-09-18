@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
  * rejects missing, malformed, or unsupported external-source locations.
  *
  * <p>Related specification: {@code backend-configuration-persistence-rest}.</p>
+ *
+ * <p>Feature: {@code CONFIGURATION.SOURCES}.</p>
  */
 class SourceLocationValidatorTest {
 

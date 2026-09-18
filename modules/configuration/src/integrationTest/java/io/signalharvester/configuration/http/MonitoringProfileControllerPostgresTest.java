@@ -28,7 +28,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/** Verifies monitoring-profile REST CRUD, source membership, validation, and PostgreSQL durability. */
+/**
+ * Verifies monitoring-profile REST CRUD, source membership, validation, and PostgreSQL durability.
+ *
+ * <p>Features: {@code CONFIGURATION.MONITORING_PROFILES}, {@code CONTRACTS.HTTP}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MonitoringProfileControllerPostgresTest {

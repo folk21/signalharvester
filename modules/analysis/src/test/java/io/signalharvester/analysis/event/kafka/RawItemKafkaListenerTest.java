@@ -33,6 +33,8 @@ import org.junit.jupiter.api.Test;
  * offset commits without acknowledging records before successful processing or DLQ publication.
  *
  * <p>Related specification: {@code backend-reliability-failure-handling}.</p>
+ *
+ * <p>Features: {@code RELIABILITY.KAFKA_RETRY}, {@code RELIABILITY.DEAD_LETTER}, {@code ANALYSIS.CLASSIFICATION}.</p>
  */
 class RawItemKafkaListenerTest {
 

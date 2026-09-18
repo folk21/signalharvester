@@ -10,7 +10,7 @@ import io.micronaut.context.annotation.Requires;
 import io.micronaut.runtime.server.EmbeddedServer;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceId;
-import io.signalharvester.configuration.persistence.JdbcSourceRepository;
+import io.signalharvester.configuration.persistence.JdbiSourceRepository;
 import io.signalharvester.configuration.persistence.SourceRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -28,7 +28,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +45,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * validation, runtime defaults, supported source types, and blocking execution.
  *
  * <p>Related specification: {@code backend-configuration-persistence-rest}.</p>
+ *
+ * <p>Features: {@code CONFIGURATION.SOURCES}, {@code CONTRACTS.HTTP}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -277,15 +279,15 @@ class SourceControllerPostgresTest {
     }
 
     @Singleton
-    @Replaces(JdbcSourceRepository.class)
+    @Replaces(JdbiSourceRepository.class)
     @Requires(property = "spec.name", value = SPEC_NAME)
     static final class ObservingSourceRepository implements SourceRepository {
 
-        private final JdbcSourceRepository delegate;
+        private final JdbiSourceRepository delegate;
         private final AtomicReference<Thread> lastThread = new AtomicReference<>();
 
-        ObservingSourceRepository(@Named("default") DataSource dataSource) {
-            this.delegate = new JdbcSourceRepository(dataSource);
+        ObservingSourceRepository(@Named("default") Jdbi jdbi) {
+            this.delegate = new JdbiSourceRepository(jdbi);
         }
 
         Thread lastThread() {

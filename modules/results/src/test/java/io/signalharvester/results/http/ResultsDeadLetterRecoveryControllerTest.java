@@ -78,7 +78,12 @@ class ResultsDeadLetterRecoveryControllerTest {
         assertEquals(400, send("GET", basePath + "/0/-1", null).statusCode());
         assertEquals(400, send("POST", basePath + "/0/7/replay", "{\"expectedDeadLetterId\":\" \"}").statusCode());
         assertEquals(404, send("GET", basePath + "/0/404", null).statusCode());
+        assertEquals(422, send("GET", basePath + "/0/422", null).statusCode());
+        assertEquals(429, send("GET", basePath + "/0/429", null).statusCode());
+        assertEquals(503, send("GET", basePath + "/0/503", null).statusCode());
         assertEquals(409, send("POST", basePath + "/0/409/replay", "{\"expectedDeadLetterId\":\"other\"}").statusCode());
+        assertEquals(409, send("POST", basePath + "/0/410/replay",
+                "{\"expectedDeadLetterId\":\"" + DEAD_LETTER_ID + "\"}").statusCode());
     }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {
@@ -125,6 +130,18 @@ class ResultsDeadLetterRecoveryControllerTest {
                 throw new DeadLetterRecoveryException(
                         DeadLetterRecoveryException.Reason.NOT_FOUND, "missing dead letter");
             }
+            if (deadLetterOffset == 422) {
+                throw new DeadLetterRecoveryException(
+                        DeadLetterRecoveryException.Reason.INVALID_RECORD, "invalid dead letter");
+            }
+            if (deadLetterOffset == 429) {
+                throw new DeadLetterRecoveryException(
+                        DeadLetterRecoveryException.Reason.BUSY, "recovery busy");
+            }
+            if (deadLetterOffset == 503) {
+                throw new DeadLetterRecoveryException(
+                        DeadLetterRecoveryException.Reason.KAFKA_UNAVAILABLE, "kafka unavailable");
+            }
             return inspection();
         }
 
@@ -135,6 +152,10 @@ class ResultsDeadLetterRecoveryControllerTest {
             if (deadLetterOffset == 409) {
                 throw new DeadLetterRecoveryException(
                         DeadLetterRecoveryException.Reason.CONFIRMATION_FAILED, "confirmation mismatch");
+            }
+            if (deadLetterOffset == 410) {
+                throw new DeadLetterRecoveryException(
+                        DeadLetterRecoveryException.Reason.REPLAY_FAILED, "replay failed");
             }
             return inspection();
         }

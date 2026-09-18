@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Owns short read-only JDBC transactions for Results browsing, pagination, search, and detail queries. */
+/** Owns short read-only application transactions for Results browsing, pagination, search, and detail queries. */
 @Singleton
 public final class ResultQueryService implements ResultQuery {
 

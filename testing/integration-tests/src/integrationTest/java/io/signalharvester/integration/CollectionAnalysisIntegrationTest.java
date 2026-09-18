@@ -58,6 +58,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *
  * <p>Related specifications: {@code backend-collection-run-orchestration},
  * {@code backend-analysis-normalization-deduplication}.</p>
+ *
+ * <p>Features: {@code EVENTING.PIPELINE}, {@code ANALYSIS.NORMALIZATION}, {@code ANALYSIS.DEDUPLICATION}, {@code ANALYSIS.CLASSIFICATION}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class CollectionAnalysisIntegrationTest {

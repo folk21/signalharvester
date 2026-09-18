@@ -44,7 +44,7 @@ PostgreSQL schema `event_observation` contains diagnostic event materialization 
 
 ## Dependencies
 
-The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, and Micronaut HTTP/SSE/runtime infrastructure. It has no synchronous dependency on another functional module.
+The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, Micronaut-managed Jdbi, and Micronaut HTTP/SSE/runtime infrastructure. It has no synchronous dependency on another functional module.
 
 ## Forbidden access
 
@@ -56,6 +56,7 @@ The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, and
 ## Important invariants
 
 - event identity is idempotent by published `event_id`;
+- Event Observation repositories execute only inside application-owned Micronaut transactions; Jdbi does not own business transaction boundaries;
 - deterministic transport/key/mapping failures are dead-lettered without retry; recording failures use bounded retry;
 - Kafka offsets commit only after the observation transaction succeeds or terminal Event Observation dead-letter publication is acknowledged;
 - a failed Event Observation DLQ publication leaves the source offset uncommitted;
