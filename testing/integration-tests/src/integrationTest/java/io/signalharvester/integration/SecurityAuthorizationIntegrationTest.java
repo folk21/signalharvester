@@ -29,6 +29,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 /**
  * Protects cross-module RBAC for {@code SECURITY.AUTHORIZATION}, including VIEWER Results access and
  * the absence of implicit ADMIN-to-VIEWER role inheritance.
+ *
+ * <p>Related feature: {@code RELIABILITY.DEAD_LETTER}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -86,6 +88,10 @@ class SecurityAuthorizationIntegrationTest {
                 false).statusCode());
         assertEquals(403, viewer.send("GET", "/api/v1/admin/collection-runs?limit=1", null, false).statusCode());
         assertEquals(403, viewer.send("GET", "/api/v1/events?limit=1", null, false).statusCode());
+        assertEquals(403, viewer.send("GET", "/api/v1/admin/analysis/dead-letters/0/0", null, false).statusCode());
+        assertEquals(403, viewer.send("GET", "/api/v1/admin/results/dead-letters/0/0", null, false).statusCode());
+        assertEquals(403, viewer.send(
+                "GET", "/api/v1/admin/event-observation/dead-letters/0/0", null, false).statusCode());
 
         HttpResponse<java.util.stream.Stream<String>> stream = viewer.sendLines("/api/v1/results/stream");
         assertEquals(200, stream.statusCode());

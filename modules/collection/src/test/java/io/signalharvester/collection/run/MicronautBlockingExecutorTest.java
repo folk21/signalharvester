@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
  * so blocking operations run on the configured Micronaut blocking executor rather than an event loop.
  *
  * <p>Related specification: {@code backend-project-structure}.</p>
+ *
+ * <p>Feature: {@code RUNTIME.CONCURRENCY}.</p>
  */
 class MicronautBlockingExecutorTest {
 

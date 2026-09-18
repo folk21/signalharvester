@@ -1,12 +1,14 @@
 package io.signalharvester.eventobservation.event.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
 import io.micronaut.context.ApplicationContext;
 import io.signalharvester.eventobservation.application.DeadLetterRecovery;
+import io.signalharvester.eventobservation.application.DeadLetterRecoveryException;
 import io.signalharvester.eventobservation.application.EventObservationCriteria;
 import io.signalharvester.eventobservation.application.EventObservationQuery;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
@@ -43,7 +45,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/** Verifies Kafka decoding, idempotent persistence, and bounded retention for {@link EventObservationKafkaListener}. */
+/**
+ * Verifies Kafka decoding, idempotent persistence, and bounded retention for {@link EventObservationKafkaListener}.
+ *
+ * <p>Features: {@code DIAGNOSTICS.EVENT_OBSERVATION}, {@code RELIABILITY.IDEMPOTENCY}, {@code RELIABILITY.DEAD_LETTER}.</p>
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class EventObservationKafkaPostgresIntegrationTest {
 
@@ -187,6 +193,37 @@ class EventObservationKafkaPostgresIntegrationTest {
 
         recovery.replay(metadata.partition(), metadata.offset(), deadLetterId);
         assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
+    }
+
+    /** Reject a real Event Observation DLQ record whose source topic is outside the observed topic allowlist. */
+    @Test
+    void shouldRejectDeadLetterFromUnobservedSourceTopic() throws Exception {
+        RawItemDiscovered source = rawEvent();
+        String foreignTopic = "signalharvester.unknown.v1";
+        long sourceOffset = 74L;
+        String deadLetterId = GROUP + ":" + foreignTopic + ":0:" + sourceOffset;
+        DeadLetterEvent deadLetter = DeadLetterEvent.newBuilder()
+                .setDeadLetterId(deadLetterId)
+                .setConsumer("event-observation")
+                .setConsumerGroup(GROUP)
+                .setSourceTopic(foreignTopic)
+                .setSourcePartition(0)
+                .setSourceOffset(sourceOffset)
+                .setSourceKey("raw-1")
+                .setSourcePayload(ByteString.copyFrom(source.toByteArray()))
+                .setFailureType("java.lang.IllegalStateException")
+                .setFailureMessage("foreign source topic")
+                .setAttempts(1)
+                .setRetryable(false)
+                .build();
+        var metadata = producer.send(new ProducerRecord<>(DEAD_LETTER_TOPIC, deadLetterId, deadLetter.toByteArray())).get();
+        producer.flush();
+
+        DeadLetterRecoveryException failure = assertThrows(
+                DeadLetterRecoveryException.class,
+                () -> context.getBean(DeadLetterRecovery.class).inspect(metadata.partition(), metadata.offset()));
+
+        assertEquals(DeadLetterRecoveryException.Reason.INVALID_RECORD, failure.reason());
     }
 
     /** Apply age retention before the count bound so expired high cursors do not evict valid recent history. */

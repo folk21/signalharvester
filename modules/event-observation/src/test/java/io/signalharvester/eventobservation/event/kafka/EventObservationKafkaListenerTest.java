@@ -29,6 +29,8 @@ import org.junit.jupiter.api.Test;
  * a failed diagnostic record to block its Kafka partition indefinitely.
  *
  * <p>Related specification: {@code backend-reliability-failure-handling}.</p>
+ *
+ * <p>Features: {@code DIAGNOSTICS.EVENT_OBSERVATION}, {@code RELIABILITY.KAFKA_RETRY}, {@code RELIABILITY.DEAD_LETTER}.</p>
  */
 class EventObservationKafkaListenerTest {
 

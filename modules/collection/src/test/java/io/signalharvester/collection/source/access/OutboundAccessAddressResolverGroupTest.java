@@ -14,7 +14,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
-/** Verifies DNS authorization is bound to the socket addresses returned to the Netty connection path. */
+/**
+ * Verifies DNS authorization is bound to the socket addresses returned to the Netty connection path.
+ *
+ * <p>Feature: {@code SECURITY.EXTERNAL_SOURCE_ACCESS}.</p>
+ */
 class OutboundAccessAddressResolverGroupTest {
 
     /** Return the exact authorized address from the resolver output consumed by Netty. */

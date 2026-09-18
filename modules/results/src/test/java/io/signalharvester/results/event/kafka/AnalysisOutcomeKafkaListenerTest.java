@@ -31,6 +31,8 @@ import org.junit.jupiter.api.Test;
  * and manual offset commits for analyzed and rejected terminal events.
  *
  * <p>Related specification: {@code backend-reliability-failure-handling}.</p>
+ *
+ * <p>Features: {@code RESULTS.MATERIALIZATION}, {@code RELIABILITY.KAFKA_RETRY}, {@code RELIABILITY.DEAD_LETTER}.</p>
  */
 class AnalysisOutcomeKafkaListenerTest {
 

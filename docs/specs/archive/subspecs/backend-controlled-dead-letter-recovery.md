@@ -3,14 +3,14 @@ type: Specification
 title: Controlled dead-letter recovery
 description: Add ADMIN-only owner-specific inspection and deliberate replay for Analysis, Results, and Event Observation dead-letter records.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Controlled dead-letter recovery
 
 ## Status
 
-Current backend implementation focus. The bounded Kafka retry/DLQ baseline remains unchanged; this slice adds explicit operator recovery over real dead-letter records without turning the backend into a general Kafka injection surface.
+Accepted after the developer confirmed the canonical repository gate passed on 2026-09-18. The bounded Kafka retry/DLQ baseline remains unchanged; this slice adds explicit operator recovery over real dead-letter records without turning the backend into a general Kafka injection surface.
 
 ## Feature scope
 

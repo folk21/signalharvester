@@ -25,7 +25,11 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
-/** Verifies diagnostic source testing reuses fetch/extraction ports and keeps previews bounded. */
+/**
+ * Verifies diagnostic source testing reuses fetch/extraction ports and keeps previews bounded.
+ *
+ * <p>Feature: {@code COLLECTION.SOURCE_TEST}.</p>
+ */
 class SourceTestServiceTest {
 
     private static final SourceId SOURCE_ID = SourceId.of(

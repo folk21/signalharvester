@@ -26,7 +26,7 @@ The following platform work is also accepted:
 
 Profile-owned typed Analysis settings are accepted after the canonical repository gate passed. Monitoring Profiles are now authoritative for deterministic keyword behavior and carry the effective settings through `RawItemDiscovered`.
 
-Production-oriented Results browsing is accepted after the canonical repository gate passed. The current verification-pending refinement is controlled owner-specific dead-letter recovery for Analysis, Results, and Event Observation.
+Production-oriented Results browsing and controlled owner-specific dead-letter recovery are accepted after their canonical repository gates passed. The current bounded backend focus is a staged Jdbi persistence refactoring before further product feature work.
 
 Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
@@ -76,7 +76,7 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Accept the current controlled dead-letter recovery slice after the canonical repository gate passes.
+1. Complete the active Jdbi persistence refactoring, beginning with the Configuration pilot and preserving existing contracts, schema, and application-owned transaction boundaries.
 2. Run a backend closure review and address only concrete remaining operational lifecycle gaps before returning to frontend work.
 3. Consider scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
 

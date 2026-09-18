@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
  * {@link ItemRejected}, including preservation of shared event-envelope metadata.
  *
  * <p>Related specification: {@code backend-event-contracts}.</p>
+ *
+ * <p>Feature: {@code CONTRACTS.KAFKA_PROTOBUF}.</p>
  */
 class AnalysisEventSerializationTest {
 

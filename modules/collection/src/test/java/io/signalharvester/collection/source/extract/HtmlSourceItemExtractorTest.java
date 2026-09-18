@@ -18,7 +18,11 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** Verifies configuration-driven HTML extraction through persisted CSS selectors and attributes. */
+/**
+ * Verifies configuration-driven HTML extraction through persisted CSS selectors and attributes.
+ *
+ * <p>Feature: {@code COLLECTION.ADAPTERS}.</p>
+ */
 class HtmlSourceItemExtractorTest {
 
     private static final SourceId SOURCE_ID = SourceId.of(

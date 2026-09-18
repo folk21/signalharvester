@@ -7,7 +7,11 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Verifies standalone binding and fallback values for {@link MonitoringProfileAnalysisDefaultsConfiguration}. */
+/**
+ * Verifies standalone binding and fallback values for {@link MonitoringProfileAnalysisDefaultsConfiguration}.
+ *
+ * <p>Features: {@code CONFIGURATION.MONITORING_PROFILES}, {@code ANALYSIS.CLASSIFICATION}.</p>
+ */
 class MonitoringProfileAnalysisDefaultsConfigurationTest {
 
     /** Provide historical compatibility defaults when the composition root does not supply overrides. */

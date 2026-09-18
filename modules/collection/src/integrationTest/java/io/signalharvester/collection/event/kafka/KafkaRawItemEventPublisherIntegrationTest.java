@@ -39,6 +39,8 @@ import org.testcontainers.kafka.KafkaContainer;
  * {@code RawItemDiscovered} delivery, configured topic selection, and raw-item message keys.
  *
  * <p>Related specifications: {@code backend-rss-atom-extraction}, {@code backend-event-contracts}.</p>
+ *
+ * <p>Features: {@code EVENTING.PIPELINE}, {@code CONTRACTS.KAFKA_PROTOBUF}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class KafkaRawItemEventPublisherIntegrationTest {

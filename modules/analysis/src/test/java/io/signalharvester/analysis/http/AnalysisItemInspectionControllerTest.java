@@ -32,6 +32,8 @@ import org.junit.jupiter.api.Test;
  * status mapping, response shape, and blocking-work offload through the application query boundary.
  *
  * <p>Related specification: {@code backend-operational-admin-api}.</p>
+ *
+ * <p>Features: {@code DIAGNOSTICS.ANALYSIS_INSPECTION}, {@code CONTRACTS.HTTP}.</p>
  */
 class AnalysisItemInspectionControllerTest {
 

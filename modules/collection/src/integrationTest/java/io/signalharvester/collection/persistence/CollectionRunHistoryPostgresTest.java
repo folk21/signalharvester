@@ -34,6 +34,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * participation, atomic writes, deterministic recent-history ordering, and restart durability.
  *
  * <p>Related specifications: {@code backend-collection-run-orchestration}, {@code backend-rss-atom-extraction}.</p>
+ *
+ * <p>Features: {@code COLLECTION.RUNS}, {@code DATA.PROVENANCE}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class CollectionRunHistoryPostgresTest {

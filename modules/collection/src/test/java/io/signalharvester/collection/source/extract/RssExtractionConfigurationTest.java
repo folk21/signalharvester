@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
  * RSS/Atom item cardinality.
  *
  * <p>Related specification: {@code backend-rss-atom-extraction}.</p>
+ *
+ * <p>Feature: {@code COLLECTION.ADAPTERS}.</p>
  */
 class RssExtractionConfigurationTest {
 

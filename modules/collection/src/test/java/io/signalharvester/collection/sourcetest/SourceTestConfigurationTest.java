@@ -7,7 +7,11 @@ import io.micronaut.context.ApplicationContext;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** Verifies defaults and fail-fast bounds for diagnostic source-test previews. */
+/**
+ * Verifies defaults and fail-fast bounds for diagnostic source-test previews.
+ *
+ * <p>Feature: {@code COLLECTION.SOURCE_TEST}.</p>
+ */
 class SourceTestConfigurationTest {
 
     /** Expose bounded source-test preview defaults. */

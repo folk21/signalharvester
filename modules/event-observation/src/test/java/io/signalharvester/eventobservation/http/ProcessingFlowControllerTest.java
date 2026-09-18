@@ -27,7 +27,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Verifies processing-flow HTTP routing, serialization, 404 mapping, and blocking-work offload. */
+/**
+ * Verifies processing-flow HTTP routing, serialization, 404 mapping, and blocking-work offload.
+ *
+ * <p>Features: {@code DIAGNOSTICS.PROCESSING_FLOW}, {@code CONTRACTS.HTTP}.</p>
+ */
 class ProcessingFlowControllerTest {
 
     private static final String SPEC_NAME = "processing-flow-controller";

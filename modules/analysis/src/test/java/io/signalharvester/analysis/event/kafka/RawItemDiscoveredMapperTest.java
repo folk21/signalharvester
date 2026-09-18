@@ -12,7 +12,11 @@ import io.signalharvester.events.common.v1.EventEnvelope;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Verifies raw-event mapping uses captured Analysis settings and preserves legacy-event compatibility. */
+/**
+ * Verifies raw-event mapping uses captured Analysis settings and preserves legacy-event compatibility.
+ *
+ * <p>Features: {@code ANALYSIS.CLASSIFICATION}, {@code CONTRACTS.KAFKA_PROTOBUF}.</p>
+ */
 class RawItemDiscoveredMapperTest {
 
     /** Prefer the immutable event snapshot over deployment compatibility defaults. */

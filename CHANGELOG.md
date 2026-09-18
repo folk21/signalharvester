@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-18 — Started the staged Jdbi persistence refactoring with a Configuration-module pilot using Micronaut-managed Jdbi, named bindings, classpath SQL resources, and preserved application-owned transactions.
+- 2026-09-18 — Accepted controlled ADMIN dead-letter recovery after the developer confirmed the canonical repository gate passed.
 - 2026-09-18 — Added verification-pending ADMIN-only controlled dead-letter inspection/replay for Analysis, Results, and Event Observation using real DLQ positions, explicit id confirmation, owner-local decode/application paths, bounded concurrency, and no shared-topic republish.
 - 2026-09-18 — Accepted production-oriented Results browsing after the canonical repository gate passed.
 - 2026-09-18 — Added verification-pending production-oriented Results browsing with criteria-bound keyset cursors, indexed PostgreSQL text search, additive next-page response metadata, and backward-compatible array responses.

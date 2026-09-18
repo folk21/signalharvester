@@ -37,6 +37,8 @@ import org.junit.jupiter.api.Test;
  * Verifies {@link ResultLiveController} SSE framing, filter binding, resume cursors, and blocking-query offload.
  *
  * <p>Related specification: {@code backend-results-sse-live-delivery}.</p>
+ *
+ * <p>Features: {@code RESULTS.LIVE}, {@code CONTRACTS.HTTP}.</p>
  */
 class ResultLiveControllerTest {
 

@@ -27,7 +27,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Verifies bounded Event Explorer REST filters and blocking-work offload for {@link EventObservationController}. */
+/**
+ * Verifies bounded Event Explorer REST filters and blocking-work offload for {@link EventObservationController}.
+ *
+ * <p>Features: {@code DIAGNOSTICS.EVENT_OBSERVATION}, {@code CONTRACTS.HTTP}.</p>
+ */
 class EventObservationControllerTest {
 
     private static final String SPEC_NAME = "event-observation-controller";

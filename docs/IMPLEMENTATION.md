@@ -78,7 +78,7 @@ Configuration administration is an internal application boundary used by module-
 
 `SourceConfigurationManager` implements both the internal administration boundary and the published provider contract.
 
-PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. Persistence adapters own JDBC SQL and resource handling. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
+PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. The Configuration persistence pilot uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while preserving those application transaction boundaries. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
 
 See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md).
 
@@ -179,7 +179,7 @@ Failure behavior is explicit:
 - retry exhaustion publishes the original input plus deterministic source-position dead-letter identity and failure metadata as `failure/v1/DeadLetterEvent`;
 - DLQ publication failure leaves the raw source offset uncommitted.
 
-The verification-pending controlled recovery boundary can inspect a concrete Analysis DLQ partition/offset and replay the stored original key/payload through the same `RawItemKafkaRecordDecoder` and `RawItemProcessor`. It validates the current consumer group and allowed source topic, requires explicit dead-letter-id confirmation, and does not republish `RawItemDiscovered` or rewrite source offsets. Results and Event Observation use the same owner-local pattern through their own decoders and application boundaries.
+The accepted controlled recovery boundary can inspect a concrete Analysis DLQ partition/offset and replay the stored original key/payload through the same `RawItemKafkaRecordDecoder` and `RawItemProcessor`. It validates the current consumer group and allowed source topic, requires explicit dead-letter-id confirmation, and does not republish `RawItemDiscovered` or rewrite source offsets. Results and Event Observation use the same owner-local pattern through their own decoders and application boundaries.
 
 Successful application processing means that two pieces of state commit atomically in PostgreSQL:
 
@@ -549,4 +549,4 @@ See:
 - Backend-owned Kubernetes/infrastructure deployment and resilience acceptance are verified. Full platform R24 still requires a real frontend image from `signalharvester-web`.
 - Kafka consumer horizontal scaling is accepted for the current three-partition local topic contract. Parallelism remains bounded by partition capacity; autoscaling is not implemented.
 - There is no cross-resource exactly-once guarantee between PostgreSQL and Kafka.
-- Controlled owner-specific DLQ inspection/replay is verification-pending; automatic/bulk replay and replay UI remain unimplemented.
+- Controlled owner-specific DLQ inspection/replay is accepted; automatic/bulk replay and replay UI remain unimplemented.

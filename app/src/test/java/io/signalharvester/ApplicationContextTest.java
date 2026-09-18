@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
  * external infrastructure, protecting the basic module wiring expected from the runnable backend.
  *
  * <p>Related specification: {@code backend-project-structure}.</p>
+ *
+ * <p>Feature: {@code PLATFORM.MODULAR_MONOLITH}.</p>
  */
 class ApplicationContextTest {
 

@@ -34,6 +34,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * Verifies PostgreSQL-backed profile scheduling, especially exclusive due-work claims across replicas.
  *
  * <p>Related specification: {@code backend-profile-driven-scheduling}.</p>
+ *
+ * <p>Feature: {@code COLLECTION.SCHEDULING}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class ProfileSchedulePostgresTest {

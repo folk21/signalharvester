@@ -128,7 +128,7 @@ The first implementation foundation contains:
   - functional modules do not depend on the application composition root;
 - `ConfiguredSourceTest` for configuration-boundary invariants;
 - `RawItemDiscoveredSerializationTest` and `AnalysisEventSerializationTest` for Protobuf round trips and unknown additive fields on raw, analyzed, and rejected event families;
-- `DeadLetterEventSerializationTest` for round-trip preservation of deterministic dead-letter identity, source Kafka position/payload, failure diagnostics, attempts, and retryability metadata;
+- `DeadLetterEventSerializationTest` for round-trip preservation of deterministic dead-letter identity, source Kafka position/payload, failure diagnostics, attempts, retryability metadata, and unknown additive-field compatibility;
 - `ExternalSourceHttpClientTest` covers Micronaut-managed synchronous absolute-URL calls against deterministic loopback servers, including:
   - different hosts and preserved query strings;
   - scoped filter headers;
@@ -166,7 +166,7 @@ The first implementation foundation contains:
 - `DefaultContentNormalizerTest` for deterministic whitespace/URL normalization and stable normalized identity;
 - `KeywordContentAnalyzerTest` for deterministic relevance/classification/scoring from explicit immutable per-item settings;
 - Analysis `RawItemDiscoveredMapperTest` for captured-settings authority, legacy-event fallback, and deterministic invalid-snapshot rejection;
-- `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims, discovery counters, real SQL inspection filtering/ordering/limits, and enforcement of the application-owned JDBC transaction boundary;
+- `DeduplicationPostgresIntegrationTest` for durable profile-scoped duplicate claims, concurrent single-winner claiming across two application contexts, discovery counters, real SQL inspection filtering/ordering/limits, and enforcement of the application-owned JDBC transaction boundary;
 - `RawItemProcessingPostgresIntegrationTest` covers Analysis PostgreSQL processing:
   - new, irrelevant, and duplicate items;
   - independent cross-profile acceptance;
@@ -178,28 +178,29 @@ The first implementation foundation contains:
 - `ApplicationObservabilityTest` for `/health`, liveness/readiness, and deterministic `/prometheus` exposure without PostgreSQL or Kafka;
 - `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
 - `RawItemKafkaListenerTest` for Analysis bounded retry recovery, immediate malformed/key/invalid-settings dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
-- `AnalysisDeadLetterRecoveryControllerTest` for ADMIN recovery request/response validation, status mapping, sanitized payload metadata, confirmation forwarding, and blocking Virtual Thread execution;
-- `AnalysisDeadLetterRecoveryKafkaIntegrationTest` for real-DLQ inspection, explicit confirmation, original-byte decoding, and proof that owner-local replay does not append to the shared raw-item topic;
+- `AnalysisDeadLetterRecoveryControllerTest` for ADMIN recovery request/response validation, the full expected recovery-error status mapping, sanitized payload metadata, confirmation forwarding, and blocking Virtual Thread execution;
+- `AnalysisDeadLetterRecoveryKafkaIntegrationTest` for real-DLQ inspection, explicit confirmation, consumer-group and Kafka-key ownership validation, original-byte decoding, bounded recovery concurrency, and proof that owner-local replay does not append to the shared raw-item topic;
 - `TransactionalAnalysisOutboxTest` for analyzed/rejected final topic-key mapping, stable terminal-event serialization, provenance, and outbox staging metadata;
 - `AnalysisOutcomeKafkaListenerTest` for Results terminal-event mapping, bounded projection retry, poison-input dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
-- `ResultsDeadLetterRecoveryControllerTest` for Results recovery HTTP validation, status mapping, confirmation, sanitization, and blocking execution;
+- `ResultsDeadLetterRecoveryControllerTest` for Results recovery HTTP validation, the full expected recovery-error status mapping, confirmation, sanitization, and blocking execution;
 - `ResultsKafkaPostgresIntegrationTest` covers real Kafka -> Results listener -> PostgreSQL materialization, including:
   - idempotent retry/upsert behavior;
   - transactional replacement of result tags and attributes;
   - live-cursor advancement only for a new analysis-event identity;
   - poison-record DLQ handling followed by same-partition progress;
-  - real Results DLQ inspection/replay, explicit confirmation mismatch, and repeated idempotent projection;
+  - real Results DLQ inspection/replay, explicit confirmation mismatch, consumer-owner rejection, no shared-topic republish, and repeated idempotent projection;
+- `ResultCursorCodecTest` for opaque cursor round-trips, criteria binding, limit-independent reuse, unsupported versions, malformed/truncated/overlong payloads, invalid embedded sort keys, and encoding bounds;
 - `ResultControllerTest` for public Results list/detail HTTP defaults, filters/search/cursor request mapping, additive next-cursor response headers, validation/not-found mapping, stable nullable JSON fields, and blocking Virtual Thread execution;
 - `ResultLiveControllerTest` for SSE ready/result framing, `Last-Event-ID` resume behavior, live filters, cursor validation, and JDBC polling on the blocking Virtual Thread executor;
 - `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, deterministic keyset pagination including timestamp ties, criteria-bound cursors, indexed full-text search, browse-index migrations, ordered tags/attributes, profile-scoped detail reads, durable live polling, and duplicate-analysis-event cursor idempotency;
 - `EventObservationMapperTest` for decoded human-readable metadata across the current raw/analyzed/rejected Protobuf event families without copying large content bodies;
 - `EventObservationKafkaListenerTest` for bounded recording retry, immediate poison dead-letter handling, and no source-offset commit when Event Observation DLQ publication fails;
-- `EventObservationDeadLetterRecoveryControllerTest` for Event Observation recovery HTTP validation, status mapping, confirmation, sanitization, and blocking execution;
+- `EventObservationDeadLetterRecoveryControllerTest` for Event Observation recovery HTTP validation, the full expected recovery-error status mapping, confirmation, sanitization, and blocking execution;
 - `EventObservationControllerTest` for bounded Event Explorer REST filters, decoded JSON shape, validation, and blocking Virtual Thread execution;
 - `EventObservationLiveControllerTest` for `ready`/`event` SSE framing, `Last-Event-ID` resume, technical filters, cursor validation, and blocking-query offload;
 - `ProcessingFlowServiceTest` for analyzed, duplicate, in-progress, partial-history, and run-scoped item graph reconstruction with explicit evidence levels;
 - `ProcessingFlowControllerTest` for collection-run/item graph routes, stable JSON shape, 404 mapping, and blocking Virtual Thread execution;
-- `EventObservationKafkaPostgresIntegrationTest` for real Kafka -> Event Observation -> PostgreSQL decoding, event-id idempotency, selected diagnostics, count-bounded retention, age/count retention interaction, and owner-local DLQ replay preserving source transport metadata without shared-topic republish;
+- `EventObservationKafkaPostgresIntegrationTest` for real Kafka -> Event Observation -> PostgreSQL decoding, event-id idempotency, selected diagnostics, count-bounded retention, age/count retention interaction, source-topic ownership rejection, and owner-local DLQ replay preserving source transport metadata without shared-topic republish;
 - `CollectionRunIntegrationTest` for persisted enabled-source selection, deterministic local HTTP fetch, source-level partial failure, run correlation, disabled-source exclusion, and successful Kafka publication;
 - `CollectionAnalysisIntegrationTest` for persisted source -> deterministic HTTP -> raw Kafka -> analysis -> analyzed/rejected Kafka, including profile-owned Analysis settings overriding deployment compatibility defaults and equivalent normalized rediscovery with different raw ids.
 - `HttpPipelineSmokeIntegrationTest` covers the black-box public pipeline:
@@ -241,7 +242,7 @@ The Analysis module verifies:
 - rollback when outbox staging fails;
 - lease-driven outbox publication retry state.
 
-Listener tests verify bounded input retry and terminal DLQ behavior. Recovery controller tests verify the ADMIN HTTP boundary, while Kafka-backed integration coverage exercises real owner-specific DLQ reads and replay. Results integration coverage also proves that a poison record can be dead-lettered while a following record on the same partition still reaches PostgreSQL.
+Listener tests verify bounded input retry and terminal DLQ behavior. Recovery controller tests verify the ADMIN HTTP boundary and expected error mapping, while Kafka-backed integration coverage exercises real owner-specific DLQ reads, ownership validation, replay, and bounded recovery concurrency. Results integration coverage also proves that a poison record can be dead-lettered while a following record on the same partition still reaches PostgreSQL.
 
 `HttpPipelineSmokeIntegrationTest` starts from Source and Monitoring Profile configuration plus manual Collection REST endpoints.
 
@@ -304,7 +305,7 @@ The PostgreSQL/server integration suite covers:
 The cross-module application test verifies:
 
 - `VIEWER` access to Results list/detail/SSE;
-- denial of VIEWER diagnostic/admin access;
+- denial of VIEWER diagnostic/admin access, including all three dead-letter recovery routes;
 - `ADMIN` without `VIEWER` does not inherit Results access;
 - role changes affect newly issued credentials while old JWTs remain stateless;
 - USER/BOT-only principals receive no business capability;

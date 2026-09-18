@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
  * representative RSS 2.0 and Atom feeds.
  *
  * <p>Related specification: {@code backend-rss-atom-extraction}.</p>
+ *
+ * <p>Feature: {@code COLLECTION.ADAPTERS}.</p>
  */
 class RssAtomItemExtractorTest {
 
