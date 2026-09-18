@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-18 — Added verification-pending production-oriented Results browsing with criteria-bound keyset cursors, indexed PostgreSQL text search, additive next-page response metadata, and backward-compatible array responses.
+- 2026-09-18 — Accepted profile-owned typed Analysis settings after the canonical repository gate passed in the developer environment.
 - 2026-09-17 — Added verification-pending profile-owned typed Analysis settings with PostgreSQL persistence, REST/OpenAPI round-trip, immutable `RawItemDiscovered` snapshots, legacy compatibility, stateless keyword analysis, and focused regression coverage.
 - 2026-09-17 — Accepted `SCALABILITY.KAFKA_CONSUMERS` after live Kubernetes verification scaled the backend from one to three replicas, observed three distinct Analysis members owning partitions 0/1/2, drained Analysis lag from 5745 to 0, and completed the canonical repository gate.
 - 2026-09-17 — Added live Kafka consumer horizontal-scaling acceptance that builds deterministic backlog, scales the modular-monolith backend from one to three replicas, verifies shared-group partition ownership, backlog drain, persistence completeness, outbox completion, and DLQ stability.

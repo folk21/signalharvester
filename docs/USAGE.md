@@ -197,7 +197,7 @@ Extraction behavior is:
 
 Analysis consumes the raw events, normalizes and deduplicates them, runs deterministic keyword analysis, and atomically stages `ItemAnalyzed` or `ItemRejected` bytes in the Analysis outbox.
 
-The outbox dispatcher publishes committed records to Kafka. Results consumes terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST and resumable SSE.
+The outbox dispatcher publishes committed records to Kafka. Results consumes terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST and resumable SSE. `GET /api/v1/results` also supports optional `search` and opaque `cursor` parameters. The response body remains the existing Result summary array; when more rows exist, read the `X-Next-Cursor` response header and pass it back as `cursor` for the next page. The cursor is tied to the filters/search expression that produced it, while `limit` may change between pages.
 
 ## Inspect application observability
 
@@ -414,7 +414,7 @@ Browse recent analyzed results:
 curl 'http://localhost:8080/api/v1/results?limit=20&monitoringProfileId=real-trial'
 ```
 
-Useful optional filters are `sourceId`, `informationCategory`, `relevant`, `classification`, `analyzedFrom`, and `analyzedTo`. The list representation intentionally omits the potentially large normalized content and attribute map.
+Useful optional filters are `sourceId`, `informationCategory`, `relevant`, `classification`, `analyzedFrom`, and `analyzedTo`. `search` performs full-text matching over title and normalized content. The list representation intentionally omits the potentially large normalized content while retaining bounded attributes and tags. When `X-Next-Cursor` is present, pass its value as `cursor` with the same filters/search to continue; changing only `limit` is allowed.
 
 Inspect one detailed profile-scoped result:
 

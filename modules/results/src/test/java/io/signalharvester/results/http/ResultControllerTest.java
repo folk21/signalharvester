@@ -9,6 +9,7 @@ import io.micronaut.context.annotation.Replaces;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.runtime.server.EmbeddedServer;
 import io.signalharvester.results.application.ResultDetail;
+import io.signalharvester.results.application.ResultPage;
 import io.signalharvester.results.application.ResultQuery;
 import io.signalharvester.results.application.ResultQueryCriteria;
 import io.signalharvester.results.application.ResultQueryService;
@@ -29,10 +30,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies the HTTP contract implemented by {@link ResultController}, including bounded result-feed filters,
- * detail status mapping, nullable JSON fields, and blocking-work offload through {@link ResultQuery}.
+ * Verifies the HTTP contract implemented by {@link ResultController}, including browsing filters, search/cursor
+ * mapping, pagination metadata, detail status mapping, nullable JSON fields, and blocking-work offload.
  *
- * <p>Related specification: {@code backend-results-rest-api}.</p>
+ * <p>Related feature: {@code RESULTS.BROWSING}.</p>
  */
 class ResultControllerTest {
 
@@ -70,6 +71,11 @@ class ResultControllerTest {
         assertTrue(response.body().contains("\"externalId\":null"));
         assertFalse(response.body().contains("normalizedContent"));
         assertTrue(response.body().contains("\"attributes\":{\"location\":\"Remote\"}"));
+        assertEquals("cursor-next", response.headers().firstValue(ResultController.NEXT_CURSOR_HEADER).orElseThrow());
+        assertTrue(send("/api/v1/results?search=final-page")
+                .headers()
+                .firstValue(ResultController.NEXT_CURSOR_HEADER)
+                .isEmpty());
 
         TestResultQuery query = server.getApplicationContext().getBean(TestResultQuery.class);
         ResultQueryCriteria defaults = query.lastCriteria();
@@ -82,6 +88,7 @@ class ResultControllerTest {
         String path = "/api/v1/results?limit=10&monitoringProfileId=" + PROFILE_ID
                 + "&sourceId=" + SOURCE_ID
                 + "&informationCategory=JOB&relevant=true&classification=MATCHED"
+                + "&search=java%20kafka&cursor=cursor-1"
                 + "&analyzedFrom=2026-09-13T10:00:00Z&analyzedTo=2026-09-13T11:00:00Z";
         assertEquals(200, send(path).statusCode());
 
@@ -94,6 +101,8 @@ class ResultControllerTest {
         assertEquals(Optional.of("MATCHED"), filtered.classification());
         assertEquals(Optional.of(Instant.parse("2026-09-13T10:00:00Z")), filtered.analyzedFrom());
         assertEquals(Optional.of(Instant.parse("2026-09-13T11:00:00Z")), filtered.analyzedTo());
+        assertEquals(Optional.of("java kafka"), filtered.search());
+        assertEquals(Optional.of("cursor-1"), filtered.cursor());
     }
 
     /**
@@ -110,6 +119,9 @@ class ResultControllerTest {
 
         assertEquals(400, send("/api/v1/results?limit=0").statusCode());
         assertEquals(400, send("/api/v1/results?limit=201").statusCode());
+        assertEquals(400, send("/api/v1/results?search=" + "x".repeat(ResultQueryCriteria.MAX_SEARCH_LENGTH + 1)).statusCode());
+        assertEquals(400, send("/api/v1/results?cursor=" + "x".repeat(ResultQueryCriteria.MAX_CURSOR_LENGTH + 1)).statusCode());
+        assertEquals(400, send("/api/v1/results?analyzedFrom=2026-09-14T00:00:00Z&analyzedTo=2026-09-13T00:00:00Z").statusCode());
         assertEquals(404, send("/api/v1/results/not-a-hash?monitoringProfileId=" + PROFILE_ID).statusCode());
 
         String blankProfile = URLEncoder.encode("   ", StandardCharsets.UTF_8);
@@ -189,10 +201,13 @@ class ResultControllerTest {
         private final AtomicReference<Thread> lastThread = new AtomicReference<>();
 
         @Override
-        public List<ResultSummary> recent(ResultQueryCriteria criteria) {
+        public ResultPage browse(ResultQueryCriteria criteria) {
             lastCriteria.set(criteria);
             lastThread.set(Thread.currentThread());
-            return List.of(summary());
+            Optional<String> nextCursor = criteria.search().filter("final-page"::equals).isPresent()
+                    ? Optional.empty()
+                    : Optional.of("cursor-next");
+            return new ResultPage(List.of(summary()), nextCursor);
         }
 
         @Override

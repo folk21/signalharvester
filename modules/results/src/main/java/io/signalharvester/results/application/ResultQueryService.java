@@ -9,26 +9,35 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/**
- * Owns short read-only JDBC transactions for Results browsing and detail queries.
- */
+/** Owns short read-only JDBC transactions for Results browsing, pagination, search, and detail queries. */
 @Singleton
 public final class ResultQueryService implements ResultQuery {
 
     private final ResultQueryRepository repository;
+    private final ResultCursorCodec cursorCodec;
     private final TransactionOperations<Connection> transactions;
 
     public ResultQueryService(
             ResultQueryRepository repository,
+            ResultCursorCodec cursorCodec,
             @Named("default") TransactionOperations<Connection> transactions) {
         this.repository = Objects.requireNonNull(repository, "repository");
+        this.cursorCodec = Objects.requireNonNull(cursorCodec, "cursorCodec");
         this.transactions = Objects.requireNonNull(transactions, "transactions");
     }
 
     @Override
-    public List<ResultSummary> recent(ResultQueryCriteria criteria) {
+    public ResultPage browse(ResultQueryCriteria criteria) {
         Objects.requireNonNull(criteria, "criteria");
-        return transactions.executeRead(status -> repository.findRecent(criteria));
+        Optional<ResultPagePosition> after = criteria.cursor().map(cursor -> cursorCodec.decode(cursor, criteria));
+        int fetchLimit = criteria.limit() + 1;
+        List<ResultSummary> fetched = transactions.executeRead(status -> repository.findPage(criteria, after, fetchLimit));
+        boolean hasMore = fetched.size() > criteria.limit();
+        List<ResultSummary> page = hasMore ? List.copyOf(fetched.subList(0, criteria.limit())) : List.copyOf(fetched);
+        Optional<String> nextCursor = hasMore
+                ? Optional.of(cursorCodec.encode(page.getLast(), criteria))
+                : Optional.empty();
+        return new ResultPage(page, nextCursor);
     }
 
     @Override
@@ -40,14 +49,14 @@ public final class ResultQueryService implements ResultQuery {
 
     private static void requireHash(String value, String name) {
         requireNonBlank(value, name);
-        if (value.length() != 64) {
-            throw new IllegalArgumentException(name + " must contain 64 characters");
+        if (!value.matches("[0-9a-f]{64}")) {
+            throw new InvalidResultQueryException(name + " must contain 64 lowercase hexadecimal characters");
         }
     }
 
     private static void requireNonBlank(String value, String name) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
+            throw new InvalidResultQueryException(name + " must not be blank");
         }
     }
 }

@@ -3,6 +3,7 @@ package io.signalharvester.results.persistence;
 import io.signalharvester.results.application.ResultDetail;
 import io.signalharvester.results.application.ResultLiveCriteria;
 import io.signalharvester.results.application.ResultLiveUpdate;
+import io.signalharvester.results.application.ResultPagePosition;
 import io.signalharvester.results.application.ResultQueryCriteria;
 import io.signalharvester.results.application.ResultSummary;
 import jakarta.inject.Named;
@@ -168,7 +169,8 @@ public final class JdbcResultQueryRepository implements ResultQueryRepository, R
     }
 
     @Override
-    public List<ResultSummary> findRecent(ResultQueryCriteria criteria) {
+    public List<ResultSummary> findPage(
+            ResultQueryCriteria criteria, Optional<ResultPagePosition> after, int fetchLimit) {
         StringBuilder sql = new StringBuilder(SUMMARY_SELECT);
         List<Object> parameters = new ArrayList<>();
         appendTextFilter(sql, parameters, "ai.monitoring_profile_id", criteria.monitoringProfileId());
@@ -187,8 +189,25 @@ public final class JdbcResultQueryRepository implements ResultQueryRepository, R
             sql.append(" AND ai.analyzed_at <= ?\n");
             parameters.add(value);
         });
+        criteria.search().ifPresent(value -> {
+            sql.append(" AND to_tsvector('simple', COALESCE(ai.title, '') || ' ' || ai.normalized_content) ")
+                    .append("@@ websearch_to_tsquery('simple', ?)\n");
+            parameters.add(value);
+        });
+        after.ifPresent(position -> {
+            sql.append(" AND (ai.analyzed_at < ?\n")
+                    .append("      OR (ai.analyzed_at = ? AND ai.monitoring_profile_id > ?)\n")
+                    .append("      OR (ai.analyzed_at = ? AND ai.monitoring_profile_id = ? ")
+                    .append("AND ai.normalized_item_id > ?))\n");
+            parameters.add(position.analyzedAt());
+            parameters.add(position.analyzedAt());
+            parameters.add(position.monitoringProfileId());
+            parameters.add(position.analyzedAt());
+            parameters.add(position.monitoringProfileId());
+            parameters.add(position.normalizedItemId());
+        });
         sql.append(" ORDER BY ai.analyzed_at DESC, ai.monitoring_profile_id, ai.normalized_item_id LIMIT ?");
-        parameters.add(criteria.limit());
+        parameters.add(fetchLimit);
 
         try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
             bind(statement, parameters);
@@ -200,7 +219,7 @@ public final class JdbcResultQueryRepository implements ResultQueryRepository, R
                 return List.copyOf(results);
             }
         } catch (SQLException | RuntimeException exception) {
-            throw new ResultsPersistenceException("Failed to list analyzed results", exception);
+            throw new ResultsPersistenceException("Failed to browse analyzed results", exception);
         }
     }
 

@@ -3,7 +3,7 @@ type: Specification
 title: Profile-owned Analysis settings
 description: Backend change specification for persisted typed Monitoring Profile analysis settings and immutable RawItemDiscovered settings snapshots.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Profile-owned Analysis settings
