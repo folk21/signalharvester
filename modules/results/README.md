@@ -52,7 +52,7 @@ The consumed topics are the existing `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC`
 
 - rejected-result persistence remains internal operational state and is not exposed by this product API;
 - no transactional outbox/exactly-once cross-resource guarantee;
-- automatic/bulk replay remains intentionally absent; verification-pending ADMIN recovery reprojects one confirmed real DLQ record through Results only.
+- automatic/bulk replay remains intentionally absent; accepted ADMIN recovery reprojects one confirmed real DLQ record through Results only.
 
 ## Read next
 

@@ -138,7 +138,7 @@ The implemented backend foundation includes the following capability groups.
 - Bounded diagnostic history with REST/SSE Event Explorer APIs.
 - Collection-run and item Processing Flow reconstruction with explicit observed, derived, and unobserved evidence.
 - Bounded Kafka retry and versioned dead-letter handling for Analysis, Results, and Event Observation.
-- Verification-pending ADMIN-only owner-specific dead-letter inspection/replay that reuses the original key/payload without republishing shared source events.
+- Accepted ADMIN-only owner-specific dead-letter inspection/replay that reuses the original key/payload without republishing shared source events.
 - Health/readiness endpoints, Prometheus metrics, OpenTelemetry HTTP/Kafka/JDBC tracing, and trace-correlated console logs.
 - Trace-context preservation across Collection fan-out and the Analysis outbox.
 
@@ -157,7 +157,7 @@ The default host-run local profile remains an explicitly trusted unauthenticated
 
 The `security` environment enables authentication/RBAC and restrictive outbound-source policy.
 
-`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. Profile-owned typed Analysis settings, production-oriented Results browsing, and controlled ADMIN dead-letter recovery are also accepted. The Configuration Jdbi pilot is verified; the current bounded backend focus is the Security / Analysis / Collection slice of the staged Jdbi persistence refactoring before Event Observation and Results.
+`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. Profile-owned typed Analysis settings, production-oriented Results browsing, and controlled ADMIN dead-letter recovery are also accepted. The Configuration and Security / Analysis / Collection Jdbi slices are verified; the current bounded backend focus is the Event Observation slice of the staged Jdbi persistence refactoring before Results.
 
 Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
 

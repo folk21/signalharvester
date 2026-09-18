@@ -31,6 +31,7 @@ dependencies {
     implementation("io.micronaut:micronaut-context")
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("io.micronaut.data:micronaut-data-tx-jdbc")
+    implementation("io.micronaut.sql:micronaut-jdbi")
 
     runtimeOnly("io.micronaut.sql:micronaut-jdbc-hikari")
     runtimeOnly("org.postgresql:postgresql")

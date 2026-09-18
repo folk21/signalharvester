@@ -11,6 +11,9 @@ import io.signalharvester.eventobservation.application.DeadLetterRecovery;
 import io.signalharvester.eventobservation.application.DeadLetterRecoveryException;
 import io.signalharvester.eventobservation.application.EventObservationCriteria;
 import io.signalharvester.eventobservation.application.EventObservationQuery;
+import io.signalharvester.eventobservation.application.ProcessingFlowQuery;
+import io.signalharvester.eventobservation.persistence.EventObservationPersistenceException;
+import io.signalharvester.eventobservation.persistence.EventObservationRepository;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import io.signalharvester.events.analysis.v1.ItemRejected;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
@@ -155,6 +158,41 @@ class EventObservationKafkaPostgresIntegrationTest {
         assertEquals("Already accepted", filtered.getFirst().explanation().orElseThrow());
     }
 
+    /** Preserve live-cursor ordering and Processing Flow filters through the Jdbi query adapter. */
+    @Test
+    void shouldQueryLiveCursorAndProcessingFlowThroughJdbiPersistence() throws Exception {
+        send(RAW_TOPIC, "raw-1", rawEvent());
+        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 1L);
+        send(ANALYZED_TOPIC, NORMALIZED_ID, analyzedEvent());
+        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 2L);
+
+        EventObservationQuery query = context.getBean(EventObservationQuery.class);
+        long watermark = query.currentCursor();
+        var batch = query.pollAfter(0, emptyCriteria(), 10);
+
+        assertEquals(watermark, batch.nextCursor());
+        assertEquals(
+                List.of("raw-event", "analyzed-event"),
+                batch.events().stream().map(event -> event.eventId()).toList());
+
+        ProcessingFlowQuery flows = context.getBean(ProcessingFlowQuery.class);
+        var runFlow = flows.collectionRun("run-1");
+        assertEquals("run-1", runFlow.collectionRunId());
+        assertEquals(2, runFlow.observedEventCount());
+
+        var itemFlow = flows.item("run-1", NORMALIZED_ID);
+        assertEquals(Optional.of(NORMALIZED_ID), itemFlow.itemId());
+        assertTrue(itemFlow.observedEventCount() >= 1);
+    }
+
+    /** Reject direct persistence access that bypasses the application-owned transaction boundary. */
+    @Test
+    void shouldRequireApplicationOwnedTransactionForPersistenceAccess() {
+        EventObservationRepository repository = context.getBean(EventObservationRepository.class);
+
+        assertThrows(EventObservationPersistenceException.class, repository::currentCursor);
+    }
+
     /** Replay one Event Observation DLQ record without republishing the shared source event. */
     @Test
     void shouldReplayDeadLetterThroughEventObservationOnly() throws Exception {
@@ -247,6 +285,17 @@ class EventObservationKafkaPostgresIntegrationTest {
         assertEquals(0L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='recent-1'"));
         assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='recent-2'"));
         assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
+    }
+
+    private static EventObservationCriteria emptyCriteria() {
+        return new EventObservationCriteria(
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty());
     }
 
     private static RawItemDiscovered rawEvent() {

@@ -205,7 +205,7 @@ DLQ acknowledgement is part of terminal durability. A source offset never advanc
 
 If DLQ publication fails, normal Kafka redelivery remains the recovery path.
 
-Automatic/bulk DLQ replay is deliberately absent. The verification-pending controlled recovery boundary addresses one real owner-specific DLQ position at a time, validates dead-letter identity plus consumer/group/topic ownership, and reuses the owning module's normal decoder/application path. It does not republish shared source topics or rewrite consumer offsets.
+Automatic/bulk DLQ replay is deliberately absent. The accepted controlled recovery boundary addresses one real owner-specific DLQ position at a time, validates dead-letter identity plus consumer/group/topic ownership, and reuses the owning module's normal decoder/application path. It does not republish shared source topics or rewrite consumer offsets.
 
 ## HTTP server execution boundary
 

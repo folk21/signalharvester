@@ -12,7 +12,7 @@ parent: ../spec-signal-harvester-platform.md
 
 Current backend refactoring focus before further product feature work.
 
-The Configuration-module pilot is accepted after the canonical repository gate passed in the developer environment. The current verification-pending slice migrates Security, Analysis, and Collection using the same transaction-preserving Jdbi conventions.
+The Configuration and Security / Analysis / Collection slices are accepted after their canonical repository gates passed in the developer environment. The current verification-pending slice migrates Event Observation using the same transaction-preserving Jdbi conventions.
 
 ## Feature scope
 
@@ -27,6 +27,7 @@ This refactoring does not introduce a new product capability or feature ID. It p
 - `DIAGNOSTICS.ANALYSIS_INSPECTION`;
 - `COLLECTION.RUNS`;
 - `COLLECTION.SCHEDULING`;
+- `DIAGNOSTICS.EVENT_OBSERVATION`;
 - `TESTING.DETERMINISTIC_LOCAL` for regression protection.
 
 ## Goal
@@ -37,7 +38,7 @@ Jdbi becomes the lightweight SQL execution/mapping boundary. SQL remains explici
 
 ## Current state
 
-The verified Configuration slice already uses Jdbi. The current Security / Analysis / Collection slice removes their remaining direct statement plumbing; Event Observation and Results still contain direct JDBC until later slices. Those remaining adapters mix Java text blocks, string constants, inline SQL, positional bindings, manual result mapping, and dynamic string construction.
+The verified Configuration, Security, Analysis, and Collection slices already use Jdbi. The current Event Observation slice removes its remaining direct statement plumbing; Results remains on direct JDBC until the final slice. The remaining Results adapters mix Java text blocks, string constants, inline SQL, positional bindings, manual result mapping, and dynamic string construction.
 
 The existing architecture already has the correct higher-level boundary: application use cases own Micronaut `TransactionOperations<Connection>` transactions and repositories own persistence details. This refactoring must preserve that boundary.
 
@@ -129,27 +130,38 @@ The first slice must:
 5. preserve application-owned transaction rollback through existing integration tests;
 6. keep Analysis-settings legacy fallback behavior unchanged.
 
+## Event Observation slice
+
+The Event Observation slice must:
+
+1. add Micronaut Jdbi integration to the module;
+2. replace direct JDBC statement/result-set lifecycle management with a module-local Jdbi repository adapter;
+3. move insert, retention, cursor, recent-history, and live-cursor SQL into classpath `.sql` resources;
+4. remove Java `StringBuilder`/positional-parameter query assembly by expressing optional bounded filters as typed nullable named criteria in static SQL;
+5. preserve idempotent event identity, retention ordering, SSE cursor ordering, and Processing Flow query semantics;
+6. require repository access to participate in the existing application-owned transaction boundary;
+7. keep StringTemplate 4 out of this slice because static SQL can express all current structural variants clearly.
+
 ## Validation
 
-The Configuration pilot passed the canonical repository gate in the developer environment.
+The Configuration and Security / Analysis / Collection slices passed the canonical repository gate in the developer environment.
 
-For the current Security / Analysis / Collection slice:
+For the current Event Observation slice:
 
-1. compile the three migrated modules;
-2. run Security PostgreSQL/authentication integration tests;
-3. run Analysis deduplication, inspection, outbox, Kafka/PostgreSQL integration tests;
-4. run Collection run-history and scheduler PostgreSQL integration tests;
-5. verify transaction-ownership regression tests still reject direct persistence access outside application-owned transactions where required;
-6. run `./run_checks.sh`;
-7. report any dependency-analysis changes separately rather than weakening quality checks.
+1. compile the migrated module;
+2. run Event Observation PostgreSQL/Kafka integration tests covering idempotency, retention, filtering, live cursors, and controlled recovery;
+3. verify direct repository access outside an application-owned transaction is rejected;
+4. verify static Jdbi query resources preserve deterministic ordering and filter semantics without StringTemplate;
+5. run `./run_checks.sh`;
+6. report any dependency-analysis changes separately rather than weakening quality checks.
 
-Later slices add the owning module's focused tests before the canonical gate.
+The final Results slice adds its focused browsing/live/projection tests before the canonical gate.
 
 ## Implementation tasks
 
 1. Configuration pilot — completed and verified.
 2. Jdbi convention review — completed; retain explicit row mapping, classpath SQL resources, named bindings, and application-owned transactions without a shared persistence abstraction.
-3. Security / Analysis / Collection migration — implemented, verification pending.
-4. Migrate Event Observation.
-5. Review Results dynamic SQL against plain Jdbi templating versus Jdbi StringTemplate 4, then migrate Results.
+3. Security / Analysis / Collection migration — completed and verified.
+4. Event Observation migration — implemented, verification pending.
+5. Review Results dynamic SQL against plain Jdbi composition versus Jdbi StringTemplate 4, then migrate Results.
 6. Update stable implementation documentation and archive this specification only after all intended persistence adapters are migrated and verified.

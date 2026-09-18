@@ -197,7 +197,7 @@ Failure handling is explicit:
 
 Event Observation uses its own consumer group and does not compete with business consumers.
 
-Automatic/bulk replay remains intentionally absent. The verification-pending controlled recovery API reads one known owner-specific DLQ partition/offset at a time, validates consumer/group/topic ownership, and reuses the original source key/payload through the owning module's normal decoder/application boundary without republishing the shared source topic.
+Automatic/bulk replay remains intentionally absent. The accepted controlled recovery API reads one known owner-specific DLQ partition/offset at a time, validates consumer/group/topic ownership, and reuses the original source key/payload through the owning module's normal decoder/application boundary without republishing the shared source topic.
 
 ### Profile-owned Analysis configuration
 

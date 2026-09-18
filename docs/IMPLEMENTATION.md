@@ -269,7 +269,7 @@ The listener applies the same bounded retry/dead-letter split as the other busin
 - recording failures retry;
 - source offsets advance only after recording or acknowledged DLQ publication.
 
-PostgreSQL schema `event_observation` is created by `V9__create_event_observation_history.sql`.
+PostgreSQL schema `event_observation` is created by `V9__create_event_observation_history.sql`. Event Observation persistence now uses Micronaut-managed Jdbi inside application-owned transactions; static insert, retention, cursor, and bounded history/live queries live in module-owned classpath SQL resources with named bindings.
 
 `observed_events` stores:
 
