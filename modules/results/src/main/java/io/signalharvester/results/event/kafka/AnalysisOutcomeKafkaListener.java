@@ -1,14 +1,11 @@
 package io.signalharvester.results.event.kafka;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import io.micronaut.configuration.kafka.annotation.KafkaKey;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.OffsetReset;
 import io.micronaut.configuration.kafka.annotation.OffsetStrategy;
 import io.micronaut.configuration.kafka.annotation.Topic;
 import io.micronaut.context.annotation.Requires;
-import io.signalharvester.events.analysis.v1.ItemAnalyzed;
-import io.signalharvester.events.analysis.v1.ItemRejected;
 import io.signalharvester.results.application.AnalysisOutcomeProjector;
 import io.signalharvester.results.configuration.ResultsKafkaReliabilityConfiguration;
 import io.signalharvester.results.model.AnalyzedResult;
@@ -36,17 +33,17 @@ public class AnalysisOutcomeKafkaListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(AnalysisOutcomeKafkaListener.class);
     private static final Duration MAX_RETRY_BACKOFF = Duration.ofSeconds(5);
 
-    private final AnalysisOutcomeMapper mapper;
+    private final AnalysisOutcomeKafkaRecordDecoder decoder;
     private final AnalysisOutcomeProjector projector;
     private final ResultsKafkaReliabilityConfiguration reliabilityConfiguration;
     private final ResultsDeadLetterPublisher deadLetterPublisher;
 
     public AnalysisOutcomeKafkaListener(
-            AnalysisOutcomeMapper mapper,
+            AnalysisOutcomeKafkaRecordDecoder decoder,
             AnalysisOutcomeProjector projector,
             ResultsKafkaReliabilityConfiguration reliabilityConfiguration,
             ResultsDeadLetterPublisher deadLetterPublisher) {
-        this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.decoder = Objects.requireNonNull(decoder, "decoder");
         this.projector = Objects.requireNonNull(projector, "projector");
         this.reliabilityConfiguration = Objects.requireNonNull(reliabilityConfiguration, "reliabilityConfiguration");
         this.deadLetterPublisher = Objects.requireNonNull(deadLetterPublisher, "deadLetterPublisher");
@@ -65,9 +62,7 @@ public class AnalysisOutcomeKafkaListener {
         requireRecordArguments(payload, topic, consumer);
         final AnalyzedResult result;
         try {
-            ItemAnalyzed event = parseAnalyzed(payload);
-            requireKey(key, event.getNormalizedItemId(), "ItemAnalyzed.normalized_item_id");
-            result = mapper.map(event);
+            result = decoder.decodeAnalyzed(key, payload);
         } catch (RuntimeException permanentFailure) {
             deadLetterPermanentAndCommit(key, payload, offset, partition, topic, consumer, permanentFailure);
             return;
@@ -87,10 +82,7 @@ public class AnalysisOutcomeKafkaListener {
         requireRecordArguments(payload, topic, consumer);
         final RejectedResult result;
         try {
-            ItemRejected event = parseRejected(payload);
-            String expectedKey = event.hasNormalizedItemId() ? event.getNormalizedItemId() : event.getRawItemId();
-            requireKey(key, expectedKey, "ItemRejected identity");
-            result = mapper.map(event);
+            result = decoder.decodeRejected(key, payload);
         } catch (RuntimeException permanentFailure) {
             deadLetterPermanentAndCommit(key, payload, offset, partition, topic, consumer, permanentFailure);
             return;
@@ -144,28 +136,6 @@ public class AnalysisOutcomeKafkaListener {
         deadLetterPublisher.publish(topic, partition, offset, key, payload, failure, 1, false);
         logDeadLetter(topic, partition, offset, 1, failure);
         commit(consumer, topic, partition, offset);
-    }
-
-    private static ItemAnalyzed parseAnalyzed(byte[] payload) {
-        try {
-            return ItemAnalyzed.parseFrom(payload);
-        } catch (InvalidProtocolBufferException exception) {
-            throw new IllegalArgumentException("Invalid ItemAnalyzed Protobuf payload", exception);
-        }
-    }
-
-    private static ItemRejected parseRejected(byte[] payload) {
-        try {
-            return ItemRejected.parseFrom(payload);
-        } catch (InvalidProtocolBufferException exception) {
-            throw new IllegalArgumentException("Invalid ItemRejected Protobuf payload", exception);
-        }
-    }
-
-    private static void requireKey(String actualKey, String expectedKey, String identityDescription) {
-        if (actualKey == null || !actualKey.equals(expectedKey)) {
-            throw new IllegalArgumentException("Kafka key must match " + identityDescription);
-        }
     }
 
     private static void requireRecordArguments(byte[] payload, String topic, Consumer<?, ?> consumer) {

@@ -3,14 +3,14 @@ type: Specification
 title: Production-oriented Results browsing
 description: Add backward-compatible keyset pagination and indexed text search to the Results REST browsing contract.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Production-oriented Results browsing
 
 ## Status
 
-Current backend implementation focus. The existing Results REST array response remains compatible while the browsing boundary gains opaque keyset pagination, bounded text search, and supporting PostgreSQL indexes.
+Accepted on 2026-09-18 after the canonical repository gate passed. The Results REST array response remains compatible while the browsing boundary provides opaque keyset pagination, bounded text search, and supporting PostgreSQL indexes.
 
 ## Feature scope
 

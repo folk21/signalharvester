@@ -3,6 +3,7 @@ package io.signalharvester.results.event.kafka;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.google.protobuf.Timestamp;
 import io.micronaut.context.ApplicationContext;
@@ -10,6 +11,8 @@ import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import io.signalharvester.events.analysis.v1.ItemRejected;
 import io.signalharvester.events.common.v1.EventEnvelope;
 import io.signalharvester.events.failure.v1.DeadLetterEvent;
+import io.signalharvester.results.application.DeadLetterRecovery;
+import io.signalharvester.results.application.DeadLetterRecoveryException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -159,19 +162,67 @@ class ResultsKafkaPostgresIntegrationTest {
         assertEquals(NORMALIZED_ITEM_ID, sqlString("SELECT normalized_item_id FROM results.rejected_items"));
     }
 
+    /** Inspect and replay one Results DLQ record through Results only, preserving projection idempotency. */
+    @Test
+    void shouldInspectAndReplayDeadLetterThroughOwningResultsPath() throws Exception {
+        ItemAnalyzed source = analyzedEvent("analysis-event-recovery", 93, List.of("java"));
+        String deadLetterId = RESULTS_GROUP + ":" + ANALYZED_TOPIC + ":0:123";
+        DeadLetterEvent deadLetter = DeadLetterEvent.newBuilder()
+                .setDeadLetterId(deadLetterId)
+                .setConsumer("results")
+                .setConsumerGroup(RESULTS_GROUP)
+                .setSourceTopic(ANALYZED_TOPIC)
+                .setSourcePartition(0)
+                .setSourceOffset(123)
+                .setSourceKey(NORMALIZED_ITEM_ID)
+                .setSourcePayload(com.google.protobuf.ByteString.copyFrom(source.toByteArray()))
+                .setFailureType("java.lang.IllegalStateException")
+                .setFailureMessage("temporary projection failure")
+                .setAttempts(1)
+                .setRetryable(true)
+                .build();
+        var metadata = producer.send(new ProducerRecord<>(DEAD_LETTER_TOPIC, deadLetterId, deadLetter.toByteArray())).get();
+        producer.flush();
+
+        DeadLetterRecovery recovery = context.getBean(DeadLetterRecovery.class);
+        DeadLetterRecovery.Inspection inspection = recovery.inspect(metadata.partition(), metadata.offset());
+        assertEquals(deadLetterId, inspection.deadLetterId());
+        assertEquals(ANALYZED_TOPIC, inspection.sourceTopic());
+        assertEquals(source.toByteArray().length, inspection.sourcePayloadBytes());
+
+        DeadLetterRecoveryException mismatch = assertThrows(
+                DeadLetterRecoveryException.class,
+                () -> recovery.replay(metadata.partition(), metadata.offset(), "wrong-id"));
+        assertEquals(DeadLetterRecoveryException.Reason.CONFIRMATION_FAILED, mismatch.reason());
+
+        recovery.replay(metadata.partition(), metadata.offset(), deadLetterId);
+        awaitSqlValue("SELECT count(*) FROM results.analyzed_items", 1L);
+        assertEquals(93L, sqlLong("SELECT score FROM results.analyzed_items"));
+        long firstCursor = sqlLong("SELECT live_event_id FROM results.live_result_cursors");
+
+        recovery.replay(metadata.partition(), metadata.offset(), deadLetterId);
+        assertEquals(1L, sqlLong("SELECT count(*) FROM results.analyzed_items"));
+        assertEquals(firstCursor, sqlLong("SELECT live_event_id FROM results.live_result_cursors"));
+    }
+
     /** Dead-letter a poison record and continue materializing the following record on the same partition. */
     @Test
     void shouldDeadLetterPoisonRecordAndContinuePartition() throws Exception {
-        producer.send(new ProducerRecord<>(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, new byte[] {(byte) 0x80})).get();
+        var poisonMetadata = producer
+                .send(new ProducerRecord<>(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, new byte[] {(byte) 0x80}))
+                .get();
         send(ANALYZED_TOPIC, NORMALIZED_ITEM_ID, analyzedEvent("analysis-event-after-poison", 88, List.of("java")));
 
         awaitSqlValue("SELECT count(*) FROM results.analyzed_items", 1L);
         assertEquals(88L, sqlLong("SELECT score FROM results.analyzed_items"));
 
-        ConsumerRecord<String, byte[]> deadLetterRecord = consumeOne(DEAD_LETTER_TOPIC);
+        String expectedDeadLetterId = RESULTS_GROUP + ":" + ANALYZED_TOPIC + ":"
+                + poisonMetadata.partition() + ":" + poisonMetadata.offset();
+        ConsumerRecord<String, byte[]> deadLetterRecord = consumeOne(DEAD_LETTER_TOPIC, expectedDeadLetterId);
         DeadLetterEvent deadLetter = DeadLetterEvent.parseFrom(deadLetterRecord.value());
-        assertEquals(RESULTS_GROUP + ":" + ANALYZED_TOPIC + ":"
-                + deadLetter.getSourcePartition() + ":" + deadLetter.getSourceOffset(), deadLetter.getDeadLetterId());
+        assertEquals(expectedDeadLetterId, deadLetter.getDeadLetterId());
+        assertEquals(poisonMetadata.partition(), deadLetter.getSourcePartition());
+        assertEquals(poisonMetadata.offset(), deadLetter.getSourceOffset());
         assertEquals("results", deadLetter.getConsumer());
         assertEquals(RESULTS_GROUP, deadLetter.getConsumerGroup());
         assertEquals(ANALYZED_TOPIC, deadLetter.getSourceTopic());
@@ -236,7 +287,7 @@ class ResultsKafkaPostgresIntegrationTest {
         producer.flush();
     }
 
-    private static ConsumerRecord<String, byte[]> consumeOne(String topic) {
+    private static ConsumerRecord<String, byte[]> consumeOne(String topic, String expectedKey) {
         Properties properties = new Properties();
         properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers());
         properties.put(ConsumerConfig.GROUP_ID_CONFIG, "results-dlq-test-" + UUID.randomUUID());
@@ -249,12 +300,14 @@ class ResultsKafkaPostgresIntegrationTest {
             Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
             while (Instant.now().isBefore(deadline)) {
                 var records = consumer.poll(Duration.ofMillis(250));
-                if (!records.isEmpty()) {
-                    return records.iterator().next();
+                for (ConsumerRecord<String, byte[]> record : records) {
+                    if (expectedKey.equals(record.key())) {
+                        return record;
+                    }
                 }
             }
         }
-        throw new AssertionError("Timed out waiting for Kafka record on " + topic);
+        throw new AssertionError("Timed out waiting for Kafka record with key " + expectedKey + " on " + topic);
     }
 
     private static Properties producerProperties() {

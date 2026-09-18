@@ -26,7 +26,7 @@ The following platform work is also accepted:
 
 Profile-owned typed Analysis settings are accepted after the canonical repository gate passed. Monitoring Profiles are now authoritative for deterministic keyword behavior and carry the effective settings through `RawItemDiscovered`.
 
-Production-oriented Results browsing is the current verification-pending backend refinement. It preserves the existing Results array response while adding opaque keyset pagination, indexed text search, and an additive next-cursor response header.
+Production-oriented Results browsing is accepted after the canonical repository gate passed. The current verification-pending refinement is controlled owner-specific dead-letter recovery for Analysis, Results, and Event Observation.
 
 Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
@@ -76,8 +76,8 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Accept the current production-oriented Results browsing slice after the canonical repository gate passes.
-2. Add controlled operator recovery/replay behavior while preserving original event identity and semantics.
+1. Accept the current controlled dead-letter recovery slice after the canonical repository gate passes.
+2. Run a backend closure review and address only concrete remaining operational lifecycle gaps before returning to frontend work.
 3. Consider scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
@@ -88,6 +88,6 @@ Accepted scaling work:
 - gRPC service boundaries;
 - Schema Registry;
 - LLM/embedding analysis as a required core dependency;
-- automatic DLQ replay UI/workflows;
+- automatic/bulk DLQ replay and replay UI/workflows;
 - KEDA-driven autoscaling;
 - richer scheduling, fuzzy/relevance-ranked search, and other browsing refinements that are not yet required by an active product slice.

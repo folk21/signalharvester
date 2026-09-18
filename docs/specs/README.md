@@ -56,7 +56,7 @@ Rules:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-results-production-browsing.md`](active/subspecs/backend-results-production-browsing.md) — verification-pending backward-compatible keyset pagination and indexed text search for Results browsing.
+- [`active/subspecs/backend-controlled-dead-letter-recovery.md`](active/subspecs/backend-controlled-dead-letter-recovery.md) — verification-pending ADMIN-only owner-specific inspection and replay for Analysis, Results, and Event Observation dead-letter records.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, and external-source access security are archived.
 
@@ -156,7 +156,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-results-production-browsing.md`](active/subspecs/backend-results-production-browsing.md) — current verification-pending backend focus.
+- [`active/subspecs/backend-controlled-dead-letter-recovery.md`](active/subspecs/backend-controlled-dead-letter-recovery.md) — current verification-pending backend focus.
 
 Active supporting tracks:
 
@@ -168,6 +168,7 @@ Active supporting tracks:
 Accepted on 2026-09-18:
 
 - [`archive/subspecs/backend-profile-owned-analysis-settings.md`](archive/subspecs/backend-profile-owned-analysis-settings.md) — typed Monitoring Profile Analysis settings and immutable raw-event settings snapshots; accepted after the canonical repository gate passed.
+- [`archive/subspecs/backend-results-production-browsing.md`](archive/subspecs/backend-results-production-browsing.md) — backward-compatible keyset pagination and indexed text search for Results; accepted after the canonical repository gate passed.
 
 Accepted on 2026-09-17:
 
@@ -205,10 +206,10 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-Likely next bounded backend specs after the current Results browsing slice include product refinements such as:
+Likely next bounded backend work after controlled dead-letter recovery includes:
 
-- controlled replay operations;
-- scheduling refinements.
+- a backend closure review for concrete remaining operational lifecycle gaps;
+- scheduling refinements only when a product requirement justifies them.
 
 These are candidates, not active commitments.
 

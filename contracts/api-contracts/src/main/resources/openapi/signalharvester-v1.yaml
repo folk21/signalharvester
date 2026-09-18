@@ -23,6 +23,8 @@ tags:
   description: Stateless JWT browser authentication and current-principal inspection.
 - name: User Administration
   description: ADMIN-only persistent identity and role administration.
+- name: Dead Letter Recovery
+  description: ADMIN-only inspection and deliberate owner-specific recovery of terminal Kafka consumer failures.
 security:
 - cookieAuth: []
 - bearerAuth: []
@@ -726,6 +728,165 @@ paths:
                 $ref: '#/components/schemas/CurrentPrincipal'
         '401':
           description: Authentication required
+  /api/v1/admin/analysis/dead-letters/{partition}/{offset}:
+    parameters:
+    - $ref: '#/components/parameters/DeadLetterPartition'
+    - $ref: '#/components/parameters/DeadLetterOffset'
+    get:
+      tags: [Dead Letter Recovery]
+      operationId: inspectAnalysisDeadLetter
+      summary: Inspect one Analysis dead-letter record
+      description: Reads one real Analysis DLQ record by Kafka position without exposing its serialized source payload.
+      responses:
+        '200':
+          description: Sanitized Analysis dead-letter metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterInspection'
+        '400': { description: Invalid DLQ position }
+        '401': { description: Authentication required }
+        '403': { description: ADMIN role required }
+        '404': { description: DLQ record not found }
+        '422': { description: DLQ record is invalid for Analysis recovery }
+        '429': { description: Analysis recovery concurrency limit reached }
+        '503': { description: Kafka unavailable }
+  /api/v1/admin/analysis/dead-letters/{partition}/{offset}/replay:
+    parameters:
+    - $ref: '#/components/parameters/DeadLetterPartition'
+    - $ref: '#/components/parameters/DeadLetterOffset'
+    post:
+      tags: [Dead Letter Recovery]
+      operationId: replayAnalysisDeadLetter
+      summary: Replay one confirmed Analysis dead-letter record
+      description: Reprocesses the stored original key and payload through the Analysis-owned decoder/application path without republishing the shared source event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeadLetterReplayRequest'
+      responses:
+        '200':
+          description: Sanitized metadata for the replayed Analysis dead-letter record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterInspection'
+        '400': { description: Invalid request or DLQ position }
+        '401': { description: Authentication required }
+        '403': { description: ADMIN role required or CSRF validation failed }
+        '404': { description: DLQ record not found }
+        '409': { description: Confirmation mismatch or Analysis replay failed }
+        '422': { description: DLQ record or stored source record is invalid for Analysis recovery }
+        '429': { description: Analysis recovery concurrency limit reached }
+        '503': { description: Kafka unavailable }
+  /api/v1/admin/results/dead-letters/{partition}/{offset}:
+    parameters:
+    - $ref: '#/components/parameters/DeadLetterPartition'
+    - $ref: '#/components/parameters/DeadLetterOffset'
+    get:
+      tags: [Dead Letter Recovery]
+      operationId: inspectResultsDeadLetter
+      summary: Inspect one Results dead-letter record
+      description: Reads one real Results DLQ record by Kafka position without exposing its serialized source payload.
+      responses:
+        '200':
+          description: Sanitized Results dead-letter metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterInspection'
+        '400': { description: Invalid DLQ position }
+        '401': { description: Authentication required }
+        '403': { description: ADMIN role required }
+        '404': { description: DLQ record not found }
+        '422': { description: DLQ record is invalid for Results recovery }
+        '429': { description: Results recovery concurrency limit reached }
+        '503': { description: Kafka unavailable }
+  /api/v1/admin/results/dead-letters/{partition}/{offset}/replay:
+    parameters:
+    - $ref: '#/components/parameters/DeadLetterPartition'
+    - $ref: '#/components/parameters/DeadLetterOffset'
+    post:
+      tags: [Dead Letter Recovery]
+      operationId: replayResultsDeadLetter
+      summary: Replay one confirmed Results dead-letter record
+      description: Reprojects the stored original key and payload through the Results-owned decoder/application path without republishing the shared Analysis event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeadLetterReplayRequest'
+      responses:
+        '200':
+          description: Sanitized metadata for the replayed Results dead-letter record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterInspection'
+        '400': { description: Invalid request or DLQ position }
+        '401': { description: Authentication required }
+        '403': { description: ADMIN role required or CSRF validation failed }
+        '404': { description: DLQ record not found }
+        '409': { description: Confirmation mismatch or Results replay failed }
+        '422': { description: DLQ record or stored source record is invalid for Results recovery }
+        '429': { description: Results recovery concurrency limit reached }
+        '503': { description: Kafka unavailable }
+  /api/v1/admin/event-observation/dead-letters/{partition}/{offset}:
+    parameters:
+    - $ref: '#/components/parameters/DeadLetterPartition'
+    - $ref: '#/components/parameters/DeadLetterOffset'
+    get:
+      tags: [Dead Letter Recovery]
+      operationId: inspectEventObservationDeadLetter
+      summary: Inspect one Event Observation dead-letter record
+      description: Reads one real Event Observation DLQ record by Kafka position without exposing its serialized source payload.
+      responses:
+        '200':
+          description: Sanitized Event Observation dead-letter metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterInspection'
+        '400': { description: Invalid DLQ position }
+        '401': { description: Authentication required }
+        '403': { description: ADMIN role required }
+        '404': { description: DLQ record not found }
+        '422': { description: DLQ record is invalid for Event Observation recovery }
+        '429': { description: Event Observation recovery concurrency limit reached }
+        '503': { description: Kafka unavailable }
+  /api/v1/admin/event-observation/dead-letters/{partition}/{offset}/replay:
+    parameters:
+    - $ref: '#/components/parameters/DeadLetterPartition'
+    - $ref: '#/components/parameters/DeadLetterOffset'
+    post:
+      tags: [Dead Letter Recovery]
+      operationId: replayEventObservationDeadLetter
+      summary: Replay one confirmed Event Observation dead-letter record
+      description: Re-records the stored original key and payload through Event Observation only, preserving original source transport metadata and without republishing the shared source event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeadLetterReplayRequest'
+      responses:
+        '200':
+          description: Sanitized metadata for the replayed Event Observation dead-letter record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterInspection'
+        '400': { description: Invalid request or DLQ position }
+        '401': { description: Authentication required }
+        '403': { description: ADMIN role required or CSRF validation failed }
+        '404': { description: DLQ record not found }
+        '409': { description: Confirmation mismatch or Event Observation replay failed }
+        '422': { description: DLQ record or stored source record is invalid for Event Observation recovery }
+        '429': { description: Event Observation recovery concurrency limit reached }
+        '503': { description: Kafka unavailable }
   /api/v1/admin/users:
     get:
       tags:
@@ -838,6 +999,23 @@ components:
       bearerFormat: JWT
       description: JWT bearer transport for approved non-browser clients.
   parameters:
+    DeadLetterPartition:
+      name: partition
+      in: path
+      required: true
+      description: Kafka partition of the owner-specific dead-letter topic.
+      schema:
+        type: integer
+        minimum: 0
+    DeadLetterOffset:
+      name: offset
+      in: path
+      required: true
+      description: Kafka offset of the owner-specific dead-letter topic.
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
     SourceId:
       name: sourceId
       in: path
@@ -847,6 +1025,75 @@ components:
         type: string
         format: uuid
   schemas:
+    DeadLetterReplayRequest:
+      type: object
+      required: [expectedDeadLetterId]
+      properties:
+        expectedDeadLetterId:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: .*\S.*
+          description: Exact dead-letter identifier returned by inspection and required as an explicit replay confirmation.
+    DeadLetterInspection:
+      type: object
+      required:
+      - deadLetterId
+      - consumer
+      - consumerGroup
+      - deadLetterTopic
+      - deadLetterPartition
+      - deadLetterOffset
+      - sourceTopic
+      - sourcePartition
+      - sourceOffset
+      - sourceKey
+      - failureType
+      - failureMessage
+      - attempts
+      - retryable
+      - sourcePayloadBytes
+      properties:
+        deadLetterId:
+          type: string
+        consumer:
+          type: string
+        consumerGroup:
+          type: string
+        deadLetterTopic:
+          type: string
+        deadLetterPartition:
+          type: integer
+          minimum: 0
+        deadLetterOffset:
+          type: integer
+          format: int64
+          minimum: 0
+        sourceTopic:
+          type: string
+        sourcePartition:
+          type: integer
+          minimum: 0
+        sourceOffset:
+          type: integer
+          format: int64
+          minimum: 0
+        sourceKey:
+          type: string
+          description: Original Kafka key, or an empty string when the source record had no usable key.
+        failureType:
+          type: string
+        failureMessage:
+          type: string
+        attempts:
+          type: integer
+          minimum: 1
+        retryable:
+          type: boolean
+        sourcePayloadBytes:
+          type: integer
+          minimum: 0
+          description: Serialized source payload size; the payload bytes themselves are never returned by the administrative API.
     LoginRequest:
       type: object
       required: [username, password]

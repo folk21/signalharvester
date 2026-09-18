@@ -15,6 +15,8 @@ The module observes the currently published `RawItemDiscovered`, `ItemAnalyzed`,
 
 The diagnostic projection intentionally excludes large raw and normalized content bodies. It is not a source of truth for business modules and it does not replace distributed tracing or the Kafka log.
 
+Verification-pending controlled recovery reads one known Event Observation DLQ position and re-records the stored original key/payload through the same decoder/recorder while preserving the original source topic/partition/offset. It does not republish the shared business event, so repairing this diagnostic projection cannot trigger unrelated Analysis or Results processing.
+
 `GET /api/v1/flows/collection-runs/{collectionRunId}` reconstructs a bounded run graph, and `/api/v1/flows/collection-runs/{collectionRunId}/items/{itemId}` reconstructs one raw/normalized item branch within that run. Graph stages explicitly mark evidence as observed, Kafka-observed, derived, or not observed. `ProcessingFlowService` owns retained-event query/scoping, while the package-private `ProcessingFlowReconstructor` owns deterministic graph construction. Results persistence is currently shown as `NOT_OBSERVED` rather than inferred as successful.
 
 ## Read next

@@ -213,20 +213,25 @@ class RawItemKafkaListenerTest {
             public String getDeadLetterTopic() {
                 return "analysis-dlq";
             }
-        };
-        KeywordAnalysisConfiguration legacyDefaults = new KeywordAnalysisConfiguration() {
+
             @Override
-            public List<String> getKeywords() {
-                return List.of("legacy");
+            public Duration getReplayReadTimeout() {
+                return Duration.ofSeconds(2);
             }
 
             @Override
-            public int getMinimumMatches() {
+            public int getReplayMaxConcurrency() {
                 return 1;
             }
         };
+        KeywordAnalysisConfiguration legacyDefaults = new KeywordAnalysisConfiguration();
+        legacyDefaults.setKeywords(List.of("legacy"));
+        legacyDefaults.setMinimumMatches(1);
         return new RawItemKafkaListener(
-                new RawItemDiscoveredMapper(legacyDefaults), processor, configuration, deadLetters);
+                new RawItemKafkaRecordDecoder(new RawItemDiscoveredMapper(legacyDefaults)),
+                processor,
+                configuration,
+                deadLetters);
     }
 
     private static RawItemProcessingResult successfulResult() {

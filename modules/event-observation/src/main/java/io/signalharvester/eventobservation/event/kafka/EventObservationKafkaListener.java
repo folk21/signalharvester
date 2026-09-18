@@ -1,6 +1,5 @@
 package io.signalharvester.eventobservation.event.kafka;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import io.micronaut.configuration.kafka.annotation.KafkaKey;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.OffsetReset;
@@ -10,9 +9,6 @@ import io.micronaut.context.annotation.Requires;
 import io.signalharvester.eventobservation.application.EventObservationRecorder;
 import io.signalharvester.eventobservation.configuration.EventObservationKafkaReliabilityConfiguration;
 import io.signalharvester.eventobservation.model.ObservedEventInput;
-import io.signalharvester.events.analysis.v1.ItemAnalyzed;
-import io.signalharvester.events.analysis.v1.ItemRejected;
-import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
@@ -33,17 +29,17 @@ public class EventObservationKafkaListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventObservationKafkaListener.class);
     private static final Duration MAX_RETRY_BACKOFF = Duration.ofSeconds(5);
 
-    private final EventObservationMapper mapper;
+    private final EventObservationKafkaRecordDecoder decoder;
     private final EventObservationRecorder recorder;
     private final EventObservationKafkaReliabilityConfiguration reliabilityConfiguration;
     private final EventObservationDeadLetterPublisher deadLetterPublisher;
 
     public EventObservationKafkaListener(
-            EventObservationMapper mapper,
+            EventObservationKafkaRecordDecoder decoder,
             EventObservationRecorder recorder,
             EventObservationKafkaReliabilityConfiguration reliabilityConfiguration,
             EventObservationDeadLetterPublisher deadLetterPublisher) {
-        this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.decoder = Objects.requireNonNull(decoder, "decoder");
         this.recorder = Objects.requireNonNull(recorder, "recorder");
         this.reliabilityConfiguration = Objects.requireNonNull(reliabilityConfiguration, "reliabilityConfiguration");
         this.deadLetterPublisher = Objects.requireNonNull(deadLetterPublisher, "deadLetterPublisher");
@@ -57,9 +53,7 @@ public class EventObservationKafkaListener {
         requireRecordArguments(payload, topic, consumer);
         final ObservedEventInput event;
         try {
-            RawItemDiscovered raw = parseRaw(payload);
-            requireKey(key, raw.getRawItemId(), "RawItemDiscovered.raw_item_id");
-            event = mapper.mapRaw(raw, key, topic, partition, offset);
+            event = decoder.decodeRaw(key, payload, topic, partition, offset);
         } catch (RuntimeException permanentFailure) {
             deadLetterPermanentAndCommit(key, payload, offset, partition, topic, consumer, permanentFailure);
             return;
@@ -74,9 +68,7 @@ public class EventObservationKafkaListener {
         requireRecordArguments(payload, topic, consumer);
         final ObservedEventInput event;
         try {
-            ItemAnalyzed analyzed = parseAnalyzed(payload);
-            requireKey(key, analyzed.getNormalizedItemId(), "ItemAnalyzed.normalized_item_id");
-            event = mapper.mapAnalyzed(analyzed, key, topic, partition, offset);
+            event = decoder.decodeAnalyzed(key, payload, topic, partition, offset);
         } catch (RuntimeException permanentFailure) {
             deadLetterPermanentAndCommit(key, payload, offset, partition, topic, consumer, permanentFailure);
             return;
@@ -91,10 +83,7 @@ public class EventObservationKafkaListener {
         requireRecordArguments(payload, topic, consumer);
         final ObservedEventInput event;
         try {
-            ItemRejected rejected = parseRejected(payload);
-            String expectedKey = rejected.hasNormalizedItemId() ? rejected.getNormalizedItemId() : rejected.getRawItemId();
-            requireKey(key, expectedKey, "ItemRejected identity");
-            event = mapper.mapRejected(rejected, key, topic, partition, offset);
+            event = decoder.decodeRejected(key, payload, topic, partition, offset);
         } catch (RuntimeException permanentFailure) {
             deadLetterPermanentAndCommit(key, payload, offset, partition, topic, consumer, permanentFailure);
             return;
@@ -148,36 +137,6 @@ public class EventObservationKafkaListener {
         deadLetterPublisher.publish(topic, partition, offset, key, payload, failure, 1, false);
         logDeadLetter(topic, partition, offset, 1, failure);
         commit(consumer, topic, partition, offset);
-    }
-
-    private static RawItemDiscovered parseRaw(byte[] payload) {
-        try {
-            return RawItemDiscovered.parseFrom(payload);
-        } catch (InvalidProtocolBufferException exception) {
-            throw new IllegalArgumentException("Invalid RawItemDiscovered Protobuf payload", exception);
-        }
-    }
-
-    private static ItemAnalyzed parseAnalyzed(byte[] payload) {
-        try {
-            return ItemAnalyzed.parseFrom(payload);
-        } catch (InvalidProtocolBufferException exception) {
-            throw new IllegalArgumentException("Invalid ItemAnalyzed Protobuf payload", exception);
-        }
-    }
-
-    private static ItemRejected parseRejected(byte[] payload) {
-        try {
-            return ItemRejected.parseFrom(payload);
-        } catch (InvalidProtocolBufferException exception) {
-            throw new IllegalArgumentException("Invalid ItemRejected Protobuf payload", exception);
-        }
-    }
-
-    private static void requireKey(String actual, String expected, String description) {
-        if (actual == null || !actual.equals(expected)) {
-            throw new IllegalArgumentException("Kafka key must match " + description);
-        }
     }
 
     private static void requireRecordArguments(byte[] payload, String topic, Consumer<?, ?> consumer) {

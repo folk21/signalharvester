@@ -59,6 +59,8 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_ANALYSIS_KAFKA_MAX_ATTEMPTS` | `3` | Maximum Analysis processing attempts for a validated Kafka record, including the initial attempt; bounded to 10. |
 | `SIGNALHARVESTER_ANALYSIS_KAFKA_RETRY_BACKOFF` | `250ms` | Fixed delay between retryable Analysis Kafka attempts; `0ms` through `5s`. |
 | `SIGNALHARVESTER_ANALYSIS_DEAD_LETTER_TOPIC` | `signalharvester.analysis.raw-item-dead-letter.v1` | Terminal DLQ for invalid or retry-exhausted Analysis inputs. |
+| `SIGNALHARVESTER_ANALYSIS_REPLAY_READ_TIMEOUT` | `2s` | Maximum Kafka wait for one Analysis DLQ inspection/replay read; runtime validation caps it at 10 seconds. |
+| `SIGNALHARVESTER_ANALYSIS_REPLAY_MAX_CONCURRENCY` | `1` | Maximum concurrent Analysis DLQ inspection/replay operations; bounded to 4. |
 | `SIGNALHARVESTER_ANALYSIS_OUTBOX_ENABLED` | `true` | Enables background publication of committed Analysis outbox rows. |
 | `SIGNALHARVESTER_ANALYSIS_OUTBOX_POLL_INTERVAL` | `1s` | Delay between bounded Analysis outbox dispatch passes. |
 | `SIGNALHARVESTER_ANALYSIS_OUTBOX_BATCH_SIZE` | `100` | Maximum outbox rows claimed per pass; bounded to 500. |
@@ -69,6 +71,8 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_RESULTS_KAFKA_MAX_ATTEMPTS` | `3` | Maximum Results projection attempts for a validated Kafka record, including the initial attempt; bounded to 10. |
 | `SIGNALHARVESTER_RESULTS_KAFKA_RETRY_BACKOFF` | `250ms` | Fixed delay between retryable Results Kafka attempts; `0ms` through `5s`. |
 | `SIGNALHARVESTER_RESULTS_DEAD_LETTER_TOPIC` | `signalharvester.results.analysis-outcome-dead-letter.v1` | Terminal DLQ for invalid or retry-exhausted Results inputs. |
+| `SIGNALHARVESTER_RESULTS_REPLAY_READ_TIMEOUT` | `2s` | Maximum Kafka wait for one Results DLQ inspection/replay read; runtime validation caps it at 10 seconds. |
+| `SIGNALHARVESTER_RESULTS_REPLAY_MAX_CONCURRENCY` | `1` | Maximum concurrent Results DLQ inspection/replay operations; bounded to 4. |
 | `SIGNALHARVESTER_RESULTS_SSE_POLL_INTERVAL` | `1s` | Delay between durable Results live-cursor polls for an open SSE subscription. |
 | `SIGNALHARVESTER_RESULTS_SSE_KEEPALIVE_INTERVAL` | `15s` | Maximum idle period before a `keepalive` SSE event is emitted. |
 | `SIGNALHARVESTER_RESULTS_SSE_RECONNECT_DELAY` | `2s` | Browser reconnect delay written to SSE `retry` on ready/result events. |
@@ -78,6 +82,8 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_EVENT_OBSERVATION_KAFKA_MAX_ATTEMPTS` | `3` | Maximum Event Observation recording attempts for a validated Kafka record, including the initial attempt; bounded to 10. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_KAFKA_RETRY_BACKOFF` | `250ms` | Fixed delay between retryable Event Observation Kafka attempts; `0ms` through `5s`. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_DEAD_LETTER_TOPIC` | `signalharvester.event-observation.dead-letter.v1` | Terminal DLQ for invalid or retry-exhausted Event Observation inputs. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_REPLAY_READ_TIMEOUT` | `2s` | Maximum Kafka wait for one Event Observation DLQ inspection/replay read; runtime validation caps it at 10 seconds. |
+| `SIGNALHARVESTER_EVENT_OBSERVATION_REPLAY_MAX_CONCURRENCY` | `1` | Maximum concurrent Event Observation DLQ inspection/replay operations; bounded to 4. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_MAX_EVENTS` | `10000` | Maximum retained diagnostic event rows. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_MAX_AGE` | `24h` | Maximum age of retained diagnostic event rows. |
 | `SIGNALHARVESTER_EVENT_OBSERVATION_SSE_POLL_INTERVAL` | `1s` | Delay between durable event-history polls for an open Event Explorer SSE subscription. |
@@ -191,7 +197,7 @@ Failure handling is explicit:
 
 Event Observation uses its own consumer group and does not compete with business consumers.
 
-Automatic replay is intentionally absent.
+Automatic/bulk replay remains intentionally absent. The verification-pending controlled recovery API reads one known owner-specific DLQ partition/offset at a time, validates consumer/group/topic ownership, and reuses the original source key/payload through the owning module's normal decoder/application boundary without republishing the shared source topic.
 
 ### Profile-owned Analysis configuration
 
