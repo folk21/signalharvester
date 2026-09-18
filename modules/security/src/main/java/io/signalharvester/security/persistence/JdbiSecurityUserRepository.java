@@ -17,8 +17,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.JdbiException;
 import org.jdbi.v3.core.statement.Update;
 
 /** Jdbi adapter for security-owned user and role persistence on the active application transaction. */
@@ -61,11 +63,7 @@ public final class JdbiSecurityUserRepository implements SecurityUserRepository 
 
     @Override
     public Optional<UserAccount> findById(UserId userId) {
-        return execute("Failed to find user", handle -> handle.createQuery(FIND_BY_ID_SQL)
-                .bind("userId", userId.value())
-                .map((resultSet, context) -> mapUserRow(resultSet))
-                .findFirst()
-                .map(row -> toAccount(handle, row)));
+        return execute("Failed to find user", handle -> findById(handle, userId));
     }
 
     @Override
@@ -106,19 +104,46 @@ public final class JdbiSecurityUserRepository implements SecurityUserRepository 
     }
 
     @Override
-    public void lockAdministratorState() {
-        executeVoid("Failed to lock administrator state", handle ->
-                handle.createUpdate(LOCK_ADMINISTRATOR_STATE_SQL).execute());
-    }
+    public <T> T withAdministratorStateLock(AdministratorStateOperation<T> operation) {
+        try {
+            return jdbi.withHandle(handle -> {
+                executeOnHandle("Failed to enter administrator update transaction", () -> {
+                    requireActiveTransaction(handle);
+                    return null;
+                });
+                executeOnHandle("Failed to lock administrator state", () -> {
+                    handle.createUpdate(LOCK_ADMINISTRATOR_STATE_SQL).execute();
+                    return null;
+                });
+                AdministratorState state = new AdministratorState() {
+                    @Override
+                    public Optional<UserAccount> findById(UserId userId) {
+                        return executeOnHandle(
+                                "Failed to find user",
+                                () -> JdbiSecurityUserRepository.findById(handle, userId));
+                    }
 
-    @Override
-    public boolean anyOtherEnabledAdminExists(UserId excludedUserId) {
-        return execute("Failed to inspect alternate administrator state", handle ->
-                handle.createQuery(ANY_OTHER_ENABLED_ADMIN_SQL)
-                        .bind("excludedUserId", excludedUserId.value())
-                        .mapTo(Integer.class)
-                        .findFirst()
-                        .isPresent());
+                    @Override
+                    public boolean anyOtherEnabledAdminExists(UserId excludedUserId) {
+                        return executeOnHandle(
+                                "Failed to inspect alternate administrator state",
+                                () -> JdbiSecurityUserRepository.anyOtherEnabledAdminExists(handle, excludedUserId));
+                    }
+
+                    @Override
+                    public boolean update(UserAccount account) {
+                        return executeOnHandle(
+                                "Failed to update user",
+                                () -> JdbiSecurityUserRepository.update(handle, account));
+                    }
+                };
+                return operation.apply(state);
+            });
+        } catch (SecurityPersistenceException exception) {
+            throw exception;
+        } catch (JdbiException exception) {
+            throw new SecurityPersistenceException("Failed to update administrator state", exception);
+        }
     }
 
     @Override
@@ -131,21 +156,34 @@ public final class JdbiSecurityUserRepository implements SecurityUserRepository 
         });
     }
 
-    @Override
-    public boolean update(UserAccount account) {
-        return execute("Failed to update user", handle -> {
-            int updated = handle.createUpdate(UPDATE_SQL)
-                    .bind("username", account.username())
-                    .bind("enabled", account.enabled())
-                    .bind("updatedAt", Timestamp.from(account.updatedAt()))
-                    .bind("id", account.id().value())
-                    .execute();
-            if (updated == 0) {
-                return false;
-            }
-            replaceRoles(handle, account.id().value(), account.roles());
-            return true;
-        });
+    private static Optional<UserAccount> findById(Handle handle, UserId userId) {
+        return handle.createQuery(FIND_BY_ID_SQL)
+                .bind("userId", userId.value())
+                .map((resultSet, context) -> mapUserRow(resultSet))
+                .findFirst()
+                .map(row -> toAccount(handle, row));
+    }
+
+    private static boolean anyOtherEnabledAdminExists(Handle handle, UserId excludedUserId) {
+        return handle.createQuery(ANY_OTHER_ENABLED_ADMIN_SQL)
+                .bind("excludedUserId", excludedUserId.value())
+                .mapTo(Integer.class)
+                .findFirst()
+                .isPresent();
+    }
+
+    private static boolean update(Handle handle, UserAccount account) {
+        int updated = handle.createUpdate(UPDATE_SQL)
+                .bind("username", account.username())
+                .bind("enabled", account.enabled())
+                .bind("updatedAt", Timestamp.from(account.updatedAt()))
+                .bind("id", account.id().value())
+                .execute();
+        if (updated == 0) {
+            return false;
+        }
+        replaceRoles(handle, account.id().value(), account.roles());
+        return true;
     }
 
     private static Update bindAccount(Update update, UserAccount account) {
@@ -199,6 +237,16 @@ public final class JdbiSecurityUserRepository implements SecurityUserRepository 
                     .bind("userId", userId)
                     .bind("role", role.name())
                     .execute();
+        }
+    }
+
+    private static <T> T executeOnHandle(String message, Supplier<T> operation) {
+        try {
+            return operation.get();
+        } catch (SecurityPersistenceException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new SecurityPersistenceException(message, exception);
         }
     }
 

@@ -214,9 +214,9 @@ See [`../modules/analysis/README.md`](../modules/analysis/README.md) and [`../mo
 
 Generated Protobuf messages stay inside the Kafka adapter. They are mapped to immutable Results-owned models before application or persistence logic.
 
-`ResultProjectionService` owns the JDBC transaction.
+`ResultProjectionService` owns the application transaction.
 
-`JdbcResultProjectionRepository` uses the transaction-aware default connection. It upserts analyzed projections by `(monitoringProfileId, normalizedItemId)`.
+`JdbiResultProjectionRepository` uses Micronaut-managed Jdbi inside that transaction. Projection SQL lives in Results-owned classpath resources with named bindings. It upserts analyzed projections by `(monitoringProfileId, normalizedItemId)` and replaces attributes/tags before advancing the live cursor in the same transaction.
 
 Tags and attributes are replaced atomically with the parent projection.
 
@@ -230,7 +230,7 @@ The Results listener disables automatic Kafka commit:
 
 This is an at-least-once/idempotent-consumer model. It does not claim distributed exactly-once processing.
 
-`ResultQueryService` owns short read-only JDBC transactions for the public Results REST API.
+`ResultQueryService` owns short read-only application transactions for the public Results REST API. `JdbiResultQueryRepository` keeps static/detail SQL in Results-owned resources. The two structurally dynamic paths — REST browsing and filtered live polling — use Jdbi StringTemplate 4 only to include active predicates; all user values remain named bind parameters.
 
 The read model exposes:
 
@@ -251,7 +251,7 @@ SSE behavior is:
 - disconnected updates to one logical result may collapse to the latest projection;
 - resume cursors ahead of current durable state are normalized to the current watermark.
 
-JDBC polling runs on the blocking executor while the controller remains a streaming `Publisher` boundary.
+Jdbi-backed polling runs on the blocking executor while the controller remains a streaming `Publisher` boundary.
 
 The cursor table is shared PostgreSQL state. The Kafka consumer and SSE client can therefore be served by different backend replicas.
 
@@ -345,7 +345,7 @@ Disabling an account blocks future credential authentication. Already-issued JWT
 
 Administrative updates cannot disable or demote the last enabled `ADMIN`. The persistence boundary serializes these updates before evaluating that invariant.
 
-Security identity and role persistence now uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while retaining the application-owned transaction and explicit PostgreSQL table lock used for the last-enabled-ADMIN invariant.
+Security identity and role persistence now uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while retaining the application-owned transaction and explicit PostgreSQL table lock used for the last-enabled-ADMIN invariant. The lock-sensitive read/check/update sequence executes on one transaction-bound Jdbi handle so its connection/session scope matches the pre-Jdbi persistence behavior.
 
 The first administrator can be created from deployment-provided bootstrap credentials only when no enabled ADMIN exists. The repository contains no default administrator credential.
 

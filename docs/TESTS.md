@@ -192,7 +192,7 @@ The first implementation foundation contains:
 - `ResultCursorCodecTest` for opaque cursor round-trips, criteria binding, limit-independent reuse, unsupported versions, malformed/truncated/overlong payloads, invalid embedded sort keys, and encoding bounds;
 - `ResultControllerTest` for public Results list/detail HTTP defaults, filters/search/cursor request mapping, additive next-cursor response headers, validation/not-found mapping, stable nullable JSON fields, and blocking Virtual Thread execution;
 - `ResultLiveControllerTest` for SSE ready/result framing, `Last-Event-ID` resume behavior, live filters, cursor validation, and JDBC polling on the blocking Virtual Thread executor;
-- `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, deterministic keyset pagination including timestamp ties, criteria-bound cursors, indexed full-text search, browse-index migrations, ordered tags/attributes, profile-scoped detail reads, durable live polling, and duplicate-analysis-event cursor idempotency;
+- `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, deterministic keyset pagination including timestamp ties, criteria-bound cursors, indexed full-text search, browse-index migrations, ordered tags/attributes, profile-scoped detail reads, durable live polling, duplicate-analysis-event cursor idempotency, Jdbi transaction ownership, and analyzed-projection rollback on child-write failure;
 - `EventObservationMapperTest` for decoded human-readable metadata across the current raw/analyzed/rejected Protobuf event families without copying large content bodies;
 - `EventObservationKafkaListenerTest` for bounded recording retry, immediate poison dead-letter handling, and no source-offset commit when Event Observation DLQ publication fails;
 - `EventObservationDeadLetterRecoveryControllerTest` for Event Observation recovery HTTP validation, the full expected recovery-error status mapping, confirmation, sanitization, and blocking execution;
@@ -365,6 +365,7 @@ Results tests cover:
 - durable cursor migration/write semantics;
 - filtered polling;
 - duplicate analysis-event idempotency;
+- application-owned Jdbi transaction enforcement and analyzed-projection rollback on child-write failure;
 - SSE framing;
 - browser resume by `Last-Event-ID`;
 - blocking-executor offload.

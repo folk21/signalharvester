@@ -17,11 +17,25 @@ public interface SecurityUserRepository {
 
     boolean anyEnabledAdminExists();
 
-    void lockAdministratorState();
-
-    boolean anyOtherEnabledAdminExists(UserId excludedUserId);
-
     void insert(UserAccount account, String passwordHash);
 
-    boolean update(UserAccount account);
+    /**
+     * Executes the lock-sensitive administrative update sequence on one transaction-bound persistence handle.
+     */
+    <T> T withAdministratorStateLock(AdministratorStateOperation<T> operation);
+
+    /** Persistence operations that must share the administrator-state lock and the same database handle. */
+    interface AdministratorState {
+        Optional<UserAccount> findById(UserId userId);
+
+        boolean anyOtherEnabledAdminExists(UserId excludedUserId);
+
+        boolean update(UserAccount account);
+    }
+
+    /** Callback executed while the administrator-state lock is held. */
+    @FunctionalInterface
+    interface AdministratorStateOperation<T> {
+        T apply(AdministratorState state);
+    }
 }

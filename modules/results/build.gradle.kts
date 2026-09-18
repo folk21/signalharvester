@@ -22,6 +22,7 @@ dependencies {
     testAnnotationProcessor("io.micronaut:micronaut-inject-java")
     testAnnotationProcessor("io.micronaut.validation:micronaut-validation-processor")
 
+    implementation(project(":common"))
     implementation(project(":contracts:event-contracts"))
 
     implementation("io.micronaut.kafka:micronaut-kafka")
@@ -31,6 +32,8 @@ dependencies {
     implementation("io.micronaut:micronaut-context")
     implementation("io.micronaut.flyway:micronaut-flyway")
     implementation("io.micronaut.data:micronaut-data-tx-jdbc")
+    implementation("io.micronaut.sql:micronaut-jdbi")
+    implementation(libs.jdbi.stringtemplate4)
 
     runtimeOnly("io.micronaut.sql:micronaut-jdbc-hikari")
     runtimeOnly("org.postgresql:postgresql")

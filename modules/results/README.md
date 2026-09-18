@@ -9,7 +9,7 @@ The authoritative ownership/integration boundary is [`contract.md`](contract.md)
 
 ## Current implementation
 
-Results consumes version-one `ItemAnalyzed` and `ItemRejected` Kafka bytes and maps them immediately into Results-owned immutable models. `ResultProjectionService` owns write transactions; `JdbcResultProjectionRepository` writes only the module-owned `results` PostgreSQL schema.
+Results consumes version-one `ItemAnalyzed` and `ItemRejected` Kafka bytes and maps them immediately into Results-owned immutable models. `ResultProjectionService` owns write transactions; `JdbiResultProjectionRepository` writes only the module-owned `results` PostgreSQL schema through named SQL resources.
 
 Analyzed results are materialized by `(monitoringProfileId, normalizedItemId)`, so repeated Analysis publication updates one logical projection instead of creating duplicate result rows. Attributes and ordered tags are replaced in the same transaction as the main projection. Rejections are keyed by the upstream `sourceEventId`, preserving separate rediscoveries while making redelivery of one source event idempotent.
 
@@ -17,7 +17,7 @@ The Kafka listener disables automatic offset commit. Deterministic transport/key
 
 Controlled recovery reads one known Results DLQ partition/offset, validates the DLQ key/id, logical consumer, configured consumer group, and allowed Analysis source topic, then requires explicit dead-letter-id confirmation. Replay uses the same `AnalysisOutcomeKafkaRecordDecoder` and `AnalysisOutcomeProjector`; it never republishes the shared Analysis topic or changes consumer offsets. Existing projection idempotency absorbs repeated operator replay.
 
-`ResultQueryService` owns short read-only JDBC transactions over the same Results schema. The public REST adapter exposes:
+`ResultQueryService` owns short read-only application transactions over the same Results schema. `JdbiResultQueryRepository` loads static SQL from module-owned resources and uses StringTemplate 4 only to include active browsing/live predicates before named-value binding. The public REST adapter exposes:
 
 - `GET /api/v1/results` — newest-first result feed with optional monitoring-profile, source, information-category, relevance, classification, analyzed-time, and text-search filters; the JSON body remains `ResultSummary[]`, while `X-Next-Cursor` carries opaque keyset continuation when another page exists;
 - `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` — detailed result content, attributes, ordered tags, and provenance.
@@ -26,7 +26,7 @@ REST pagination uses the deterministic order `analyzedAt DESC`, `monitoringProfi
 
 The feed intentionally omits `normalizedContent` so a bounded list query does not return every potentially large payload; normalized attributes remain available for browsing. Detailed content is loaded only for a point lookup. Feed tag retrieval is performed in the same bounded SQL query rather than through per-result N+1 reads.
 
-`GET /api/v1/results/stream` exposes resumable Server-Sent Events. `results.live_result_cursors` stores one current monotonic cursor per logical analyzed result. Cursor advancement happens in the same transaction as projection updates and does not advance when the same `analysisEventId` is redelivered. Fresh connections receive `ready`, then later `result` events; idle connections receive `keepalive`. Browser `Last-Event-ID` resumes durable polling after the last received cursor. The stream represents current projections rather than an append-only event history, so several updates to one logical result while a client is disconnected may collapse to the latest projection. A resume cursor ahead of current durable state is normalized to the current watermark. Race-free browser bootstrap opens SSE through `ready` before loading the REST snapshot, then merges buffered/live updates by `(monitoringProfileId, normalizedItemId)`. JDBC polling runs on the blocking executor, while the HTTP controller remains a streaming `Publisher` boundary.
+`GET /api/v1/results/stream` exposes resumable Server-Sent Events. `results.live_result_cursors` stores one current monotonic cursor per logical analyzed result. Cursor advancement happens in the same transaction as projection updates and does not advance when the same `analysisEventId` is redelivered. Fresh connections receive `ready`, then later `result` events; idle connections receive `keepalive`. Browser `Last-Event-ID` resumes durable polling after the last received cursor. The stream represents current projections rather than an append-only event history, so several updates to one logical result while a client is disconnected may collapse to the latest projection. A resume cursor ahead of current durable state is normalized to the current watermark. Race-free browser bootstrap opens SSE through `ready` before loading the REST snapshot, then merges buffered/live updates by `(monitoringProfileId, normalizedItemId)`. Jdbi-backed polling runs on the blocking executor, while the HTTP controller remains a streaming `Publisher` boundary.
 
 ## Runtime configuration
 

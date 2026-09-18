@@ -247,47 +247,40 @@ class SecurityHttpPostgresIntegrationTest {
         assertFalse(deniedResponse.headers().firstValue("Access-Control-Allow-Credentials").isPresent());
     }
 
-    /** Prevent administrative updates from leaving the deployment without an enabled ADMIN identity. */
+    /** Reject disabling the only remaining enabled administrator. */
     @Test
-    void shouldProtectLastEnabledAdministrator() throws Exception {
-        AuthenticatedClient bootstrapAdmin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
-        String recoveryAdminName = "recovery-admin-" + UUID.randomUUID().toString().substring(0, 8);
-        String recoveryPassword = "recovery-admin-password-for-tests";
-        HttpResponse<String> created = bootstrapAdmin.send("POST", "/api/v1/admin/users", """
-                {
-                  "username": "%s",
-                  "password": "%s",
-                  "identityType": "HUMAN",
-                  "enabled": true,
-                  "roles": ["ADMIN"]
-                }
-                """.formatted(recoveryAdminName, recoveryPassword), true);
-        assertEquals(201, created.statusCode());
-        UUID recoveryAdminId = extractId(created.body());
-        UUID bootstrapAdminId = UUID.fromString(
-                scalarString("SELECT id::text FROM security.users WHERE username = '" + ADMIN_USERNAME + "'"));
-        AuthenticatedClient recoveryAdmin = login(recoveryAdminName, recoveryPassword);
+    void shouldPreventDisablingLastEnabledAdministrator() throws Exception {
+        LastAdministratorScenario scenario = prepareLastAdministratorScenario();
 
-        HttpResponse<String> disabledBootstrap = recoveryAdmin.send(
+        HttpResponse<String> response = scenario.client().send(
                 "PUT",
-                "/api/v1/admin/users/" + bootstrapAdminId,
+                "/api/v1/admin/users/" + scenario.userId(),
                 "{\"enabled\":false,\"roles\":[\"ADMIN\"]}",
                 true);
-        assertEquals(200, disabledBootstrap.statusCode());
+        long enabledAdmins = enabledAdministratorCount();
 
-        HttpResponse<String> selfDisable = recoveryAdmin.send(
-                "PUT",
-                "/api/v1/admin/users/" + recoveryAdminId,
-                "{\"enabled\":false,\"roles\":[\"ADMIN\"]}",
-                true);
-        assertEquals(409, selfDisable.statusCode());
+        assertEquals(409, response.statusCode(), () ->
+                "Expected last-admin disable conflict, got " + response.statusCode() + " " + response.body()
+                        + "; enabledAdmins=" + enabledAdmins);
+        assertEquals(1L, enabledAdmins);
+    }
 
-        HttpResponse<String> selfDemote = recoveryAdmin.send(
+    /** Reject removing ADMIN from the only remaining enabled administrator. */
+    @Test
+    void shouldPreventDemotingLastEnabledAdministrator() throws Exception {
+        LastAdministratorScenario scenario = prepareLastAdministratorScenario();
+
+        HttpResponse<String> response = scenario.client().send(
                 "PUT",
-                "/api/v1/admin/users/" + recoveryAdminId,
+                "/api/v1/admin/users/" + scenario.userId(),
                 "{\"enabled\":true,\"roles\":[\"VIEWER\"]}",
                 true);
-        assertEquals(409, selfDemote.statusCode());
+        long enabledAdmins = enabledAdministratorCount();
+
+        assertEquals(409, response.statusCode(), () ->
+                "Expected last-admin demotion conflict, got " + response.statusCode() + " " + response.body()
+                        + "; enabledAdmins=" + enabledAdmins);
+        assertEquals(1L, enabledAdmins);
     }
 
     /** Serialize concurrent ADMIN demotions so exactly one enabled administrator remains. */
@@ -373,6 +366,48 @@ class SecurityHttpPostgresIntegrationTest {
 
         assertEquals(200, viewer.send("GET", "/api/v1/auth/me", null, false).statusCode());
         assertEquals(401, loginResponse(username, password).statusCode());
+    }
+
+    private LastAdministratorScenario prepareLastAdministratorScenario() throws Exception {
+        AuthenticatedClient bootstrapAdmin = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        String recoveryAdminName = "recovery-admin-" + UUID.randomUUID().toString().substring(0, 8);
+        String recoveryPassword = "recovery-admin-password-for-tests";
+        HttpResponse<String> created = bootstrapAdmin.send("POST", "/api/v1/admin/users", """
+                {
+                  "username": "%s",
+                  "password": "%s",
+                  "identityType": "HUMAN",
+                  "enabled": true,
+                  "roles": ["ADMIN"]
+                }
+                """.formatted(recoveryAdminName, recoveryPassword), true);
+        assertEquals(201, created.statusCode(), () ->
+                "Recovery administrator creation failed: " + created.statusCode() + " " + created.body());
+        UUID recoveryAdminId = extractId(created.body());
+        UUID bootstrapAdminId = UUID.fromString(
+                scalarString("SELECT id::text FROM security.users WHERE username = '" + ADMIN_USERNAME + "'"));
+        AuthenticatedClient recoveryAdmin = login(recoveryAdminName, recoveryPassword);
+
+        HttpResponse<String> disabledBootstrap = recoveryAdmin.send(
+                "PUT",
+                "/api/v1/admin/users/" + bootstrapAdminId,
+                "{\"enabled\":false,\"roles\":[\"ADMIN\"]}",
+                true);
+        assertEquals(200, disabledBootstrap.statusCode(), () ->
+                "Bootstrap administrator disable failed: " + disabledBootstrap.statusCode() + " "
+                        + disabledBootstrap.body());
+        assertEquals(1L, enabledAdministratorCount());
+        return new LastAdministratorScenario(recoveryAdminId, recoveryAdmin);
+    }
+
+    private static long enabledAdministratorCount() throws Exception {
+        return scalarLong("""
+                SELECT COUNT(DISTINCT u.id)
+                  FROM security.users u
+                  JOIN security.user_roles r ON r.user_id = u.id
+                 WHERE u.enabled = TRUE
+                   AND r.role = 'ADMIN'
+                """);
     }
 
     private HttpResponse<String> bearerRequest(String token) throws Exception {
@@ -527,6 +562,9 @@ class SecurityHttpPostgresIntegrationTest {
             statement.execute("DROP SCHEMA IF EXISTS security CASCADE");
             statement.execute("DROP TABLE IF EXISTS flyway_schema_history");
         }
+    }
+
+    private record LastAdministratorScenario(UUID userId, AuthenticatedClient client) {
     }
 
     private final class AuthenticatedClient {

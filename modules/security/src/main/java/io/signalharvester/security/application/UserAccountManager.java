@@ -94,9 +94,8 @@ public final class UserAccountManager implements UserAccountOperations {
 
     @Override
     public UserAccount update(UserId userId, UpdateUserCommand command) {
-        return transactions.executeWrite(status -> {
-            repository.lockAdministratorState();
-            UserAccount existing = repository.findById(userId)
+        return transactions.executeWrite(status -> repository.withAdministratorStateLock(state -> {
+            UserAccount existing = state.findById(userId)
                     .orElseThrow(() -> new UserNotFoundException(userId));
             Set<UserRole> roles = normalizeRoles(existing.identityType(), command.roles());
             UserAccount updated = new UserAccount(
@@ -109,14 +108,14 @@ public final class UserAccountManager implements UserAccountOperations {
                     clock.instant());
             if (isEnabledAdmin(existing)
                     && !isEnabledAdmin(updated)
-                    && !repository.anyOtherEnabledAdminExists(userId)) {
+                    && !state.anyOtherEnabledAdminExists(userId)) {
                 throw new LastEnabledAdministratorException(userId);
             }
-            if (!repository.update(updated)) {
+            if (!state.update(updated)) {
                 throw new UserNotFoundException(userId);
             }
             return updated;
-        });
+        }));
     }
 
     private static boolean isEnabledAdmin(UserAccount account) {
@@ -145,4 +144,5 @@ public final class UserAccountManager implements UserAccountOperations {
         }
         return false;
     }
+
 }
