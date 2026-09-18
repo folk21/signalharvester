@@ -65,7 +65,8 @@ The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, and
 - an SSE resume cursor may have fallen behind retention and clients must tolerate missing expired diagnostic rows;
 - flow lineage links terminal events to raw discoveries by published `sourceEventId`;
 - reconstructed stages explicitly identify observed, derived, and currently unobserved evidence;
-- Results persistence is not claimed as completed until an observation signal proves it.
+- Results persistence is not claimed as completed until an observation signal proves it;
+- operator recovery validates the current Event Observation consumer group and observed source topic, preserves original source transport metadata, and reuses the normal decoder/recorder without shared-topic republish or source-offset mutation.
 
 ## Extension points
 

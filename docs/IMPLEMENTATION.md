@@ -179,6 +179,8 @@ Failure behavior is explicit:
 - retry exhaustion publishes the original input plus deterministic source-position dead-letter identity and failure metadata as `failure/v1/DeadLetterEvent`;
 - DLQ publication failure leaves the raw source offset uncommitted.
 
+The verification-pending controlled recovery boundary can inspect a concrete Analysis DLQ partition/offset and replay the stored original key/payload through the same `RawItemKafkaRecordDecoder` and `RawItemProcessor`. It validates the current consumer group and allowed source topic, requires explicit dead-letter-id confirmation, and does not republish `RawItemDiscovered` or rewrite source offsets. Results and Event Observation use the same owner-local pattern through their own decoders and application boundaries.
+
 Successful application processing means that two pieces of state commit atomically in PostgreSQL:
 
 - deduplication state;
@@ -547,4 +549,4 @@ See:
 - Backend-owned Kubernetes/infrastructure deployment and resilience acceptance are verified. Full platform R24 still requires a real frontend image from `signalharvester-web`.
 - Kafka consumer horizontal scaling is accepted for the current three-partition local topic contract. Parallelism remains bounded by partition capacity; autoscaling is not implemented.
 - There is no cross-resource exactly-once guarantee between PostgreSQL and Kafka.
-- Controlled DLQ replay tooling/UI is not implemented. Failed records remain operator-managed in versioned dead-letter topics.
+- Controlled owner-specific DLQ inspection/replay is verification-pending; automatic/bulk replay and replay UI remain unimplemented.

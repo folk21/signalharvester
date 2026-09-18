@@ -123,8 +123,22 @@ class EventObservationKafkaListenerTest {
             public String getDeadLetterTopic() {
                 return "event-observation-dlq";
             }
+
+            @Override
+            public Duration getReplayReadTimeout() {
+                return Duration.ofSeconds(2);
+            }
+
+            @Override
+            public int getReplayMaxConcurrency() {
+                return 1;
+            }
         };
-        return new EventObservationKafkaListener(new EventObservationMapper(), recorder, configuration, deadLetters);
+        return new EventObservationKafkaListener(
+                new EventObservationKafkaRecordDecoder(new EventObservationMapper()),
+                recorder,
+                configuration,
+                deadLetters);
     }
 
     private static RawItemDiscovered rawEvent() {

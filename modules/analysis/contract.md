@@ -74,7 +74,8 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 - a successful raw-item transaction commits the deduplication claim/update and exact serialized terminal event outbox row atomically before the source offset is committed;
 - Kafka publication happens outside JDBC transactions through bounded expiring outbox leases;
 - a post-ack publication-marker failure may republish the same event id/payload, so downstream persistence remains idempotent;
-- terminal input failures advance only after acknowledged Analysis dead-letter publication.
+- terminal input failures advance only after acknowledged Analysis dead-letter publication;
+- operator recovery validates the current Analysis consumer group and raw input topic, requires exact dead-letter-id confirmation, reuses the normal decoder/processor, and never republishes the shared raw topic or rewrites source offsets.
 
 ## Extension points
 

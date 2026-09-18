@@ -20,7 +20,7 @@ Implemented processing includes:
 
 The initial analyzer uses deterministic keyword matching and does not require an external AI provider. Generated Protobuf messages and Kafka client types remain in the Kafka adapter layer; core normalization, persistence, and analyzer code use Analysis-owned Java models. `RawItemDiscovered.analysis_settings` is mapped into an immutable Analysis-owned value before processing. The deployment-global keyword configuration remains only as a compatibility fallback for legacy raw events that predate this snapshot.
 
-Richer category-specific normalization and controlled DLQ replay remain future work.
+Richer category-specific normalization remains future work. Verification-pending controlled DLQ recovery can inspect a known Analysis DLQ position and replay the stored original key/payload through the same raw-record decoder and `RawItemProcessor` without republishing the shared raw topic.
 
 ## Operational inspection
 

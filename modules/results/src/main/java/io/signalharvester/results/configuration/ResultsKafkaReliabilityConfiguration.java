@@ -29,4 +29,15 @@ public interface ResultsKafkaReliabilityConfiguration {
     @NotBlank
     @Bindable(defaultValue = "signalharvester.results.analysis-outcome-dead-letter.v1")
     String getDeadLetterTopic();
+
+    /** Returns the maximum Kafka wait used when an operator inspects one dead-letter record. */
+    @NotNull
+    @Bindable(defaultValue = "2s")
+    Duration getReplayReadTimeout();
+
+    /** Returns the maximum concurrent operator dead-letter inspection/replay operations for Results. */
+    @Positive
+    @Max(4)
+    @Bindable(defaultValue = "1")
+    int getReplayMaxConcurrency();
 }

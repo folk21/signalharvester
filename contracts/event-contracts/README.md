@@ -30,7 +30,7 @@ The first `v1` schemas are implemented:
 - `analysis/v1/item-rejected.proto`;
 - `failure/v1/dead-letter-event.proto`.
 
-Gradle generates Java transport classes from these sources. Contract tests verify representative raw/analysis serialization round trips, dead-letter metadata round trips, and tolerance of unknown additive fields. Collection publishes `RawItemDiscovered` with an additive effective Analysis-settings snapshot; Analysis consumes that immutable snapshot and publishes `ItemAnalyzed` or `ItemRejected`. Legacy raw events without the snapshot remain decodable. Analysis, Results, and Event Observation publish `DeadLetterEvent` when deterministic poison input or bounded retry exhaustion reaches terminal handling.
+Gradle generates Java transport classes from these sources. Contract tests verify representative raw/analysis serialization round trips, dead-letter metadata round trips, and tolerance of unknown additive fields. Collection publishes `RawItemDiscovered` with an additive effective Analysis-settings snapshot; Analysis consumes that immutable snapshot and publishes `ItemAnalyzed` or `ItemRejected`. Legacy raw events without the snapshot remain decodable. Analysis, Results, and Event Observation publish `DeadLetterEvent` when deterministic poison input or bounded retry exhaustion reaches terminal handling. The same stored source key/payload now also supports controlled owner-specific recovery without changing the event schema or republishing a shared source topic.
 
 ## Read next
 

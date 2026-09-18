@@ -138,6 +138,7 @@ The implemented backend foundation includes the following capability groups.
 - Bounded diagnostic history with REST/SSE Event Explorer APIs.
 - Collection-run and item Processing Flow reconstruction with explicit observed, derived, and unobserved evidence.
 - Bounded Kafka retry and versioned dead-letter handling for Analysis, Results, and Event Observation.
+- Verification-pending ADMIN-only owner-specific dead-letter inspection/replay that reuses the original key/payload without republishing shared source events.
 - Health/readiness endpoints, Prometheus metrics, OpenTelemetry HTTP/Kafka/JDBC tracing, and trace-correlated console logs.
 - Trace-context preservation across Collection fan-out and the Analysis outbox.
 
@@ -156,7 +157,7 @@ The default host-run local profile remains an explicitly trusted unauthenticated
 
 The `security` environment enables authentication/RBAC and restrictive outbound-source policy.
 
-`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. Profile-owned typed Analysis settings are also accepted. The current verification-pending backend focus extends `RESULTS.BROWSING` with backward-compatible keyset pagination and indexed text search.
+`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. Profile-owned typed Analysis settings and production-oriented Results browsing are also accepted. The current verification-pending backend focus adds controlled ADMIN dead-letter recovery for `RELIABILITY.DEAD_LETTER`.
 
 Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
 

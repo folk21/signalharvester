@@ -97,7 +97,7 @@ Tests and documents must use IDs from this catalog. Do not invent local feature 
 ### Reliability and runtime
 
 - `RELIABILITY.KAFKA_RETRY` — bounded retry for asynchronous Kafka processing failures. Owner: consuming modules. Related umbrella requirement: R20.
-- `RELIABILITY.DEAD_LETTER` — terminal dead-letter handling for poison or exhausted Kafka records. Owner: consuming modules + Event Contracts. Related umbrella requirement: R20.
+- `RELIABILITY.DEAD_LETTER` — terminal dead-letter handling plus controlled owner-specific operator recovery for poison or exhausted Kafka records. Owner: consuming modules + Event Contracts. Related umbrella requirement: R20.
 - `RELIABILITY.IDEMPOTENCY` — duplicate-safe consumer and persistence behavior. Owner: consuming modules. Related umbrella requirement: R21.
 - `RUNTIME.CONCURRENCY` — explicit blocking/streaming execution and bounded external-I/O concurrency. Owner: App + producing/consuming modules. Related umbrella requirement: R23.
 - `SCALABILITY.KAFKA_CONSUMERS` — horizontal Kafka consumer scaling where partitioning permits. Owner: consuming modules + deployment. Related umbrella requirement: R26.

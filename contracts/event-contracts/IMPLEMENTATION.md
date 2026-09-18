@@ -53,7 +53,7 @@ These are Kafka transport contracts. Analysis core logic maps to and from module
 
 ## Dead-letter event
 
-`DeadLetterEvent` captures terminal consumer failures for Analysis, Results, and Event Observation. It carries a deterministic dead-letter identity derived from consumer group and source Kafka position, the complete source topic/partition/offset/key/value needed for deliberate replay, bounded failure diagnostics, attempt count, and whether the exhausted path was retryable. Keeping the original serialized value preserves event correlation and trace metadata whenever the source event was decodable, while malformed source bytes remain inspectable without inventing missing metadata.
+`DeadLetterEvent` captures terminal consumer failures for Analysis, Results, and Event Observation. It carries a deterministic dead-letter identity derived from consumer group and source Kafka position, the complete source topic/partition/offset/key/value needed for deliberate replay, bounded failure diagnostics, attempt count, and whether the exhausted path was retryable. Keeping the original serialized value preserves event correlation and trace metadata whenever the source event was decodable, while malformed source bytes remain inspectable without inventing missing metadata. Controlled recovery reads the real DLQ record by position and reuses these stored bytes only inside the owning consumer module; the schema does not imply or require republishing to the original shared topic.
 
 ## Gradle generation
 
@@ -69,5 +69,5 @@ Collection provides the real `RawItemDiscovered` producer adapter. Analysis prov
 
 - no Schema Registry is configured;
 - results event schemas are not implemented yet;
-- automatic dead-letter replay is intentionally not implemented;
+- automatic/bulk dead-letter replay is intentionally not implemented; owner-specific single-record recovery is operator-driven;
 - compatibility fixtures for an evolved published schema are not implemented yet.

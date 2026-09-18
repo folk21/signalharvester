@@ -84,7 +84,8 @@ Do not import Analysis implementation/application/persistence types or read the 
 - search is bounded and uses PostgreSQL full-text search over title and normalized content within Results-owned tables;
 - feed retrieval must avoid per-result N+1 persistence reads;
 - detailed result lookup is profile-scoped because normalized identity is profile-scoped;
-- Results does not provide distributed exactly-once processing; it achieves retry safety through idempotent projection keys.
+- Results does not provide distributed exactly-once processing; it achieves retry safety through idempotent projection keys;
+- operator recovery validates the current Results consumer group and allowed terminal Analysis topic, requires exact dead-letter-id confirmation, and reuses the normal decoder/projector without shared-topic republish or offset mutation.
 
 ## Extension points
 

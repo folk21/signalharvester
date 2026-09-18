@@ -75,16 +75,9 @@ class RawItemDiscoveredMapperTest {
     }
 
     private static KeywordAnalysisConfiguration defaults(List<String> keywords, int minimumMatches) {
-        return new KeywordAnalysisConfiguration() {
-            @Override
-            public List<String> getKeywords() {
-                return keywords;
-            }
-
-            @Override
-            public int getMinimumMatches() {
-                return minimumMatches;
-            }
-        };
+        KeywordAnalysisConfiguration configuration = new KeywordAnalysisConfiguration();
+        configuration.setKeywords(keywords);
+        configuration.setMinimumMatches(minimumMatches);
+        return configuration;
     }
 }

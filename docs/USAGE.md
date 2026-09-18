@@ -335,7 +335,18 @@ Results and Event Observation advance after their normal durable processing.
 
 Failed inputs advance only after acknowledged DLQ publication. If a DLQ producer is unavailable, the source record remains uncommitted and recoverable by Kafka redelivery.
 
-There is no automatic replay command. Correct the underlying problem before any controlled replay with Kafka tooling.
+Automatic/bulk replay remains disabled. After correcting the underlying problem, an ADMIN can inspect and replay one known owner-specific DLQ record by Kafka partition/offset through the backend API:
+
+```text
+GET  /api/v1/admin/analysis/dead-letters/{partition}/{offset}
+POST /api/v1/admin/analysis/dead-letters/{partition}/{offset}/replay
+GET  /api/v1/admin/results/dead-letters/{partition}/{offset}
+POST /api/v1/admin/results/dead-letters/{partition}/{offset}/replay
+GET  /api/v1/admin/event-observation/dead-letters/{partition}/{offset}
+POST /api/v1/admin/event-observation/dead-letters/{partition}/{offset}/replay
+```
+
+Inspection returns sanitized metadata and `sourcePayloadBytes`, not the serialized payload. Replay requires JSON `{ "expectedDeadLetterId": "<exact-id-from-inspection>" }`. The backend rereads the real DLQ record, validates consumer/group/topic identity, and reprocesses the stored original key/payload only through the owning module. It does not republish the shared source topic or modify Kafka consumer-group offsets. POST requests remain subject to the normal ADMIN authentication and CSRF policy.
 
 ### Analysis outbox inspection
 

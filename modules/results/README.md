@@ -15,6 +15,8 @@ Analyzed results are materialized by `(monitoringProfileId, normalizedItemId)`, 
 
 The Kafka listener disables automatic offset commit. Deterministic transport/key/mapping failures are dead-lettered immediately, while projection failures retry within the configured bound. The source offset advances only after durable projection or acknowledged Results DLQ publication; DLQ failure leaves the offset uncommitted. This provides bounded at-least-once recovery behavior, not distributed exactly-once processing.
 
+Controlled recovery reads one known Results DLQ partition/offset, validates the DLQ key/id, logical consumer, configured consumer group, and allowed Analysis source topic, then requires explicit dead-letter-id confirmation. Replay uses the same `AnalysisOutcomeKafkaRecordDecoder` and `AnalysisOutcomeProjector`; it never republishes the shared Analysis topic or changes consumer offsets. Existing projection idempotency absorbs repeated operator replay.
+
 `ResultQueryService` owns short read-only JDBC transactions over the same Results schema. The public REST adapter exposes:
 
 - `GET /api/v1/results` — newest-first result feed with optional monitoring-profile, source, information-category, relevance, classification, analyzed-time, and text-search filters; the JSON body remains `ResultSummary[]`, while `X-Next-Cursor` carries opaque keyset continuation when another page exists;
@@ -36,6 +38,8 @@ SIGNALHARVESTER_RESULTS_CONSUMER_GROUP=signalharvester-results-v1
 SIGNALHARVESTER_RESULTS_KAFKA_MAX_ATTEMPTS=3
 SIGNALHARVESTER_RESULTS_KAFKA_RETRY_BACKOFF=250ms
 SIGNALHARVESTER_RESULTS_DEAD_LETTER_TOPIC=signalharvester.results.analysis-outcome-dead-letter.v1
+SIGNALHARVESTER_RESULTS_REPLAY_READ_TIMEOUT=2s
+SIGNALHARVESTER_RESULTS_REPLAY_MAX_CONCURRENCY=1
 SIGNALHARVESTER_RESULTS_SSE_POLL_INTERVAL=1s
 SIGNALHARVESTER_RESULTS_SSE_KEEPALIVE_INTERVAL=15s
 SIGNALHARVESTER_RESULTS_SSE_RECONNECT_DELAY=2s
@@ -48,7 +52,7 @@ The consumed topics are the existing `SIGNALHARVESTER_KAFKA_ITEM_ANALYZED_TOPIC`
 
 - rejected-result persistence remains internal operational state and is not exposed by this product API;
 - no transactional outbox/exactly-once cross-resource guarantee;
-- automatic replay of dead-lettered records is intentionally not implemented yet.
+- automatic/bulk replay remains intentionally absent; verification-pending ADMIN recovery reprojects one confirmed real DLQ record through Results only.
 
 ## Read next
 

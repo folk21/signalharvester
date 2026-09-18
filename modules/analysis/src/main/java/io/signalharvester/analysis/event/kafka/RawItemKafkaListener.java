@@ -1,6 +1,5 @@
 package io.signalharvester.analysis.event.kafka;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import io.micronaut.configuration.kafka.annotation.KafkaKey;
 import io.micronaut.configuration.kafka.annotation.KafkaListener;
 import io.micronaut.configuration.kafka.annotation.OffsetReset;
@@ -10,7 +9,6 @@ import io.micronaut.context.annotation.Requires;
 import io.signalharvester.analysis.application.RawItemProcessor;
 import io.signalharvester.analysis.configuration.AnalysisKafkaReliabilityConfiguration;
 import io.signalharvester.analysis.model.DiscoveredRawItem;
-import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
@@ -37,17 +35,17 @@ public class RawItemKafkaListener {
     private static final Logger LOGGER = LoggerFactory.getLogger(RawItemKafkaListener.class);
     private static final Duration MAX_RETRY_BACKOFF = Duration.ofSeconds(5);
 
-    private final RawItemDiscoveredMapper mapper;
+    private final RawItemKafkaRecordDecoder decoder;
     private final RawItemProcessor processor;
     private final AnalysisKafkaReliabilityConfiguration reliabilityConfiguration;
     private final AnalysisDeadLetterPublisher deadLetterPublisher;
 
     public RawItemKafkaListener(
-            RawItemDiscoveredMapper mapper,
+            RawItemKafkaRecordDecoder decoder,
             RawItemProcessor processor,
             AnalysisKafkaReliabilityConfiguration reliabilityConfiguration,
             AnalysisDeadLetterPublisher deadLetterPublisher) {
-        this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.decoder = Objects.requireNonNull(decoder, "decoder");
         this.processor = Objects.requireNonNull(processor, "processor");
         this.reliabilityConfiguration = Objects.requireNonNull(reliabilityConfiguration, "reliabilityConfiguration");
         this.deadLetterPublisher = Objects.requireNonNull(deadLetterPublisher, "deadLetterPublisher");
@@ -71,9 +69,7 @@ public class RawItemKafkaListener {
 
         final DiscoveredRawItem rawItem;
         try {
-            RawItemDiscovered event = parse(payload);
-            requireKey(key, event.getRawItemId());
-            rawItem = mapper.map(event);
+            rawItem = decoder.decode(key, payload);
         } catch (RuntimeException permanentFailure) {
             deadLetterPublisher.publish(
                     topic, partition, offset, key, payload, permanentFailure, 1, false);
@@ -106,20 +102,6 @@ public class RawItemKafkaListener {
                         retryableFailure);
                 sleepBeforeRetry(reliabilityConfiguration.getRetryBackoff());
             }
-        }
-    }
-
-    private static RawItemDiscovered parse(byte[] payload) {
-        try {
-            return RawItemDiscovered.parseFrom(payload);
-        } catch (InvalidProtocolBufferException exception) {
-            throw new IllegalArgumentException("Invalid RawItemDiscovered Protobuf payload", exception);
-        }
-    }
-
-    private static void requireKey(String actualKey, String expectedKey) {
-        if (actualKey == null || !actualKey.equals(expectedKey)) {
-            throw new IllegalArgumentException("Kafka key must match RawItemDiscovered.raw_item_id");
         }
     }
 

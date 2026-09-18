@@ -254,8 +254,22 @@ class AnalysisOutcomeKafkaListenerTest {
             public String getDeadLetterTopic() {
                 return "results-dlq";
             }
+
+            @Override
+            public Duration getReplayReadTimeout() {
+                return Duration.ofSeconds(2);
+            }
+
+            @Override
+            public int getReplayMaxConcurrency() {
+                return 1;
+            }
         };
-        return new AnalysisOutcomeKafkaListener(new AnalysisOutcomeMapper(), projector, configuration, deadLetters);
+        return new AnalysisOutcomeKafkaListener(
+                new AnalysisOutcomeKafkaRecordDecoder(new AnalysisOutcomeMapper()),
+                projector,
+                configuration,
+                deadLetters);
     }
 
     private static ItemAnalyzed analyzedEvent() {
