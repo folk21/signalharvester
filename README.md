@@ -157,7 +157,7 @@ The default host-run local profile remains an explicitly trusted unauthenticated
 
 The `security` environment enables authentication/RBAC and restrictive outbound-source policy.
 
-`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. Profile-owned typed Analysis settings, production-oriented Results browsing, and controlled ADMIN dead-letter recovery are also accepted. The Configuration, Security / Analysis / Collection, and Event Observation Jdbi slices are verified. The final Results Jdbi slice is implemented and verification-pending; it keeps indexed browsing/keyset SQL structurally explicit through bounded StringTemplate 4 predicates while preserving application-owned transactions.
+`SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. Profile-owned typed Analysis settings, production-oriented Results browsing, and controlled ADMIN dead-letter recovery are also accepted. The repository-wide Jdbi persistence refactoring is accepted after the canonical repository gate passed for the final Results slice and its Security handle-lifecycle correction. Runtime SQL now uses Micronaut-managed Jdbi with named bindings and module-owned SQL resources while application use cases retain transaction ownership; Results alone uses bounded StringTemplate 4 rendering for structural browse/live predicates.
 
 Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
 

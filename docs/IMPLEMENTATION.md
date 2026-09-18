@@ -37,9 +37,15 @@ The application uses:
 - HTTP port `SIGNALHARVESTER_HTTP_PORT`, default `8080`;
 - Micronaut's Virtual-Thread-backed blocking executor on Java 21.
 
-Synchronous REST controllers that invoke JDBC or blocking collection work use `@ExecuteOn(TaskExecutors.BLOCKING)`.
+Synchronous REST controllers that invoke database work or blocking collection work use `@ExecuteOn(TaskExecutors.BLOCKING)`.
 
-Results and Event Observation SSE controllers remain streaming `Publisher` boundaries. Their PostgreSQL polling is submitted to the blocking executor instead of running JDBC on the Netty event loop.
+Results and Event Observation SSE controllers remain streaming `Publisher` boundaries. Their PostgreSQL polling is submitted to the blocking executor instead of running database work on the Netty event loop.
+
+## Persistence execution convention
+
+All functional-module runtime SQL now executes through Micronaut-managed Jdbi. Application services continue to own `TransactionOperations<Connection>` boundaries; Jdbi adapters participate in those transactions and reject self-committing access where the module contract requires an active transaction. Security keeps its administrator lock/read/check/update sequence on one transaction-bound Jdbi handle so PostgreSQL session scope matches the pre-refactoring behavior.
+
+Substantial statements live in module-owned classpath `.sql` resources and are resolved through the single shared `SqlResources` utility from `common`. Values use named bindings. Results browsing and filtered live polling are the only current structural-template use: Jdbi StringTemplate 4 selects trusted static predicate blocks while request values remain ordinary named bindings. Focused row-mapper callbacks may read JDBC `ResultSet`/driver value types for explicit domain conversion; repositories no longer own low-level JDBC statement or connection lifecycle.
 
 ## Current implemented flow
 
@@ -78,7 +84,7 @@ Configuration administration is an internal application boundary used by module-
 
 `SourceConfigurationManager` implements both the internal administration boundary and the published provider contract.
 
-PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. The verified Configuration persistence pilot uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while preserving those application transaction boundaries. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
+PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. Configuration persistence uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while preserving those application transaction boundaries. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
 
 See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md).
 

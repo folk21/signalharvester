@@ -4,7 +4,6 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-jdbi-persistence-refactoring.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +25,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, and `backend-controlled-dead-letter-recovery` are accepted after their canonical repository gates passed. `backend-jdbi-persistence-refactoring` is the current bounded refactoring focus before further product feature work.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, and the repository-wide `backend-jdbi-persistence-refactoring` are accepted after their canonical repository gates passed. No bounded implementation sub-spec is currently active; the next backend action is a closure/reliability review before further product feature work.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository.
 

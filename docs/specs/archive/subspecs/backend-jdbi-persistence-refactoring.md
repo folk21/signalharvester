@@ -3,16 +3,14 @@ type: Specification
 title: Jdbi persistence refactoring
 description: Replace direct JDBC statement plumbing with module-local Jdbi adapters while preserving contracts, schema, transaction ownership, and PostgreSQL semantics.
 document_role: subspec
-spec_status: active
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Jdbi persistence refactoring
 
 ## Status
 
-Current backend refactoring focus before further product feature work.
-
-The Configuration, Security / Analysis / Collection, and Event Observation slices previously passed their canonical repository gates. The final Results gate exposed a Security administrative-update regression in the migrated Jdbi handle lifecycle; a corrective lock-scope fix is verification-pending together with Results. The refactoring remains active until the canonical repository gate passes.
+Accepted on 2026-09-18 after the developer confirmed the canonical repository gate passed for the final Results slice and the corrective Security single-handle administrative update path. The migration now defines the accepted runtime SQL execution convention for the backend; future local persistence refactors do not require this specification to remain active.
 
 ## Feature scope
 
@@ -41,7 +39,7 @@ Jdbi becomes the lightweight SQL execution/mapping boundary. SQL remains explici
 
 ## Current state
 
-The Configuration, Security, Analysis, Collection, and Event Observation slices use Jdbi, and Results is implemented on Jdbi as the final slice. Projection/detail/cursor SQL lives in module-owned resources, while browse/live queries use StringTemplate 4 only to render active structural predicates before named binding. Final verification is pending after the canonical gate exposed that the Security lock/read/check/write sequence had been split across multiple managed Jdbi handles.
+Configuration, Security, Analysis, Collection, Event Observation, and Results use Micronaut-managed Jdbi. Substantial SQL lives in module-owned resources and uses named bindings; Results browse/live queries use StringTemplate 4 only to render trusted structural predicates before named binding. Security keeps its lock/read/check/update sequence on one transaction-bound Jdbi handle, restoring the connection/session scope relied upon before the migration.
 
 The existing architecture already has the correct higher-level boundary: application use cases own Micronaut `TransactionOperations<Connection>` transactions and repositories own persistence details. This refactoring must preserve that boundary.
 
@@ -159,9 +157,7 @@ The final Results slice must:
 
 ## Validation
 
-The Configuration, Security / Analysis / Collection, and Event Observation slices passed the canonical repository gate in the developer environment.
-
-The Results slice is implemented with focused browsing/live/projection regression coverage. Final verification also covers the corrective Security change that keeps its administrator lock/read/check/write sequence on one Jdbi handle; the canonical repository gate must pass before this refactoring is accepted.
+The Configuration, Security / Analysis / Collection, Event Observation, and Results slices passed the canonical repository gate in the developer environment. Final verification included the corrective Security change that keeps administrator lock/read/check/write work on one transaction-bound Jdbi handle, Results browsing/live/projection regression coverage, transaction ownership checks, and projection rollback coverage.
 
 ## Implementation tasks
 
@@ -169,6 +165,6 @@ The Results slice is implemented with focused browsing/live/projection regressio
 2. Jdbi convention review — completed; retain explicit row mapping, classpath SQL resources, named bindings, and application-owned transactions without a shared persistence abstraction.
 3. Security / Analysis / Collection migration — completed and verified.
 4. Event Observation migration — completed and verified.
-5. Results dynamic-SQL review and migration — implemented with bounded StringTemplate 4 structural rendering; verification-pending.
-6. Security handle-lifecycle parity correction — implemented; keep the administrator lock/read/check/write sequence on one transaction-bound Jdbi handle and verify the full Security integration suite.
-7. Update stable implementation documentation and archive this specification after the canonical repository gate passes.
+5. Results dynamic-SQL review and migration — completed and verified with bounded StringTemplate 4 structural rendering.
+6. Security handle-lifecycle parity correction — completed and verified; administrator lock/read/check/write work stays on one transaction-bound Jdbi handle.
+7. Stable persistence conventions were moved into owning architecture/implementation documentation and this specification was archived after the canonical repository gate passed.
