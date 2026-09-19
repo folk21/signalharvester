@@ -13,6 +13,7 @@ import io.signalharvester.eventobservation.application.ProcessingFlowNotFoundExc
 import io.signalharvester.eventobservation.application.ProcessingFlowQuery;
 import io.signalharvester.eventobservation.application.ProcessingFlowService;
 import jakarta.inject.Singleton;
+import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -36,7 +37,6 @@ class ProcessingFlowControllerTest {
 
     private static final String SPEC_NAME = "processing-flow-controller";
     private EmbeddedServer server;
-    private HttpClient client;
 
     @BeforeEach
     void setUp() {
@@ -46,7 +46,6 @@ class ProcessingFlowControllerTest {
                 Map.entry("micronaut.executors.blocking.virtual", true),
                 Map.entry("kafka.enabled", false),
                 Map.entry("signalharvester.event-observation.enabled", false)), "test");
-        client = HttpClient.newHttpClient();
     }
 
     @AfterEach
@@ -86,9 +85,16 @@ class ProcessingFlowControllerTest {
     }
 
     private HttpResponse<String> send(String path) throws Exception {
-        return client.send(
-                HttpRequest.newBuilder(server.getURI().resolve(path)).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
+        HttpClient requestClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
+        try {
+            return requestClient.send(
+                    HttpRequest.newBuilder(server.getURI().resolve(path)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+        } catch (IOException exception) {
+            throw new IOException("GET " + path + " failed before an HTTP response was received", exception);
+        }
     }
 
     private static ProcessingFlow flow(ProcessingFlow.Scope scope, String itemId) {

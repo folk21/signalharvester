@@ -9,5 +9,6 @@ java {
 }
 
 dependencies {
+    implementation(libs.testcontainers.kafka)
     testImplementation(libs.junit.jupiter)
 }

@@ -1,5 +1,7 @@
 package io.signalharvester.analysis.event;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 import io.signalharvester.analysis.model.NormalizedContentItem;
 import java.util.Objects;
 
@@ -10,13 +12,8 @@ public record RejectedItem(NormalizedContentItem item, String reasonCode, String
 
     public RejectedItem {
         Objects.requireNonNull(item, "item");
-        requireNonBlank(reasonCode, "reasonCode");
-        requireNonBlank(explanation, "explanation");
+        requireNonBlankArgument(reasonCode, "reasonCode");
+        requireNonBlankArgument(explanation, "explanation");
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

@@ -1,5 +1,7 @@
 package io.signalharvester.analysis.model;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
@@ -31,27 +33,22 @@ public record NormalizedContentItem(
         Optional<Instant> publishedAt) {
 
     public NormalizedContentItem {
-        requireNonBlank(sourceEventId, "sourceEventId");
-        requireNonBlank(correlationId, "correlationId");
+        requireNonBlankArgument(sourceEventId, "sourceEventId");
+        requireNonBlankArgument(correlationId, "correlationId");
         Objects.requireNonNull(traceparent, "traceparent");
         Objects.requireNonNull(discoveredAt, "discoveredAt");
-        requireNonBlank(rawItemId, "rawItemId");
-        requireNonBlank(normalizedItemId, "normalizedItemId");
-        requireNonBlank(sourceId, "sourceId");
-        requireNonBlank(monitoringProfileId, "monitoringProfileId");
-        requireNonBlank(informationCategory, "informationCategory");
+        requireNonBlankArgument(rawItemId, "rawItemId");
+        requireNonBlankArgument(normalizedItemId, "normalizedItemId");
+        requireNonBlankArgument(sourceId, "sourceId");
+        requireNonBlankArgument(monitoringProfileId, "monitoringProfileId");
+        requireNonBlankArgument(informationCategory, "informationCategory");
         Objects.requireNonNull(externalId, "externalId");
         Objects.requireNonNull(title, "title");
         Objects.requireNonNull(url, "url");
         Objects.requireNonNull(content, "content");
-        requireNonBlank(contentType, "contentType");
+        requireNonBlankArgument(contentType, "contentType");
         attributes = Map.copyOf(Objects.requireNonNull(attributes, "attributes"));
         Objects.requireNonNull(publishedAt, "publishedAt");
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

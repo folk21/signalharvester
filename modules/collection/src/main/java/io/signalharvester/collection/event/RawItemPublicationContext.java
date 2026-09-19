@@ -1,5 +1,7 @@
 package io.signalharvester.collection.event;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,18 +29,13 @@ public record RawItemPublicationContext(
         Optional<String> traceparent) {
 
     public RawItemPublicationContext {
-        requireNonBlank(rawItemId, "rawItemId");
-        requireNonBlank(correlationId, "correlationId");
-        requireNonBlank(monitoringProfileId, "monitoringProfileId");
-        requireNonBlank(informationCategory, "informationCategory");
+        requireNonBlankArgument(rawItemId, "rawItemId");
+        requireNonBlankArgument(correlationId, "correlationId");
+        requireNonBlankArgument(monitoringProfileId, "monitoringProfileId");
+        requireNonBlankArgument(informationCategory, "informationCategory");
         Objects.requireNonNull(analysisSettings, "analysisSettings");
         Objects.requireNonNull(traceparent, "traceparent");
-        traceparent.ifPresent(value -> requireNonBlank(value, "traceparent"));
+        traceparent.ifPresent(value -> requireNonBlankArgument(value, "traceparent"));
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

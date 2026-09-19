@@ -1,5 +1,7 @@
 package io.signalharvester.collection.source;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 import io.signalharvester.configuration.api.SourceId;
 import java.net.URI;
 import java.time.Instant;
@@ -36,12 +38,12 @@ public record ExtractedSourceItem(
         Objects.requireNonNull(externalId, "externalId");
         Objects.requireNonNull(title, "title");
         Objects.requireNonNull(content, "content");
-        requireNonBlank(contentType, "contentType");
+        requireNonBlankArgument(contentType, "contentType");
         Objects.requireNonNull(publishedAt, "publishedAt");
         Objects.requireNonNull(discoveredAt, "discoveredAt");
         Objects.requireNonNull(identityPayload, "identityPayload");
-        externalId.ifPresent(value -> requireNonBlank(value, "externalId"));
-        title.ifPresent(value -> requireNonBlank(value, "title"));
+        externalId.ifPresent(value -> requireNonBlankArgument(value, "externalId"));
+        title.ifPresent(value -> requireNonBlankArgument(value, "title"));
         validateUrl(url);
         identityPayload = identityPayload.clone();
     }
@@ -70,9 +72,4 @@ public record ExtractedSourceItem(
         }
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

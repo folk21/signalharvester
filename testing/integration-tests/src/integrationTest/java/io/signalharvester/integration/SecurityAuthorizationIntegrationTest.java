@@ -22,6 +22,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -34,6 +36,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  */
 @Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Execution(ExecutionMode.SAME_THREAD)
 class SecurityAuthorizationIntegrationTest {
     private static final String ADMIN_USERNAME = "integration-admin";
     private static final String ADMIN_PASSWORD = "integration-admin-password";
@@ -49,17 +52,27 @@ class SecurityAuthorizationIntegrationTest {
             .withPassword("signalharvester");
 
     private EmbeddedServer server;
+    private HttpClient httpClient;
 
     @BeforeAll
     void startServer() throws Exception {
         resetDatabase();
         server = ApplicationContext.run(EmbeddedServer.class, serverProperties(), "test", "security");
+        httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
     }
 
     @AfterAll
     void stopServer() {
+        if (httpClient != null) {
+            httpClient.close();
+            httpClient = null;
+        }
         if (server != null) {
             server.close();
+            server = null;
         }
     }
 
@@ -220,7 +233,6 @@ class SecurityAuthorizationIntegrationTest {
     }
 
     private Client login(String username, String password) throws Exception {
-        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
         HttpRequest request = HttpRequest.newBuilder(server.getURI().resolve("/api/v1/auth/login"))
                 .timeout(HTTP_TIMEOUT)
                 .header("Content-Type", "application/json")
@@ -228,7 +240,7 @@ class SecurityAuthorizationIntegrationTest {
                         {"username":"%s","password":"%s"}
                         """.formatted(username, password)))
                 .build();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         assertEquals(200, response.statusCode(),
                 () -> "Login failed: " + response.statusCode() + " " + response.body());
         return new Client(response);
@@ -280,8 +292,6 @@ class SecurityAuthorizationIntegrationTest {
 
     private final class Client {
         private final Map<String, BrowserCookie> cookies = new LinkedHashMap<>();
-        private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-
         private Client() {
         }
 
@@ -300,14 +310,14 @@ class SecurityAuthorizationIntegrationTest {
                 request.header("Content-Type", "application/json");
                 request.method(method, HttpRequest.BodyPublishers.ofString(body));
             }
-            HttpResponse<String> response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString());
             applySetCookieHeaders(response);
             return response;
         }
 
         private HttpResponse<java.util.stream.Stream<String>> sendLines(String path) throws Exception {
             HttpRequest request = request(path).GET().build();
-            return client.send(request, HttpResponse.BodyHandlers.ofLines());
+            return httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
         }
 
         private HttpRequest.Builder request(String path) {

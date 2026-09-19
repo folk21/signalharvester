@@ -1,5 +1,8 @@
 package io.signalharvester.eventobservation.model;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlank;
+import static io.signalharvester.common.validation.Preconditions.requireNonNegative;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -47,12 +50,8 @@ public record ObservedEventInput(
         producer = requireNonBlank(producer, "producer");
         schemaVersion = requireNonBlank(schemaVersion, "schemaVersion");
         kafkaTopic = requireNonBlank(kafkaTopic, "kafkaTopic");
-        if (kafkaPartition < 0) {
-            throw new IllegalArgumentException("kafkaPartition must not be negative");
-        }
-        if (kafkaOffset < 0) {
-            throw new IllegalArgumentException("kafkaOffset must not be negative");
-        }
+        requireNonNegative(kafkaPartition, "kafkaPartition");
+        requireNonNegative(kafkaOffset, "kafkaOffset");
         kafkaKey = requireNonBlank(kafkaKey, "kafkaKey");
         payloadType = requireNonBlank(payloadType, "payloadType");
         sourceEventId = Objects.requireNonNull(sourceEventId, "sourceEventId");
@@ -73,11 +72,4 @@ public record ObservedEventInput(
         explanation = Objects.requireNonNull(explanation, "explanation");
     }
 
-    private static String requireNonBlank(String value, String name) {
-        Objects.requireNonNull(value, name);
-        if (value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-        return value;
-    }
 }

@@ -1,5 +1,7 @@
 package io.signalharvester.collection.run;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -27,9 +29,9 @@ public record CollectionRunResult(
         List<CollectionSourceResult> sources) {
 
     public CollectionRunResult {
-        requireNonBlank(collectionRunId, "collectionRunId");
-        requireNonBlank(monitoringProfileId, "monitoringProfileId");
-        requireNonBlank(informationCategory, "informationCategory");
+        requireNonBlankArgument(collectionRunId, "collectionRunId");
+        requireNonBlankArgument(monitoringProfileId, "monitoringProfileId");
+        requireNonBlankArgument(informationCategory, "informationCategory");
         Objects.requireNonNull(startedAt, "startedAt");
         Objects.requireNonNull(finishedAt, "finishedAt");
         Objects.requireNonNull(status, "status");
@@ -58,9 +60,4 @@ public record CollectionRunResult(
         return sources.stream().filter(CollectionSourceResult::failed).count();
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

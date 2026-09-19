@@ -47,6 +47,7 @@ dependencies {
 
     implementation("io.micronaut.validation:micronaut-validation")
 
+    testImplementation(project(":testing:test-support"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("io.micronaut:micronaut-http-server-netty")
     testImplementation(libs.testcontainers.junit.jupiter)

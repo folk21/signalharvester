@@ -1,5 +1,8 @@
 package io.signalharvester.analysis.application;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+import static io.signalharvester.common.validation.Preconditions.requireRange;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -15,18 +18,11 @@ public record AnalysisDecision(
         String analyzer) {
 
     public AnalysisDecision {
-        requireNonBlank(classification, "classification");
-        if (score < 0 || score > 100) {
-            throw new IllegalArgumentException("score must be between 0 and 100");
-        }
+        requireNonBlankArgument(classification, "classification");
+        requireRange(score, 0, 100, "score");
         tags = List.copyOf(Objects.requireNonNull(tags, "tags"));
-        requireNonBlank(explanation, "explanation");
-        requireNonBlank(analyzer, "analyzer");
+        requireNonBlankArgument(explanation, "explanation");
+        requireNonBlankArgument(analyzer, "analyzer");
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

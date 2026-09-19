@@ -1,5 +1,8 @@
 package io.signalharvester.results.model;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+import static io.signalharvester.common.validation.Preconditions.requireOptionalNonBlank;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -22,32 +25,26 @@ public record RejectedResult(
         Optional<String> traceparent) {
 
     public RejectedResult {
-        requireNonBlank(analysisEventId, "analysisEventId");
-        requireNonBlank(sourceEventId, "sourceEventId");
-        requireNonBlank(rawItemId, "rawItemId");
+        requireNonBlankArgument(analysisEventId, "analysisEventId");
+        requireNonBlankArgument(sourceEventId, "sourceEventId");
+        requireNonBlankArgument(rawItemId, "rawItemId");
         normalizedItemId = Objects.requireNonNull(normalizedItemId, "normalizedItemId");
         normalizedItemId.ifPresent(value -> requireHash(value, "normalizedItemId"));
-        requireNonBlank(sourceId, "sourceId");
-        requireNonBlank(monitoringProfileId, "monitoringProfileId");
-        requireNonBlank(informationCategory, "informationCategory");
-        requireNonBlank(reasonCode, "reasonCode");
-        requireNonBlank(explanation, "explanation");
+        requireNonBlankArgument(sourceId, "sourceId");
+        requireNonBlankArgument(monitoringProfileId, "monitoringProfileId");
+        requireNonBlankArgument(informationCategory, "informationCategory");
+        requireNonBlankArgument(reasonCode, "reasonCode");
+        requireNonBlankArgument(explanation, "explanation");
         rejectedAt = Objects.requireNonNull(rejectedAt, "rejectedAt");
-        requireNonBlank(correlationId, "correlationId");
-        traceparent = Objects.requireNonNull(traceparent, "traceparent");
-        traceparent.ifPresent(value -> requireNonBlank(value, "traceparent"));
+        requireNonBlankArgument(correlationId, "correlationId");
+        traceparent = requireOptionalNonBlank(traceparent, "traceparent");
     }
 
     private static void requireHash(String value, String name) {
-        requireNonBlank(value, name);
+        requireNonBlankArgument(value, name);
         if (value.length() != 64) {
             throw new IllegalArgumentException(name + " must contain 64 characters");
         }
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

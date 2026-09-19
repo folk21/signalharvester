@@ -1,5 +1,7 @@
 package io.signalharvester.analysis.model;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 import java.net.URI;
 import java.time.Instant;
 import java.util.Objects;
@@ -45,24 +47,24 @@ public record DiscoveredRawItem(
         Optional<Instant> publishedAt) {
 
     public DiscoveredRawItem {
-        requireNonBlank(sourceEventId, "sourceEventId");
-        requireNonBlank(correlationId, "correlationId");
+        requireNonBlankArgument(sourceEventId, "sourceEventId");
+        requireNonBlankArgument(correlationId, "correlationId");
         Objects.requireNonNull(traceparent, "traceparent");
         Objects.requireNonNull(discoveredAt, "discoveredAt");
-        requireNonBlank(rawItemId, "rawItemId");
-        requireNonBlank(sourceId, "sourceId");
-        requireNonBlank(monitoringProfileId, "monitoringProfileId");
-        requireNonBlank(informationCategory, "informationCategory");
+        requireNonBlankArgument(rawItemId, "rawItemId");
+        requireNonBlankArgument(sourceId, "sourceId");
+        requireNonBlankArgument(monitoringProfileId, "monitoringProfileId");
+        requireNonBlankArgument(informationCategory, "informationCategory");
         Objects.requireNonNull(analysisSettings, "analysisSettings");
         Objects.requireNonNull(externalId, "externalId");
         Objects.requireNonNull(title, "title");
         Objects.requireNonNull(url, "url");
         Objects.requireNonNull(content, "content");
-        requireNonBlank(contentType, "contentType");
+        requireNonBlankArgument(contentType, "contentType");
         Objects.requireNonNull(publishedAt, "publishedAt");
-        traceparent.ifPresent(value -> requireNonBlank(value, "traceparent"));
-        externalId.ifPresent(value -> requireNonBlank(value, "externalId"));
-        title.ifPresent(value -> requireNonBlank(value, "title"));
+        traceparent.ifPresent(value -> requireNonBlankArgument(value, "traceparent"));
+        externalId.ifPresent(value -> requireNonBlankArgument(value, "externalId"));
+        title.ifPresent(value -> requireNonBlankArgument(value, "title"));
         validateUrl(url);
     }
 
@@ -85,9 +87,4 @@ public record DiscoveredRawItem(
         }
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

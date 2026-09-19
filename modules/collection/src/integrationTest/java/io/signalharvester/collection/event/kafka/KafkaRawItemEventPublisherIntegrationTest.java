@@ -10,6 +10,7 @@ import io.signalharvester.collection.source.ExtractedSourceItem;
 import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
+import io.signalharvester.testing.KafkaContainerSupport;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -54,7 +55,7 @@ class KafkaRawItemEventPublisherIntegrationTest {
             UUID.fromString("00000000-0000-0000-0000-000000000401"));
 
     @Container
-    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:3.8.0");
+    private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
 
     private ApplicationContext context;
 

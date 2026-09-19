@@ -10,6 +10,7 @@ import com.sun.net.httpserver.HttpServer;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.runtime.server.EmbeddedServer;
 import io.signalharvester.testing.Await;
+import io.signalharvester.testing.KafkaContainerSupport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -85,7 +86,7 @@ class HttpPipelineSmokeIntegrationTest {
             .withPassword("signalharvester");
 
     @Container
-    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:3.8.0");
+    private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
 
     private final AtomicInteger sourceRequests = new AtomicInteger();
     private HttpServer sourceServer;

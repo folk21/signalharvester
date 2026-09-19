@@ -20,6 +20,7 @@ import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import io.signalharvester.events.common.v1.EventEnvelope;
 import io.signalharvester.events.failure.v1.DeadLetterEvent;
 import io.signalharvester.testing.Await;
+import io.signalharvester.testing.KafkaContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -76,7 +77,7 @@ class EventObservationKafkaPostgresIntegrationTest {
             .withPassword("signalharvester");
 
     @Container
-    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:3.8.0");
+    private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
 
     private ApplicationContext context;
     private KafkaProducer<String, byte[]> producer;
