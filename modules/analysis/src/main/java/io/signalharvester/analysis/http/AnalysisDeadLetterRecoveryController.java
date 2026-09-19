@@ -11,6 +11,7 @@ import io.micronaut.validation.Validated;
 import io.signalharvester.analysis.application.DeadLetterRecovery;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import java.util.Objects;
 
 /** ADMIN transport for bounded inspection and deliberate Analysis dead-letter replay. */
@@ -38,8 +39,7 @@ public class AnalysisDeadLetterRecoveryController {
     public DeadLetterInspectionResponse replay(
             @PathVariable @Min(0) int partition,
             @PathVariable @Min(0) long offset,
-            @Body @Valid DeadLetterReplayRequest request) {
-        Objects.requireNonNull(request, "request");
+            @Body @Valid @NotNull DeadLetterReplayRequest request) {
         return DeadLetterInspectionResponse.from(
                 recovery.replay(partition, offset, request.expectedDeadLetterId()));
     }

@@ -8,8 +8,11 @@ import io.signalharvester.configuration.persistence.MonitoringProfileRepository;
 import io.signalharvester.configuration.persistence.SourceRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import java.sql.Connection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,14 +25,17 @@ public final class SourceConfigurationManager implements SourceConfigurationOper
     private final SourceRepository repository;
     private final MonitoringProfileRepository monitoringProfiles;
     private final TransactionOperations<Connection> transactions;
+    private final Validator validator;
 
     public SourceConfigurationManager(
             SourceRepository repository,
             MonitoringProfileRepository monitoringProfiles,
-            @Named("default") TransactionOperations<Connection> transactions) {
+            @Named("default") TransactionOperations<Connection> transactions,
+            Validator validator) {
         this.repository = repository;
         this.monitoringProfiles = monitoringProfiles;
         this.transactions = transactions;
+        this.validator = validator;
     }
 
     /**
@@ -40,6 +46,7 @@ public final class SourceConfigurationManager implements SourceConfigurationOper
      */
     @Override
     public ConfiguredSource create(SourceConfigurationCommand command) {
+        validateCommand(command);
         SourceId sourceId = SourceId.of(UUID.randomUUID());
         ConfiguredSource source = materialize(sourceId, command);
         return transactions.executeWrite(status -> {
@@ -79,6 +86,7 @@ public final class SourceConfigurationManager implements SourceConfigurationOper
      */
     @Override
     public ConfiguredSource update(SourceId sourceId, SourceConfigurationCommand command) {
+        validateCommand(command);
         ConfiguredSource source = materialize(sourceId, command);
         return transactions.executeWrite(status -> {
             if (!repository.update(source)) {
@@ -114,6 +122,15 @@ public final class SourceConfigurationManager implements SourceConfigurationOper
     @Override
     public List<ConfiguredSource> findEnabledSources() {
         return transactions.executeRead(status -> repository.findEnabled());
+    }
+
+    private void validateCommand(SourceConfigurationCommand command) {
+        Objects.requireNonNull(command, "command");
+        var violations = validator.validate(command);
+        if (!violations.isEmpty()) {
+            ConstraintViolationException cause = new ConstraintViolationException(violations);
+            throw new InvalidSourceConfigurationException(cause.getMessage(), cause);
+        }
     }
 
     private static ConfiguredSource materialize(SourceId sourceId, SourceConfigurationCommand command) {

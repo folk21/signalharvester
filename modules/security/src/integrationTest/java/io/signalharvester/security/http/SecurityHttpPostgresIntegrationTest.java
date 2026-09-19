@@ -3,6 +3,7 @@ package io.signalharvester.security.http;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micronaut.context.ApplicationContext;
@@ -13,6 +14,13 @@ import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import io.micronaut.runtime.server.EmbeddedServer;
+import io.signalharvester.security.application.CreateUserCommand;
+import io.signalharvester.security.application.InvalidUserConfigurationException;
+import io.signalharvester.security.application.UpdateUserCommand;
+import io.signalharvester.security.application.UserAccountOperations;
+import io.signalharvester.security.model.IdentityType;
+import io.signalharvester.security.model.UserId;
+import io.signalharvester.security.model.UserRole;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -145,6 +153,28 @@ class SecurityHttpPostgresIntegrationTest {
                 "signalharvester-api", Instant.now().plusSeconds(60), JWT_SECRET)).statusCode());
         assertEquals(401, bearerRequest(signedToken(subject, List.of("USER"), "signalharvester",
                 "signalharvester-api", Instant.now().plusSeconds(60), JWT_SECRET + "-wrong")).statusCode());
+    }
+
+    /** Reject invalid application commands before hashing, lookup, or persistence. */
+    @Test
+    void shouldValidateUserApplicationCommands() throws Exception {
+        UserAccountOperations operations = server.getApplicationContext().getBean(UserAccountOperations.class);
+
+        assertThrows(
+                InvalidUserConfigurationException.class,
+                () -> operations.create(new CreateUserCommand(
+                        "invalid" + (char) 1 + "username",
+                        "valid-password",
+                        IdentityType.HUMAN,
+                        true,
+                        Set.of(UserRole.VIEWER))));
+        assertThrows(
+                InvalidUserConfigurationException.class,
+                () -> operations.update(
+                        UserId.of(UUID.randomUUID()),
+                        new UpdateUserCommand(true, null)));
+
+        assertEquals(1L, scalarLong("SELECT COUNT(*) FROM security.users"));
     }
 
     /** Apply the baseline USER role while keeping additional human roles explicit. */

@@ -10,12 +10,15 @@ import io.signalharvester.security.persistence.SecurityPersistenceException;
 import io.signalharvester.security.persistence.SecurityUserRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -26,27 +29,32 @@ public final class UserAccountManager implements UserAccountOperations {
     private final PasswordHasher passwordHasher;
     private final TransactionOperations<Connection> transactions;
     private final Clock clock;
+    private final Validator validator;
 
     public UserAccountManager(
             SecurityUserRepository repository,
             PasswordHasher passwordHasher,
-            @Named("default") TransactionOperations<Connection> transactions) {
-        this(repository, passwordHasher, transactions, Clock.systemUTC());
+            @Named("default") TransactionOperations<Connection> transactions,
+            Validator validator) {
+        this(repository, passwordHasher, transactions, Clock.systemUTC(), validator);
     }
 
     UserAccountManager(
             SecurityUserRepository repository,
             PasswordHasher passwordHasher,
             TransactionOperations<Connection> transactions,
-            Clock clock) {
+            Clock clock,
+            Validator validator) {
         this.repository = repository;
         this.passwordHasher = passwordHasher;
         this.transactions = transactions;
         this.clock = clock;
+        this.validator = validator;
     }
 
     @Override
     public UserAccount create(CreateUserCommand command) {
+        validateCommand(command);
         Set<UserRole> roles = normalizeRoles(command.identityType(), command.roles());
         Instant now = clock.instant();
         UserAccount account = new UserAccount(
@@ -94,6 +102,7 @@ public final class UserAccountManager implements UserAccountOperations {
 
     @Override
     public UserAccount update(UserId userId, UpdateUserCommand command) {
+        validateCommand(command);
         return transactions.executeWrite(status -> repository.withAdministratorStateLock(state -> {
             UserAccount existing = state.findById(userId)
                     .orElseThrow(() -> new UserNotFoundException(userId));
@@ -116,6 +125,15 @@ public final class UserAccountManager implements UserAccountOperations {
             }
             return updated;
         }));
+    }
+
+    private <T> void validateCommand(T command) {
+        Objects.requireNonNull(command, "command");
+        var violations = validator.validate(command);
+        if (!violations.isEmpty()) {
+            ConstraintViolationException cause = new ConstraintViolationException(violations);
+            throw new InvalidUserConfigurationException(cause.getMessage(), cause);
+        }
     }
 
     private static boolean isEnabledAdmin(UserAccount account) {

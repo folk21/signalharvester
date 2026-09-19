@@ -6,13 +6,17 @@ import io.signalharvester.security.model.IdentityType;
 import io.signalharvester.security.model.UserRole;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.Set;
 
 /** REST payload for creating one human or system identity. */
 @Serdeable
 public record UserCreateRequest(
-        @NotBlank @Size(max = 200) String username,
+        @NotBlank
+        @Size(max = CreateUserCommand.MAX_USERNAME_LENGTH)
+        @Pattern(regexp = CreateUserCommand.USERNAME_PATTERN, message = "username must not contain control characters")
+        String username,
         @NotBlank @Size(max = 1024) String password,
         @NotNull IdentityType identityType,
         boolean enabled,

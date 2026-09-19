@@ -1,10 +1,15 @@
 package io.signalharvester.configuration.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.runtime.server.EmbeddedServer;
+import io.signalharvester.configuration.api.SourceId;
+import io.signalharvester.configuration.application.InvalidMonitoringProfileConfigurationException;
+import io.signalharvester.configuration.application.MonitoringProfileConfigurationCommand;
+import io.signalharvester.configuration.application.MonitoringProfileConfigurationOperations;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -16,6 +21,7 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -201,6 +207,24 @@ class MonitoringProfileControllerPostgresTest {
                 """.formatted(sourceId));
         assertEquals(200, updated.statusCode());
         assertPersistedAnalysisSettings(profileId, 2, 2);
+    }
+
+    /** Reject invalid application commands before profile materialization or source lookup. */
+    @Test
+    void shouldValidateMonitoringProfileApplicationCommands() {
+        MonitoringProfileConfigurationOperations operations = server.getApplicationContext()
+                .getBean(MonitoringProfileConfigurationOperations.class);
+
+        assertThrows(
+                InvalidMonitoringProfileConfigurationException.class,
+                () -> operations.create(new MonitoringProfileConfigurationCommand(
+                        "   ",
+                        "JOB",
+                        true,
+                        0,
+                        List.of(SourceId.of(UUID.randomUUID())),
+                        Map.of(),
+                        Optional.empty())));
     }
 
     private UUID createSource(String name, String location) throws Exception {

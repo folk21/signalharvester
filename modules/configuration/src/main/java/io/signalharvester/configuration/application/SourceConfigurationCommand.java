@@ -1,11 +1,15 @@
 package io.signalharvester.configuration.application;
 
+import io.micronaut.core.annotation.Introspected;
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.api.SourceType;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.net.URI;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Carries validated source configuration input into the configuration module application API.
@@ -16,18 +20,18 @@ import java.util.Objects;
  * @param enabled whether collection is enabled
  * @param settings source-specific string settings
  */
+@Introspected
 public record SourceConfigurationCommand(
-        String name,
-        SourceType type,
-        URI location,
+        @NotBlank String name,
+        @NotNull SourceType type,
+        @NotNull URI location,
         boolean enabled,
-        Map<String, String> settings) {
+        @NotNull Map<@NotNull String, @NotNull String> settings) {
 
     public SourceConfigurationCommand {
-        Objects.requireNonNull(name, "name");
-        Objects.requireNonNull(type, "type");
-        Objects.requireNonNull(location, "location");
-        settings = Map.copyOf(Objects.requireNonNull(settings, "settings"));
+        settings = settings == null
+                ? null
+                : Collections.unmodifiableMap(new LinkedHashMap<>(settings));
     }
 
     /**

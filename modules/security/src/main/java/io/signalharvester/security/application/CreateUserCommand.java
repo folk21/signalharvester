@@ -1,49 +1,35 @@
 package io.signalharvester.security.application;
 
+import io.micronaut.core.annotation.Introspected;
 import io.signalharvester.security.model.IdentityType;
 import io.signalharvester.security.model.UserRole;
-import java.util.Objects;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 /** Administrative command for creating one persisted security identity. */
+@Introspected
 public record CreateUserCommand(
+        @NotBlank
+        @Size(max = MAX_USERNAME_LENGTH)
+        @Pattern(regexp = USERNAME_PATTERN, message = "username must not contain control characters")
         String username,
-        String password,
-        IdentityType identityType,
+        @NotBlank String password,
+        @NotNull IdentityType identityType,
         boolean enabled,
-        Set<UserRole> roles) {
+        Set<@NotNull UserRole> roles) {
+
+    public static final int MAX_USERNAME_LENGTH = 200;
+    public static final String USERNAME_PATTERN = "[^\\p{Cc}]*";
+
     public CreateUserCommand {
-        username = normalizeUsername(username);
-        password = requirePassword(password);
-        Objects.requireNonNull(identityType, "identityType");
-        roles = Set.copyOf(roles == null ? Set.of() : roles);
-    }
-
-    private static String normalizeUsername(String value) {
-        String normalized = requireNonBlank(value, "username");
-        if (normalized.length() > 200) {
-            throw new IllegalArgumentException("username exceeds the supported length");
-        }
-        if (normalized.chars().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException("username must not contain control characters");
-        }
-        return normalized;
-    }
-
-    private static String requirePassword(String value) {
-        Objects.requireNonNull(value, "password");
-        if (value.isBlank()) {
-            throw new IllegalArgumentException("password must not be blank");
-        }
-        return value;
-    }
-
-    private static String requireNonBlank(String value, String name) {
-        Objects.requireNonNull(value, name);
-        String normalized = value.trim();
-        if (normalized.isEmpty()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-        return normalized;
+        username = username == null ? null : username.trim();
+        roles = roles == null
+                ? Set.of()
+                : Collections.unmodifiableSet(new LinkedHashSet<>(roles));
     }
 }

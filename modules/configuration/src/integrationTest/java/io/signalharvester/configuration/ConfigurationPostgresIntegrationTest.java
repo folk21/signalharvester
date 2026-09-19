@@ -11,6 +11,7 @@ import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.api.SourceType;
+import io.signalharvester.configuration.application.InvalidSourceConfigurationException;
 import io.signalharvester.configuration.application.SourceConfigurationCommand;
 import io.signalharvester.configuration.application.SourceConfigurationOperations;
 import io.signalharvester.configuration.application.SourceNotFoundException;
@@ -182,6 +183,31 @@ class ConfigurationPostgresIntegrationTest {
 
         SourceConfigurationProvider provider = context.getBean(SourceConfigurationProvider.class);
         assertEquals(created, provider.findSource(created.id()).orElseThrow());
+    }
+
+    /** Reject invalid application commands before any source persistence occurs. */
+    @Test
+    void shouldValidateSourceApplicationCommandsBeforePersistence() throws Exception {
+        SourceConfigurationOperations manager = context.getBean(SourceConfigurationOperations.class);
+
+        assertThrows(
+                InvalidSourceConfigurationException.class,
+                () -> manager.create(new SourceConfigurationCommand(
+                        "   ",
+                        SourceType.REST,
+                        URI.create("https://example.test/jobs"),
+                        true,
+                        Map.of())));
+        assertThrows(
+                InvalidSourceConfigurationException.class,
+                () -> manager.create(new SourceConfigurationCommand(
+                        "Jobs API",
+                        null,
+                        URI.create("https://example.test/jobs"),
+                        true,
+                        Map.of())));
+
+        assertEquals(0L, countSourceRows());
     }
 
     /**
