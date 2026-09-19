@@ -114,7 +114,7 @@ Activating the `security` environment loads `application-security.properties`. T
 
 CORS stays disabled unless `SIGNALHARVESTER_CORS_ENABLED=true`. Credentialed CORS uses one configured origin, never `*`. The Results `X-Next-Cursor` response header is exposed so a separately hosted browser frontend can follow paginated Results.
 
-The browser JWT cookie is HttpOnly and `SameSite=Strict`. The readable `XSRF-TOKEN` cookie contains only CSRF proof. JSON/form mutations return that proof in `X-CSRF-TOKEN`.
+The browser JWT cookie is HttpOnly and `SameSite=Strict`. The readable `XSRF-TOKEN` cookie contains only CSRF proof. Protected mutations return that proof in the `X-CSRF-TOKEN` request header. The security profile keeps Micronaut HTTP-header CSRF resolution enabled and disables form-field token resolution, so the backend has one explicit CSRF proof transport for JSON and form-compatible mutation content types.
 
 JWTs must not appear in URLs.
 
