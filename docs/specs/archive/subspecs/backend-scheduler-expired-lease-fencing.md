@@ -3,7 +3,7 @@ type: Specification
 title: Scheduler expired-lease fencing
 description: Prevent an expired Collection scheduler lease from being renewed or completed by its former owner after ownership has lapsed.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 
@@ -11,9 +11,9 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Implementation complete; verification pending.
+Completed and accepted on 2026-09-20 after the developer confirmed all relevant tests and validations passed.
 
-The systematic lifecycle/reliability review identified a durable-ownership gap in the accepted `COLLECTION.SCHEDULING` lease lifecycle. Focused verification and the canonical repository gate are still required before acceptance.
+The systematic lifecycle/reliability review identified a durable-ownership gap in the accepted `COLLECTION.SCHEDULING` lease lifecycle. The accepted implementation fences renewal and completion at the persisted lease-expiry boundary while preserving successor-token and pre-run release semantics.
 
 ## Feature scope
 

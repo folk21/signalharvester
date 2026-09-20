@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-scheduler-expired-lease-fencing.md
+current_focus: subspecs/backend-kafka-listener-interruption-fencing.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +26,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, and `backend-module-contract-discoverability` are accepted after their relevant repository tests and validations passed. The current bounded focus is `backend-scheduler-expired-lease-fencing`, identified by the systematic lifecycle/reliability review after it found that an expired scheduler owner could still renew or complete its lease before a successor claim.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, and `backend-scheduler-expired-lease-fencing` are accepted after their relevant repository tests and validations passed. The current bounded focus is `backend-kafka-listener-interruption-fencing`, identified by the Kafka consumer lifecycle review after it found that interrupted processing could otherwise enter retry exhaustion and terminal DLQ handling.
 
 Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
 

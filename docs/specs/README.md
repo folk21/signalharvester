@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded implementation focus is [`active/subspecs/backend-scheduler-expired-lease-fencing.md`](active/subspecs/backend-scheduler-expired-lease-fencing.md). The systematic lifecycle/reliability review identified a material scheduler ownership defect: an expired exact-token lease could still be renewed or completed before a successor claim. The fix is implemented and awaits verification.
+The current bounded implementation focus is [`active/subspecs/backend-kafka-listener-interruption-fencing.md`](active/subspecs/backend-kafka-listener-interruption-fencing.md). The Kafka consumer lifecycle review identified a material cancellation-classification defect: interrupted Analysis, Results, or Event Observation work could otherwise enter retry exhaustion and terminal DLQ handling. The bounded fix is implemented and awaits verification.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- None. Further backend lifecycle/reliability review remains analysis-only until it identifies a concrete material change.
+- [`active/subspecs/backend-kafka-listener-interruption-fencing.md`](active/subspecs/backend-kafka-listener-interruption-fencing.md) — keep listener-thread interruption outside application retry/DLQ classification for Analysis, Results, and Event Observation.
 
 Active supporting tracks:
 
@@ -165,6 +165,7 @@ Active supporting tracks:
 
 Accepted on 2026-09-20:
 
+- [`archive/subspecs/backend-scheduler-expired-lease-fencing.md`](archive/subspecs/backend-scheduler-expired-lease-fencing.md) — `COLLECTION.SCHEDULING` expiry fencing that rejects stale renewal/completion after `lease_until` and leaves overdue work reclaimable; accepted after the developer confirmed all relevant tests and validations passed.
 - [`archive/subspecs/backend-module-contract-discoverability.md`](archive/subspecs/backend-module-contract-discoverability.md) — `PLATFORM.MODULAR_MONOLITH`, `CONTRACTS.HTTP`, and `CONTRACTS.KAFKA_PROTOBUF` discoverability hardening; accepted after the developer confirmed all relevant repository tests and validations passed.
 - [`archive/subspecs/backend-kafka-offset-commit-failure-separation.md`](archive/subspecs/backend-kafka-offset-commit-failure-separation.md) — `RELIABILITY.KAFKA_RETRY`, `RELIABILITY.DEAD_LETTER`, and `RELIABILITY.IDEMPOTENCY`; accepted after the corrected Micronaut `SYNC_PER_RECORD` implementation completed focused listener verification, `HttpPipelineSmokeIntegrationTest`, and the canonical repository gate.
 - [`archive/subspecs/backend-analysis-outbox-lease-renewal.md`](archive/subspecs/backend-analysis-outbox-lease-renewal.md) — `ANALYSIS.OUTBOX` exact-token pre-publication lease renewal so sequential batch queueing cannot expire later-row ownership before Kafka send; accepted after focused Analysis verification and the canonical repository gate passed.

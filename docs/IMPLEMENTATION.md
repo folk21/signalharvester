@@ -186,6 +186,7 @@ Failure behavior is explicit:
 
 - transport, key, and mapping failures are dead-lettered immediately;
 - application failures use bounded retry;
+- listener-thread interruption escapes before retry exhaustion/DLQ classification and preserves the interrupt status;
 - retry exhaustion publishes the original input plus deterministic source-position dead-letter identity and failure metadata as `failure/v1/DeadLetterEvent`;
 - normal listener completion occurs only after the Analysis PostgreSQL transaction or acknowledged Analysis DLQ publication succeeds;
 - Micronaut synchronously commits the completed record afterward;
@@ -236,6 +237,7 @@ The Results listener uses Micronaut Kafka `SYNC_PER_RECORD`:
 
 - deterministic transport, key, and mapping failures go directly to the Results DLQ;
 - projection failures retry within the configured bound;
+- listener-thread interruption escapes before terminal DLQ classification and preserves the interrupt status;
 - the listener returns normally only after the Results transaction completes or terminal `DeadLetterEvent` publication is acknowledged;
 - Micronaut performs the synchronous per-record offset commit after that successful listener completion.
 
@@ -278,6 +280,7 @@ The listener applies the same bounded retry/dead-letter split and Micronaut `SYN
 
 - deterministic decode, key, and mapping failures are terminal immediately;
 - recording failures retry;
+- listener-thread interruption escapes before terminal DLQ classification and preserves the interrupt status;
 - the listener completes normally only after recording or acknowledged DLQ publication;
 - Micronaut synchronously commits the completed source record afterward;
 - DLQ publication failure escapes before successful completion, and framework commit failures remain outside Event Observation application retry/DLQ classification.

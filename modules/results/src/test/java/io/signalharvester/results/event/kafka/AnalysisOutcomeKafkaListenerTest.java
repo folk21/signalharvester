@@ -27,8 +27,9 @@ import org.junit.jupiter.api.Test;
  * Verifies {@link AnalysisOutcomeKafkaListener} projection dispatch, bounded retry, dead-letter handling,
  * and framework-owned synchronous per-record commits for analyzed and rejected terminal events.
  *
- * <p>Related specifications: {@code backend-reliability-failure-handling} and
- * {@code backend-kafka-offset-commit-failure-separation}.</p>
+ * <p>Related specifications: {@code backend-reliability-failure-handling},
+ * {@code backend-kafka-offset-commit-failure-separation}, and
+ * {@code backend-kafka-listener-interruption-fencing}.</p>
  *
  * <p>Features: {@code RESULTS.MATERIALIZATION}, {@code RELIABILITY.KAFKA_RETRY}, {@code RELIABILITY.DEAD_LETTER}.</p>
  */
@@ -207,6 +208,38 @@ class AnalysisOutcomeKafkaListenerTest {
                 0,
                 ANALYZED_TOPIC));
 
+    }
+
+    /** Propagate lifecycle interruption instead of classifying interrupted projection as a terminal DLQ failure. */
+    @Test
+    void shouldPropagateInterruptedProjectionWithoutDeadLettering() {
+        AnalysisOutcomeProjector projector = new AnalysisOutcomeProjector() {
+            @Override
+            public void projectAnalyzed(AnalyzedResult result) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("projection interrupted");
+            }
+
+            @Override
+            public void projectRejected(RejectedResult result) {
+                throw new AssertionError("unexpected rejected projection");
+            }
+        };
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        AnalysisOutcomeKafkaListener listener = listener(projector, deadLetters, 1, Duration.ZERO);
+
+        try {
+            assertThrows(IllegalStateException.class, () -> listener.receiveAnalyzed(
+                    NORMALIZED_ITEM_ID,
+                    analyzedEvent().toByteArray(),
+                    5L,
+                    0,
+                    ANALYZED_TOPIC));
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertTrue(deadLetters.failures.isEmpty());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     /** Reject retry backoff that exceeds the bounded listener policy. */

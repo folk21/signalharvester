@@ -205,6 +205,7 @@ Failure handling is deterministic:
 
 - decode, key, and mapping failures go directly to the owning consumer's DLQ;
 - application failures retry within a small configured bound;
+- an interrupted listener thread escapes application retry/DLQ classification and remains eligible for redelivery;
 - retry exhaustion produces a deterministic dead-letter identity and preserves the original key/payload, source position, consumer identity, failure details, attempt count, and retryability classification.
 
 A listener returns normally only after durable application processing succeeds or acknowledged owner-specific DLQ publication completes. Micronaut then commits that completed record synchronously. Offset-commit mechanics do not re-enter SignalHarvester application retry or DLQ classification.
