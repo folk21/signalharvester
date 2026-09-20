@@ -22,6 +22,7 @@ public final class JdbiProfileScheduleStateStore implements ProfileScheduleState
     private static final String RESCHEDULE_INTERVAL_SQL = SqlResources.load(SQL_PATH, "reschedule-interval");
     private static final String CLAIM_SQL = SqlResources.load(SQL_PATH, "claim");
     private static final String RENEW_SQL = SqlResources.load(SQL_PATH, "renew");
+    private static final String RELEASE_SQL = SqlResources.load(SQL_PATH, "release");
     private static final String COMPLETE_SQL = SqlResources.load(SQL_PATH, "complete");
 
     private final Jdbi jdbi;
@@ -66,6 +67,16 @@ public final class JdbiProfileScheduleStateStore implements ProfileScheduleState
                 handle.createUpdate(RENEW_SQL)
                         .bind("leaseUntil", Timestamp.from(now.plus(leaseDuration)))
                         .bind("updatedAt", Timestamp.from(now))
+                        .bind("monitoringProfileId", lease.profileId().value())
+                        .bind("leaseToken", lease.token())
+                        .execute() == 1);
+    }
+
+    @Override
+    public boolean release(ProfileScheduleLease lease, Instant releasedAt) {
+        return execute("Failed to release monitoring-profile schedule lease", handle ->
+                handle.createUpdate(RELEASE_SQL)
+                        .bind("updatedAt", Timestamp.from(releasedAt))
                         .bind("monitoringProfileId", lease.profileId().value())
                         .bind("leaseToken", lease.token())
                         .execute() == 1);

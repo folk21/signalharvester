@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Owns short database transactions for cluster-safe schedule claim, heartbeat, and completion. */
+/** Owns short database transactions for cluster-safe schedule claim, heartbeat, pre-run release, and completion. */
 @Singleton
 public final class ProfileScheduleCoordinator {
     private final ProfileScheduleStateStore store;
@@ -34,6 +34,11 @@ public final class ProfileScheduleCoordinator {
     /** Renews an active lease without holding a transaction across collection work. */
     public boolean renew(ProfileScheduleLease lease, Instant now, Duration leaseDuration) {
         return transactions.executeWrite(status -> store.renew(lease, now, leaseDuration));
+    }
+
+    /** Releases an active lease without advancing the persisted next-due time. */
+    public boolean release(ProfileScheduleLease lease, Instant releasedAt) {
+        return transactions.executeWrite(status -> store.release(lease, releasedAt));
     }
 
     /** Releases an active lease and schedules the next run after the configured interval. */
