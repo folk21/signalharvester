@@ -17,34 +17,44 @@ Own the application-level technical projection of selected published events for 
 - expose bounded REST history queries;
 - expose resumable browser-facing SSE technical-event updates;
 - preserve correlation, trace, Kafka, source, profile, and item provenance needed for flow reconstruction;
-- reconstruct bounded collection-run and run-scoped item graphs on read from retained observation evidence.
+- reconstruct bounded collection-run and run-scoped item graphs on read from retained observation evidence;
+- expose controlled owner-specific dead-letter inspection and replay.
 
 ## Public integration surface
 
 ### Synchronous Java API
 
-None. No external functional module currently calls event observation synchronously.
+None. Event Observation currently publishes no synchronous cross-module Java API.
 
 ### REST / SSE API
 
-The authoritative browser contract is `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`:
+Authoritative schema: `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`.
 
-- `GET /api/v1/events` — bounded recent technical event history;
-- `GET /api/v1/events/stream` — resumable SSE live event delivery;
-- `GET /api/v1/flows/collection-runs/{collectionRunId}` — reconstructed collection-run processing graph;
-- `GET /api/v1/flows/collection-runs/{collectionRunId}/items/{itemId}` — reconstructed run-scoped item graph.
+Event Observation owns the Event Explorer route family under `/api/v1/events`, resumable live delivery at `/api/v1/events/stream`, Processing Flow routes under `/api/v1/flows/collection-runs`, and controlled dead-letter inspection/replay under `/api/v1/admin/event-observation/dead-letters`.
 
 ### Events
 
-The module consumes existing versioned schemas under `contracts/event-contracts/src/main/proto/`. It does not redefine them.
+Event Observation consumes `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` through an independent observation consumer group. Terminal Event Observation consumer failures publish `DeadLetterEvent`.
+
+Authoritative event sources:
+
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/collection/v1/raw-item-discovered.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/analysis/v1/item-analyzed.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/analysis/v1/item-rejected.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/failure/v1/dead-letter-event.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/common/v1/event-envelope.proto` — shared envelope used by the observed normal pipeline events.
+
+The module does not redefine these schemas, and generated Protobuf classes remain inside the Kafka adapter boundary.
 
 ## Owned data
 
-PostgreSQL schema `event_observation` contains diagnostic event materialization only. `observed_events` is keyed by a durable observation cursor and enforces unique published event identity.
+PostgreSQL schema `event_observation` is owned by migrations under `modules/event-observation/src/main/resources/db/migration/event_observation/`. `observed_events` contains diagnostic event materialization only, is keyed by a durable observation cursor, and enforces unique published event identity.
 
 ## Dependencies
 
-The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, Micronaut-managed Jdbi, and Micronaut HTTP/SSE/runtime infrastructure. It has no synchronous dependency on another functional module.
+No synchronous dependency on another functional module is required.
+
+The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, Micronaut-managed Jdbi, and Micronaut HTTP/SSE/runtime infrastructure.
 
 ## Forbidden access
 

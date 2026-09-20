@@ -248,7 +248,7 @@ Browser authentication uses an HttpOnly JWT cookie so native SSE remains compati
 
 JWTs are short-lived and stateless. Account disablement and role changes prevent future login/issuance, but already-issued credentials remain valid until expiry unless a future revocation design is introduced.
 
-The default local environment remains an explicitly trusted compatibility mode while the companion frontend migrates.
+The default local environment remains an explicitly trusted compatibility mode.
 
 Shared or public deployments must enable the protected security profile and provide deployment-owned JWT/CSRF secrets.
 
@@ -282,7 +282,7 @@ Telemetry is auxiliary. Disabling Micrometer or OpenTelemetry does not change bu
 
 Kubernetes is the target deployment environment. The backend-owned local Kubernetes stack and Prometheus/Loki/Tempo/Grafana observability stack are accepted after live developer verification.
 
-Full platform Kubernetes acceptance still depends on the separately owned real frontend image.
+Backend-owned Kubernetes and infrastructure-observability acceptance are complete in this repository. Full product deployment acceptance spans the separately owned frontend deliverable and must be evaluated across repository boundaries.
 
 Application Event Explorer and Processing Flow explain retained domain/event evidence. Infrastructure telemetry explains aggregate runtime health and distributed timing. These views complement each other.
 

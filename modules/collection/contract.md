@@ -12,9 +12,9 @@ Own collection-run orchestration, bounded external-source access, and publicatio
 ## Owned responsibilities
 
 - explicit profile-driven collection-run lifecycle;
-- interval scheduling with collection-owned cluster-safe lease state;
+- interval scheduling with Collection-owned cluster-safe lease state;
 - external source fetching and bounded concurrency;
-- collection-owned source extraction, including bounded RSS/Atom parsing, REST/JSON Pointer extraction, and HTML CSS-selector extraction;
+- Collection-owned source extraction, including bounded RSS/Atom parsing, REST/JSON Pointer extraction, and HTML CSS-selector extraction;
 - bounded persisted-source diagnostic testing through the same fetch/extraction ports used by collection runs;
 - raw-item identity generation;
 - `RawItemDiscovered` publication;
@@ -25,52 +25,59 @@ Own collection-run orchestration, bounded external-source access, and publicatio
 
 ### Synchronous Java API
 
-No synchronous cross-module Java API is currently published by Collection.
+None. Collection currently publishes no synchronous cross-module Java API.
 
-`CollectionRunner`, `CollectionRunHistory`, their run/result records, and related status types live under `collection.run` as internal application boundaries used by collection-owned adapters and tests. They are interfaces/models for clean internal composition, not permission for another functional module to depend on Collection synchronously.
+`CollectionRunner`, `CollectionRunHistory`, their run/result records, and related status types live under `collection.run` as internal application boundaries used by Collection-owned adapters and tests. They are interfaces/models for clean internal composition, not permission for another functional module to depend on Collection synchronously.
 
 Internal interfaces such as `ExternalSourceClient`, `RawItemEventPublisher`, and `CollectionRunHistoryStore` are replaceable implementation ports and are likewise not published module APIs.
 
-### REST API
+### REST / SSE API
 
-Authoritative schema: `contracts/api-contracts/`.
+Authoritative schema: `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`.
 
-Implementation adapter: `src/main/java/io/signalharvester/collection/http/`.
+Collection owns the persisted-source diagnostic route `/api/v1/sources/{sourceId}/test` and the operational Collection Run route family under `/api/v1/admin/collection-runs`.
+
+Implementation adapters live under `modules/collection/src/main/java/io/signalharvester/collection/http/`.
 
 Collection HTTP adapters depend on internal application boundaries such as `CollectionRunner`, `CollectionRunHistory`, and `SourceTester`; controller classes and those internal ports are not cross-module Java APIs.
 
 ### Events
 
-Produces versioned `RawItemDiscovered` events defined under `contracts/event-contracts/src/main/proto/`.
+Collection produces `RawItemDiscovered`.
 
-Generated Protobuf classes are transport contract output, not collection domain/API models.
+Authoritative event sources:
+
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/collection/v1/raw-item-discovered.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/common/v1/event-envelope.proto` — shared envelope used by `RawItemDiscovered`.
+
+Generated Protobuf classes are transport contract output, not Collection domain/API models.
 
 ## Owned data
 
-- PostgreSQL schema `collection`;
+- PostgreSQL schema `collection` and migrations under `modules/collection/src/main/resources/db/migration/collection/`;
 - durable collection-run and ordered source-outcome history;
-- monitoring-profile schedule due/lease state.
+- Monitoring Profile schedule due/lease state.
 
 ## Dependencies
 
 Synchronous functional-module dependency:
 
-- `configuration.api..` for persisted monitoring profiles, effective source configuration, and stable profile/source identity types used internally by Collection. The Gradle dependency is an `implementation` dependency because Collection currently publishes no Java API of its own.
+- Configuration through `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider` in `io.signalharvester.configuration.api..`; Configuration-owned API data types from that package carry stable profile/source identity and effective configuration. The Gradle dependency is an `implementation` dependency because Collection currently publishes no Java API of its own.
 
-Asynchronous downstream processing uses Kafka event contracts rather than direct calls to analysis/results.
+Asynchronous downstream processing uses Kafka event contracts rather than direct calls to Analysis or Results.
 
 ## Forbidden access
 
-Collection must not access configuration-owned tables or configuration implementation packages.
+Collection must not access Configuration-owned tables or Configuration implementation packages.
 
-Other functional modules must not depend on collection `run`, `source`, `sourcetest`, `event`, `persistence`, `configuration`, or `http` packages. Internal application ports are not cross-module APIs merely because they are Java interfaces.
+Other functional modules must not depend on Collection `run`, `source`, `sourcetest`, `event`, `persistence`, `configuration`, or `http` packages. Internal application ports are not cross-module APIs merely because they are Java interfaces.
 
 ## Important invariants
 
-- a run derives information category, ordered source membership, and effective Analysis settings from the persisted monitoring profile; callers cannot override them;
+- a run derives information category, ordered source membership, and effective Analysis settings from the persisted Monitoring Profile; callers cannot override them;
 - every newly published `RawItemDiscovered` carries the effective profile Analysis settings snapshot used by that run;
 - automatic scheduling considers only enabled profiles and fetches only enabled member sources;
-- scheduler due-work claims and lease updates use short collection-owned PostgreSQL transactions; external HTTP/Kafka work runs outside those transactions;
+- scheduler due-work claims and lease updates use short Collection-owned PostgreSQL transactions; external HTTP/Kafka work runs outside those transactions;
 - scheduler claims that fail before `CollectionRunner.run(...)` starts because local dispatch or heartbeat setup is rejected are released best-effort by exact lease token without advancing the due time; stale owners cannot clear a successor lease, and expiry remains the fallback if release persistence fails;
 - source/item-level failures are best-effort and do not cancel unrelated source work;
 - run-level coordination failures, including partial executor rejection, cancel already accepted in-flight fetch work best-effort before propagating the failure;

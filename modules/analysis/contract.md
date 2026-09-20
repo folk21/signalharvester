@@ -16,55 +16,66 @@ Own post-discovery normalization, profile-scoped deduplication, deterministic an
 - durable deduplication claims;
 - analysis/classification;
 - terminal analysis event publication;
-- read-only operational inspection of normalized-item claims.
+- read-only operational inspection of normalized-item claims;
+- controlled owner-specific dead-letter inspection and replay.
 
 ## Public integration surface
 
 ### Synchronous Java API
 
-No synchronous cross-module Java API is currently published by Analysis.
+None. Analysis currently publishes no synchronous cross-module Java API.
 
-`AnalysisItemInspectionQuery` and `AnalysisItemInspection` live under `analysis.application` as an internal read-only application boundary used by the analysis-owned HTTP adapter and tests. The raw-item processing path is also intentionally internal and event-driven.
+`AnalysisItemInspectionQuery` and `AnalysisItemInspection` live under `analysis.application` as an internal read-only application boundary used by the Analysis-owned HTTP adapter and tests. The raw-item processing path is also intentionally internal and event-driven.
 
 `RawItemProcessor`, `ContentAnalyzer`, `ContentNormalizer`, `AnalysisOutbox`, inspection queries, and repository interfaces are internal ports used to structure the module implementation, not published module contracts.
 
-### REST API
+### REST / SSE API
 
-Authoritative schema: `contracts/api-contracts/`.
+Authoritative schema: `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`.
 
-Implementation adapter: `src/main/java/io/signalharvester/analysis/http/`.
+Analysis owns the bounded inspection route family under `/api/v1/admin/analysis/items` and controlled dead-letter inspection/replay under `/api/v1/admin/analysis/dead-letters`.
 
-The operational controller depends on the internal `AnalysisItemInspectionQuery` application boundary, not directly on persistence.
+Implementation adapters live under `modules/analysis/src/main/java/io/signalharvester/analysis/http/`.
+
+The operational inspection controller depends on the internal `AnalysisItemInspectionQuery` application boundary, not directly on persistence.
 
 ### Events
 
-Consumes versioned `RawItemDiscovered` events, including the effective Analysis-settings snapshot when present, and produces versioned `ItemAnalyzed` / `ItemRejected` events defined under `contracts/event-contracts/src/main/proto/`.
+Analysis consumes `RawItemDiscovered`, including the effective Analysis-settings snapshot when present, and produces `ItemAnalyzed` or `ItemRejected`. Terminal Analysis consumer failures publish `DeadLetterEvent`.
+
+Authoritative event sources:
+
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/collection/v1/raw-item-discovered.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/analysis/v1/item-analyzed.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/analysis/v1/item-rejected.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/failure/v1/dead-letter-event.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/common/v1/event-envelope.proto` — shared envelope used by the normal pipeline events above.
 
 Kafka/Protobuf adapters remain internal implementation details.
 
 ## Owned data
 
-- PostgreSQL schema `analysis`;
+- PostgreSQL schema `analysis` and migrations under `modules/analysis/src/main/resources/db/migration/analysis/`;
 - normalized-item/deduplication claim state;
 - transactional terminal-event outbox rows and dispatcher lease/publication metadata.
 
-Other modules must not query analysis tables directly.
+Other modules must not query Analysis tables directly.
 
 ## Dependencies
 
 No synchronous dependency on another functional module is currently required.
 
-Collection-to-analysis processing is asynchronous through Kafka contracts.
+Collection-to-Analysis processing is asynchronous through Kafka contracts.
 
 ## Forbidden access
 
-Consumers must not import analysis `application`, `normalization`, `rules`, `event`, `outbox`, `persistence`, `configuration`, or `http` packages.
+Consumers must not import Analysis `application`, `normalization`, `rules`, `event`, `outbox`, `persistence`, `configuration`, or `http` packages.
 
 Do not turn internal strategy/repository interfaces into published APIs solely because they are interfaces.
 
 ## Important invariants
 
-- deduplication identity is scoped by monitoring profile;
+- deduplication identity is scoped by Monitoring Profile;
 - deterministic classification uses the immutable settings snapshot carried by the raw event and does not synchronously query Configuration;
 - deployment-global keyword rules are a compatibility fallback only for legacy raw events without a settings snapshot;
 - the raw Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;

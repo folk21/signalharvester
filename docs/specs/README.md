@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded implementation focus is `active/subspecs/backend-module-contract-discoverability.md`. Stage 1 repository contract audit is complete; module contract normalization is the next stage.
+There is currently no bounded implementation focus. The backend is in systematic lifecycle/reliability review; create the next sub-spec only when that review identifies a material change requiring explicit semantics and acceptance criteria.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-module-contract-discoverability.md`](active/subspecs/backend-module-contract-discoverability.md) — `PLATFORM.MODULAR_MONOLITH`, `CONTRACTS.HTTP`, and `CONTRACTS.KAFKA_PROTOBUF` contract discoverability hardening; Stage 1 audit complete, Stage 2 module contract normalization next.
+- None. Further backend lifecycle/reliability review remains analysis-only until it identifies a concrete material change.
 
 Active supporting tracks:
 
@@ -165,6 +165,7 @@ Active supporting tracks:
 
 Accepted on 2026-09-20:
 
+- [`archive/subspecs/backend-module-contract-discoverability.md`](archive/subspecs/backend-module-contract-discoverability.md) — `PLATFORM.MODULAR_MONOLITH`, `CONTRACTS.HTTP`, and `CONTRACTS.KAFKA_PROTOBUF` discoverability hardening; accepted after the developer confirmed all relevant repository tests and validations passed.
 - [`archive/subspecs/backend-kafka-offset-commit-failure-separation.md`](archive/subspecs/backend-kafka-offset-commit-failure-separation.md) — `RELIABILITY.KAFKA_RETRY`, `RELIABILITY.DEAD_LETTER`, and `RELIABILITY.IDEMPOTENCY`; accepted after the corrected Micronaut `SYNC_PER_RECORD` implementation completed focused listener verification, `HttpPipelineSmokeIntegrationTest`, and the canonical repository gate.
 - [`archive/subspecs/backend-analysis-outbox-lease-renewal.md`](archive/subspecs/backend-analysis-outbox-lease-renewal.md) — `ANALYSIS.OUTBOX` exact-token pre-publication lease renewal so sequential batch queueing cannot expire later-row ownership before Kafka send; accepted after focused Analysis verification and the canonical repository gate passed.
 - [`archive/subspecs/backend-scheduler-pre-run-lease-recovery.md`](archive/subspecs/backend-scheduler-pre-run-lease-recovery.md) — `COLLECTION.SCHEDULING` pre-run recovery that releases exact-token leases after local dispatch/setup failure without advancing due time; accepted after the developer confirmed focused Collection verification and the canonical repository gate passed.
@@ -218,4 +219,4 @@ Further scheduling refinements remain deferred until a product requirement justi
 
 These are candidates, not active commitments.
 
-Detailed `PRESENTATION.VIEWER_RESULTS` behavior belongs to `signalharvester-web`. It should receive its own frontend sub-spec when that work resumes.
+Companion-frontend planning and implementation lifecycle belong to `signalharvester-web` and are not maintained in this backend specification index.

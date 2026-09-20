@@ -4,15 +4,15 @@ title: SignalHarvester backend module contract discoverability and repository na
 description: Bounded backend hardening slice that makes module boundaries, published contracts, dependencies, and authoritative source locations deterministic to discover without requiring unrelated implementation context.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: active
+spec_status: completed
 ---
 # SignalHarvester backend module contract discoverability and repository navigation
 
 ## Status
 
-Active implementation focus.
+Completed and accepted on 2026-09-20 after the developer confirmed all relevant repository tests and validations passed.
 
-Stage 1 repository contract audit completed on 2026-09-20. The audit confirmed that the existing module-contract model is structurally sound and identified a bounded normalization backlog. Stage 2 is the next implementation stage.
+Stages 1-3 are complete. Stage 1 audited the repository contract model, Stage 2 normalized all six functional-module contracts, and Stage 3 reconciled global/current-state navigation plus stale active-spec inventories. Stable behavior and navigation rules now live in current-state documentation and module contracts.
 
 This specification hardens the existing modular-monolith documentation and contract-navigation model.
 
@@ -409,6 +409,8 @@ Validation should include:
 
 No new automated contract-readiness validation is required by this specification.
 
+Acceptance evidence: the developer confirmed on 2026-09-20 that all relevant repository tests and validations passed after Stages 1-3 were applied.
+
 If the audit demonstrates a recurring structural failure that is both important and inexpensive to detect automatically, such validation may be proposed as a separate follow-up stage.
 
 ## Implementation tasks
@@ -572,6 +574,41 @@ The audit does not classify those statements as stale without an authoritative c
 The audit found no reason to change runtime behavior, module dependency direction, or published Java APIs as part of this slice.
 
 The existing architecture is suitable for minimum-context navigation once the documented boundaries are normalized. Stage 2 can therefore remain a documentation-only module-contract pass focused on all six `contract.md` files, with module README changes only where contract-versus-implementation ownership requires them.
+
+## Stage 2 normalization outcome
+
+Stage 2 normalized all six functional-module contracts without changing runtime behavior, published Java APIs, transport schemas, or module dependency direction.
+
+The normalized contracts now provide a predictable minimum-context navigation path:
+
+- every module has explicit `Synchronous Java API`, `REST / SSE API`, and `Events` subsections under `Public integration surface`;
+- every HTTP-owning module points directly to `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml` and names only the route families needed to locate its owned surface efficiently;
+- Configuration points directly to its repository-relative published Java API package and keeps all published contract data within that package;
+- Collection identifies `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider` as its primary synchronous Configuration entry points instead of requiring an initial scan of the full package;
+- Collection, Analysis, Results, and Event Observation enumerate the smallest practical authoritative Protobuf source set for the events they consume or produce, including the shared envelope for normal pipeline events and `DeadLetterEvent` for terminal consumer failures where applicable;
+- Configuration and Security explicitly state that they currently own no Kafka event boundary;
+- module-owned migration locations use repository-relative resource paths where persistence navigation is useful;
+- Analysis, Results, and Event Observation expose their existing controlled dead-letter HTTP route families in their boundary summaries.
+
+No module README required modification: all six already delegate ownership and integration boundaries to their root `contract.md`. No implementation source, test, OpenAPI, Protobuf, Gradle dependency, or persistence migration was changed.
+
+Stage 3 remains responsible for global/current-state documentation normalization and stale inventories in active supporting specifications.
+
+## Stage 3 normalization outcome
+
+Stage 3 reconciled global/current-state navigation without changing runtime behavior, published APIs, OpenAPI, Protobuf schemas, persistence, or module dependencies.
+
+The normalization made the following ownership boundaries explicit:
+
+- `backend-project-structure.md` no longer maintains a duplicated repository tree, functional-module inventory, Gradle-project list, event-schema inventory, persistence-schema inventory, approximate dependency graph, historical service-to-module list, or implementation checklist; current topology is delegated to root/module navigation, module contracts, `settings.gradle.kts`, and current-state architecture documentation;
+- the active umbrella no longer records companion-frontend implementation items as backend-owned pending state; frontend implementation sequencing and current status remain companion-repository concerns, while cross-repository acceptance requirements stay normative in the umbrella;
+- backend `README.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION.md`, and `docs/ROADMAP.md` now describe only backend-owned deployment acceptance and the independently owned frontend boundary rather than asserting the companion repository's current completion state;
+- `docs/ROADMAP.md` no longer duplicates a companion-frontend next-stage plan;
+- root current-state documentation continues to own the complete current functional-module topology, while `modules/README.md` remains the authoritative functional-module navigation index.
+
+No change was required in `docs/FEATURES.md` or `modules/README.md`: their ownership vocabulary and current module index were already consistent with the normalized contracts.
+
+The documentation-hardening work is accepted after the developer confirmed all relevant repository tests and validations passed. The stable navigation model is owned by current-state documentation and module contracts.
 
 ## Completion criteria
 

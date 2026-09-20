@@ -7,7 +7,7 @@ description: Identity ownership, credential persistence, authentication integrat
 
 ## Purpose
 
-Own application identities, local credential verification, explicit role assignments, and the security-owned HTTP administration surface used by backend authentication/RBAC.
+Own application identities, local credential verification, explicit role assignments, and the Security-owned HTTP administration surface used by backend authentication/RBAC.
 
 ## Feature ownership
 
@@ -31,23 +31,23 @@ The application-wide endpoint authorization matrix implements `SECURITY.AUTHORIZ
 
 ### Synchronous Java API
 
-None. Other functional modules do not inspect identities or roles directly. HTTP authorization is enforced through Micronaut Security at the external boundary.
+None. Security currently publishes no synchronous cross-module Java API. Other functional modules do not inspect identities or roles directly; HTTP authorization is enforced through Micronaut Security at the external boundary.
 
-### REST API
+### REST / SSE API
 
-The authoritative contract is `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`:
+Authoritative schema: `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`.
 
-- `POST /api/v1/auth/login` — built-in username/password authentication and browser credential issuance;
-- `POST /api/v1/auth/logout` — SignalHarvester-owned browser credential clearing for the JWT and CSRF cookies;
-- `GET /api/v1/auth/me` — current stable identity and explicit roles;
-- `GET/POST /api/v1/admin/users` — identity list/create;
-- `GET/PUT /api/v1/admin/users/{userId}` — identity read and enabled/role replacement.
+Security owns authentication/current-principal routes under `/api/v1/auth` and ADMIN user-management routes under `/api/v1/admin/users`.
 
 The module does not expose password hashes, signing secrets, CSRF signing material, or JWT token contents through its REST DTOs.
 
+### Events
+
+None. Security currently owns no Kafka event boundary.
+
 ## Owned data
 
-PostgreSQL schema `security`, created by `db/migration/security/V12__create_security_users.sql`:
+PostgreSQL schema `security` is owned by migrations under `modules/security/src/main/resources/db/migration/security/`:
 
 - `security.users` — stable identity, username, identity type, enabled state, password hash, timestamps;
 - `security.user_roles` — explicit additive role assignments.
@@ -56,7 +56,9 @@ There is intentionally no login-session or JWT-session table.
 
 ## Dependencies
 
-The module depends on Micronaut HTTP/security, Jdbi over Micronaut JDBC transaction infrastructure, Flyway, and PostgreSQL runtime support. It has no synchronous dependency on another functional module.
+No synchronous dependency on another functional module is required.
+
+The module depends on Micronaut HTTP/security, Jdbi over Micronaut JDBC transaction infrastructure, Flyway, and PostgreSQL runtime support.
 
 ## Forbidden access
 

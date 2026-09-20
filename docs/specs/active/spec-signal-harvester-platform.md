@@ -4,7 +4,6 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-module-contract-discoverability.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,9 +25,9 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, and `backend-kafka-offset-commit-failure-separation` are accepted after their canonical repository gates passed. The current bounded backend focus is `backend-module-contract-discoverability`, which audits and normalizes module contract navigation without changing runtime behavior.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, and `backend-module-contract-discoverability` are accepted after their relevant repository tests and validations passed. There is currently no bounded backend implementation focus; further lifecycle/reliability review remains analysis-only until it identifies a material change that requires explicit semantics and acceptance criteria.
 
-Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository.
+Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
 
 Stable feature identifiers referenced by this specification are defined in [`../../FEATURES.md`](../../FEATURES.md).
 
@@ -42,7 +41,7 @@ Deliver an observable event-driven information collection and analysis platform 
 - move collected items through an asynchronous processing pipeline;
 - normalize, deduplicate, analyze, score, classify, and persist collected information;
 - present newly discovered and analyzed information in a browser UI that updates automatically without manual page refresh;
-- separate expert/administrative workflows from a future consumer-facing result experience through explicit authenticated roles and backend authorization;
+- separate expert/administrative workflows from the consumer-facing result experience through explicit authenticated roles and backend authorization;
 - make the movement of events through the system visually inspectable;
 - make important persistence and processing outcomes visible without exposing the frontend directly to Kafka or PostgreSQL protocols;
 - provide production-style technical observability through metrics, logs, distributed traces, and health information;
@@ -100,13 +99,7 @@ Accepted backend capabilities already cover the main functional pipeline:
 - bounded Kafka retry and dead-letter handling;
 - Analysis transactional outbox delivery.
 
-Major unresolved work in this umbrella includes:
-
-- `PRESENTATION.VIEWER_RESULTS` in the companion frontend;
-- a real frontend Kubernetes image from `signalharvester-web`;
-- final cross-repository umbrella acceptance after those remaining pieces are integrated.
-
-Backend-owned `DEPLOYMENT.KUBERNETES`, `OBSERVABILITY.INFRASTRUCTURE`, and the controlled system resilience workflow are already accepted.
+Backend-owned `DEPLOYMENT.KUBERNETES`, `OBSERVABILITY.INFRASTRUCTURE`, and the controlled system resilience workflow are accepted. Requirements whose final acceptance depends on both backend and frontend deliverables remain cross-repository acceptance concerns; the companion repository owns its own implementation status and evidence.
 
 The intended technology direction remains:
 
@@ -694,7 +687,6 @@ Backend authorization must ensure that a `VIEWER` cannot call protected admin or
 
 Detailed React routing, layout, presentation, and component behavior belong to the `signalharvester-web` specification tree.
 
-When frontend work resumes, its active specification must add a bounded VIEWER UI sub-spec. That sub-spec must use the accepted backend authentication/authorization contract.
 
 ## Scenarios
 
@@ -899,25 +891,12 @@ Performance is not defined by a production-scale numerical SLA in the initial pr
 
 Instead, the implementation must support a repeatable demonstration. Concurrent collection and Kafka backlog behavior must be observable and understandable in that demonstration.
 
-## Implementation tasks
+## Implementation coordination
 
-The umbrella implementation should proceed through bounded sub-specifications rather than attempting the entire target in one increment.
+This umbrella is implemented through bounded sub-specifications rather than a permanently maintained implementation checklist.
 
-Recommended sequence. Accepted items remain listed to show delivery history. No new bounded backend slice is currently selected after step 15 acceptance.
-
-1. Define backend module boundaries, the Protocol Buffers event envelope, core domain contracts, and PostgreSQL schema strategy.
-2. Implement the first vertical slice: one configured source -> collection -> Kafka -> normalization/deduplication -> analysis -> PostgreSQL.
-3. Define and implement the frontend shell, configuration UI, and result browsing against explicit backend APIs.
-4. Add the live result stream and browser reconnection behavior.
-5. Add the technical event observer and live Event Explorer.
-6. Add correlated processing-flow visualization for collection runs and individual items.
-7. Add the first generic configuration-driven source adapter and source-test workflow.
-8. Add explicit bounded retry, terminal failure/DLQ handling, and complete idempotent-consumer behavior.
-9. Add the database/event consistency mechanism, preferably transactional outbox. **Accepted:** `ANALYSIS.OUTBOX`.
-10. Add OpenTelemetry application instrumentation and health/readiness behavior. **Accepted:** `OBSERVABILITY.APPLICATION`.
-11. Add stateless JWT authentication, persisted user/role management, and backend-enforced RBAC for `VIEWER`, `ADMIN`, `BOT`, and baseline `USER`. **Accepted.**
-12. Extend the companion frontend specification with a consumer-facing `VIEWER` result experience and integrate it with the accepted authentication/RBAC contract. **Pending in `signalharvester-web`.**
-13. Run the backend/infrastructure slice in local Kubernetes and add Prometheus/Loki/Tempo/Grafana observability. **Accepted for backend-owned scope.**
-14. Add controlled restart, lag, slow-source, retry, authorization, outbox-recovery, and recovery demonstrations. **Accepted.**
-15. Add horizontal Kafka consumer scaling within partition limits. **Accepted on 2026-09-17 after live one-to-three replica backlog-drain verification.** KEDA remains optional future work.
-16. Complete cross-repository umbrella acceptance after the frontend image and remaining viewer experience are integrated. Then move stable implementation truth into current-state documentation and archive completed sub-specifications.
+- The current backend implementation focus is the `current_focus` sub-specification and is summarized in [`../README.md`](../README.md).
+- Accepted backend implementation truth belongs in current-state documentation such as `docs/IMPLEMENTATION.md`, module READMEs, and module contracts.
+- Historical accepted sub-specifications are indexed from `docs/specs/README.md` and archived after developer acceptance.
+- Frontend implementation sequencing and current status belong to the separate `signalharvester-web` specification tree.
+- Cross-repository umbrella acceptance must use evidence from both independently owned deliverables rather than duplicating one repository's current-state inventory in the other.

@@ -499,7 +499,7 @@ The backend exports OTLP traces to Tempo. Tempo generates span metrics and remot
 
 Grafana starts with Prometheus, Loki, and Tempo data sources plus a repository-owned operational dashboard.
 
-The separate frontend repository still owns the real frontend image. `infra/kubernetes/frontend/` defines only the expected runtime workload boundary. Full umbrella R24 therefore remains incomplete.
+The separate frontend repository owns the frontend image implementation. `infra/kubernetes/frontend/` defines the backend repository's expected runtime workload boundary for that independently built deliverable. Cross-repository product deployment acceptance is outside this backend implementation inventory.
 
 `infra/kubernetes/resilience/` provides the accepted live resilience acceptance layer.
 
@@ -565,7 +565,7 @@ See:
 
 - Interval scheduling is implemented. Cron/calendar scheduling and missed-interval catch-up are not.
 - Processing Flow cannot prove Results persistence until an observation signal exists for that stage.
-- Backend-owned Kubernetes/infrastructure deployment and resilience acceptance are verified. Full platform R24 still requires a real frontend image from `signalharvester-web`.
+- Backend-owned Kubernetes/infrastructure deployment and resilience acceptance are verified. The frontend workload remains an independently built deliverable whose current implementation status is owned by `signalharvester-web`.
 - Kafka consumer horizontal scaling is accepted for the current three-partition local topic contract. Parallelism remains bounded by partition capacity; autoscaling is not implemented.
 - There is no cross-resource exactly-once guarantee between PostgreSQL and Kafka.
 - Controlled owner-specific DLQ inspection/replay is accepted; automatic/bulk replay and replay UI remain unimplemented.
