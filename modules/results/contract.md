@@ -73,10 +73,11 @@ Do not import Analysis implementation/application/persistence types or read the 
 - race-free browser bootstrap opens SSE through `ready` before loading the REST snapshot, then merges buffered/live updates by logical result identity;
 - a resume cursor ahead of current durable state is normalized to the current watermark rather than starving future delivery;
 - live delivery exposes current projections, not an append-only history, so multiple disconnected updates to one logical result may collapse to the latest projection;
+- the Results Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic transport/key/mapping failures are dead-lettered without retry; projection failures use bounded retry;
-- Kafka offsets are committed only after the Results transaction commits successfully or terminal Results dead-letter publication is acknowledged;
-- a failed Results DLQ publication leaves the source offset uncommitted;
-- exhausted projection failures advance the consumed offset only after acknowledged Results dead-letter publication;
+- normal listener completion occurs only after the Results transaction commits successfully or terminal Results dead-letter publication is acknowledged; Micronaut owns the synchronous per-record source-offset commit afterward;
+- a failed Results DLQ publication must escape before successful listener completion, while framework commit failure remains outside Results application retry/DLQ classification and may result in at-least-once redelivery;
+- exhausted projection failures become eligible for framework offset commit only after acknowledged Results dead-letter publication;
 - write and read repositories participate in application-owned transactions;
 - result-feed limit is bounded to `1..200` and ordered by `analyzedAt DESC`, `monitoringProfileId ASC`, `normalizedItemId ASC`;
 - page cursors encode the last sort key and are bound to all query criteria except page size;

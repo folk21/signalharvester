@@ -7,6 +7,9 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-20 — Accepted Kafka offset-commit failure separation after the corrected Micronaut `SYNC_PER_RECORD` implementation passed focused listener verification, `HttpPipelineSmokeIntegrationTest`, and the canonical repository gate; application retry/DLQ classification now remains separate from framework-owned per-record commits.
+- 2026-09-20 — Added verification-pending Kafka offset-commit failure separation by keeping application retry/DLQ handling inside Analysis, Results, and Event Observation listeners while delegating successful synchronous per-record offset commit to Micronaut Kafka.
+- 2026-09-20 — Accepted Analysis outbox pre-publication lease renewal after focused Analysis verification and the canonical repository gate passed; exact-token renewal before each send is now part of the stable at-least-once outbox lifecycle.
 - 2026-09-20 — Added verification-pending Analysis outbox pre-publication lease renewal so sequential batch queueing cannot expire a later row's lease before Kafka send; stale owners now skip publication when exact-token renewal fails.
 - 2026-09-20 — Accepted scheduler pre-run lease recovery after focused Collection verification and the canonical repository gate passed; exact-token pre-run release is now part of the stable scheduling lifecycle.
 - 2026-09-20 — Added verification-pending scheduler pre-run lease recovery so executor or heartbeat setup failures release claimed due work without advancing its next-due time.

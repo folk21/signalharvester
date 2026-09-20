@@ -3,14 +3,14 @@ type: Specification
 title: Analysis outbox pre-publication lease renewal
 description: Reliability hardening so batch queueing time cannot expire an Analysis outbox row lease before its Kafka publication starts.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Analysis outbox pre-publication lease renewal
 
 ## Status
 
-Verification-pending implementation identified during the backend lifecycle/reliability closure review.
+Completed and accepted on 2026-09-20 after focused Analysis verification and the canonical repository gate passed.
 
 ## Feature scope
 
@@ -78,9 +78,9 @@ This stage does not:
 
 ## Validation
 
-Acceptance requires:
+Accepted on 2026-09-20 after the developer confirmed:
 
-1. focused Analysis unit/integration tests pass;
-2. PostgreSQL coverage proves pre-publication renewal and stale-token safety;
-3. existing outbox success, retry, post-ack replay, and claim-expiry scenarios remain green;
-4. `./run_checks.sh` passes in the developer environment.
+1. focused Analysis unit/integration tests passed;
+2. PostgreSQL coverage proved pre-publication renewal and stale-token safety;
+3. existing outbox success, retry, post-ack replay, and claim-expiry scenarios remained green;
+4. `./run_checks.sh` passed.

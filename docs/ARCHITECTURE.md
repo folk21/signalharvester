@@ -120,12 +120,13 @@ Duplicate acceptance is monitoring-profile scoped. The same logical item may the
 
 The initial analyzer is deterministic and replaceable through `ContentAnalyzer`. External AI is not a core dependency.
 
-Analysis uses explicit Kafka offset control:
+Analysis uses an explicit listener-completion/offset boundary:
 
 - deterministic transport or mapping failures skip retry;
 - application/database failures use bounded retry;
-- source offsets advance after the Analysis transaction commits, or after an exhausted/invalid input is durably published to the Analysis DLQ;
-- DLQ publication failure leaves the source offset uncommitted.
+- the listener completes normally only after the Analysis transaction commits, or after an exhausted/invalid input is durably published to the Analysis DLQ;
+- Micronaut `SYNC_PER_RECORD` commits the completed source record afterward;
+- DLQ publication failure escapes before successful listener completion; framework-level commit failure is outside Analysis application retry/DLQ classification and may cause normal at-least-once redelivery.
 
 Terminal Analysis publication uses a module-owned transactional outbox:
 
@@ -142,12 +143,13 @@ Results consumes versioned terminal Analysis events asynchronously. It never rea
 
 The analyzed-result identity is `(monitoringProfileId, normalizedItemId)`. Rejection retry identity is the upstream `sourceEventId`.
 
-Results application services own their database transactions and explicit offset semantics:
+Results application services own their database transactions and processing/DLQ semantics, while Micronaut owns synchronous per-record offset commit:
 
 - valid records use bounded retry around projection;
 - deterministic transport/mapping failures bypass retry;
-- the consumed offset advances only after durable projection or acknowledged Results DLQ publication;
-- failed DLQ publication leaves the offset uncommitted.
+- the listener completes normally only after durable projection or acknowledged Results DLQ publication;
+- Micronaut `SYNC_PER_RECORD` commits the completed source record afterward;
+- failed DLQ publication escapes before successful completion, while framework commit failure may cause normal at-least-once redelivery without re-entering Results retry/DLQ classification.
 
 Idempotent projection keys absorb normal at-least-once redelivery, including deliberate Analysis outbox republish after a post-ack dispatcher failure.
 
@@ -177,7 +179,7 @@ Large content bodies are intentionally excluded.
 
 The projection is diagnostic state. It is not an authoritative replacement for Kafka or another module's domain data.
 
-The consumer uses the same bounded retry and permanent-input split as other Kafka consumers. Source offsets advance only after successful recording or acknowledged Event Observation DLQ publication.
+The consumer uses the same bounded retry and permanent-input split as other Kafka consumers. It completes normally only after successful recording or acknowledged Event Observation DLQ publication, after which Micronaut `SYNC_PER_RECORD` performs the synchronous source-offset commit.
 
 Retention is explicitly bounded by age and count.
 
@@ -197,7 +199,7 @@ Processing Flow keeps raw-to-terminal lineage by published source-event identity
 
 ## Kafka consumer failure boundary
 
-Analysis, Results, and Event Observation use explicit manual offset commits plus versioned `failure/v1/DeadLetterEvent` records.
+Analysis, Results, and Event Observation keep application retry and terminal DLQ classification inside their listeners while Micronaut Kafka owns synchronous per-record source-offset commits through `OffsetStrategy.SYNC_PER_RECORD`.
 
 Failure handling is deterministic:
 
@@ -205,9 +207,9 @@ Failure handling is deterministic:
 - application failures retry within a small configured bound;
 - retry exhaustion produces a deterministic dead-letter identity and preserves the original key/payload, source position, consumer identity, failure details, attempt count, and retryability classification.
 
-DLQ acknowledgement is part of terminal durability. A source offset never advances merely because retries were exhausted.
+A listener returns normally only after durable application processing succeeds or acknowledged owner-specific DLQ publication completes. Micronaut then commits that completed record synchronously. Offset-commit mechanics do not re-enter SignalHarvester application retry or DLQ classification.
 
-If DLQ publication fails, normal Kafka redelivery remains the recovery path.
+If DLQ publication fails, the listener throws before successful completion and normal Kafka redelivery remains the recovery path. A framework-level commit failure may likewise cause later at-least-once redelivery, which module idempotency must absorb.
 
 Automatic/bulk DLQ replay is deliberately absent. The accepted controlled recovery boundary addresses one real owner-specific DLQ position at a time, validates dead-letter identity plus consumer/group/topic ownership, and reuses the owning module's normal decoder/application path. It does not republish shared source topics or rewrite consumer offsets.
 

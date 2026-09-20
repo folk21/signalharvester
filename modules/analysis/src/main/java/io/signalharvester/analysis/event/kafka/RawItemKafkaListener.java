@@ -10,25 +10,21 @@ import io.signalharvester.analysis.application.RawItemProcessor;
 import io.signalharvester.analysis.configuration.AnalysisKafkaReliabilityConfiguration;
 import io.signalharvester.analysis.model.DiscoveredRawItem;
 import java.time.Duration;
-import java.util.Map;
 import java.util.Objects;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Kafka ingress adapter for version-one collection raw-item events.
  *
- * <p>The listener commits the consumed offset only after successful processing or acknowledged
- * dead-letter publication. Deterministically invalid records skip retries, while runtime failures
- * use the configured bounded retry policy before terminal handling.</p>
+ * <p>The listener completes only after successful processing or acknowledged dead-letter publication.
+ * Micronaut then commits the consumed offset synchronously per record. Deterministically invalid
+ * records skip retries, while runtime failures use the configured bounded retry policy before terminal handling.</p>
  */
 @KafkaListener(
         value = "${signalharvester.analysis.consumer-group:signalharvester-analysis-v1}",
         offsetReset = OffsetReset.EARLIEST,
-        offsetStrategy = OffsetStrategy.DISABLED)
+        offsetStrategy = OffsetStrategy.SYNC_PER_RECORD)
 @Requires(property = "signalharvester.analysis.enabled", notEquals = "false", defaultValue = "true")
 public class RawItemKafkaListener {
 
@@ -53,7 +49,7 @@ public class RawItemKafkaListener {
     }
 
     /**
-     * Decodes and processes one raw item with bounded retries, then commits or dead-letters its offset.
+     * Decodes and processes one raw item with bounded retries before per-record framework commit.
      */
     @Topic("${signalharvester.kafka.raw-item-discovered-topic:signalharvester.collection.raw-item-discovered.v1}")
     public void receive(
@@ -61,11 +57,9 @@ public class RawItemKafkaListener {
             byte[] payload,
             long offset,
             int partition,
-            String topic,
-            Consumer<?, ?> consumer) {
+            String topic) {
         Objects.requireNonNull(payload, "payload");
         Objects.requireNonNull(topic, "topic");
-        Objects.requireNonNull(consumer, "consumer");
 
         final DiscoveredRawItem rawItem;
         try {
@@ -74,7 +68,6 @@ public class RawItemKafkaListener {
             deadLetterPublisher.publish(
                     topic, partition, offset, key, payload, permanentFailure, 1, false);
             logDeadLetter(topic, partition, offset, 1, permanentFailure);
-            commit(consumer, topic, partition, offset);
             return;
         }
 
@@ -83,14 +76,12 @@ public class RawItemKafkaListener {
             attempt++;
             try {
                 processor.process(rawItem);
-                commit(consumer, topic, partition, offset);
-                return;
+                break;
             } catch (RuntimeException retryableFailure) {
                 if (attempt >= reliabilityConfiguration.getMaxAttempts()) {
                     deadLetterPublisher.publish(
                             topic, partition, offset, key, payload, retryableFailure, attempt, true);
                     logDeadLetter(topic, partition, offset, attempt, retryableFailure);
-                    commit(consumer, topic, partition, offset);
                     return;
                 }
                 LOGGER.warn(
@@ -105,11 +96,6 @@ public class RawItemKafkaListener {
         }
     }
 
-    private static void commit(Consumer<?, ?> consumer, String topic, int partition, long offset) {
-        consumer.commitSync(Map.of(
-                new TopicPartition(topic, partition),
-                new OffsetAndMetadata(offset + 1)));
-    }
 
     private static void sleepBeforeRetry(Duration backoff) {
         if (backoff.isZero()) {

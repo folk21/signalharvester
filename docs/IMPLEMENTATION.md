@@ -180,14 +180,16 @@ Logical normalized identity excludes Monitoring Profile ID. Duplicate claims are
 
 Analysis deduplication, bounded inspection, and transactional-outbox persistence now use Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources. Deduplication/outbox operations explicitly require the existing application-owned transaction and the outbox keeps its PostgreSQL `FOR UPDATE SKIP LOCKED` lease semantics.
 
-The Analysis listener disables automatic offset commit.
+The Analysis listener uses Micronaut Kafka `SYNC_PER_RECORD`. It owns decoding, bounded application retry, and terminal Analysis DLQ publication, but it does not call `Consumer.commitSync()` directly.
 
 Failure behavior is explicit:
 
 - transport, key, and mapping failures are dead-lettered immediately;
 - application failures use bounded retry;
 - retry exhaustion publishes the original input plus deterministic source-position dead-letter identity and failure metadata as `failure/v1/DeadLetterEvent`;
-- DLQ publication failure leaves the raw source offset uncommitted.
+- normal listener completion occurs only after the Analysis PostgreSQL transaction or acknowledged Analysis DLQ publication succeeds;
+- Micronaut synchronously commits the completed record afterward;
+- DLQ publication failure escapes the listener before successful completion, while a later framework commit failure remains outside SignalHarvester application retry/DLQ classification and may produce normal at-least-once redelivery.
 
 The accepted controlled recovery boundary can inspect a concrete Analysis DLQ partition/offset and replay the stored original key/payload through the same `RawItemKafkaRecordDecoder` and `RawItemProcessor`. It validates the current consumer group and allowed source topic, requires explicit dead-letter-id confirmation, and does not republish `RawItemDiscovered` or rewrite source offsets. Results and Event Observation use the same owner-local pattern through their own decoders and application boundaries.
 
@@ -201,12 +203,14 @@ Successful application processing means that two pieces of state commit atomical
 `AnalysisOutboxDispatcher`:
 
 - claims bounded pending batches with short PostgreSQL leases;
+- renews each row's exact-token lease immediately before its Kafka send so time spent behind earlier batch entries cannot expire ownership before publication begins;
+- skips publication when exact-token renewal no longer succeeds because another replica owns the row;
 - publishes stored bytes to Kafka outside a database transaction;
 - records success or retry state in a second short transaction.
 
-Multiple replicas coordinate through `FOR UPDATE SKIP LOCKED` plus lease expiry.
+Multiple replicas coordinate through `FOR UPDATE SKIP LOCKED`, exact-token pre-publication renewal, and lease expiry. Renewal is committed before Kafka I/O, so no JDBC transaction or PostgreSQL row lock is held while waiting for broker acknowledgement.
 
-A crash after Kafka acknowledgement but before `published_at` may republish the same stored event. Delivery therefore remains at-least-once.
+A crash after Kafka acknowledgement but before `published_at` may republish the same stored event. Delivery therefore remains at-least-once. A single Kafka send may also outlive its renewed lease; the accepted renewal rule removes avoidable ownership loss caused by local batch queueing without claiming distributed exactly-once delivery.
 
 Event ID, key, topic, and payload stay stable. Downstream idempotency handles the replay.
 
@@ -228,13 +232,14 @@ Tags and attributes are replaced atomically with the parent projection.
 
 Rejections are keyed by `sourceEventId`. Retry of one raw Source event does not create another rejection row, while later rediscovery events remain separate.
 
-The Results listener disables automatic Kafka commit:
+The Results listener uses Micronaut Kafka `SYNC_PER_RECORD`:
 
 - deterministic transport, key, and mapping failures go directly to the Results DLQ;
 - projection failures retry within the configured bound;
-- the consumed offset advances after the Results transaction completes or after terminal `DeadLetterEvent` acknowledgement.
+- the listener returns normally only after the Results transaction completes or terminal `DeadLetterEvent` publication is acknowledged;
+- Micronaut performs the synchronous per-record offset commit after that successful listener completion.
 
-This is an at-least-once/idempotent-consumer model. It does not claim distributed exactly-once processing.
+Commit mechanics remain outside Results application retry/DLQ classification. A failed DLQ publication escapes before successful completion, while a later framework commit failure may cause normal at-least-once redelivery. This is an at-least-once/idempotent-consumer model; it does not claim distributed exactly-once processing.
 
 `ResultQueryService` owns short read-only application transactions for the public Results REST API. `JdbiResultQueryRepository` keeps static/detail SQL in Results-owned resources. The two structurally dynamic paths — REST browsing and filtered live polling — use Jdbi StringTemplate 4 only to include active predicates; all user values remain named bind parameters.
 
@@ -269,11 +274,13 @@ See [`../modules/results/README.md`](../modules/results/README.md) and [`../modu
 
 Generated Protobuf messages stay inside the Kafka adapter and are decoded into an observation-owned diagnostic model before persistence.
 
-The listener applies the same bounded retry/dead-letter split as the other business consumers:
+The listener applies the same bounded retry/dead-letter split and Micronaut `SYNC_PER_RECORD` offset boundary as the other business consumers:
 
 - deterministic decode, key, and mapping failures are terminal immediately;
 - recording failures retry;
-- source offsets advance only after recording or acknowledged DLQ publication.
+- the listener completes normally only after recording or acknowledged DLQ publication;
+- Micronaut synchronously commits the completed source record afterward;
+- DLQ publication failure escapes before successful completion, and framework commit failures remain outside Event Observation application retry/DLQ classification.
 
 PostgreSQL schema `event_observation` is created by `V9__create_event_observation_history.sql`. Event Observation persistence now uses Micronaut-managed Jdbi inside application-owned transactions; static insert, retention, cursor, and bounded history/live queries live in module-owned classpath SQL resources with named bindings.
 

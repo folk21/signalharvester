@@ -10,11 +10,7 @@ import io.signalharvester.eventobservation.application.EventObservationRecorder;
 import io.signalharvester.eventobservation.configuration.EventObservationKafkaReliabilityConfiguration;
 import io.signalharvester.eventobservation.model.ObservedEventInput;
 import java.time.Duration;
-import java.util.Map;
 import java.util.Objects;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +18,7 @@ import org.slf4j.LoggerFactory;
 @KafkaListener(
         value = "${signalharvester.event-observation.consumer-group:signalharvester-event-observation-v1}",
         offsetReset = OffsetReset.EARLIEST,
-        offsetStrategy = OffsetStrategy.DISABLED)
+        offsetStrategy = OffsetStrategy.SYNC_PER_RECORD)
 @Requires(property = "signalharvester.event-observation.enabled", value = "true")
 public class EventObservationKafkaListener {
 
@@ -49,46 +45,46 @@ public class EventObservationKafkaListener {
     /** Records a raw-item discovery with bounded retry and terminal dead-letter handling. */
     @Topic("${signalharvester.kafka.raw-item-discovered-topic:signalharvester.collection.raw-item-discovered.v1}")
     public void receiveRaw(
-            @KafkaKey String key, byte[] payload, long offset, int partition, String topic, Consumer<?, ?> consumer) {
-        requireRecordArguments(payload, topic, consumer);
+            @KafkaKey String key, byte[] payload, long offset, int partition, String topic) {
+        requireRecordArguments(payload, topic);
         final ObservedEventInput event;
         try {
             event = decoder.decodeRaw(key, payload, topic, partition, offset);
         } catch (RuntimeException permanentFailure) {
-            deadLetterPermanentAndCommit(key, payload, offset, partition, topic, consumer, permanentFailure);
+            deadLetterPermanent(key, payload, offset, partition, topic, permanentFailure);
             return;
         }
-        processRetryable(key, payload, offset, partition, topic, consumer, () -> recorder.record(event));
+        processRetryable(key, payload, offset, partition, topic, () -> recorder.record(event));
     }
 
     /** Records an analyzed-item event with bounded retry and terminal dead-letter handling. */
     @Topic("${signalharvester.kafka.item-analyzed-topic:signalharvester.analysis.item-analyzed.v1}")
     public void receiveAnalyzed(
-            @KafkaKey String key, byte[] payload, long offset, int partition, String topic, Consumer<?, ?> consumer) {
-        requireRecordArguments(payload, topic, consumer);
+            @KafkaKey String key, byte[] payload, long offset, int partition, String topic) {
+        requireRecordArguments(payload, topic);
         final ObservedEventInput event;
         try {
             event = decoder.decodeAnalyzed(key, payload, topic, partition, offset);
         } catch (RuntimeException permanentFailure) {
-            deadLetterPermanentAndCommit(key, payload, offset, partition, topic, consumer, permanentFailure);
+            deadLetterPermanent(key, payload, offset, partition, topic, permanentFailure);
             return;
         }
-        processRetryable(key, payload, offset, partition, topic, consumer, () -> recorder.record(event));
+        processRetryable(key, payload, offset, partition, topic, () -> recorder.record(event));
     }
 
     /** Records a rejected-item event with bounded retry and terminal dead-letter handling. */
     @Topic("${signalharvester.kafka.item-rejected-topic:signalharvester.analysis.item-rejected.v1}")
     public void receiveRejected(
-            @KafkaKey String key, byte[] payload, long offset, int partition, String topic, Consumer<?, ?> consumer) {
-        requireRecordArguments(payload, topic, consumer);
+            @KafkaKey String key, byte[] payload, long offset, int partition, String topic) {
+        requireRecordArguments(payload, topic);
         final ObservedEventInput event;
         try {
             event = decoder.decodeRejected(key, payload, topic, partition, offset);
         } catch (RuntimeException permanentFailure) {
-            deadLetterPermanentAndCommit(key, payload, offset, partition, topic, consumer, permanentFailure);
+            deadLetterPermanent(key, payload, offset, partition, topic, permanentFailure);
             return;
         }
-        processRetryable(key, payload, offset, partition, topic, consumer, () -> recorder.record(event));
+        processRetryable(key, payload, offset, partition, topic, () -> recorder.record(event));
     }
 
     private void processRetryable(
@@ -97,21 +93,18 @@ public class EventObservationKafkaListener {
             long offset,
             int partition,
             String topic,
-            Consumer<?, ?> consumer,
             Runnable processing) {
         int attempt = 0;
         while (true) {
             attempt++;
             try {
                 processing.run();
-                commit(consumer, topic, partition, offset);
-                return;
+                break;
             } catch (RuntimeException retryableFailure) {
                 if (attempt >= reliabilityConfiguration.getMaxAttempts()) {
                     deadLetterPublisher.publish(
                             topic, partition, offset, key, payload, retryableFailure, attempt, true);
                     logDeadLetter(topic, partition, offset, attempt, retryableFailure);
-                    commit(consumer, topic, partition, offset);
                     return;
                 }
                 LOGGER.warn(
@@ -126,30 +119,22 @@ public class EventObservationKafkaListener {
         }
     }
 
-    private void deadLetterPermanentAndCommit(
+    private void deadLetterPermanent(
             String key,
             byte[] payload,
             long offset,
             int partition,
             String topic,
-            Consumer<?, ?> consumer,
             RuntimeException failure) {
         deadLetterPublisher.publish(topic, partition, offset, key, payload, failure, 1, false);
         logDeadLetter(topic, partition, offset, 1, failure);
-        commit(consumer, topic, partition, offset);
     }
 
-    private static void requireRecordArguments(byte[] payload, String topic, Consumer<?, ?> consumer) {
+    private static void requireRecordArguments(byte[] payload, String topic) {
         Objects.requireNonNull(payload, "payload");
         Objects.requireNonNull(topic, "topic");
-        Objects.requireNonNull(consumer, "consumer");
     }
 
-    private static void commit(Consumer<?, ?> consumer, String topic, int partition, long offset) {
-        consumer.commitSync(Map.of(
-                new TopicPartition(topic, partition),
-                new OffsetAndMetadata(offset + 1)));
-    }
 
     private static void sleepBeforeRetry(Duration backoff) {
         if (backoff.isZero()) {

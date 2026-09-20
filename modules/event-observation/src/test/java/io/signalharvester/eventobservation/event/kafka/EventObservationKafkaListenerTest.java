@@ -7,28 +7,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.Timestamp;
+import io.micronaut.configuration.kafka.annotation.KafkaListener;
+import io.micronaut.configuration.kafka.annotation.OffsetStrategy;
 import io.signalharvester.eventobservation.application.EventObservationRecorder;
 import io.signalharvester.eventobservation.configuration.EventObservationKafkaReliabilityConfiguration;
 import io.signalharvester.eventobservation.model.ObservedEventInput;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import io.signalharvester.events.common.v1.EventEnvelope;
-import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 
 /**
  * Verifies {@link EventObservationKafkaListener} bounded retry and dead-letter handling without allowing
  * a failed diagnostic record to block its Kafka partition indefinitely.
  *
- * <p>Related specification: {@code backend-reliability-failure-handling}.</p>
+ * <p>Related specifications: {@code backend-reliability-failure-handling} and
+ * {@code backend-kafka-offset-commit-failure-separation}.</p>
  *
  * <p>Features: {@code DIAGNOSTICS.EVENT_OBSERVATION}, {@code RELIABILITY.KAFKA_RETRY}, {@code RELIABILITY.DEAD_LETTER}.</p>
  */
@@ -37,9 +35,9 @@ class EventObservationKafkaListenerTest {
     private static final String TOPIC = "raw-items";
     private static final String RAW_ITEM_ID = "raw-01";
 
-    /** Retry persistence failures and commit when recording eventually succeeds. */
+    /** Retry persistence failures and complete when recording eventually succeeds. */
     @Test
-    void shouldRetryRecordingFailureAndCommitAfterRecovery() {
+    void shouldRetryRecordingFailureAndCompleteAfterRecovery() {
         AtomicInteger attempts = new AtomicInteger();
         EventObservationRecorder recorder = event -> {
             if (attempts.incrementAndGet() < 3) {
@@ -48,35 +46,39 @@ class EventObservationKafkaListenerTest {
         };
         RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
         EventObservationKafkaListener listener = listener(recorder, deadLetters, 3);
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
-        listener.receiveRaw(RAW_ITEM_ID, rawEvent().toByteArray(), 7L, 2, TOPIC, consumer(committed));
+        listener.receiveRaw(RAW_ITEM_ID, rawEvent().toByteArray(), 7L, 2, TOPIC);
 
         assertEquals(3, attempts.get());
-        assertEquals(new OffsetAndMetadata(8L), committed.get().get(new TopicPartition(TOPIC, 2)));
         assertTrue(deadLetters.failures.isEmpty());
     }
 
-    /** Dead-letter malformed records immediately and commit only after DLQ publication succeeds. */
+    /** Dead-letter malformed records immediately and complete only after DLQ publication succeeds. */
     @Test
-    void shouldDeadLetterMalformedPayloadAndCommit() {
+    void shouldDeadLetterMalformedPayloadAndComplete() {
         AtomicReference<ObservedEventInput> recorded = new AtomicReference<>();
         RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
         EventObservationKafkaListener listener = listener(recorded::set, deadLetters, 3);
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
-        listener.receiveRaw(RAW_ITEM_ID, new byte[] {0x0A, 0x05, 0x01}, 7L, 2, TOPIC, consumer(committed));
+        listener.receiveRaw(RAW_ITEM_ID, new byte[] {0x0A, 0x05, 0x01}, 7L, 2, TOPIC);
 
         assertNull(recorded.get());
-        assertEquals(new OffsetAndMetadata(8L), committed.get().get(new TopicPartition(TOPIC, 2)));
         Failure failure = deadLetters.failures.getFirst();
         assertEquals(1, failure.attempts());
         assertFalse(failure.retryable());
     }
 
-    /** Leave the source offset uncommitted when terminal DLQ publication cannot be acknowledged. */
+    /** Delegate synchronous offset commit to Micronaut after successful listener completion. */
     @Test
-    void shouldLeaveOffsetUncommittedWhenDeadLetterPublicationFails() {
+    void shouldUseSynchronousPerRecordOffsetStrategy() {
+        KafkaListener annotation = EventObservationKafkaListener.class.getAnnotation(KafkaListener.class);
+
+        assertEquals(OffsetStrategy.SYNC_PER_RECORD, annotation.offsetStrategy());
+    }
+
+    /** Propagate terminal DLQ publication failure so the framework does not commit the source offset. */
+    @Test
+    void shouldPropagateWhenDeadLetterPublicationFails() {
         EventObservationRecorder recorder = event -> {
             throw new IllegalStateException("database unavailable");
         };
@@ -85,14 +87,11 @@ class EventObservationKafkaListenerTest {
             throw new IllegalStateException("DLQ unavailable");
         };
         EventObservationKafkaListener listener = listener(recorder, deadLetters, 1);
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
 
         assertThrows(IllegalStateException.class, () ->
-                listener.receiveRaw(RAW_ITEM_ID, rawEvent().toByteArray(), 7L, 2, TOPIC, consumer(committed)));
+                listener.receiveRaw(RAW_ITEM_ID, rawEvent().toByteArray(), 7L, 2, TOPIC));
 
-        assertNull(committed.get());
     }
-
 
     /** Reject retry backoff that exceeds the bounded listener policy. */
     @Test
@@ -161,28 +160,6 @@ class EventObservationKafkaListenerTest {
                 .setContent("Java Kafka")
                 .setContentType("text/plain")
                 .build();
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Consumer<?, ?> consumer(AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed) {
-        return (Consumer<?, ?>) Proxy.newProxyInstance(
-                EventObservationKafkaListenerTest.class.getClassLoader(),
-                new Class<?>[] {Consumer.class},
-                (proxy, method, args) -> {
-                    if (method.getName().equals("commitSync") && args != null && args.length == 1) {
-                        committed.set((Map<TopicPartition, OffsetAndMetadata>) args[0]);
-                        return null;
-                    }
-                    if (method.getDeclaringClass() == Object.class) {
-                        return switch (method.getName()) {
-                            case "toString" -> "RecordingKafkaConsumer";
-                            case "hashCode" -> System.identityHashCode(proxy);
-                            case "equals" -> proxy == args[0];
-                            default -> throw new UnsupportedOperationException(method.getName());
-                        };
-                    }
-                    throw new UnsupportedOperationException(method.getName());
-                });
     }
 
     private static final class RecordingDeadLetterPublisher implements EventObservationDeadLetterPublisher {

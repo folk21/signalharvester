@@ -329,11 +329,11 @@ It preserves:
 
 Local Redpanda uses topic auto-creation, so these topics appear on the first terminal failure.
 
-Analysis advances a normal source offset only after deduplication state and the terminal-event outbox row commit together in PostgreSQL. Kafka terminal-event delivery can therefore recover independently from a broker outage.
+Analysis returns normally only after deduplication state and the terminal-event outbox row commit together in PostgreSQL. Kafka terminal-event delivery can therefore recover independently from a broker outage. Micronaut `SYNC_PER_RECORD` performs the synchronous source-offset commit only after that successful listener completion.
 
-Results and Event Observation advance after their normal durable processing.
+Results and Event Observation use the same boundary: durable processing completes first, then Micronaut commits the completed source record.
 
-Failed inputs advance only after acknowledged DLQ publication. If a DLQ producer is unavailable, the source record remains uncommitted and recoverable by Kafka redelivery.
+Failed inputs become eligible for framework offset commit only after acknowledged DLQ publication. If a DLQ producer is unavailable, the listener fails before successful completion and the source record remains recoverable by Kafka redelivery. A framework-level commit failure is outside SignalHarvester application retry/DLQ classification and may also lead to normal at-least-once redelivery.
 
 Automatic/bulk replay remains disabled. After correcting the underlying problem, an ADMIN can inspect and replay one known owner-specific DLQ record by Kafka partition/offset through the backend API:
 
