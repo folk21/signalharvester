@@ -1,7 +1,7 @@
 ---
 type: Specification
 title: SignalHarvester backend project structure and module boundaries
-description: Active technical sub-specification defining the initial Gradle modular-monolith structure, module ownership rules, contracts, and integration-testing strategy.
+description: Active technical sub-specification defining Gradle modular-monolith boundary rules, contract ownership, dependency direction, and integration-testing strategy.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
 spec_status: active
@@ -51,7 +51,7 @@ The repository already implements the foundation described by this specification
 
 - modular Gradle layout;
 - Micronaut composition root;
-- explicit module `api` packages;
+- deliberately published module APIs where a synchronous consumer exists;
 - module-owned persistence;
 - contract modules;
 - ArchUnit boundary checks;
@@ -59,53 +59,19 @@ The repository already implements the foundation described by this specification
 
 Later capabilities must preserve those boundaries. Detailed implementation status belongs in `docs/IMPLEMENTATION.md`; this supporting spec only defines architectural constraints that still matter for future work.
 
-## Repository structure
+## Repository navigation
 
-```text
-signalharvester/
-├── app/
-│   └── src/
-│
-├── common/
-│   └── src/
-│
-├── contracts/
-│   ├── api-contracts/
-│   │   └── src/main/resources/openapi/
-│   └── event-contracts/
-│       └── src/main/proto/
-│           └── io/signalharvester/events/
-│               ├── common/v1/
-│               ├── collection/v1/
-│               ├── analysis/v1/
-│               └── results/v1/
-│
-├── modules/
-│   ├── configuration/
-│   │   └── src/
-│   ├── collection/
-│   │   └── src/
-│   ├── analysis/
-│   │   └── src/
-│   ├── results/
-│   │   └── src/
-│   └── event-observation/
-│       └── src/
-│
-├── testing/
-│   ├── test-support/
-│   └── integration-tests/
-│
-├── infra/
-│   ├── docker-compose/
-│   ├── kubernetes/
-│   └── observability/
-│
-├── docs/specs/
-├── settings.gradle.kts
-├── build.gradle.kts
-└── gradle.properties
-```
+This supporting specification does not maintain a second current repository tree.
+
+Use the following authoritative current-state sources instead:
+
+- root [`README.md`](../../../../README.md) — top-level repository layout and primary navigation;
+- [`modules/README.md`](../../../../modules/README.md) — current functional-module inventory and module documentation entry points;
+- [`contracts/README.md`](../../../../contracts/README.md) — current REST and event-contract source ownership;
+- [`docs/ARCHITECTURE.md`](../../../ARCHITECTURE.md) — accepted architecture and dependency direction;
+- `settings.gradle.kts` — actual Gradle subproject registration.
+
+This specification continues to own only the boundary rules that those current-state sources must preserve.
 
 Directory names use lowercase and kebab-case only.
 
@@ -113,22 +79,11 @@ Directory names use lowercase and kebab-case only.
 
 The backend is a modular monolith, not a collection of microservices.
 
-Initially the complete backend is packaged and deployed as one application:
+The complete backend is packaged and deployed as one application. Functional modules are compile-time code boundaries, not deployment boundaries.
 
-```text
-frontend
-    ↓ REST / SSE
-signalharvester-backend
-    ├── configuration
-    ├── collection
-    ├── analysis
-    ├── results
-    └── event-observation
-        ↓
-Kafka + PostgreSQL + observability infrastructure
-```
+The browser-facing application boundary remains REST/SSE. Kafka, PostgreSQL, and observability infrastructure remain external runtime dependencies rather than reasons to split functional modules into separate deployments.
 
-The modules are compile-time code boundaries, not deployment boundaries.
+The current functional-module inventory belongs in [`modules/README.md`](../../../../modules/README.md), not in this supporting specification.
 
 A module represents a cohesive capability. It must not represent a repository-wide technical layer such as `controllers`, `services`, `repositories`, or `entities`.
 
@@ -197,7 +152,7 @@ Each functional module also keeps a root `contract.md` as a compact context/navi
 
 It points to authoritative Java `api/**`, OpenAPI, and Protobuf sources. It records ownership, dependency, and invariant information without copying complete method or field signatures.
 
-This supports selective context loading for developers and coding agents.
+This supports focused repository navigation without requiring unrelated implementation context.
 
 ## Interfaces and contracts
 
@@ -245,23 +200,11 @@ The backend must use Gradle Kotlin DSL.
 
 Each functional module must be a Gradle subproject.
 
-The initial Gradle projects are:
+The build must keep explicit subprojects for the composition root, shared kernel, contract sources, functional modules, and testing support where those areas exist. The actual current subproject inventory is authoritative in `settings.gradle.kts`; the current functional-module inventory is authoritative in `modules/README.md`.
 
-1. `app`;
-2. `common`;
-3. `contracts:api-contracts`;
-4. `contracts:event-contracts`;
-5. `modules:configuration`;
-6. `modules:collection`;
-7. `modules:analysis`;
-8. `modules:results`;
-9. `modules:event-observation`;
-10. `testing:test-support`;
-11. `testing:integration-tests`.
+Only `app` is the backend executable application.
 
-Only `app` is an executable backend application initially.
-
-Functional modules use `java-library` semantics and are not independently deployable applications at this stage.
+Functional modules use `java-library` semantics and are not independently deployable applications.
 
 ### R2 — app is the composition root
 
@@ -424,14 +367,7 @@ Protocol Buffers is the canonical wire-contract format for these Kafka integrati
 contracts/event-contracts/src/main/proto/io/signalharvester/events/
 ```
 
-The initial schema groups are:
-
-```text
-common/v1
-collection/v1
-analysis/v1
-results/v1
-```
+The current schema inventory belongs to the event-contract source tree and [`backend-event-contracts.md`](backend-event-contracts.md); this supporting specification does not duplicate that inventory.
 
 The contract module may define:
 
@@ -492,15 +428,7 @@ Initially modules may share one PostgreSQL server and one physical database for 
 
 Logical ownership must nevertheless be explicit.
 
-The preferred initial arrangement is separate PostgreSQL schemas per persistence-owning functional module, for example:
-
-```text
-configuration.*
-collection.*
-analysis.*
-results.*
-event_observation.*
-```
+Each persistence-owning functional module should retain a distinct logical PostgreSQL ownership boundary even when modules share one physical database and Flyway history. Current schema/table ownership belongs in module contracts and `docs/IMPLEMENTATION.md`, not in this supporting specification.
 
 A module must not read or mutate another module's tables directly.
 
@@ -527,25 +455,13 @@ The Gradle module graph must remain acyclic.
 
 Functional modules should avoid synchronous dependencies on one another unless there is a clear reason.
 
-The expected initial graph is approximately:
+`app` may depend on the functional modules it composes. `common` and contract modules remain lower-level dependencies and must not depend on functional implementation modules.
 
-```text
-                    common
-                      ▲
-                      │
-              event-contracts
-              ▲   ▲   ▲   ▲
-              │   │   │   │
-configuration │ collection │ analysis │ results │ event-observation
-       ▲              │
-       └──────── collection
+The Collection-to-Configuration dependency is an intentional synchronous functional-module dependency because Collection needs current effective configuration. It must use only Configuration's published Java API. Any additional synchronous functional-module edge requires a concrete ownership reason and must preserve acyclicity.
 
-app → all functional modules
-```
+Processing relationships that are deliberately asynchronous must remain expressed through Kafka contracts rather than direct module calls.
 
-The collection-to-configuration dependency is intentional because collection needs current effective source configuration. It must use only the configuration module's public API.
-
-Most processing relationships between collection, analysis, results, and event observation should be asynchronous through Kafka rather than direct module calls.
+The actual current Gradle dependency graph is derived from module build files and protected by architecture tests; it is not duplicated here as an inventory.
 
 ### R14 — module internals should be architecture-testable
 
@@ -625,9 +541,9 @@ Extraction must not be performed merely to demonstrate microservices.
 
 The initial modular boundaries, event contracts, schema ownership, and public APIs should make such extraction possible without making it a current requirement.
 
-## Initial package guidance
+## Package guidance
 
-When implementation starts, a functional module may use a structure similar to:
+A functional module may use a structure similar to:
 
 ```text
 io.signalharvester.collection
@@ -728,25 +644,7 @@ The initial structure does not attempt to provide:
 
 ## Compatibility / migration
 
-This specification replaces the earlier service-first backend skeleton.
-
-The previous separately deployable concepts:
-
-- `control-service`;
-- `collector-service`;
-- `analysis-service`;
-- `result-service`;
-- `event-observer-service`;
-
-are replaced by functional modules:
-
-- `configuration`;
-- `collection`;
-- `analysis`;
-- `results`;
-- `event-observation`.
-
-The responsibilities remain broadly similar, but deployment changes from five application processes to one backend application.
+The modular-monolith boundary supersedes the earlier service-first skeleton. The accepted current functional-module topology is documented in `modules/README.md`; this supporting specification does not preserve the historical service-to-module inventory.
 
 The architecture deliberately preserves future extraction paths through explicit module APIs, Kafka contracts, and persistence ownership.
 
@@ -765,23 +663,16 @@ The structure is valid when all of the following are true:
 - integration tests can boot the assembled application with real Kafka and PostgreSQL containers;
 - the layout does not require a microservice deployment to validate Kafka/event-driven behavior.
 
-## Implementation tasks
+## Ongoing maintenance responsibilities
 
-1. Bootstrap the Micronaut application in `app`.
-2. Add central Gradle version management or a version catalog.
-3. Add JUnit 5 and test conventions.
-4. Add Testcontainers for PostgreSQL and Kafka.
-5. Define the first configuration module public API.
-6. Define the first REST/OpenAPI contract for source configuration.
-7. Define the first versioned Protobuf Kafka event envelope and raw-item contract.
-8. Implement one deterministic external-source adapter in collection.
-9. Implement one non-AI analysis path.
-10. Implement the first results projection and query endpoint.
-11. Implement SSE for live result updates.
-12. Add event-observation persistence and technical SSE.
-13. Keep ArchUnit rules aligned with published module APIs as packages evolve.
-14. Add module-local Flyway migrations.
-15. Add OpenTelemetry instrumentation.
-16. Docker Compose for local PostgreSQL/Kafka dependencies is implemented with safe defaults and explicit environment overrides; keep it aligned with runtime defaults.
-17. Keep `run_checks.sh` as the canonical repository-level verification entry point for default checks, integration tests, coverage/static/dependency analysis, and archive reproducibility.
-17. Add Kubernetes deployment after the local vertical slice is stable.
+This supporting specification no longer maintains an implementation checklist. Current bounded work belongs in the active specification selected by `docs/specs/README.md` and umbrella `current_focus`; accepted implementation truth belongs in current-state documentation.
+
+Future changes must continue to:
+
+- keep the Gradle dependency graph explicit and acyclic;
+- preserve the thin composition-root boundary;
+- keep synchronous cross-module Java APIs narrow and deliberate;
+- keep asynchronous integration on authoritative Kafka/Protobuf contracts;
+- preserve module-owned persistence and migration ownership;
+- keep architecture tests aligned with published module boundaries;
+- keep deterministic integration coverage over the assembled backend and real infrastructure boundaries.

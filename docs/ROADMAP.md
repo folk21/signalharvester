@@ -32,8 +32,6 @@ Analysis outbox pre-publication lease renewal is accepted after focused Analysis
 
 Kafka offset-commit failure separation is accepted after the corrected Micronaut `SYNC_PER_RECORD` implementation passed focused listener verification, `HttpPipelineSmokeIntegrationTest`, and the canonical repository gate. Analysis, Results, and Event Observation keep application retry/DLQ handling inside their listeners while framework-owned per-record commit remains outside those application failure domains.
 
-Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
-
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
 ## P0 — repository and contract foundation
@@ -80,11 +78,11 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Reconcile global/current-state navigation and remove stale implementation inventories from active supporting specifications where current-state documentation already owns that information.
-2. After this bounded documentation-hardening slice is accepted, resume the systematic backend lifecycle/reliability review or return to the next concrete product/frontend requirement according to current priorities.
+1. Complete verification and acceptance of the module-contract discoverability slice, then archive its bounded sub-specification.
+2. Resume the systematic backend lifecycle/reliability review or select the next concrete backend/product requirement according to current priorities.
 3. Consider additional scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
 
-`PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
+Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 
 ## Deferred until justified
 

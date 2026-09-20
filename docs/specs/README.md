@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded implementation focus is `active/subspecs/backend-module-contract-discoverability.md`. Stages 1-2 are complete; global documentation normalization is the next stage.
+The current bounded implementation focus is `active/subspecs/backend-module-contract-discoverability.md`. Stages 1-3 are implemented and the slice is verification-pending until all relevant repository tests and validations pass.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-module-contract-discoverability.md`](active/subspecs/backend-module-contract-discoverability.md) — `PLATFORM.MODULAR_MONOLITH`, `CONTRACTS.HTTP`, and `CONTRACTS.KAFKA_PROTOBUF` contract discoverability hardening; Stages 1-2 complete, Stage 3 global documentation normalization next.
+- [`active/subspecs/backend-module-contract-discoverability.md`](active/subspecs/backend-module-contract-discoverability.md) — `PLATFORM.MODULAR_MONOLITH`, `CONTRACTS.HTTP`, and `CONTRACTS.KAFKA_PROTOBUF` contract discoverability hardening; Stages 1-3 implemented, verification pending.
 
 Active supporting tracks:
 
@@ -218,4 +218,4 @@ Further scheduling refinements remain deferred until a product requirement justi
 
 These are candidates, not active commitments.
 
-Detailed `PRESENTATION.VIEWER_RESULTS` behavior belongs to `signalharvester-web`. It should receive its own frontend sub-spec when that work resumes.
+Companion-frontend planning and implementation lifecycle belong to `signalharvester-web` and are not maintained in this backend specification index.

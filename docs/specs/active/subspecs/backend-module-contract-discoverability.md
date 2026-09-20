@@ -4,15 +4,15 @@ title: SignalHarvester backend module contract discoverability and repository na
 description: Bounded backend hardening slice that makes module boundaries, published contracts, dependencies, and authoritative source locations deterministic to discover without requiring unrelated implementation context.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: active
+spec_status: verification-pending
 ---
 # SignalHarvester backend module contract discoverability and repository navigation
 
 ## Status
 
-Active implementation focus.
+Verification-pending implementation focus.
 
-Stage 1 repository contract audit completed on 2026-09-20. The audit confirmed that the existing module-contract model is structurally sound and identified a bounded normalization backlog. Stage 2 is the next implementation stage.
+Stages 1-3 are implemented. Stage 1 audited the repository contract model, Stage 2 normalized all six functional-module contracts, and Stage 3 reconciled global/current-state navigation plus stale active-spec inventories. The slice remains active until all relevant repository tests and validations pass in an environment with the required Docker and Gradle dependencies.
 
 This specification hardens the existing modular-monolith documentation and contract-navigation model.
 
@@ -591,6 +591,22 @@ The normalized contracts now provide a predictable minimum-context navigation pa
 No module README required modification: all six already delegate ownership and integration boundaries to their root `contract.md`. No implementation source, test, OpenAPI, Protobuf, Gradle dependency, or persistence migration was changed.
 
 Stage 3 remains responsible for global/current-state documentation normalization and stale inventories in active supporting specifications.
+
+## Stage 3 normalization outcome
+
+Stage 3 reconciled global/current-state navigation without changing runtime behavior, published APIs, OpenAPI, Protobuf schemas, persistence, or module dependencies.
+
+The normalization made the following ownership boundaries explicit:
+
+- `backend-project-structure.md` no longer maintains a duplicated repository tree, functional-module inventory, Gradle-project list, event-schema inventory, persistence-schema inventory, approximate dependency graph, historical service-to-module list, or implementation checklist; current topology is delegated to root/module navigation, module contracts, `settings.gradle.kts`, and current-state architecture documentation;
+- the active umbrella no longer records companion-frontend implementation items as backend-owned pending state; frontend implementation sequencing and current status remain companion-repository concerns, while cross-repository acceptance requirements stay normative in the umbrella;
+- backend `README.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION.md`, and `docs/ROADMAP.md` now describe only backend-owned deployment acceptance and the independently owned frontend boundary rather than asserting the companion repository's current completion state;
+- `docs/ROADMAP.md` no longer duplicates a companion-frontend next-stage plan;
+- root current-state documentation continues to own the complete current functional-module topology, while `modules/README.md` remains the authoritative functional-module navigation index.
+
+No change was required in `docs/FEATURES.md` or `modules/README.md`: their ownership vocabulary and current module index were already consistent with the normalized contracts.
+
+The documentation-hardening work is implemented. Final acceptance and archival remain blocked only on completion of all relevant repository validation in a suitable environment.
 
 ## Completion criteria
 

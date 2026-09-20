@@ -42,8 +42,6 @@ Communication boundaries are explicit:
 
 The web frontend is a separate repository named **`signalharvester-web`**. It owns the complete SignalHarvester Web application.
 
-The current operational/admin screens are the first implemented frontend product slice. They are not a separate admin-only application.
-
 This backend repository owns the public REST/OpenAPI and SSE contracts consumed by the UI. Frontend implementation details stay in the UI repository.
 
 For frontend setup and run instructions, start with the UI repository root `README.md`. Frontend specifications belong in its own `docs/specs/` tree.
@@ -104,7 +102,7 @@ The implemented backend foundation includes the following capability groups.
 - Runnable Micronaut composition root in `app`.
 - Centralized dependency/plugin versions in `gradle/libs.versions.toml`.
 - Micronaut Platform version exposed as Gradle property `micronautVersion`.
-- Versioned Protobuf `EventEnvelope`, `RawItemDiscovered`, `ItemAnalyzed`, and `ItemRejected` schemas.
+- Versioned Protobuf `EventEnvelope`, `RawItemDiscovered`, `ItemAnalyzed`, `ItemRejected`, and `DeadLetterEvent` schemas.
 - JUnit contract tests plus PostgreSQL and Kafka Testcontainers coverage.
 - Repository-level JaCoCo, SpotBugs, dependency-health reporting, and canonical verification workflows.
 
@@ -153,13 +151,13 @@ The implemented backend foundation includes the following capability groups.
 - Accepted live resilience verification for restart, persistence outage, retry/DLQ, Kafka lag, outbox recovery, scheduler leases, authorization, and telemetry evidence.
 - Accepted Kafka consumer horizontal scaling over the existing modular-monolith Deployment and three-partition local topics, with live backlog-drain verification from one to three replicas.
 
-The default host-run local profile remains an explicitly trusted unauthenticated compatibility mode while the frontend is migrated.
+The default host-run local profile remains an explicitly trusted unauthenticated compatibility mode.
 
 The `security` environment enables authentication/RBAC and restrictive outbound-source policy.
 
 `SCALABILITY.KAFKA_CONSUMERS` is accepted after live developer verification demonstrated partition-bounded backlog drain from one to three backend replicas. Profile-owned typed Analysis settings, production-oriented Results browsing, and controlled ADMIN dead-letter recovery are also accepted. The repository-wide Jdbi persistence refactoring is accepted after the canonical repository gate passed for the final Results slice and its Security handle-lifecycle correction. Runtime SQL now uses Micronaut-managed Jdbi with named bindings and module-owned SQL resources while application use cases retain transaction ownership; Results alone uses bounded StringTemplate 4 rendering for structural browse/live predicates.
 
-Full umbrella Kubernetes acceptance still requires a real `signalharvester-web` image from the companion repository. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
+Backend-owned Kubernetes deployment and infrastructure-observability acceptance are complete for this repository. End-to-end product deployment acceptance spans the separately owned frontend repository and is not asserted from backend current-state documentation alone. Repository-owned Docker Compose remains the lightweight local PostgreSQL/Kafka development path.
 
 See [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) for detailed implemented state. See [`docs/USAGE.md`](docs/USAGE.md) for runnable workflows.
 
