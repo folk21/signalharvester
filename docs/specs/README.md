@@ -152,7 +152,9 @@ Umbrella:
 
 - [`active/spec-signal-harvester-platform.md`](active/spec-signal-harvester-platform.md) — initial observable collection/analysis platform target.
 
-Current implementation focus: none. The next backend lifecycle/reliability review is analysis-only until it finds a bounded implementation change.
+Current implementation focus:
+
+- [`active/subspecs/backend-analysis-outbox-lease-renewal.md`](active/subspecs/backend-analysis-outbox-lease-renewal.md) — `ANALYSIS.OUTBOX` pre-publication lease renewal so batch queueing cannot expire later-row ownership before Kafka send.
 
 Active supporting tracks:
 

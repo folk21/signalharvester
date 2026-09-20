@@ -23,6 +23,7 @@ public final class JdbiAnalysisOutboxStore implements AnalysisOutboxStore {
     private static final String SQL_PATH = "analysis/outbox";
     private static final String INSERT_SQL = SqlResources.load(SQL_PATH, "insert");
     private static final String CLAIM_SQL = SqlResources.load(SQL_PATH, "claim");
+    private static final String RENEW_LEASE_SQL = SqlResources.load(SQL_PATH, "renew-lease");
     private static final String MARK_PUBLISHED_SQL = SqlResources.load(SQL_PATH, "mark-published");
     private static final String MARK_FAILED_SQL = SqlResources.load(SQL_PATH, "mark-failed");
 
@@ -59,6 +60,17 @@ public final class JdbiAnalysisOutboxStore implements AnalysisOutboxStore {
                 .bind("leaseExpiresAt", Timestamp.from(leaseExpiresAt))
                 .map((rows, context) -> mapEntry(rows))
                 .list());
+    }
+
+    @Override
+    public void renewLease(String eventId, UUID leaseToken, Instant leaseExpiresAt) {
+        executeLeaseUpdate(
+                "renew Analysis outbox event lease",
+                handle -> handle.createUpdate(RENEW_LEASE_SQL)
+                        .bind("leaseExpiresAt", Timestamp.from(leaseExpiresAt))
+                        .bind("eventId", eventId)
+                        .bind("leaseToken", leaseToken)
+                        .execute());
     }
 
     @Override

@@ -72,6 +72,9 @@ public final class AnalysisOutboxDispatcher {
     }
 
     private void publishOne(AnalysisOutboxEntry entry, UUID leaseToken) {
+        if (!renewLeaseBeforePublication(entry, leaseToken)) {
+            return;
+        }
         try {
             observability.withTraceparent(
                     entry.traceparent(),
@@ -100,6 +103,23 @@ public final class AnalysisOutboxDispatcher {
             LOG.warn(
                     "Analysis outbox publication failed eventId={} topic={} attempts={}; event remains pending",
                     entry.eventId(), entry.topic(), entry.publicationAttempts(), failure);
+        }
+    }
+
+    private boolean renewLeaseBeforePublication(AnalysisOutboxEntry entry, UUID leaseToken) {
+        Instant leaseExpiresAt = clock.instant().plus(configuration.getLeaseDuration());
+        try {
+            transactions.executeWrite(status -> {
+                store.renewLease(entry.eventId(), leaseToken, leaseExpiresAt);
+                return null;
+            });
+            return true;
+        } catch (RuntimeException failure) {
+            observability.recordOutboxPublication("failed");
+            LOG.warn(
+                    "Skipping Analysis outbox publication because lease renewal failed eventId={} topic={} attempts={}",
+                    entry.eventId(), entry.topic(), entry.publicationAttempts(), failure);
+            return false;
         }
     }
 

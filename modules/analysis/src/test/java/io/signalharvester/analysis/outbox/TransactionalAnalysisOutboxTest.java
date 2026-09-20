@@ -123,6 +123,11 @@ class TransactionalAnalysisOutboxTest {
         }
 
         @Override
+        public void renewLease(String eventId, UUID leaseToken, Instant leaseExpiresAt) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public void markPublished(String eventId, UUID leaseToken, Instant publishedAt) {
             throw new UnsupportedOperationException();
         }

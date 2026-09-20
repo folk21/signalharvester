@@ -28,6 +28,8 @@ Profile-owned typed Analysis settings are accepted after the canonical repositor
 
 Production-oriented Results browsing and controlled owner-specific dead-letter recovery are accepted after their canonical repository gates passed. The repository-wide Jdbi persistence refactoring is also accepted after the final Results slice and Security handle-lifecycle correction passed the canonical repository gate. The scheduler pre-run lease recovery identified by the subsequent backend closure review is accepted as well: if local dispatch or heartbeat setup fails before a collection run starts, the exact-token lease is released without advancing its due time.
 
+The current bounded reliability focus is verification-pending Analysis outbox lease renewal. Claimed batches are published sequentially, so later rows now renew exact-token ownership immediately before Kafka send instead of relying only on the original batch-claim expiry.
+
 Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
@@ -76,9 +78,10 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Continue the systematic backend lifecycle/reliability review across background workers, shutdown/rejection paths, durable ownership, retries, commit ordering, and resource cleanup. Create a bounded sub-spec only when the review identifies a concrete change.
-2. If that review finds no further material defects, freeze a fresh verified backend/OpenAPI baseline and return to frontend work.
-3. Consider additional scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
+1. Verify and accept `backend-analysis-outbox-lease-renewal`, including the focused PostgreSQL lease-aging regression and the canonical repository gate.
+2. Continue the systematic backend lifecycle/reliability review across remaining background workers, shutdown/rejection paths, retries, commit ordering, and resource cleanup.
+3. If that review finds no further material defects, freeze a fresh verified backend/OpenAPI baseline and return to frontend work.
+4. Consider additional scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
 
