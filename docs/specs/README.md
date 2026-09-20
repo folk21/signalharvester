@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-There is currently no bounded implementation focus. The backend is in systematic lifecycle/reliability review; create the next sub-spec only when that review identifies a material change requiring explicit semantics and acceptance criteria.
+The current bounded implementation focus is `active/subspecs/backend-module-contract-discoverability.md`. Stage 1 repository contract audit is complete; module contract normalization is the next stage.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- none; systematic backend lifecycle/reliability review is active without a bounded implementation slice.
+- [`active/subspecs/backend-module-contract-discoverability.md`](active/subspecs/backend-module-contract-discoverability.md) — `PLATFORM.MODULAR_MONOLITH`, `CONTRACTS.HTTP`, and `CONTRACTS.KAFKA_PROTOBUF` contract discoverability hardening; Stage 1 audit complete, Stage 2 module contract normalization next.
 
 Active supporting tracks:
 

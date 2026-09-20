@@ -80,9 +80,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Continue the systematic backend lifecycle/reliability review across remaining Kafka shutdown/rebalance paths, background workers, executor rejection paths, durable ownership transitions, and resource cleanup.
-2. Create another bounded specification only when the review identifies a material change whose intended semantics need explicit ownership and acceptance criteria.
-3. If that review finds no further material defects, freeze a fresh verified backend/OpenAPI baseline and return to frontend work.
+1. Normalize all functional-module `contract.md` files according to the completed `backend-module-contract-discoverability` audit, preserving runtime behavior and existing public APIs.
+2. Reconcile global/current-state navigation and remove stale implementation inventories from active supporting specifications where current-state documentation already owns that information.
+3. After this bounded documentation-hardening slice is accepted, resume the systematic backend lifecycle/reliability review or return to the next concrete product/frontend requirement according to current priorities.
 4. Consider additional scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
