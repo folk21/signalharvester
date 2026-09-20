@@ -17,7 +17,8 @@ Own durable user-facing analyzed-result projections and their read boundary, whi
 - retain rejected source-event outcomes without creating duplicate rows on redelivery;
 - own Results application transactions and PostgreSQL schema;
 - expose backward-compatible read-only REST browsing/detail access with bounded filters, keyset continuation, and indexed text search;
-- expose resumable browser live delivery over committed analyzed projections through SSE.
+- expose resumable browser live delivery over committed analyzed projections through SSE;
+- expose controlled owner-specific dead-letter inspection and replay.
 
 ## Public integration surface
 
@@ -25,38 +26,45 @@ Own durable user-facing analyzed-result projections and their read boundary, whi
 
 None. Results currently has no synchronous functional-module consumer, so no `api/` package is published.
 
-### REST API
+### REST / SSE API
 
-The authoritative contract is `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`:
+Authoritative schema: `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`.
 
-- `GET /api/v1/results` — compact newest-first analyzed-result feed with bounded filters, optional text search, and opaque keyset continuation through `X-Next-Cursor`;
-- `GET /api/v1/results/{normalizedItemId}?monitoringProfileId=...` — detailed profile-scoped analyzed result;
-- `GET /api/v1/results/stream` — filtered resumable SSE updates over committed analyzed projections.
+Results owns the analyzed-result route family under `/api/v1/results`, resumable live delivery at `/api/v1/results/stream`, and controlled dead-letter inspection/replay under `/api/v1/admin/results/dead-letters`.
 
 The REST/SSE surface exposes Results-owned response DTOs only. It does not expose JDBC rows, persistence adapters, or generated Protobuf classes.
 
 ### Events
 
-Consumes versioned `ItemAnalyzed` and `ItemRejected` messages from `contracts/event-contracts/src/main/proto/io/signalharvester/events/analysis/v1/`.
+Results consumes `ItemAnalyzed` and `ItemRejected`. Terminal Results consumer failures publish `DeadLetterEvent`.
+
+Authoritative event sources:
+
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/analysis/v1/item-analyzed.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/analysis/v1/item-rejected.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/failure/v1/dead-letter-event.proto`;
+- `contracts/event-contracts/src/main/proto/io/signalharvester/events/common/v1/event-envelope.proto` — shared envelope used by the normal Analysis events above.
 
 Generated Protobuf classes remain inside the Kafka adapter boundary.
 
 ## Owned data
 
-PostgreSQL schema `results`, created by `db/migration/results/V4__create_result_projections.sql` and extended by later Results-owned migrations:
+PostgreSQL schema `results` is owned by migrations under `modules/results/src/main/resources/db/migration/results/`:
 
-- `results.analyzed_items` — one current projection per monitoring-profile/logical-item identity;
+- `results.analyzed_items` — one current projection per Monitoring Profile/logical-item identity;
 - `results.analyzed_item_attributes` — normalized result attributes;
 - `results.analyzed_item_tags` — ordered analysis tags;
 - `results.rejected_items` — terminal rejection records keyed by upstream source-event identity;
 - `results.live_result_cursors` plus `results.live_result_event_id_seq` — one durable monotonic live-delivery cursor per current logical analyzed result;
-- `V14__add_result_browsing_indexes.sql` — deterministic browse-order and GIN full-text indexes for REST browsing.
+- Results-owned deterministic browse-order and GIN full-text indexes support REST browsing.
 
 Other modules must not query or mutate these tables directly.
 
 ## Dependencies
 
-No synchronous functional-module dependency is required. Results depends only on the stable `common` SQL-resource utility, shared infrastructure/framework libraries, and the versioned event-contract artifact. Results SQL and row mapping remain module-local.
+No synchronous functional-module dependency is required.
+
+Results depends on the stable `common` SQL-resource utility, shared infrastructure/framework libraries, and the versioned event-contract artifact. Results SQL and row mapping remain module-local.
 
 ## Forbidden access
 
