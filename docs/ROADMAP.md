@@ -28,7 +28,9 @@ Profile-owned typed Analysis settings are accepted after the canonical repositor
 
 Production-oriented Results browsing and controlled owner-specific dead-letter recovery are accepted after their canonical repository gates passed. The repository-wide Jdbi persistence refactoring is also accepted after the final Results slice and Security handle-lifecycle correction passed the canonical repository gate. The scheduler pre-run lease recovery identified by the subsequent backend closure review is accepted as well: if local dispatch or heartbeat setup fails before a collection run starts, the exact-token lease is released without advancing its due time.
 
-The current bounded reliability focus is verification-pending Analysis outbox lease renewal. Claimed batches are published sequentially, so later rows now renew exact-token ownership immediately before Kafka send instead of relying only on the original batch-claim expiry.
+Analysis outbox pre-publication lease renewal is accepted after focused Analysis verification and the canonical repository gate passed. Claimed rows renew exact-token ownership immediately before Kafka send so sequential batch queueing cannot consume a later row's ownership window.
+
+The current bounded reliability focus is verification-pending Kafka offset-commit failure separation. Analysis, Results, and Event Observation keep application retry/DLQ handling inside their listeners, while Micronaut `SYNC_PER_RECORD` owns the synchronous offset commit only after successful listener completion.
 
 Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
@@ -78,10 +80,11 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Continue the systematic backend lifecycle/reliability review across remaining Kafka consumer commit/shutdown/retry paths, background workers, executor rejection paths, durable ownership transitions, and resource cleanup.
-2. Create a bounded specification only when the review identifies a material change whose intended semantics need explicit ownership and acceptance criteria.
-3. If that review finds no further material defects, freeze a fresh verified backend/OpenAPI baseline and return to frontend work.
-4. Consider additional scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
+1. Verify and accept Kafka offset-commit failure separation across Analysis, Results, and Event Observation.
+2. Continue the systematic backend lifecycle/reliability review across remaining Kafka shutdown/rebalance paths, background workers, executor rejection paths, durable ownership transitions, and resource cleanup.
+3. Create another bounded specification only when the review identifies a material change whose intended semantics need explicit ownership and acceptance criteria.
+4. If that review finds no further material defects, freeze a fresh verified backend/OpenAPI baseline and return to frontend work.
+5. Consider additional scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
 

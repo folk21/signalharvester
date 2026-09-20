@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-There is currently no bounded implementation sub-spec in focus. The next backend closure/reliability pass remains analysis until it identifies a concrete change that warrants a sub-spec.
+The current bounded implementation focus is `backend-kafka-offset-commit-failure-separation`, identified by the lifecycle/reliability review after Analysis outbox lease renewal acceptance.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -152,6 +152,10 @@ Umbrella:
 
 - [`active/spec-signal-harvester-platform.md`](active/spec-signal-harvester-platform.md) — initial observable collection/analysis platform target.
 
+Current implementation focus:
+
+- [`active/subspecs/backend-kafka-offset-commit-failure-separation.md`](active/subspecs/backend-kafka-offset-commit-failure-separation.md) — `RELIABILITY.KAFKA_RETRY`, `RELIABILITY.DEAD_LETTER`, and `RELIABILITY.IDEMPOTENCY`; keeps application retry/DLQ inside the listener and delegates successful per-record offset commit to Micronaut Kafka.
+
 Active supporting tracks:
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
@@ -207,7 +211,7 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-There is currently no planned bounded backend sub-spec. The next lifecycle/reliability review is analysis-only and should create a sub-spec only for a concrete material change.
+`backend-kafka-offset-commit-failure-separation` is the current bounded reliability change. Further lifecycle/reliability review remains analysis-only until it identifies another concrete material change.
 
 Further scheduling refinements remain deferred until a product requirement justifies them.
 

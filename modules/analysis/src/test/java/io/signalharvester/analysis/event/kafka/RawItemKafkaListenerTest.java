@@ -2,11 +2,12 @@ package io.signalharvester.analysis.event.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.Timestamp;
+import io.micronaut.configuration.kafka.annotation.KafkaListener;
+import io.micronaut.configuration.kafka.annotation.OffsetStrategy;
 import io.signalharvester.analysis.application.RawItemProcessingResult;
 import io.signalharvester.analysis.application.RawItemProcessingStatus;
 import io.signalharvester.analysis.application.RawItemProcessor;
@@ -15,24 +16,19 @@ import io.signalharvester.analysis.configuration.KeywordAnalysisConfiguration;
 import io.signalharvester.events.collection.v1.KeywordAnalysisSettings;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import io.signalharvester.events.common.v1.EventEnvelope;
-import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies {@link RawItemKafkaListener} bounded retry, poison-record dead-letter handling, and manual
- * offset commits without acknowledging records before successful processing or DLQ publication.
+ * Verifies {@link RawItemKafkaListener} bounded retry, poison-record dead-letter handling, and synchronous per-record
+ * offset strategy after successful processing or acknowledged DLQ publication.
  *
- * <p>Related specification: {@code backend-reliability-failure-handling}.</p>
+ * <p>Related specifications: {@code backend-reliability-failure-handling} and
+ * {@code backend-kafka-offset-commit-failure-separation}.</p>
  *
  * <p>Features: {@code RELIABILITY.KAFKA_RETRY}, {@code RELIABILITY.DEAD_LETTER}, {@code ANALYSIS.CLASSIFICATION}.</p>
  */
@@ -45,24 +41,21 @@ class RawItemKafkaListenerTest {
     private static final String SOURCE_ID = "source-01";
     private static final String PROFILE_ID = "profile-01";
 
-    /** Commit after the first successful processing attempt. */
+    /** Complete normally after the first successful processing attempt. */
     @Test
-    void shouldCommitAfterSuccessfulProcessing() {
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+    void shouldCompleteAfterSuccessfulProcessing() {
         RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
         RawItemProcessor processor = rawItem -> successfulResult();
         RawItemKafkaListener listener = listener(processor, deadLetters, 3);
 
-        listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC, consumer(committed));
+        listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC);
 
-        assertCommitted(committed, 8L);
         assertTrue(deadLetters.failures.isEmpty());
     }
 
-    /** Retry runtime processing failures within the configured bound and commit after recovery. */
+    /** Retry runtime processing failures within the configured bound and complete after recovery. */
     @Test
-    void shouldRetryRuntimeFailureAndCommitAfterRecovery() {
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+    void shouldRetryRuntimeFailureAndCompleteAfterRecovery() {
         RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
         AtomicInteger attempts = new AtomicInteger();
         RawItemKafkaListener listener = listener(rawItem -> {
@@ -72,17 +65,15 @@ class RawItemKafkaListenerTest {
             return successfulResult();
         }, deadLetters, 3);
 
-        listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC, consumer(committed));
+        listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC);
 
         assertEquals(3, attempts.get());
-        assertCommitted(committed, 8L);
         assertTrue(deadLetters.failures.isEmpty());
     }
 
-    /** Dead-letter an exhausted retryable failure before committing past the poison record. */
+    /** Dead-letter an exhausted retryable failure before successful listener completion. */
     @Test
-    void shouldDeadLetterExhaustedRetryableFailureBeforeCommit() {
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+    void shouldDeadLetterExhaustedRetryableFailureBeforeCompletion() {
         RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
         AtomicInteger attempts = new AtomicInteger();
         RawItemKafkaListener listener = listener(rawItem -> {
@@ -90,10 +81,9 @@ class RawItemKafkaListenerTest {
             throw new IllegalStateException("database unavailable");
         }, deadLetters, 3);
 
-        listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC, consumer(committed));
+        listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC);
 
         assertEquals(3, attempts.get());
-        assertCommitted(committed, 8L);
         Failure failure = deadLetters.failures.getFirst();
         assertEquals(3, failure.attempts());
         assertTrue(failure.retryable());
@@ -103,7 +93,6 @@ class RawItemKafkaListenerTest {
     /** Dead-letter malformed protobuf immediately without invoking the processor. */
     @Test
     void shouldDeadLetterMalformedProtobufWithoutRetry() {
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
         AtomicBoolean processed = new AtomicBoolean();
         RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
         RawItemKafkaListener listener = listener(rawItem -> {
@@ -111,10 +100,9 @@ class RawItemKafkaListenerTest {
             throw new AssertionError("processor must not run for malformed transport data");
         }, deadLetters, 3);
 
-        listener.receive(RAW_ITEM_ID, new byte[] {0x0A, 0x05, 0x01}, 7L, 2, TOPIC, consumer(committed));
+        listener.receive(RAW_ITEM_ID, new byte[] {0x0A, 0x05, 0x01}, 7L, 2, TOPIC);
 
         assertFalse(processed.get());
-        assertCommitted(committed, 8L);
         Failure failure = deadLetters.failures.getFirst();
         assertEquals(1, failure.attempts());
         assertFalse(failure.retryable());
@@ -124,7 +112,6 @@ class RawItemKafkaListenerTest {
     /** Dead-letter invalid captured Analysis settings immediately without invoking the processor. */
     @Test
     void shouldDeadLetterInvalidCapturedAnalysisSettingsWithoutRetry() {
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
         AtomicBoolean processed = new AtomicBoolean();
         RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
         RawItemKafkaListener listener = listener(rawItem -> {
@@ -137,10 +124,9 @@ class RawItemKafkaListenerTest {
                         .setMinimumMatches(2))
                 .build();
 
-        listener.receive(RAW_ITEM_ID, invalidEvent.toByteArray(), 7L, 2, TOPIC, consumer(committed));
+        listener.receive(RAW_ITEM_ID, invalidEvent.toByteArray(), 7L, 2, TOPIC);
 
         assertFalse(processed.get());
-        assertCommitted(committed, 8L);
         Failure failure = deadLetters.failures.getFirst();
         assertEquals(1, failure.attempts());
         assertFalse(failure.retryable());
@@ -150,7 +136,6 @@ class RawItemKafkaListenerTest {
     /** Dead-letter a key mismatch immediately without invoking the processor. */
     @Test
     void shouldDeadLetterKeyMismatchWithoutRetry() {
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
         AtomicBoolean processed = new AtomicBoolean();
         RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
         RawItemKafkaListener listener = listener(rawItem -> {
@@ -158,17 +143,23 @@ class RawItemKafkaListenerTest {
             throw new AssertionError("processor must not run for key mismatch");
         }, deadLetters, 3);
 
-        listener.receive("different-raw-id", event().toByteArray(), 7L, 2, TOPIC, consumer(committed));
+        listener.receive("different-raw-id", event().toByteArray(), 7L, 2, TOPIC);
 
         assertFalse(processed.get());
-        assertCommitted(committed, 8L);
         assertFalse(deadLetters.failures.getFirst().retryable());
     }
 
-    /** Leave the source offset uncommitted when dead-letter publication itself fails. */
+    /** Delegate synchronous offset commit to Micronaut after successful listener completion. */
     @Test
-    void shouldLeaveOffsetUncommittedWhenDeadLetterPublicationFails() {
-        AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed = new AtomicReference<>();
+    void shouldUseSynchronousPerRecordOffsetStrategy() {
+        KafkaListener annotation = RawItemKafkaListener.class.getAnnotation(KafkaListener.class);
+
+        assertEquals(OffsetStrategy.SYNC_PER_RECORD, annotation.offsetStrategy());
+    }
+
+    /** Propagate dead-letter publication failure so the framework does not commit the source offset. */
+    @Test
+    void shouldPropagateWhenDeadLetterPublicationFails() {
         AnalysisDeadLetterPublisher deadLetters = (sourceTopic, sourcePartition, sourceOffset, sourceKey,
                 sourcePayload, failure, attempts, retryable) -> {
             throw new IllegalStateException("DLQ unavailable");
@@ -178,11 +169,9 @@ class RawItemKafkaListenerTest {
         }, deadLetters, 1);
 
         assertThrows(IllegalStateException.class, () ->
-                listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC, consumer(committed)));
+                listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC));
 
-        assertNull(committed.get());
     }
-
 
     /** Reject retry backoff that exceeds the bounded listener policy. */
     @Test
@@ -262,35 +251,6 @@ class RawItemKafkaListenerTest {
                 .setContent("Java Kafka")
                 .setContentType("text/plain")
                 .build();
-    }
-
-    private static void assertCommitted(
-            AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed, long expectedOffset) {
-        Map<TopicPartition, OffsetAndMetadata> offsets = committed.get();
-        assertEquals(1, offsets.size());
-        assertEquals(expectedOffset, offsets.get(new TopicPartition(TOPIC, 2)).offset());
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Consumer<?, ?> consumer(AtomicReference<Map<TopicPartition, OffsetAndMetadata>> committed) {
-        return (Consumer<?, ?>) Proxy.newProxyInstance(
-                RawItemKafkaListenerTest.class.getClassLoader(),
-                new Class<?>[] {Consumer.class},
-                (proxy, method, args) -> {
-                    if (method.getName().equals("commitSync") && args != null && args.length == 1) {
-                        committed.set((Map<TopicPartition, OffsetAndMetadata>) args[0]);
-                        return null;
-                    }
-                    if (method.getDeclaringClass() == Object.class) {
-                        return switch (method.getName()) {
-                            case "toString" -> "RecordingKafkaConsumer";
-                            case "hashCode" -> System.identityHashCode(proxy);
-                            case "equals" -> proxy == args[0];
-                            default -> throw new UnsupportedOperationException(method.getName());
-                        };
-                    }
-                    throw new UnsupportedOperationException(method.getName());
-                });
     }
 
     private static final class RecordingDeadLetterPublisher implements AnalysisDeadLetterPublisher {
