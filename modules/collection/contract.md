@@ -71,6 +71,7 @@ Other functional modules must not depend on collection `run`, `source`, `sourcet
 - every newly published `RawItemDiscovered` carries the effective profile Analysis settings snapshot used by that run;
 - automatic scheduling considers only enabled profiles and fetches only enabled member sources;
 - scheduler due-work claims and lease updates use short collection-owned PostgreSQL transactions; external HTTP/Kafka work runs outside those transactions;
+- scheduler claims that fail before `CollectionRunner.run(...)` starts because local dispatch or heartbeat setup is rejected are released best-effort by exact lease token without advancing the due time; stale owners cannot clear a successor lease, and expiry remains the fallback if release persistence fails;
 - source/item-level failures are best-effort and do not cancel unrelated source work;
 - one collection run id is reused as correlation id for raw-item events from that run;
 - raw-item identity is deterministic for equivalent source content;

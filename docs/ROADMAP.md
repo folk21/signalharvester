@@ -26,7 +26,7 @@ The following platform work is also accepted:
 
 Profile-owned typed Analysis settings are accepted after the canonical repository gate passed. Monitoring Profiles are now authoritative for deterministic keyword behavior and carry the effective settings through `RawItemDiscovered`.
 
-Production-oriented Results browsing and controlled owner-specific dead-letter recovery are accepted after their canonical repository gates passed. The repository-wide Jdbi persistence refactoring is also accepted after the final Results slice and Security handle-lifecycle correction passed the canonical repository gate. The subsequent backend closure review identified one verification-pending scheduler lifecycle fix: a claimed due lease must be released without advancing its due time when local executor dispatch or heartbeat setup fails before the collection run starts.
+Production-oriented Results browsing and controlled owner-specific dead-letter recovery are accepted after their canonical repository gates passed. The repository-wide Jdbi persistence refactoring is also accepted after the final Results slice and Security handle-lifecycle correction passed the canonical repository gate. The scheduler pre-run lease recovery identified by the subsequent backend closure review is accepted as well: if local dispatch or heartbeat setup fails before a collection run starts, the exact-token lease is released without advancing its due time.
 
 Full platform Kubernetes acceptance still requires a real frontend image from `signalharvester-web`.
 
@@ -76,8 +76,8 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept the bounded scheduler pre-run lease recovery identified by the backend closure review.
-2. If the canonical gate is clean and no further concrete closure findings remain, freeze a fresh verified backend/OpenAPI baseline and return to frontend work.
+1. Continue the systematic backend lifecycle/reliability review across background workers, shutdown/rejection paths, durable ownership, retries, commit ordering, and resource cleanup. Create a bounded sub-spec only when the review identifies a concrete change.
+2. If that review finds no further material defects, freeze a fresh verified backend/OpenAPI baseline and return to frontend work.
 3. Consider additional scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
 
 `PRESENTATION.VIEWER_RESULTS` remains the next major frontend product slice after backend security. Detailed layout, routing, and frontend behavior belong to `signalharvester-web`.
