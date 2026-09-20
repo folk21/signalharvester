@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded implementation focus is `backend-kafka-offset-commit-failure-separation`, identified by the lifecycle/reliability review after Analysis outbox lease renewal acceptance.
+There is currently no bounded implementation focus. The backend is in systematic lifecycle/reliability review; create the next sub-spec only when that review identifies a material change requiring explicit semantics and acceptance criteria.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-kafka-offset-commit-failure-separation.md`](active/subspecs/backend-kafka-offset-commit-failure-separation.md) — `RELIABILITY.KAFKA_RETRY`, `RELIABILITY.DEAD_LETTER`, and `RELIABILITY.IDEMPOTENCY`; keeps application retry/DLQ inside the listener and delegates successful per-record offset commit to Micronaut Kafka.
+- none; systematic backend lifecycle/reliability review is active without a bounded implementation slice.
 
 Active supporting tracks:
 
@@ -165,6 +165,7 @@ Active supporting tracks:
 
 Accepted on 2026-09-20:
 
+- [`archive/subspecs/backend-kafka-offset-commit-failure-separation.md`](archive/subspecs/backend-kafka-offset-commit-failure-separation.md) — `RELIABILITY.KAFKA_RETRY`, `RELIABILITY.DEAD_LETTER`, and `RELIABILITY.IDEMPOTENCY`; accepted after the corrected Micronaut `SYNC_PER_RECORD` implementation completed focused listener verification, `HttpPipelineSmokeIntegrationTest`, and the canonical repository gate.
 - [`archive/subspecs/backend-analysis-outbox-lease-renewal.md`](archive/subspecs/backend-analysis-outbox-lease-renewal.md) — `ANALYSIS.OUTBOX` exact-token pre-publication lease renewal so sequential batch queueing cannot expire later-row ownership before Kafka send; accepted after focused Analysis verification and the canonical repository gate passed.
 - [`archive/subspecs/backend-scheduler-pre-run-lease-recovery.md`](archive/subspecs/backend-scheduler-pre-run-lease-recovery.md) — `COLLECTION.SCHEDULING` pre-run recovery that releases exact-token leases after local dispatch/setup failure without advancing due time; accepted after the developer confirmed focused Collection verification and the canonical repository gate passed.
 
@@ -211,7 +212,7 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-`backend-kafka-offset-commit-failure-separation` is the current bounded reliability change. Further lifecycle/reliability review remains analysis-only until it identifies another concrete material change.
+There is no planned bounded backend sub-specification at this point. Further lifecycle/reliability review remains analysis-only until it identifies another concrete material change.
 
 Further scheduling refinements remain deferred until a product requirement justifies them.
 

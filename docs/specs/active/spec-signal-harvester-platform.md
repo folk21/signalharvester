@@ -4,7 +4,6 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-kafka-offset-commit-failure-separation.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +25,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, and `backend-analysis-outbox-lease-renewal` are accepted after their canonical repository gates passed. The current bounded reliability focus is `backend-kafka-offset-commit-failure-separation`, which keeps application retry and terminal dead-letter classification inside the listener while Micronaut owns synchronous per-record offset commit after successful completion.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, and `backend-kafka-offset-commit-failure-separation` are accepted after their canonical repository gates passed. The backend is back in systematic lifecycle/reliability review with no bounded implementation sub-spec currently selected.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository.
 

@@ -67,16 +67,17 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 - deduplication identity is scoped by monitoring profile;
 - deterministic classification uses the immutable settings snapshot carried by the raw event and does not synchronously query Configuration;
 - deployment-global keyword rules are a compatibility fallback only for legacy raw events without a settings snapshot;
-- raw Kafka offsets are committed only after the Analysis state/outbox transaction commits or acknowledged Analysis dead-letter publication;
+- the raw Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic decode/key/mapping failures are dead-lettered without retry, while application failures use a bounded retry policy;
-- DLQ publication failure leaves the source offset uncommitted;
+- normal listener completion occurs only after the Analysis state/outbox transaction commits or acknowledged Analysis dead-letter publication; Micronaut owns the synchronous per-record source-offset commit afterward;
+- DLQ publication failure must escape before successful listener completion, while framework commit failure remains outside Analysis application retry/DLQ classification and may result in at-least-once redelivery;
 - deduplication writes require an active application-owned database transaction and Jdbi adapters must not self-commit;
-- a successful raw-item transaction commits the deduplication claim/update and exact serialized terminal event outbox row atomically before the source offset is committed;
+- a successful raw-item transaction commits the deduplication claim/update and exact serialized terminal event outbox row atomically before the listener can complete successfully;
 - Kafka publication happens outside database transactions through bounded expiring outbox leases;
 - each claimed outbox row renews its exact-token lease immediately before Kafka publication; a stale owner that can no longer renew must not publish the row;
 - pre-publication renewal completes before Kafka I/O and prevents local batch queueing from consuming a later row's ownership window; it does not provide distributed exactly-once delivery or guarantee that one Kafka send cannot outlive the renewed lease;
 - a post-ack publication-marker failure may republish the same event id/payload, so downstream persistence remains idempotent;
-- terminal input failures advance only after acknowledged Analysis dead-letter publication;
+- terminal input failures become eligible for framework offset commit only after acknowledged Analysis dead-letter publication;
 - operator recovery validates the current Analysis consumer group and raw input topic, requires exact dead-letter-id confirmation, reuses the normal decoder/processor, and never republishes the shared raw topic or rewrites source offsets.
 
 ## Extension points

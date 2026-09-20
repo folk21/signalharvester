@@ -3,16 +3,16 @@ type: Specification
 title: Kafka offset commit failure separation
 description: Keep Analysis, Results, and Event Observation application retry/DLQ semantics inside the listener while delegating successful per-record offset commit to Micronaut Kafka.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Kafka offset commit failure separation
 
 ## Status
 
-Verification-pending implementation identified by the backend lifecycle/reliability review.
+Completed and accepted on 2026-09-20 after the corrected Micronaut `SYNC_PER_RECORD` implementation passed focused listener verification, `HttpPipelineSmokeIntegrationTest`, and the canonical repository gate.
 
-The first implementation moved manual `commitSync()` outside the application retry `try/catch`, but still let a manual commit failure escape from an `OffsetStrategy.DISABLED` listener. Cross-module integration then stalled while the Kafka listener/runtime was handling that escaped post-processing failure. The revised implementation removes manual commit ownership from the listener methods and uses Micronaut `SYNC_PER_RECORD` commit semantics instead.
+The first implementation moved manual `commitSync()` outside the application retry `try/catch`, but still let a manual commit failure escape from an `OffsetStrategy.DISABLED` listener. Cross-module integration then stalled while the Kafka listener/runtime was handling that escaped post-processing failure. The accepted implementation removes manual commit ownership from the listener methods and uses Micronaut `SYNC_PER_RECORD` commit semantics instead.
 
 ## Feature scope
 
@@ -69,11 +69,11 @@ This stage does not:
 
 ## Validation
 
-Acceptance requires:
+Accepted on 2026-09-20 after the developer confirmed:
 
-1. Analysis unit coverage asserting `SYNC_PER_RECORD`, bounded processing retry, terminal DLQ behavior, and propagation when DLQ publication fails;
-2. equivalent Results unit coverage;
-3. equivalent Event Observation unit coverage;
-4. the real `HttpPipelineSmokeIntegrationTest` completes and tears down normally through Kafka -> Analysis -> Results/Event Observation;
-5. existing poison-record, DLQ-recovery, PostgreSQL/Kafka integration, and cross-module tests remain green;
-6. `./run_checks.sh` passes in the developer environment.
+1. Analysis unit coverage passed for `SYNC_PER_RECORD`, bounded processing retry, terminal DLQ behavior, and propagation when DLQ publication fails;
+2. equivalent Results unit coverage passed;
+3. equivalent Event Observation unit coverage passed;
+4. the real `HttpPipelineSmokeIntegrationTest` completed and tore down normally through Kafka -> Analysis -> Results/Event Observation;
+5. existing poison-record, DLQ-recovery, PostgreSQL/Kafka integration, and cross-module tests remained green;
+6. `./run_checks.sh` passed in the developer environment.

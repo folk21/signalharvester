@@ -125,7 +125,7 @@ The implemented backend foundation includes the following capability groups.
 - Analysis consumption with deterministic normalization.
 - PostgreSQL-backed profile-scoped deduplication.
 - Deterministic keyword analysis driven by immutable Monitoring Profile settings snapshots carried in `RawItemDiscovered`.
-- Manual source-offset commit after durable processing.
+- Framework-owned synchronous per-record source-offset commit after successful Analysis/Results/Event Observation listener completion.
 - Transactional-outbox staging of `ItemAnalyzed` and `ItemRejected`.
 - Operational APIs for Collection Runs and bounded Analysis inspection.
 - Results-owned PostgreSQL materialization with idempotent at-least-once consumption.

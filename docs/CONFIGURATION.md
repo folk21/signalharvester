@@ -183,17 +183,18 @@ Secrets belong in separate secret configuration, not in URLs.
 
 Collection, Analysis outbox, and dead-letter producers use `StringSerializer` for Kafka keys and `ByteArraySerializer` for explicit Protobuf payload bytes. They use `acks=all` and Kafka producer idempotence.
 
-Analysis, Results, and Event Observation use manual source-offset commits.
+Analysis, Results, and Event Observation use Micronaut Kafka `SYNC_PER_RECORD` source-offset commits. SignalHarvester listeners do not call `Consumer.commitSync()` directly.
 
 Failure handling is explicit:
 
 - deterministic decode/key/mapping failures bypass retry and publish `failure/v1/DeadLetterEvent`;
 - application failures retry up to the owning configured maximum with fixed backoff;
-- Analysis commits deduplication state plus serialized terminal event to PostgreSQL before advancing the raw source offset;
+- Analysis commits deduplication state plus the serialized terminal event to PostgreSQL before the listener can complete successfully;
 - the Analysis outbox publishes that stored record later;
-- Results and Event Observation advance source offsets after durable projection or recording;
+- Results and Event Observation complete successfully only after durable projection or recording;
 - an acknowledged DLQ is the terminal boundary for failed inputs;
-- failed DLQ publication leaves the source offset uncommitted.
+- failed DLQ publication throws before successful listener completion, so the source record is not intentionally advanced by SignalHarvester;
+- framework-level offset commit failure is outside application retry/DLQ classification and may result in normal at-least-once redelivery.
 
 Event Observation uses its own consumer group and does not compete with business consumers.
 

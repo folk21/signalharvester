@@ -177,11 +177,11 @@ The first implementation foundation contains:
 - `CollectionObservabilityTest` and `AnalysisObservabilityTest` for low-cardinality application metric emission with telemetry disabled safely through no-op boundaries;
 - `ApplicationObservabilityTest` for `/health`, liveness/readiness, and deterministic `/prometheus` exposure without PostgreSQL or Kafka;
 - `AnalysisItemInspectionControllerTest` for server-level inspection filters, validation/not-found semantics, required nullable JSON fields, and blocking Virtual Thread execution without external infrastructure;
-- `RawItemKafkaListenerTest` for Analysis bounded retry recovery, immediate malformed/key/invalid-settings dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
+- `RawItemKafkaListenerTest` for Analysis bounded retry recovery, immediate malformed/key/invalid-settings dead-letter handling, retry exhaustion, `SYNC_PER_RECORD` listener configuration, and propagation when DLQ publication fails before successful listener completion;
 - `AnalysisDeadLetterRecoveryControllerTest` for ADMIN recovery request/response validation, the full expected recovery-error status mapping, sanitized payload metadata, confirmation forwarding, and blocking Virtual Thread execution;
 - `AnalysisDeadLetterRecoveryKafkaIntegrationTest` for real-DLQ inspection, explicit confirmation, consumer-group and Kafka-key ownership validation, original-byte decoding, bounded recovery concurrency, and proof that owner-local replay does not append to the shared raw-item topic;
 - `TransactionalAnalysisOutboxTest` for analyzed/rejected final topic-key mapping, stable terminal-event serialization, provenance, and outbox staging metadata;
-- `AnalysisOutcomeKafkaListenerTest` for Results terminal-event mapping, bounded projection retry, poison-input dead-letter handling, retry exhaustion, and no source-offset commit when DLQ publication fails;
+- `AnalysisOutcomeKafkaListenerTest` for Results terminal-event mapping, bounded projection retry, poison-input dead-letter handling, retry exhaustion, `SYNC_PER_RECORD` listener configuration, and propagation when DLQ publication fails before successful listener completion;
 - `ResultsDeadLetterRecoveryControllerTest` for Results recovery HTTP validation, the full expected recovery-error status mapping, confirmation, sanitization, and blocking execution;
 - `ResultsKafkaPostgresIntegrationTest` covers real Kafka -> Results listener -> PostgreSQL materialization, including:
   - idempotent retry/upsert behavior;
@@ -194,7 +194,7 @@ The first implementation foundation contains:
 - `ResultLiveControllerTest` for SSE ready/result framing, `Last-Event-ID` resume behavior, live filters, cursor validation, and JDBC polling on the blocking Virtual Thread executor;
 - `ResultQueryPostgresIntegrationTest` for real Results SQL filtering, deterministic keyset pagination including timestamp ties, criteria-bound cursors, indexed full-text search, browse-index migrations, ordered tags/attributes, profile-scoped detail reads, durable live polling, duplicate-analysis-event cursor idempotency, Jdbi transaction ownership, and analyzed-projection rollback on child-write failure;
 - `EventObservationMapperTest` for decoded human-readable metadata across the current raw/analyzed/rejected Protobuf event families without copying large content bodies;
-- `EventObservationKafkaListenerTest` for bounded recording retry, immediate poison dead-letter handling, and no source-offset commit when Event Observation DLQ publication fails;
+- `EventObservationKafkaListenerTest` for bounded recording retry, immediate poison dead-letter handling, `SYNC_PER_RECORD` listener configuration, and propagation when Event Observation DLQ publication fails before successful listener completion;
 - `EventObservationDeadLetterRecoveryControllerTest` for Event Observation recovery HTTP validation, the full expected recovery-error status mapping, confirmation, sanitization, and blocking execution;
 - `EventObservationControllerTest` for bounded Event Explorer REST filters, decoded JSON shape, validation, and blocking Virtual Thread execution;
 - `EventObservationLiveControllerTest` for `ready`/`event` SSE framing, `Last-Event-ID` resume, technical filters, cursor validation, and blocking-query offload;
@@ -231,7 +231,8 @@ Before using real sources for a controlled trial, the backend should keep the fo
 raw Kafka input
     -> analysis claim/update + serialized outbox append
     -> PostgreSQL transaction commit
-    -> input offset commit
+    -> successful listener completion
+    -> Micronaut synchronous per-record offset commit
     -> lease-based outbox publication
     -> publication marker / retry metadata
 ```
