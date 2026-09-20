@@ -78,8 +78,8 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept `backend-analysis-outbox-lease-renewal`, including the focused PostgreSQL lease-aging regression and the canonical repository gate.
-2. Continue the systematic backend lifecycle/reliability review across remaining background workers, shutdown/rejection paths, retries, commit ordering, and resource cleanup.
+1. Continue the systematic backend lifecycle/reliability review across remaining Kafka consumer commit/shutdown/retry paths, background workers, executor rejection paths, durable ownership transitions, and resource cleanup.
+2. Create a bounded specification only when the review identifies a material change whose intended semantics need explicit ownership and acceptance criteria.
 3. If that review finds no further material defects, freeze a fresh verified backend/OpenAPI baseline and return to frontend work.
 4. Consider additional scheduling refinements or KEDA only when a concrete product/operational requirement justifies them; manual horizontal scaling is already accepted.
 

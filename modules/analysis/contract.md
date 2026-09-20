@@ -73,6 +73,8 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 - deduplication writes require an active application-owned database transaction and Jdbi adapters must not self-commit;
 - a successful raw-item transaction commits the deduplication claim/update and exact serialized terminal event outbox row atomically before the source offset is committed;
 - Kafka publication happens outside database transactions through bounded expiring outbox leases;
+- each claimed outbox row renews its exact-token lease immediately before Kafka publication; a stale owner that can no longer renew must not publish the row;
+- pre-publication renewal completes before Kafka I/O and prevents local batch queueing from consuming a later row's ownership window; it does not provide distributed exactly-once delivery or guarantee that one Kafka send cannot outlive the renewed lease;
 - a post-ack publication-marker failure may republish the same event id/payload, so downstream persistence remains idempotent;
 - terminal input failures advance only after acknowledged Analysis dead-letter publication;
 - operator recovery validates the current Analysis consumer group and raw input topic, requires exact dead-letter-id confirmation, reuses the normal decoder/processor, and never republishes the shared raw topic or rewrites source offsets.

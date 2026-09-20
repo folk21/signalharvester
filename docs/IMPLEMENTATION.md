@@ -201,12 +201,14 @@ Successful application processing means that two pieces of state commit atomical
 `AnalysisOutboxDispatcher`:
 
 - claims bounded pending batches with short PostgreSQL leases;
+- renews each row's exact-token lease immediately before its Kafka send so time spent behind earlier batch entries cannot expire ownership before publication begins;
+- skips publication when exact-token renewal no longer succeeds because another replica owns the row;
 - publishes stored bytes to Kafka outside a database transaction;
 - records success or retry state in a second short transaction.
 
-Multiple replicas coordinate through `FOR UPDATE SKIP LOCKED` plus lease expiry.
+Multiple replicas coordinate through `FOR UPDATE SKIP LOCKED`, exact-token pre-publication renewal, and lease expiry. Renewal is committed before Kafka I/O, so no JDBC transaction or PostgreSQL row lock is held while waiting for broker acknowledgement.
 
-A crash after Kafka acknowledgement but before `published_at` may republish the same stored event. Delivery therefore remains at-least-once.
+A crash after Kafka acknowledgement but before `published_at` may republish the same stored event. Delivery therefore remains at-least-once. A single Kafka send may also outlive its renewed lease; the accepted renewal rule removes avoidable ownership loss caused by local batch queueing without claiming distributed exactly-once delivery.
 
 Event ID, key, topic, and payload stay stable. Downstream idempotency handles the replay.
 

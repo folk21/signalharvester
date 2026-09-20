@@ -152,10 +152,6 @@ Umbrella:
 
 - [`active/spec-signal-harvester-platform.md`](active/spec-signal-harvester-platform.md) — initial observable collection/analysis platform target.
 
-Current implementation focus:
-
-- [`active/subspecs/backend-analysis-outbox-lease-renewal.md`](active/subspecs/backend-analysis-outbox-lease-renewal.md) — `ANALYSIS.OUTBOX` pre-publication lease renewal so batch queueing cannot expire later-row ownership before Kafka send.
-
 Active supporting tracks:
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
@@ -165,6 +161,7 @@ Active supporting tracks:
 
 Accepted on 2026-09-20:
 
+- [`archive/subspecs/backend-analysis-outbox-lease-renewal.md`](archive/subspecs/backend-analysis-outbox-lease-renewal.md) — `ANALYSIS.OUTBOX` exact-token pre-publication lease renewal so sequential batch queueing cannot expire later-row ownership before Kafka send; accepted after focused Analysis verification and the canonical repository gate passed.
 - [`archive/subspecs/backend-scheduler-pre-run-lease-recovery.md`](archive/subspecs/backend-scheduler-pre-run-lease-recovery.md) — `COLLECTION.SCHEDULING` pre-run recovery that releases exact-token leases after local dispatch/setup failure without advancing due time; accepted after the developer confirmed focused Collection verification and the canonical repository gate passed.
 
 Accepted on 2026-09-18:

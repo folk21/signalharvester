@@ -4,7 +4,6 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-analysis-outbox-lease-renewal.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +25,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, and `backend-scheduler-pre-run-lease-recovery` are accepted after their canonical repository gates passed. The current bounded backend focus is `backend-analysis-outbox-lease-renewal`, a verification-pending reliability fix identified by the continuing lifecycle review.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, and `backend-analysis-outbox-lease-renewal` are accepted after their canonical repository gates passed. No bounded backend implementation focus is active; the lifecycle/reliability review continues and should create a new sub-spec only when it identifies a material change that requires one.
 
 Detailed `PRESENTATION.VIEWER_RESULTS` implementation and the real frontend image remain owned by the `signalharvester-web` specification tree. Full umbrella R24 acceptance therefore remains cross-repository.
 
