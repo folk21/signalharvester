@@ -4,6 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
+current_focus: subspecs/backend-scheduler-expired-lease-fencing.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -25,7 +26,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, and `backend-module-contract-discoverability` are accepted after their relevant repository tests and validations passed. There is currently no bounded backend implementation focus; further lifecycle/reliability review remains analysis-only until it identifies a material change that requires explicit semantics and acceptance criteria.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, and `backend-module-contract-discoverability` are accepted after their relevant repository tests and validations passed. The current bounded focus is `backend-scheduler-expired-lease-fencing`, identified by the systematic lifecycle/reliability review after it found that an expired scheduler owner could still renew or complete its lease before a successor claim.
 
 Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
 

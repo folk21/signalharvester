@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-There is currently no bounded implementation focus. The backend is in systematic lifecycle/reliability review; create the next sub-spec only when that review identifies a material change requiring explicit semantics and acceptance criteria.
+The current bounded implementation focus is [`active/subspecs/backend-scheduler-expired-lease-fencing.md`](active/subspecs/backend-scheduler-expired-lease-fencing.md). The systematic lifecycle/reliability review identified a material scheduler ownership defect: an expired exact-token lease could still be renewed or completed before a successor claim. The fix is implemented and awaits verification.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 

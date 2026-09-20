@@ -78,9 +78,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Resume the systematic backend lifecycle/reliability review across remaining Kafka shutdown/rebalance paths, background workers, executor rejection, durable ownership, and resource cleanup.
-2. Create a bounded sub-specification only when that review identifies a concrete material change requiring explicit semantics and acceptance criteria.
-3. If no material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement. Additional scheduling refinements or KEDA remain deferred until a product/operational requirement justifies them.
+1. Verify and accept `backend-scheduler-expired-lease-fencing`: expired Collection scheduler owners must not renew or complete work after the persisted lease boundary, and overdue work must remain reclaimable.
+2. After acceptance, resume the systematic lifecycle/reliability review across remaining Kafka shutdown/rebalance paths, background workers, executor rejection, durable ownership, and resource cleanup.
+3. Create another bounded sub-specification only when that review identifies a concrete material change requiring explicit semantics and acceptance criteria. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 
