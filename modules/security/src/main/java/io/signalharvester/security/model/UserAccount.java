@@ -1,5 +1,7 @@
 package io.signalharvester.security.model;
 
+import static io.signalharvester.common.validation.Preconditions.requireTrimmedNonBlank;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Set;
@@ -16,19 +18,11 @@ public record UserAccount(
 
     public UserAccount {
         Objects.requireNonNull(id, "id");
-        username = requireNonBlank(username, "username");
+        username = requireTrimmedNonBlank(username, "username");
         Objects.requireNonNull(identityType, "identityType");
         roles = Set.copyOf(Objects.requireNonNull(roles, "roles"));
         Objects.requireNonNull(createdAt, "createdAt");
         Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
-    private static String requireNonBlank(String value, String name) {
-        Objects.requireNonNull(value, name);
-        String normalized = value.trim();
-        if (normalized.isEmpty()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-        return normalized;
-    }
 }

@@ -21,6 +21,7 @@ import io.signalharvester.events.collection.v1.KeywordAnalysisSettings;
 import io.signalharvester.events.collection.v1.RawItemDiscovered;
 import io.signalharvester.events.common.v1.EventEnvelope;
 import io.signalharvester.events.failure.v1.DeadLetterEvent;
+import io.signalharvester.testing.KafkaContainerSupport;
 import jakarta.inject.Singleton;
 import java.time.Duration;
 import java.util.List;
@@ -66,7 +67,7 @@ class AnalysisDeadLetterRecoveryKafkaIntegrationTest {
     private static final String RAW_ITEM_ID = "raw-recovery-it";
 
     @Container
-    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:3.8.0");
+    private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
 
     private ApplicationContext context;
     private KafkaProducer<String, byte[]> producer;

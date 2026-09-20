@@ -1,5 +1,7 @@
 package io.signalharvester.collection.run;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 import io.signalharvester.configuration.api.SourceId;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,9 +31,9 @@ public record CollectionSourceResult(
         Objects.requireNonNull(rawItemId, "rawItemId");
         Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(failureMessage, "failureMessage");
-        rawItemId.ifPresent(value -> requireNonBlank(value, "rawItemId"));
-        eventId.ifPresent(value -> requireNonBlank(value, "eventId"));
-        failureMessage.ifPresent(value -> requireNonBlank(value, "failureMessage"));
+        rawItemId.ifPresent(value -> requireNonBlankArgument(value, "rawItemId"));
+        eventId.ifPresent(value -> requireNonBlankArgument(value, "eventId"));
+        failureMessage.ifPresent(value -> requireNonBlankArgument(value, "failureMessage"));
 
         switch (status) {
             case PUBLISHED -> {
@@ -67,9 +69,4 @@ public record CollectionSourceResult(
                 || status == CollectionSourceStatus.PUBLICATION_FAILED;
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

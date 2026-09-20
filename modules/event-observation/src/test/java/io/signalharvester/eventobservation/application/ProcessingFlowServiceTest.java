@@ -10,11 +10,11 @@ import io.signalharvester.eventobservation.application.ProcessingFlow.NodeStatus
 import io.signalharvester.eventobservation.application.ProcessingFlow.Stage;
 import io.signalharvester.eventobservation.application.ProcessingFlow.State;
 import io.signalharvester.eventobservation.model.ObservedEvent;
+import io.signalharvester.eventobservation.testing.ObservedEventFixture;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.OptionalInt;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -171,12 +171,12 @@ class ProcessingFlowServiceTest {
                 "raw-topic",
                 rawItemId,
                 "RawItemDiscovered",
-                Optional.empty(),
-                Optional.of(rawItemId),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                OptionalInt.empty());
+                null,
+                rawItemId,
+                null,
+                null,
+                null,
+                null);
     }
 
     private static ObservedEvent analyzed(
@@ -195,12 +195,12 @@ class ProcessingFlowServiceTest {
                 "analyzed-topic",
                 normalizedItemId,
                 "ItemAnalyzed",
-                Optional.of(sourceEventId),
-                Optional.of(rawItemId),
-                Optional.of(normalizedItemId),
-                Optional.of("MATCHED"),
-                Optional.empty(),
-                OptionalInt.of(90));
+                sourceEventId,
+                rawItemId,
+                normalizedItemId,
+                "MATCHED",
+                null,
+                90);
     }
 
     private static ObservedEvent rejected(
@@ -219,12 +219,12 @@ class ProcessingFlowServiceTest {
                 "rejected-topic",
                 normalizedItemId,
                 "ItemRejected",
-                Optional.of(sourceEventId),
-                Optional.of(rawItemId),
-                Optional.of(normalizedItemId),
-                Optional.empty(),
-                Optional.of("DUPLICATE"),
-                OptionalInt.empty());
+                sourceEventId,
+                rawItemId,
+                normalizedItemId,
+                null,
+                "DUPLICATE",
+                null);
     }
 
     private static ObservedEvent event(
@@ -236,43 +236,37 @@ class ProcessingFlowServiceTest {
             String topic,
             String key,
             String payloadType,
-            Optional<String> sourceEventId,
-            Optional<String> rawItemId,
-            Optional<String> normalizedItemId,
-            Optional<String> classification,
-            Optional<String> reasonCode,
-            OptionalInt score) {
-        return new ObservedEvent(
-                cursor,
-                eventId,
-                eventType,
-                occurredAt,
-                occurredAt.plusMillis(50),
-                RUN_ID,
-                Optional.of("00-" + TRACE_ID + "-0123456789abcdef-01"),
-                producer,
-                "v1",
-                topic,
-                0,
-                cursor,
-                key,
-                payloadType,
-                sourceEventId,
-                rawItemId,
-                normalizedItemId,
-                Optional.of("source-1"),
-                Optional.of("profile-1"),
-                Optional.of("JOB"),
-                Optional.of("external-1"),
-                Optional.of("Senior Java Engineer"),
-                Optional.of("https://example.test/jobs/1"),
-                Optional.of("text/plain"),
-                classification.isPresent() ? Optional.of(true) : Optional.empty(),
-                classification,
-                score,
-                classification.isPresent() ? Optional.of("keyword-v1") : Optional.empty(),
-                reasonCode,
-                reasonCode.isPresent() ? Optional.of("Already accepted") : Optional.of("Matched Java"));
+            String sourceEventId,
+            String rawItemId,
+            String normalizedItemId,
+            String classification,
+            String reasonCode,
+            Integer score) {
+        ObservedEventFixture.Builder fixture = ObservedEventFixture.observedEvent(cursor, eventId, eventType)
+                .occurredAt(occurredAt)
+                .observedAt(occurredAt.plusMillis(50))
+                .correlationId(RUN_ID)
+                .traceparent("00-" + TRACE_ID + "-0123456789abcdef-01")
+                .producer(producer)
+                .topic(topic)
+                .offset(cursor)
+                .key(key)
+                .payloadType(payloadType)
+                .sourceEventId(sourceEventId)
+                .rawItemId(rawItemId)
+                .normalizedItemId(normalizedItemId)
+                .externalId("external-1")
+                .title("Senior Java Engineer")
+                .url("https://example.test/jobs/1")
+                .contentType("text/plain")
+                .classification(classification)
+                .reasonCode(reasonCode)
+                .score(score)
+                .explanation(reasonCode != null ? "Already accepted" : "Matched Java");
+        if (classification != null) {
+            fixture.relevant(true).analyzer("keyword-v1");
+        }
+        return fixture.build();
     }
 
     private static final class FakeEventQuery implements EventObservationQuery {

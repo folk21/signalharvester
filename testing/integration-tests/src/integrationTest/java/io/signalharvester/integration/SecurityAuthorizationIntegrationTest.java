@@ -5,23 +5,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.runtime.server.EmbeddedServer;
-import java.net.http.HttpClient;
+import io.signalharvester.testing.BrowserHttpSession;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.Duration;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -34,6 +36,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  */
 @Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@Execution(ExecutionMode.SAME_THREAD)
 class SecurityAuthorizationIntegrationTest {
     private static final String ADMIN_USERNAME = "integration-admin";
     private static final String ADMIN_PASSWORD = "integration-admin-password";
@@ -49,6 +52,7 @@ class SecurityAuthorizationIntegrationTest {
             .withPassword("signalharvester");
 
     private EmbeddedServer server;
+    private final List<BrowserHttpSession> browserSessions = new ArrayList<>();
 
     @BeforeAll
     void startServer() throws Exception {
@@ -58,8 +62,13 @@ class SecurityAuthorizationIntegrationTest {
 
     @AfterAll
     void stopServer() {
+        for (BrowserHttpSession browserSession : browserSessions) {
+            browserSession.close();
+        }
+        browserSessions.clear();
         if (server != null) {
             server.close();
+            server = null;
         }
     }
 
@@ -220,18 +229,17 @@ class SecurityAuthorizationIntegrationTest {
     }
 
     private Client login(String username, String password) throws Exception {
-        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-        HttpRequest request = HttpRequest.newBuilder(server.getURI().resolve("/api/v1/auth/login"))
-                .timeout(HTTP_TIMEOUT)
+        Client client = new Client();
+        HttpRequest request = client.session.request("/api/v1/auth/login")
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("""
                         {"username":"%s","password":"%s"}
                         """.formatted(username, password)))
                 .build();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = client.session.send(request, HttpResponse.BodyHandlers.ofString());
         assertEquals(200, response.statusCode(),
                 () -> "Login failed: " + response.statusCode() + " " + response.body());
-        return new Client(response);
+        return client;
     }
 
     private static UUID extractId(String body) {
@@ -279,20 +287,17 @@ class SecurityAuthorizationIntegrationTest {
     }
 
     private final class Client {
-        private final Map<String, BrowserCookie> cookies = new LinkedHashMap<>();
-        private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        private final BrowserHttpSession session;
 
         private Client() {
-        }
-
-        private Client(HttpResponse<?> loginResponse) {
-            applySetCookieHeaders(loginResponse);
+            session = new BrowserHttpSession(server.getURI(), Duration.ofSeconds(5), HTTP_TIMEOUT);
+            browserSessions.add(session);
         }
 
         private HttpResponse<String> send(String method, String path, String body, boolean includeCsrf) throws Exception {
-            HttpRequest.Builder request = request(path);
+            HttpRequest.Builder request = session.request(path);
             if (includeCsrf) {
-                request.header("X-CSRF-TOKEN", cookie("XSRF-TOKEN").value());
+                request.header("X-CSRF-TOKEN", session.requireCookie("XSRF-TOKEN").getValue());
             }
             if (body == null) {
                 request.method(method, HttpRequest.BodyPublishers.noBody());
@@ -300,61 +305,12 @@ class SecurityAuthorizationIntegrationTest {
                 request.header("Content-Type", "application/json");
                 request.method(method, HttpRequest.BodyPublishers.ofString(body));
             }
-            HttpResponse<String> response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
-            applySetCookieHeaders(response);
-            return response;
+            return session.send(request.build(), HttpResponse.BodyHandlers.ofString());
         }
 
         private HttpResponse<java.util.stream.Stream<String>> sendLines(String path) throws Exception {
-            HttpRequest request = request(path).GET().build();
-            return client.send(request, HttpResponse.BodyHandlers.ofLines());
+            HttpRequest request = session.request(path).GET().build();
+            return session.send(request, HttpResponse.BodyHandlers.ofLines());
         }
-
-        private HttpRequest.Builder request(String path) {
-            HttpRequest.Builder request = HttpRequest.newBuilder(server.getURI().resolve(path)).timeout(HTTP_TIMEOUT);
-            if (!cookies.isEmpty()) {
-                request.header("Cookie", cookies.values().stream()
-                        .map(cookie -> cookie.name() + "=" + cookie.value())
-                        .collect(Collectors.joining("; ")));
-            }
-            return request;
-        }
-
-        private void applySetCookieHeaders(HttpResponse<?> response) {
-            for (String header : response.headers().allValues("Set-Cookie")) {
-                String[] segments = header.split(";");
-                int separator = segments[0].indexOf('=');
-                if (separator <= 0) {
-                    throw new AssertionError("Invalid Set-Cookie header: " + header);
-                }
-
-                String name = segments[0].substring(0, separator).trim();
-                String value = segments[0].substring(separator + 1).trim();
-                boolean expired = false;
-                for (int index = 1; index < segments.length; index++) {
-                    String attribute = segments[index].trim();
-                    if (attribute.regionMatches(true, 0, "Max-Age=", 0, "Max-Age=".length())) {
-                        expired = "0".equals(attribute.substring("Max-Age=".length()).trim());
-                    }
-                }
-
-                if (expired) {
-                    cookies.remove(name);
-                } else {
-                    cookies.put(name, new BrowserCookie(name, value));
-                }
-            }
-        }
-
-        private BrowserCookie cookie(String name) {
-            BrowserCookie cookie = cookies.get(name);
-            if (cookie == null) {
-                throw new AssertionError("Missing cookie " + name + "; available cookies=" + cookies.keySet());
-            }
-            return cookie;
-        }
-    }
-
-    private record BrowserCookie(String name, String value) {
     }
 }

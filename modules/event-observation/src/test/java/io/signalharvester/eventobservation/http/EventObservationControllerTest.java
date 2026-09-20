@@ -13,6 +13,7 @@ import io.signalharvester.eventobservation.application.EventObservationLiveBatch
 import io.signalharvester.eventobservation.application.EventObservationQuery;
 import io.signalharvester.eventobservation.application.EventObservationService;
 import io.signalharvester.eventobservation.model.ObservedEvent;
+import io.signalharvester.eventobservation.testing.ObservedEventFixture;
 import jakarta.inject.Singleton;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -21,7 +22,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -87,37 +87,24 @@ class EventObservationControllerTest {
     }
 
     private static ObservedEvent event() {
-        return new ObservedEvent(
-                7L,
-                "event-1",
-                "analysis.item-analyzed.v1",
-                Instant.parse("2026-09-14T10:00:00Z"),
-                Instant.parse("2026-09-14T10:00:01Z"),
-                "run-1",
-                Optional.of("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"),
-                "analysis",
-                "v1",
-                "topic-a",
-                0,
-                42L,
-                "norm-1",
-                "ItemAnalyzed",
-                Optional.of("source-event-1"),
-                Optional.of("raw-1"),
-                Optional.of("norm-1"),
-                Optional.of("source-1"),
-                Optional.of("profile-1"),
-                Optional.of("JOB"),
-                Optional.empty(),
-                Optional.of("Senior Java Engineer"),
-                Optional.of("https://example.test/jobs/1"),
-                Optional.of("text/plain"),
-                Optional.of(true),
-                Optional.of("MATCHED"),
-                OptionalInt.of(90),
-                Optional.of("keyword-v1"),
-                Optional.empty(),
-                Optional.of("Matched deterministic keywords"));
+        return ObservedEventFixture.observedEvent(7L, "event-1", "analysis.item-analyzed.v1")
+                .traceparent("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01")
+                .topic("topic-a")
+                .offset(42L)
+                .key("norm-1")
+                .payloadType("ItemAnalyzed")
+                .sourceEventId("source-event-1")
+                .rawItemId("raw-1")
+                .normalizedItemId("norm-1")
+                .title("Senior Java Engineer")
+                .url("https://example.test/jobs/1")
+                .contentType("text/plain")
+                .relevant(true)
+                .classification("MATCHED")
+                .score(90)
+                .analyzer("keyword-v1")
+                .explanation("Matched deterministic keywords")
+                .build();
     }
 
     @Singleton

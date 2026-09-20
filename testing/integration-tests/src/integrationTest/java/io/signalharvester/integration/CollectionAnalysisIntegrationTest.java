@@ -19,6 +19,7 @@ import io.signalharvester.configuration.application.SourceConfigurationCommand;
 import io.signalharvester.configuration.application.SourceConfigurationOperations;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import io.signalharvester.events.analysis.v1.ItemRejected;
+import io.signalharvester.testing.KafkaContainerSupport;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -78,7 +79,7 @@ class CollectionAnalysisIntegrationTest {
             .withPassword("signalharvester");
 
     @Container
-    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:3.8.0");
+    private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
 
     private ApplicationContext context;
     private HttpServer sourceServer;

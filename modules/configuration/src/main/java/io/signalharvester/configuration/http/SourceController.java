@@ -14,6 +14,7 @@ import io.micronaut.validation.Validated;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.application.SourceConfigurationOperations;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,7 +40,7 @@ public class SourceController {
 
     /** Creates and persists a configured source. */
     @Post
-    public HttpResponse<SourceResponse> createSource(@Body @Valid SourceUpsertRequest request) {
+    public HttpResponse<SourceResponse> createSource(@Body @Valid @NotNull SourceUpsertRequest request) {
         SourceResponse response = SourceResponse.from(operations.create(request.toCommand()));
         return HttpResponse.created(response);
     }
@@ -54,7 +55,7 @@ public class SourceController {
     @Put("/{sourceId}")
     public SourceResponse updateSource(
             @PathVariable UUID sourceId,
-            @Body @Valid SourceUpsertRequest request) {
+            @Body @Valid @NotNull SourceUpsertRequest request) {
         return SourceResponse.from(operations.update(SourceId.of(sourceId), request.toCommand()));
     }
 

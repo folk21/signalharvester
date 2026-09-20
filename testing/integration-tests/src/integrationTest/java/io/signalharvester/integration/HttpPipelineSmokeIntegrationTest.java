@@ -9,6 +9,8 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.runtime.server.EmbeddedServer;
+import io.signalharvester.testing.Await;
+import io.signalharvester.testing.KafkaContainerSupport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -84,7 +86,7 @@ class HttpPipelineSmokeIntegrationTest {
             .withPassword("signalharvester");
 
     @Container
-    private static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka-native:3.8.0");
+    private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
 
     private final AtomicInteger sourceRequests = new AtomicInteger();
     private HttpServer sourceServer;
@@ -277,61 +279,56 @@ class HttpPipelineSmokeIntegrationTest {
 
     private String awaitAnalysisState(
             String profileId, String sourceId, String rawItemId, long discoveryCount) throws Exception {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
-        String lastBody = "";
-        while (Instant.now().isBefore(deadline)) {
-            HttpResponse<String> response = send(
-                    "GET",
-                    "/api/v1/admin/analysis/items?limit=10&monitoringProfileId=" + profileId + "&sourceId=" + sourceId,
-                    null);
-            assertEquals(200, response.statusCode());
-            lastBody = response.body();
-            if (lastBody.contains("\"firstRawItemId\":\"" + rawItemId + "\"")
-                    && lastBody.contains("\"discoveryCount\":" + discoveryCount)) {
-                return lastBody;
-            }
-            Thread.sleep(100);
-        }
-        throw new AssertionError("Analysis state did not reach discoveryCount=" + discoveryCount + ": " + lastBody);
+        String expectedRawItem = "\"firstRawItemId\":\"" + rawItemId + "\"";
+        String expectedCount = "\"discoveryCount\":" + discoveryCount;
+        return Await.until(
+                "analysis discoveryCount=" + discoveryCount,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> {
+                    HttpResponse<String> response = send(
+                            "GET",
+                            "/api/v1/admin/analysis/items?limit=10&monitoringProfileId=" + profileId + "&sourceId=" + sourceId,
+                            null);
+                    assertEquals(200, response.statusCode());
+                    return response.body();
+                },
+                body -> body.contains(expectedRawItem) && body.contains(expectedCount));
     }
 
-
     private String awaitEventHistory(String normalizedItemId) throws Exception {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
-        String lastBody = "";
-        while (Instant.now().isBefore(deadline)) {
-            HttpResponse<String> response = send(
-                    "GET", "/api/v1/events?limit=20", null);
-            assertEquals(200, response.statusCode());
-            lastBody = response.body();
-            if (lastBody.contains("\"normalizedItemId\":\"" + normalizedItemId + "\"")) {
-                return lastBody;
-            }
-            Thread.sleep(100);
-        }
-        throw new AssertionError("Event observation did not contain normalized item " + normalizedItemId + ": " + lastBody);
+        String expectedItem = "\"normalizedItemId\":\"" + normalizedItemId + "\"";
+        return Await.until(
+                "event observation for normalized item " + normalizedItemId,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> {
+                    HttpResponse<String> response = send("GET", "/api/v1/events?limit=20", null);
+                    assertEquals(200, response.statusCode());
+                    return response.body();
+                },
+                body -> body.contains(expectedItem));
     }
 
     private String awaitProcessingFlow(String collectionRunId, String itemId) throws Exception {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
-        String lastBody = "";
-        while (Instant.now().isBefore(deadline)) {
-            HttpResponse<String> response = send(
-                    "GET",
-                    "/api/v1/flows/collection-runs/" + collectionRunId + "/items/" + itemId,
-                    null);
-            if (response.statusCode() == 200) {
-                lastBody = response.body();
-                if (lastBody.contains("\"state\":\"TERMINAL_EVENT_REACHED\"")) {
-                    return lastBody;
-                }
-            } else if (response.statusCode() != 404) {
-                throw new AssertionError("Unexpected processing-flow status " + response.statusCode() + ": " + response.body());
-            }
-            Thread.sleep(100);
-        }
-        throw new AssertionError(
-                "Processing flow did not reach terminal state for run=" + collectionRunId + ", item=" + itemId + ": " + lastBody);
+        HttpResponse<String> response = Await.until(
+                "terminal processing flow for run=" + collectionRunId + ", item=" + itemId,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> {
+                    HttpResponse<String> current = send(
+                            "GET",
+                            "/api/v1/flows/collection-runs/" + collectionRunId + "/items/" + itemId,
+                            null);
+                    if (current.statusCode() != 200 && current.statusCode() != 404) {
+                        throw new AssertionError(
+                                "Unexpected processing-flow status " + current.statusCode() + ": " + current.body());
+                    }
+                    return current;
+                },
+                current -> current.statusCode() == 200
+                        && current.body().contains("\"state\":\"TERMINAL_EVENT_REACHED\""));
+        return response.body();
     }
 
     private HttpResponse<InputStream> openResultStream(String profileId) throws Exception {
@@ -345,19 +342,18 @@ class HttpPipelineSmokeIntegrationTest {
     }
 
     private String awaitResultsFeed(String profileId, String normalizedItemId) throws Exception {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
-        String lastBody = "";
-        while (Instant.now().isBefore(deadline)) {
-            HttpResponse<String> response = send(
-                    "GET", "/api/v1/results?limit=10&monitoringProfileId=" + profileId, null);
-            assertEquals(200, response.statusCode());
-            lastBody = response.body();
-            if (lastBody.contains("\"normalizedItemId\":\"" + normalizedItemId + "\"")) {
-                return lastBody;
-            }
-            Thread.sleep(100);
-        }
-        throw new AssertionError("Results feed did not contain " + normalizedItemId + ": " + lastBody);
+        String expectedItem = "\"normalizedItemId\":\"" + normalizedItemId + "\"";
+        return Await.until(
+                "Results feed item " + normalizedItemId,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> {
+                    HttpResponse<String> response = send(
+                            "GET", "/api/v1/results?limit=10&monitoringProfileId=" + profileId, null);
+                    assertEquals(200, response.statusCode());
+                    return response.body();
+                },
+                body -> body.contains(expectedItem));
     }
 
     private static String readSseUntil(BufferedReader reader, String target, Duration timeout) throws Exception {

@@ -1,5 +1,7 @@
 package io.signalharvester.collection.event;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 /**
  * Identifies a successfully acknowledged raw-item Kafka publication without exposing Protobuf types.
  *
@@ -10,14 +12,9 @@ package io.signalharvester.collection.event;
 public record RawItemPublicationResult(String eventId, String rawItemId, String topic) {
 
     public RawItemPublicationResult {
-        requireNonBlank(eventId, "eventId");
-        requireNonBlank(rawItemId, "rawItemId");
-        requireNonBlank(topic, "topic");
+        requireNonBlankArgument(eventId, "eventId");
+        requireNonBlankArgument(rawItemId, "rawItemId");
+        requireNonBlankArgument(topic, "topic");
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

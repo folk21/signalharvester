@@ -1,5 +1,9 @@
 package io.signalharvester.eventobservation.application;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlank;
+import static io.signalharvester.common.validation.Preconditions.requireNonNegative;
+import static io.signalharvester.common.validation.Preconditions.requirePositive;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -24,9 +28,7 @@ public record ProcessingFlow(
         collectionRunId = requireNonBlank(collectionRunId, "collectionRunId");
         itemId = Objects.requireNonNull(itemId, "itemId");
         Objects.requireNonNull(state, "state");
-        if (observedEventCount <= 0) {
-            throw new IllegalArgumentException("observedEventCount must be positive");
-        }
+        requirePositive(observedEventCount, "observedEventCount");
         traceIds = List.copyOf(Objects.requireNonNull(traceIds, "traceIds"));
         nodes = List.copyOf(Objects.requireNonNull(nodes, "nodes"));
         edges = List.copyOf(Objects.requireNonNull(edges, "edges"));
@@ -96,12 +98,8 @@ public record ProcessingFlow(
     public record KafkaMetadata(String topic, int partition, long offset, String key) {
         public KafkaMetadata {
             topic = requireNonBlank(topic, "topic");
-            if (partition < 0) {
-                throw new IllegalArgumentException("partition must not be negative");
-            }
-            if (offset < 0) {
-                throw new IllegalArgumentException("offset must not be negative");
-            }
+            requireNonNegative(partition, "partition");
+            requireNonNegative(offset, "offset");
             key = requireNonBlank(key, "key");
         }
     }
@@ -156,17 +154,8 @@ public record ProcessingFlow(
             to = requireNonBlank(to, "to");
             Objects.requireNonNull(kind, "kind");
             durationMs = Objects.requireNonNull(durationMs, "durationMs");
-            if (durationMs.isPresent() && durationMs.getAsLong() < 0) {
-                throw new IllegalArgumentException("durationMs must not be negative");
-            }
+            durationMs.ifPresent(value -> requireNonNegative(value, "durationMs"));
         }
     }
 
-    private static String requireNonBlank(String value, String name) {
-        Objects.requireNonNull(value, name);
-        if (value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-        return value;
-    }
 }

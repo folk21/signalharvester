@@ -13,6 +13,7 @@ import io.signalharvester.eventobservation.application.EventObservationLiveBatch
 import io.signalharvester.eventobservation.application.EventObservationQuery;
 import io.signalharvester.eventobservation.application.EventObservationService;
 import io.signalharvester.eventobservation.model.ObservedEvent;
+import io.signalharvester.eventobservation.testing.ObservedEventFixture;
 import jakarta.inject.Singleton;
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -27,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -168,37 +168,24 @@ class EventObservationLiveControllerTest {
     }
 
     private static ObservedEvent event() {
-        return new ObservedEvent(
-                EVENT_CURSOR,
-                "analyzed-event",
-                "analysis.item-analyzed.v1",
-                Instant.parse("2026-09-14T10:00:00Z"),
-                Instant.parse("2026-09-14T10:00:01Z"),
-                "run-1",
-                Optional.of("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"),
-                "analysis",
-                "v1",
-                "topic-a",
-                0,
-                7L,
-                "norm-1",
-                "ItemAnalyzed",
-                Optional.of("raw-event"),
-                Optional.of("raw-1"),
-                Optional.of("norm-1"),
-                Optional.of("source-1"),
-                Optional.of("profile-1"),
-                Optional.of("JOB"),
-                Optional.empty(),
-                Optional.of("Java Engineer"),
-                Optional.of("https://example.test/jobs/1"),
-                Optional.of("text/plain"),
-                Optional.of(true),
-                Optional.of("MATCHED"),
-                OptionalInt.of(90),
-                Optional.of("keyword-v1"),
-                Optional.empty(),
-                Optional.of("Matched Java"));
+        return ObservedEventFixture.observedEvent(EVENT_CURSOR, "analyzed-event", "analysis.item-analyzed.v1")
+                .traceparent("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01")
+                .topic("topic-a")
+                .offset(7L)
+                .key("norm-1")
+                .payloadType("ItemAnalyzed")
+                .sourceEventId("raw-event")
+                .rawItemId("raw-1")
+                .normalizedItemId("norm-1")
+                .title("Java Engineer")
+                .url("https://example.test/jobs/1")
+                .contentType("text/plain")
+                .relevant(true)
+                .classification("MATCHED")
+                .score(90)
+                .analyzer("keyword-v1")
+                .explanation("Matched Java")
+                .build();
     }
 
     @Singleton

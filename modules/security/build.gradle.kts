@@ -37,6 +37,7 @@ dependencies {
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
 
     testImplementation(libs.junit.jupiter)
+    testImplementation(project(":testing:test-support"))
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.postgresql)
     testRuntimeOnly("io.micronaut:micronaut-http-server-netty")

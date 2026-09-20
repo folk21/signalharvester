@@ -15,6 +15,7 @@ import io.micronaut.validation.Validated;
 import io.signalharvester.security.application.UserAccountOperations;
 import io.signalharvester.security.model.UserId;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -43,7 +44,7 @@ public class UserAdministrationController {
     /** Creates a new identity and applies type-specific baseline roles. */
     @Post
     public HttpResponse<UserAccountResponse> create(
-            @Body @Valid UserCreateRequest request,
+            @Body @Valid @NotNull UserCreateRequest request,
             Authentication authentication) {
         UserAccountResponse response = UserAccountResponse.from(operations.create(request.toCommand()));
         LOGGER.info("User created actorPrincipalId={} targetUserId={}", authentication.getName(), response.id());
@@ -60,9 +61,10 @@ public class UserAdministrationController {
     @Put("/{userId}")
     public UserAccountResponse update(
             @PathVariable UUID userId,
-            @Body @Valid UserUpdateRequest request,
+            @Body @Valid @NotNull UserUpdateRequest request,
             Authentication authentication) {
-        UserAccountResponse response = UserAccountResponse.from(operations.update(UserId.of(userId), request.toCommand()));
+        UserAccountResponse response = UserAccountResponse.from(
+                operations.update(UserId.of(userId), request.toCommand()));
         LOGGER.info("User updated actorPrincipalId={} targetUserId={}", authentication.getName(), userId);
         return response;
     }

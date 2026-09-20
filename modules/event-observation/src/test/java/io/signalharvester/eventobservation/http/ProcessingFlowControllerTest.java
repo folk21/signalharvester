@@ -13,6 +13,7 @@ import io.signalharvester.eventobservation.application.ProcessingFlowNotFoundExc
 import io.signalharvester.eventobservation.application.ProcessingFlowQuery;
 import io.signalharvester.eventobservation.application.ProcessingFlowService;
 import jakarta.inject.Singleton;
+import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -36,7 +37,6 @@ class ProcessingFlowControllerTest {
 
     private static final String SPEC_NAME = "processing-flow-controller";
     private EmbeddedServer server;
-    private HttpClient client;
 
     @BeforeEach
     void setUp() {
@@ -46,7 +46,6 @@ class ProcessingFlowControllerTest {
                 Map.entry("micronaut.executors.blocking.virtual", true),
                 Map.entry("kafka.enabled", false),
                 Map.entry("signalharvester.event-observation.enabled", false)), "test");
-        client = HttpClient.newHttpClient();
     }
 
     @AfterEach
@@ -73,7 +72,7 @@ class ProcessingFlowControllerTest {
 
         TestProcessingFlowQuery query = server.getApplicationContext().getBean(TestProcessingFlowQuery.class);
         assertEquals("run-1", query.lastCollectionRunId());
-        assertEquals(Optional.of("norm-1"), query.lastItemId());
+        assertEquals("norm-1", query.lastItemId());
         assertTrue(query.lastThread().isVirtual());
         assertFalse(query.lastThread().getName().contains("EventLoop"));
     }
@@ -86,12 +85,19 @@ class ProcessingFlowControllerTest {
     }
 
     private HttpResponse<String> send(String path) throws Exception {
-        return client.send(
-                HttpRequest.newBuilder(server.getURI().resolve(path)).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
+        HttpClient requestClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
+        try {
+            return requestClient.send(
+                    HttpRequest.newBuilder(server.getURI().resolve(path)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+        } catch (IOException exception) {
+            throw new IOException("GET " + path + " failed before an HTTP response was received", exception);
+        }
     }
 
-    private static ProcessingFlow flow(ProcessingFlow.Scope scope, Optional<String> itemId) {
+    private static ProcessingFlow flow(ProcessingFlow.Scope scope, String itemId) {
         ProcessingFlow.Node analysis = new ProcessingFlow.Node(
                 "event:analysis-1:analysis",
                 "raw-event-1",
@@ -114,7 +120,7 @@ class ProcessingFlowControllerTest {
         return new ProcessingFlow(
                 scope,
                 "run-1",
-                itemId,
+                Optional.ofNullable(itemId),
                 ProcessingFlow.State.TERMINAL_EVENT_REACHED,
                 2,
                 List.of("0123456789abcdef0123456789abcdef"),
@@ -141,7 +147,7 @@ class ProcessingFlowControllerTest {
             if ("missing".equals(collectionRunId)) {
                 throw new ProcessingFlowNotFoundException("missing");
             }
-            return flow(ProcessingFlow.Scope.COLLECTION_RUN, Optional.empty());
+            return flow(ProcessingFlow.Scope.COLLECTION_RUN, null);
         }
 
         @Override
@@ -150,7 +156,7 @@ class ProcessingFlowControllerTest {
             if ("missing".equals(itemId)) {
                 throw new ProcessingFlowNotFoundException("missing");
             }
-            return flow(ProcessingFlow.Scope.ITEM, Optional.of(itemId));
+            return flow(ProcessingFlow.Scope.ITEM, itemId);
         }
 
         private void capture(String collectionRunId, String itemId) {
@@ -163,8 +169,8 @@ class ProcessingFlowControllerTest {
             return collectionRunId.get();
         }
 
-        Optional<String> lastItemId() {
-            return Optional.ofNullable(itemId.get());
+        String lastItemId() {
+            return itemId.get();
         }
 
         Thread lastThread() {

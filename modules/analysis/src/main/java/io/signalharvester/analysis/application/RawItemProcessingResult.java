@@ -1,5 +1,7 @@
 package io.signalharvester.analysis.application;
 
+import static io.signalharvester.common.validation.Preconditions.requireNonBlankArgument;
+
 /**
  * Identifies the terminal event staged after processing one raw discovery.
  */
@@ -13,14 +15,9 @@ public record RawItemProcessingResult(
         if (status == null) {
             throw new NullPointerException("status");
         }
-        requireNonBlank(normalizedItemId, "normalizedItemId");
-        requireNonBlank(eventId, "eventId");
-        requireNonBlank(topic, "topic");
+        requireNonBlankArgument(normalizedItemId, "normalizedItemId");
+        requireNonBlankArgument(eventId, "eventId");
+        requireNonBlankArgument(topic, "topic");
     }
 
-    private static void requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-    }
 }

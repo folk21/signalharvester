@@ -337,7 +337,7 @@ Activating the `security` Micronaut environment enables:
 - short-lived signed JWT authentication;
 - HttpOnly browser JWT cookies;
 - bearer-token validation;
-- signed double-submit CSRF;
+- signed double-submit CSRF with `X-CSRF-TOKEN` header resolution and form-field resolution disabled;
 - explicit credentialed CORS configuration;
 - the cross-module endpoint/role matrix.
 

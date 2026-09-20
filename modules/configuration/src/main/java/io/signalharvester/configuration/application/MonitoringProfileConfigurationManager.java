@@ -11,8 +11,11 @@ import io.signalharvester.configuration.configuration.MonitoringProfileAnalysisD
 import io.signalharvester.configuration.persistence.MonitoringProfileRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import java.sql.Connection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,20 +28,24 @@ public final class MonitoringProfileConfigurationManager
     private final SourceConfigurationProvider sources;
     private final MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults;
     private final TransactionOperations<Connection> transactions;
+    private final Validator validator;
 
     public MonitoringProfileConfigurationManager(
             MonitoringProfileRepository repository,
             SourceConfigurationProvider sources,
             MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults,
-            @Named("default") TransactionOperations<Connection> transactions) {
+            @Named("default") TransactionOperations<Connection> transactions,
+            Validator validator) {
         this.repository = repository;
         this.sources = sources;
         this.analysisDefaults = analysisDefaults;
         this.transactions = transactions;
+        this.validator = validator;
     }
 
     @Override
     public ConfiguredMonitoringProfile create(MonitoringProfileConfigurationCommand command) {
+        validateCommand(command);
         MonitoringProfileAnalysisSettings effectiveSettings = command.analysisSettings().orElseGet(() ->
                 new MonitoringProfileAnalysisSettings(analysisDefaults.getKeywords(), analysisDefaults.getMinimumMatches()));
         ConfiguredMonitoringProfile profile = materialize(
@@ -65,6 +72,7 @@ public final class MonitoringProfileConfigurationManager
     public ConfiguredMonitoringProfile update(
             MonitoringProfileId profileId,
             MonitoringProfileConfigurationCommand command) {
+        validateCommand(command);
         ConfiguredMonitoringProfile current = get(profileId);
         MonitoringProfileAnalysisSettings effectiveSettings = command.analysisSettings().orElse(current.analysisSettings());
         ConfiguredMonitoringProfile profile = materialize(profileId, command, effectiveSettings);
@@ -95,6 +103,15 @@ public final class MonitoringProfileConfigurationManager
     @Override
     public List<ConfiguredMonitoringProfile> findEnabledProfiles() {
         return transactions.executeRead(status -> repository.findEnabled());
+    }
+
+    private void validateCommand(MonitoringProfileConfigurationCommand command) {
+        Objects.requireNonNull(command, "command");
+        var violations = validator.validate(command);
+        if (!violations.isEmpty()) {
+            ConstraintViolationException cause = new ConstraintViolationException(violations);
+            throw new InvalidMonitoringProfileConfigurationException(cause.getMessage(), cause);
+        }
     }
 
     private void validateSources(ConfiguredMonitoringProfile profile) {

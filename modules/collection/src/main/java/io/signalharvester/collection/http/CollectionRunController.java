@@ -15,6 +15,7 @@ import io.signalharvester.collection.run.CollectionRunner;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,7 +34,7 @@ public class CollectionRunController {
 
     /** Starts one synchronous best-effort collection run and returns its durable terminal state. */
     @Post
-    public HttpResponse<CollectionRunResponse> start(@Body @Valid CollectionRunRequestPayload request) {
+    public HttpResponse<CollectionRunResponse> start(@Body @Valid @NotNull CollectionRunRequestPayload request) {
         return HttpResponse.created(CollectionRunResponse.from(runner.run(request.toRunRequest())));
     }
 

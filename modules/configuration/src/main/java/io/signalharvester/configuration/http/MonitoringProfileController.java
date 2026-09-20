@@ -14,6 +14,7 @@ import io.micronaut.validation.Validated;
 import io.signalharvester.configuration.api.MonitoringProfileId;
 import io.signalharvester.configuration.application.MonitoringProfileConfigurationOperations;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,7 +35,8 @@ public class MonitoringProfileController {
     }
 
     @Post
-    public HttpResponse<MonitoringProfileResponse> create(@Body @Valid MonitoringProfileUpsertRequest request) {
+    public HttpResponse<MonitoringProfileResponse> create(
+            @Body @Valid @NotNull MonitoringProfileUpsertRequest request) {
         return HttpResponse.created(MonitoringProfileResponse.from(operations.create(request.toCommand())));
     }
 
@@ -46,8 +48,9 @@ public class MonitoringProfileController {
     @Put("/{profileId}")
     public MonitoringProfileResponse update(
             @PathVariable UUID profileId,
-            @Body @Valid MonitoringProfileUpsertRequest request) {
-        return MonitoringProfileResponse.from(operations.update(MonitoringProfileId.of(profileId), request.toCommand()));
+            @Body @Valid @NotNull MonitoringProfileUpsertRequest request) {
+        return MonitoringProfileResponse.from(
+                operations.update(MonitoringProfileId.of(profileId), request.toCommand()));
     }
 
     @Delete("/{profileId}")

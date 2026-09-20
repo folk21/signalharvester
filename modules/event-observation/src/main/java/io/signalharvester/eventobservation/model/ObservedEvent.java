@@ -1,5 +1,7 @@
 package io.signalharvester.eventobservation.model;
 
+import static io.signalharvester.common.validation.Preconditions.requirePositive;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -39,9 +41,7 @@ public record ObservedEvent(
         Optional<String> explanation) {
 
     public ObservedEvent {
-        if (observationId <= 0) {
-            throw new IllegalArgumentException("observationId must be positive");
-        }
+        requirePositive(observationId, "observationId");
         Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(eventType, "eventType");
         Objects.requireNonNull(occurredAt, "occurredAt");

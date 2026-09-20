@@ -21,7 +21,7 @@ public record MonitoringProfileUpsertRequest(
         @NotBlank String name,
         @NotBlank String informationCategory,
         boolean enabled,
-        @Min(1) int collectionIntervalMinutes,
+        @Min(MonitoringProfileConfigurationCommand.MIN_COLLECTION_INTERVAL_MINUTES) int collectionIntervalMinutes,
         @NotEmpty List<@NotNull UUID> sourceIds,
         Map<@NotNull String, @NotNull String> criteria,
         @Valid MonitoringProfileAnalysisSettingsRequest analysisSettings) {
