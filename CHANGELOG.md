@@ -7,6 +7,8 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-20 — Added verification-pending Analysis outbox pre-publication lease renewal so sequential batch queueing cannot expire a later row's lease before Kafka send; stale owners now skip publication when exact-token renewal fails.
+- 2026-09-20 — Accepted scheduler pre-run lease recovery after focused Collection verification and the canonical repository gate passed; exact-token pre-run release is now part of the stable scheduling lifecycle.
 - 2026-09-20 — Added verification-pending scheduler pre-run lease recovery so executor or heartbeat setup failures release claimed due work without advancing its next-due time.
 - 2026-09-19 — Narrowed the security CSRF resolver surface to the published signed-cookie plus `X-CSRF-TOKEN` header contract, disabling unused form-field token resolution while retaining CSRF filtering for JSON and form-compatible mutation content types.
 - 2026-09-18 — Accepted the repository-wide Jdbi persistence refactoring after the final Results slice and Security single-handle lock correction passed the canonical repository gate; stable persistence conventions are now documented and the implementation spec is archived.

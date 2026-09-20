@@ -81,11 +81,11 @@ public final class SourceFetchCoordinator {
         Set<Future<IndexedSourceFetchOutcome>> inFlight = new HashSet<>(maxInFlight);
         int nextIndex = 0;
 
-        for (; nextIndex < maxInFlight; nextIndex++) {
-            inFlight.add(submitFetch(completions, snapshot, nextIndex));
-        }
-
         try {
+            for (; nextIndex < maxInFlight; nextIndex++) {
+                inFlight.add(submitFetch(completions, snapshot, nextIndex));
+            }
+
             int handled = 0;
             while (handled < snapshot.size()) {
                 Future<IndexedSourceFetchOutcome> completedFuture = completions.take();

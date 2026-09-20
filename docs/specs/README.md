@@ -54,11 +54,9 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-Current implementation focus:
+There is currently no bounded implementation sub-spec in focus. The next backend closure/reliability pass remains analysis until it identifies a concrete change that warrants a sub-spec.
 
-- [`active/subspecs/backend-scheduler-pre-run-lease-recovery.md`](active/subspecs/backend-scheduler-pre-run-lease-recovery.md) — verification-pending closure finding that releases claimed due schedules when local dispatch or heartbeat setup fails before a run starts.
-
-Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, and external-source access security are archived.
+Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
 ## When to create a sub-spec
 
@@ -156,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-scheduler-pre-run-lease-recovery.md`](active/subspecs/backend-scheduler-pre-run-lease-recovery.md) — verification-pending `COLLECTION.SCHEDULING` lifecycle recovery before a claimed run starts.
+- [`active/subspecs/backend-analysis-outbox-lease-renewal.md`](active/subspecs/backend-analysis-outbox-lease-renewal.md) — `ANALYSIS.OUTBOX` pre-publication lease renewal so batch queueing cannot expire later-row ownership before Kafka send.
 
 Active supporting tracks:
 
@@ -164,6 +162,10 @@ Active supporting tracks:
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
 
 ## Recently completed sub-specifications
+
+Accepted on 2026-09-20:
+
+- [`archive/subspecs/backend-scheduler-pre-run-lease-recovery.md`](archive/subspecs/backend-scheduler-pre-run-lease-recovery.md) — `COLLECTION.SCHEDULING` pre-run recovery that releases exact-token leases after local dispatch/setup failure without advancing due time; accepted after the developer confirmed focused Collection verification and the canonical repository gate passed.
 
 Accepted on 2026-09-18:
 
@@ -208,9 +210,7 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-The closure review identified one concrete bounded lifecycle gap now implemented as verification-pending work:
-
-- release claimed due scheduling leases when local dispatch or heartbeat setup fails before collection begins.
+There is currently no planned bounded backend sub-spec. The next lifecycle/reliability review is analysis-only and should create a sub-spec only for a concrete material change.
 
 Further scheduling refinements remain deferred until a product requirement justifies them.
 

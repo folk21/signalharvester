@@ -3,14 +3,14 @@ type: Specification
 title: Scheduler lease pre-run recovery
 description: Bounded reliability fix so scheduler dispatch/setup failures release claimed due work without advancing its schedule.
 document_role: subspec
-spec_status: verification-pending
+spec_status: completed
 parent: ../spec-signal-harvester-platform.md
 ---
 # Scheduler lease pre-run recovery
 
 ## Status
 
-Verification-pending closure finding from the backend reliability review.
+Accepted on 2026-09-20 after the developer confirmed the focused Collection verification and canonical repository gate passed. The pre-run recovery semantics are now part of the accepted `COLLECTION.SCHEDULING` baseline; this specification is retained only as historical change context.
 
 ## Feature scope
 
@@ -66,7 +66,7 @@ This slice does not:
 
 ## Validation
 
-Acceptance requires:
+Developer verification completed successfully on 2026-09-20. Acceptance covered:
 
 - PostgreSQL integration coverage proving release leaves due work immediately claimable without advancing its due time;
 - scheduler integration coverage for blocking-executor rejection before the run starts;

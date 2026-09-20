@@ -22,19 +22,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 /**
  * Verifies {@link SourceFetchCoordinator} bounded concurrency, payload backpressure, source-index retention,
- * peer failure isolation, and abort behavior for unexpected worker failures.
+ * peer failure isolation, and cancellation when run-level coordination or executor dispatch fails.
  *
  * <p>Related specification: {@code backend-collection-run-orchestration}.</p>
  *
@@ -221,6 +224,28 @@ class SourceFetchCoordinatorTest {
         }
     }
 
+    /** Cancel already accepted initial fetches when a later initial submission is rejected. */
+    @Test
+    void shouldCancelAcceptedInitialFetchesWhenExecutorRejectsPartialDispatch() {
+        AtomicInteger started = new AtomicInteger();
+        ExternalSourceClient client = source -> {
+            started.incrementAndGet();
+            return content(source);
+        };
+
+        try (RejectSecondSubmissionExecutor executor = new RejectSecondSubmissionExecutor()) {
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 2, observability(), executor);
+
+            assertThrows(RejectedExecutionException.class, () -> coordinator.fetchEach(
+                    List.of(source("one"), source("two")),
+                    (index, outcome) -> {}));
+
+            executor.runAcceptedTask();
+            assertEquals(0, started.get(), "accepted peer must be cancelled when initial dispatch aborts");
+        }
+    }
+
     /** Preserve Micronaut propagated context across the custom executor fan-out. */
     @Test
     void shouldPropagateContextIntoFetchWorker() {
@@ -310,6 +335,55 @@ class SourceFetchCoordinatorTest {
                 Instant.parse("2026-09-10T10:00:00Z"));
     }
 
+    /** Executor that accepts one queued task and rejects the next submission deterministically. */
+    private static final class RejectSecondSubmissionExecutor extends AbstractExecutorService {
+        private final AtomicReference<Runnable> accepted = new AtomicReference<>();
+        private final AtomicBoolean shutdown = new AtomicBoolean();
+
+        @Override
+        public void execute(Runnable command) {
+            if (shutdown.get()) {
+                throw new RejectedExecutionException("executor is shut down");
+            }
+            if (!accepted.compareAndSet(null, command)) {
+                throw new RejectedExecutionException("synthetic partial dispatch rejection");
+            }
+        }
+
+        void runAcceptedTask() {
+            Runnable command = accepted.getAndSet(null);
+            if (command != null) {
+                command.run();
+            }
+        }
+
+        @Override
+        public void shutdown() {
+            shutdown.set(true);
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown.set(true);
+            Runnable command = accepted.getAndSet(null);
+            return command == null ? List.of() : List.of(command);
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return shutdown.get();
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return shutdown.get() && accepted.get() == null;
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            return isTerminated();
+        }
+    }
 
     private record TestContextElement(String value) implements PropagatedContextElement {
     }

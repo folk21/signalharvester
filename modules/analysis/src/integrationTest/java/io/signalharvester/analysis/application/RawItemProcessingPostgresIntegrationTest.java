@@ -30,7 +30,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +53,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * Verifies {@link RawItemProcessingService} transaction guarantees against real PostgreSQL, including
  * deduplication rollback when transactional outbox staging fails.
  *
- * <p>Related specifications: {@code backend-analysis-normalization-deduplication} and {@code backend-db-kafka-consistency}.</p>
+ * <p>Related specifications: {@code backend-analysis-normalization-deduplication},
+ * {@code backend-db-kafka-consistency}, and {@code backend-analysis-outbox-lease-renewal}.</p>
  *
  * <p>Features: {@code ANALYSIS.DEDUPLICATION}, {@code ANALYSIS.CLASSIFICATION}, {@code ANALYSIS.OUTBOX}.</p>
  */
@@ -252,6 +255,50 @@ class RawItemProcessingPostgresIntegrationTest {
         assertEquals(1, recoveredClaim.size());
         assertEquals(firstClaim.getFirst().eventId(), recoveredClaim.getFirst().eventId());
         assertEquals(2, recoveredClaim.getFirst().publicationAttempts());
+        String eventId = recoveredClaim.getFirst().eventId();
+        assertThrows(AnalysisOutboxPersistenceException.class, () -> transactions.executeWrite(status -> {
+            store.renewLease(eventId, firstLease, now.plusSeconds(90));
+            return null;
+        }));
+        transactions.executeWrite(status -> {
+            store.renewLease(eventId, secondLease, now.plusSeconds(90));
+            return null;
+        });
+    }
+
+    /** Refresh a later batch entry lease immediately before send so queueing time cannot expire ownership. */
+    @Test
+    void shouldRenewOutboxLeaseBeforePublishingLaterBatchEntry() throws Exception {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        service.process(rawItem(RAW_ITEM_2, SOURCE_EVENT_2, "Java Kafka"));
+        assertEquals(2, outboxRowCount());
+
+        AnalysisOutboxStore store = context.getBean(AnalysisOutboxStore.class);
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-15T12:05:00Z"));
+        AtomicInteger sends = new AtomicInteger();
+        AtomicReference<List<AnalysisOutboxEntry>> competingClaim = new AtomicReference<>(List.of());
+        AnalysisKafkaClient client = (topic, key, payload) -> {
+            int sendNumber = sends.incrementAndGet();
+            if (sendNumber == 1) {
+                clock.advance(Duration.ofSeconds(20));
+                return;
+            }
+            clock.advance(Duration.ofSeconds(15));
+            UUID competingLease = UUID.fromString("33333333-3333-3333-3333-333333333333");
+            competingClaim.set(transactions.executeWrite(status -> store.claimBatch(
+                    clock.instant(),
+                    competingLease,
+                    clock.instant().plusSeconds(30),
+                    10)));
+        };
+
+        dispatcher(store, client, clock).dispatchAvailable();
+
+        assertEquals(2, sends.get());
+        assertTrue(competingClaim.get().isEmpty());
+        assertEquals(2, outboxPublishedCount());
     }
 
     /** Publish a committed outbox row and mark it complete without changing its serialized bytes. */
@@ -414,13 +461,17 @@ class RawItemProcessingPostgresIntegrationTest {
     }
 
     private AnalysisOutboxDispatcher dispatcher(AnalysisOutboxStore store, AnalysisKafkaClient client, Instant now) {
+        return dispatcher(store, client, Clock.fixed(now, ZoneOffset.UTC));
+    }
+
+    private AnalysisOutboxDispatcher dispatcher(AnalysisOutboxStore store, AnalysisKafkaClient client, Clock clock) {
         return new AnalysisOutboxDispatcher(
                 store,
                 client,
                 context.getBean(AnalysisOutboxConfiguration.class),
                 transactions,
                 new AnalysisObservability(Optional.empty(), Optional.empty()),
-                Clock.fixed(now, ZoneOffset.UTC));
+                clock);
     }
 
     private int outboxRowCount() throws Exception {
@@ -449,6 +500,13 @@ class RawItemProcessingPostgresIntegrationTest {
 
     private boolean outboxPublished() throws Exception {
         return outboxScalar("SELECT published_at IS NOT NULL FROM analysis.event_outbox", Boolean.class);
+    }
+
+    private int outboxPublishedCount() throws Exception {
+        return outboxScalar(
+                        "SELECT COUNT(*) FROM analysis.event_outbox WHERE published_at IS NOT NULL",
+                        Long.class)
+                .intValue();
     }
 
     private int outboxPublicationAttempts() throws Exception {
@@ -501,6 +559,11 @@ class RawItemProcessingPostgresIntegrationTest {
         }
 
         @Override
+        public void renewLease(String eventId, UUID leaseToken, Instant leaseExpiresAt) {
+            delegate.renewLease(eventId, leaseToken, leaseExpiresAt);
+        }
+
+        @Override
         public void markPublished(String eventId, UUID leaseToken, Instant publishedAt) {
             if (failNextPublishedMarker.compareAndSet(true, false)) {
                 throw new AnalysisOutboxPersistenceException(
@@ -513,6 +576,36 @@ class RawItemProcessingPostgresIntegrationTest {
         @Override
         public void markFailed(String eventId, UUID leaseToken, Instant nextAttemptAt, String failureMessage) {
             delegate.markFailed(eventId, leaseToken, nextAttemptAt, failureMessage);
+        }
+    }
+
+    private static final class MutableClock extends Clock {
+        private Instant current;
+
+        private MutableClock(Instant initial) {
+            this.current = initial;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            if (!ZoneOffset.UTC.equals(zone)) {
+                throw new IllegalArgumentException("Test clock supports UTC only");
+            }
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return current;
+        }
+
+        private void advance(Duration duration) {
+            current = current.plus(duration);
         }
     }
 

@@ -151,9 +151,9 @@ PostgreSQL schema `collection` evolves through:
 - `V5__expand_collection_run_source_statuses.sql` — feed extraction statuses;
 - `V7__create_monitoring_profile_schedule_state.sql` — collection-owned scheduler state.
 
-Scheduling polls enabled profiles and uses short transactional PostgreSQL claims with renewable lease tokens. External fetch and Kafka work run outside the claim transaction.
+Scheduling polls enabled profiles and uses short transactional PostgreSQL claims with renewable lease tokens. External fetch and Kafka work run outside the claim transaction. If local blocking-executor dispatch or heartbeat setup fails before `CollectionRunner.run(...)` begins, the scheduler makes a best-effort exact-token lease release without advancing `next_due_at`, so another healthy replica can reclaim still-due work immediately. Lease expiry remains the bounded fallback if that release cannot be persisted.
 
-A profile becomes due one configured interval after it is first observed. Completion schedules the next run from terminal completion time.
+A profile becomes due one configured interval after it is first observed. Completion schedules the next run from terminal completion time; pre-run release does not count as completion and therefore preserves the existing due time.
 
 Collection run-history and scheduler persistence now use Micronaut-managed Jdbi, named bindings, module-owned classpath SQL resources, and Jdbi batches/list binding while preserving the existing application-owned transaction boundaries and PostgreSQL lease semantics.
 
