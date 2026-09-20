@@ -66,14 +66,28 @@ public final class MonitoringProfileScheduler {
         for (ConfiguredMonitoringProfile profile : enabledProfiles) {
             Optional<ProfileScheduleLease> lease = schedules.claim(
                     profile, clock.instant(), configuration.getLeaseDuration());
-            lease.ifPresent(value -> blockingExecutor.execute(() -> execute(value)));
+            lease.ifPresent(this::dispatch);
+        }
+    }
+
+    private void dispatch(ProfileScheduleLease lease) {
+        try {
+            blockingExecutor.execute(() -> execute(lease));
+        } catch (RuntimeException failure) {
+            releaseBeforeRun(lease, "blocking executor rejected scheduled collection", failure);
         }
     }
 
     private void execute(ProfileScheduleLease lease) {
         Duration heartbeatInterval = configuration.getHeartbeatInterval();
-        ScheduledFuture<?> heartbeat = taskScheduler.scheduleAtFixedRate(
-                heartbeatInterval, heartbeatInterval, () -> renew(lease));
+        ScheduledFuture<?> heartbeat;
+        try {
+            heartbeat = taskScheduler.scheduleAtFixedRate(
+                    heartbeatInterval, heartbeatInterval, () -> renew(lease));
+        } catch (RuntimeException failure) {
+            releaseBeforeRun(lease, "heartbeat scheduling failed before collection started", failure);
+            return;
+        }
         try {
             runner.run(new CollectionRunRequest(lease.profileId(), Optional.empty()));
         } catch (RuntimeException failure) {
@@ -83,6 +97,22 @@ public final class MonitoringProfileScheduler {
             if (!schedules.complete(lease, clock.instant())) {
                 LOG.warn("Schedule lease was no longer owned when completing profile {}", lease.profileId().value());
             }
+        }
+    }
+
+    private void releaseBeforeRun(ProfileScheduleLease lease, String reason, RuntimeException failure) {
+        try {
+            if (schedules.release(lease, clock.instant())) {
+                LOG.warn("{} for profile {}; released due schedule lease without advancing next due time",
+                        reason, lease.profileId().value(), failure);
+            } else {
+                LOG.warn("{} for profile {}; schedule lease was no longer owned",
+                        reason, lease.profileId().value(), failure);
+            }
+        } catch (RuntimeException releaseFailure) {
+            failure.addSuppressed(releaseFailure);
+            LOG.error("{} for profile {}; failed to release schedule lease, expiry remains the recovery fallback",
+                    reason, lease.profileId().value(), failure);
         }
     }
 

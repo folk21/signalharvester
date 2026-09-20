@@ -15,5 +15,7 @@ public interface ProfileScheduleStateStore {
 
     boolean renew(ProfileScheduleLease lease, Instant now, Duration leaseDuration);
 
+    boolean release(ProfileScheduleLease lease, Instant releasedAt);
+
     boolean complete(ProfileScheduleLease lease, Instant completedAt);
 }

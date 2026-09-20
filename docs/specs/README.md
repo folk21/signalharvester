@@ -56,7 +56,7 @@ Rules:
 
 Current implementation focus:
 
-- none; the Jdbi persistence refactoring is accepted and archived, and the next backend action is a closure/reliability review before activating another bounded implementation sub-spec.
+- [`active/subspecs/backend-scheduler-pre-run-lease-recovery.md`](active/subspecs/backend-scheduler-pre-run-lease-recovery.md) — verification-pending closure finding that releases claimed due schedules when local dispatch or heartbeat setup fails before a run starts.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, and external-source access security are archived.
 
@@ -156,7 +156,7 @@ Umbrella:
 
 Current implementation focus:
 
-- none; the accepted Jdbi migration is archived and the next backend action is a closure/reliability review before activating further feature work.
+- [`active/subspecs/backend-scheduler-pre-run-lease-recovery.md`](active/subspecs/backend-scheduler-pre-run-lease-recovery.md) — verification-pending `COLLECTION.SCHEDULING` lifecycle recovery before a claimed run starts.
 
 Active supporting tracks:
 
@@ -208,10 +208,11 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-With the Jdbi refactoring accepted, likely bounded backend work includes:
+The closure review identified one concrete bounded lifecycle gap now implemented as verification-pending work:
 
-- a backend closure review for concrete remaining operational lifecycle gaps;
-- scheduling refinements only when a product requirement justifies them.
+- release claimed due scheduling leases when local dispatch or heartbeat setup fails before collection begins.
+
+Further scheduling refinements remain deferred until a product requirement justifies them.
 
 These are candidates, not active commitments.
 
