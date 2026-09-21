@@ -151,3 +151,5 @@ kubectl delete namespace signalharvester
 ```
 
 This destroys local PostgreSQL, Redpanda, Prometheus, Loki, Tempo, and Grafana state.
+
+Use this full reset for disposable acceptance environments when durable test history must also be removed. Backend resilience scenarios and companion frontend live/deployed browser acceptance may intentionally leave durable Collection/Analysis/Results or retained Event Observation records after temporary configuration and fixtures are cleaned up. Those records can contain source URLs that are no longer reachable after a temporary fixture stops. The published application contracts do not provide a bulk test-history cleanup operation; do not add one only to simplify acceptance cleanup.
