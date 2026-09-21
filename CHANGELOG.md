@@ -9,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-09-21 — Accepted Analysis outbox failure-state lease fencing after the developer confirmed all relevant tests and validations passed; the remaining durable-ownership/crash-window review found no additional material correctness defect, closing the systematic backend reliability review.
+- 2026-09-21 — Recorded deferred operational-capacity follow-ups for outbox observability/retention/draining, scheduler transaction scaling, SSE polling fan-out, and large Monitoring Profile source validation; these remain measurement-driven backlog items rather than active correctness work.
 - 2026-09-21 — Reworked the root README as a human-friendly project entry point and added an end-to-end explanation of Kafka/PostgreSQL reliability, leases, transactional outbox delivery, idempotency, DLQ recovery, and lifecycle cancellation.
 - 2026-09-21 — Added verification-pending Analysis outbox failure-state lease fencing so an unsuccessful Kafka send that outlives its renewed lease cannot let the expired former owner write retry metadata and postpone immediate recovery.
 - 2026-09-21 — Accepted Analysis outbox expired-lease fencing after the developer confirmed all relevant tests and validations passed; pre-publication renewal now requires both the exact token and a still-live persisted lease.

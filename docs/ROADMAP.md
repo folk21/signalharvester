@@ -41,6 +41,7 @@ Kafka failed-poll rewind is accepted after the developer confirmed all relevant 
 Shared demand-driven polling lifecycle refactoring is accepted after developer verification. Results and Event Observation now reuse the framework-neutral `common.concurrent.DemandDrivenPollingLoop` for demand, delayed scheduling, and cancellation while retaining module-owned SSE/cursor semantics. Collection Run interruption recovery is also accepted after developer verification: publication interruption aborts run-level work and an interrupted started schedule leaves recovery to lease expiry rather than advancing `next_due_at`.
 Source-fetch worker interruption propagation is accepted after developer verification. Worker-local virtual-thread cancellation now reaches Collection run-level coordination and existing scheduler recovery semantics. The remaining background-worker/executor lifecycle review found no additional material defect in executor rejection/saturation or scheduled-task cleanup, so Review II is closed.
 Analysis outbox expired-lease fencing is accepted after developer verification. Pre-publication renewal now requires both the exact token and a still-live persisted lease, so an expired former owner cannot resurrect ownership before Kafka send.
+Analysis outbox failure-state lease fencing is accepted after developer verification. Publication-failure retry metadata now requires a still-live exact-token lease, so an unsuccessful send that outlives ownership cannot postpone immediate reclaim. The remaining durable-ownership/crash-window review found no additional material correctness defect across post-ack publication markers, DLQ acknowledgement before framework offset commit, controlled replay/idempotency, and scheduled Collection completion; Review III is closed.
 
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -88,13 +89,28 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept `backend-analysis-outbox-failure-lease-fencing`: ordinary publication-failure retry metadata must require a still-live exact-token lease so an expired former owner cannot delay immediate recovery.
-2. Continue the remaining durable-ownership/crash-window review across Analysis post-ack publication markers, acknowledged DLQ publication before source-offset commit, controlled replay/idempotency, and scheduled Collection Run completion; do not change production code without another concrete defect.
-3. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
+1. Keep the verified backend/OpenAPI baseline stable unless a concrete correctness, operational, or product requirement justifies another bounded backend change.
+2. Continue with the next concrete product or companion-frontend requirement; backend contract changes should be introduced only when that bounded slice requires them.
+3. Use the deferred operational-capacity backlog below when measurements or production-scale requirements justify a focused performance stage.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 
 ## Deferred until justified
+
+### Operational-capacity backlog
+
+These are observed scaling/capacity risks, not current correctness defects. Measure them before changing the reliability model:
+
+- Analysis outbox backlog observability: pending-row count, oldest-pending age, claimed batch size, batch duration, Kafka publish latency, and outbox database-operation latency;
+- Analysis outbox retention/cleanup for old `published_at` rows so the outbox table and stored payload bytes do not grow without bound;
+- bounded backlog draining for the Analysis outbox if the fixed scheduler delay becomes a measured throughput limiter; avoid an unbounded drain loop that can monopolize a scheduled worker;
+- Analysis outbox transaction-volume optimization only if measurements justify it; preserve short transactions around ownership fencing and durable outcomes and do not hold a PostgreSQL transaction across Kafka I/O;
+- conditional pre-publication lease renewal only if it can retain the existing exact-token/live-lease fencing semantics; do not remove per-row ownership proof merely to save a database round trip;
+- set-oriented Collection scheduler claiming if per-enabled-profile schedule transactions become a measured scaling bottleneck;
+- shared/fan-out SSE polling if per-subscriber PostgreSQL polling becomes a measured viewer-scaling bottleneck;
+- batch Source-existence validation for Monitoring Profiles if large source memberships make per-source lookup transactions material.
+
+Other deferred architecture/product work:
 
 - independently deployed backend microservices;
 - gRPC service boundaries;

@@ -4,13 +4,13 @@ title: Analysis outbox failure-state lease fencing
 description: Prevent an expired Analysis outbox owner from writing retry metadata after publication failure and delaying immediate recovery.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # Analysis outbox failure-state lease fencing
 
 ## Status
 
-Implementation is complete and awaits developer verification.
+Completed and accepted after the developer confirmed all relevant tests and validations passed.
 
 The durable-ownership/crash-window review found a second expiry gap in the Analysis outbox lifecycle. Pre-publication renewal now requires a still-live exact-token lease, but an unsuccessful Kafka send can itself outlive that renewed lease. If the send then fails before any successor claim, the former owner can still execute `markFailed` using only the old token and replace the already-expired recovery boundary with a future retry timestamp.
 
