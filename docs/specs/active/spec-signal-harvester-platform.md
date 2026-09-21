@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-shared-polling-lifecycle-refactoring.md
+current_focus: subspecs/backend-collection-run-interruption-recovery.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +26,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, and `backend-sse-inflight-poll-cancellation` are accepted after their relevant repository tests and validations passed. The remaining Kafka consumer lifecycle review found no additional material defect in rebalance/shutdown or `max.poll.interval` correctness semantics. The current bounded focus is `backend-shared-polling-lifecycle-refactoring`, which extracts stable demand/scheduling/cancellation mechanics duplicated by the two accepted SSE implementations while keeping module-owned cursor, query, and transport semantics local.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, `backend-sse-inflight-poll-cancellation`, and `backend-shared-polling-lifecycle-refactoring` are accepted after their relevant repository tests and validations passed. The remaining Kafka consumer lifecycle review found no additional material defect in rebalance/shutdown or `max.poll.interval` correctness semantics. The current bounded focus is `backend-collection-run-interruption-recovery`, which keeps Collection lifecycle interruption outside ordinary per-source publication failure handling and prevents an interrupted scheduled run from advancing its next-due time.
 
 Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
 

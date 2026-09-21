@@ -123,7 +123,7 @@ The generic HTTP path uses Micronaut-managed low-level absolute-URI requests wit
 
 Fetch completion is pipelined into terminal publication with backpressure. Only the bounded in-flight window may retain raw payload bodies. Final per-source results are reconstructed in configured-source order.
 
-Source-level fetch or publication failures are best-effort terminal outcomes. They do not cancel unrelated source work.
+Source-level fetch or publication failures are best-effort terminal outcomes and do not cancel unrelated source work. Lifecycle interruption is different: wrapped interruption during acknowledged raw-event publication aborts the Collection Run, preserves the worker interrupt signal, and stops later publication work rather than becoming `PUBLICATION_FAILED`.
 
 Extraction behavior is source-type specific:
 
@@ -142,6 +142,8 @@ Raw identity is deterministic:
 - RSS/Atom and configuration-driven JSON/HTML extraction use per-item semantic identity material.
 
 Diagnostic Source Test uses the same `ExternalSourceClient` and `SourceItemExtractor` as Collection Runs. It stops before raw-item identity/publication and run-history persistence.
+
+Scheduled runs use exact-token leases and heartbeats. Dispatch/setup failure before a run starts releases the due lease without advancing `next_due_at`; after a run has started, lifecycle interruption cancels the heartbeat and skips normal schedule completion, leaving the live lease to expire so overdue work can be reclaimed without introducing immediate in-flight handoff. Ordinary non-interruption run failures keep the existing completion-based scheduling semantics.
 
 The response contains bounded fetch/extraction diagnostics and preview items. Disabled Sources can therefore be tested before activation.
 

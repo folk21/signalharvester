@@ -74,6 +74,8 @@ Other functional modules must not depend on Collection `run`, `source`, `sourcet
 
 ## Important invariants
 
+- Ordinary source fetch, extraction, and publication failures remain isolated terminal outcomes; lifecycle interruption is run-level cancellation and must not be downgraded to a per-source failure.
+- An interrupted already-started scheduled run does not advance `next_due_at`; its current exact-token lease remains until normal expiry/reclaim rather than using the pre-run release path.
 - a run derives information category, ordered source membership, and effective Analysis settings from the persisted Monitoring Profile; callers cannot override them;
 - every newly published `RawItemDiscovered` carries the effective profile Analysis settings snapshot used by that run;
 - automatic scheduling considers only enabled profiles and fetches only enabled member sources;

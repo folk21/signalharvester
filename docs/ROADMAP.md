@@ -38,6 +38,8 @@ Kafka listener interruption fencing is accepted after the developer confirmed al
 
 Kafka failed-poll rewind is accepted after the developer confirmed all relevant tests and validations passed. The remaining Kafka consumer lifecycle review found no additional material correctness defect in shutdown/rebalance or `max.poll.interval` behavior, so Review I is closed without further consumer tuning. Analysis outbox interruption fencing is also accepted after developer verification: lifecycle cancellation now stops the current claimed batch before ordinary publication-failure classification.
 
+Shared demand-driven polling lifecycle refactoring is accepted after developer verification. Results and Event Observation now reuse the framework-neutral `common.concurrent.DemandDrivenPollingLoop` for demand, delayed scheduling, and cancellation while retaining module-owned SSE/cursor semantics.
+
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
 ## P0 — repository and contract foundation
@@ -84,8 +86,8 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept `backend-shared-polling-lifecycle-refactoring`: Results and Event Observation must reuse one framework-neutral common primitive for demand, delayed scheduling, and cancellation without moving module-owned SSE/cursor semantics into `common`.
-2. Continue the remaining background-worker/executor lifecycle review around executor rejection/saturation, scheduled-task cleanup, and already-started worker shutdown behavior; do not change production code without another concrete defect.
+1. Verify and accept `backend-collection-run-interruption-recovery`: lifecycle interruption must abort Collection publication work and an interrupted started scheduled run must not advance `next_due_at`; lease expiry remains the in-flight recovery boundary.
+2. Continue the remaining background-worker/executor lifecycle review around `SourceFetchCoordinator` interruption/rejection timing, scheduled-task cleanup, and other already-started worker shutdown behavior; do not change production code without another concrete defect.
 3. Then complete the remaining durable-ownership/crash-window review. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.

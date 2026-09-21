@@ -5,6 +5,8 @@ description: Notable project changes organized by release state, with each chang
 ---
 # Changelog
 
+- 2026-09-21 — Added verification-pending Collection Run interruption recovery so lifecycle cancellation escapes per-source publication failure classification and interrupted scheduled work does not advance its next-due time.
+- 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
 - 2026-09-21 — Added verification-pending shared demand-driven polling lifecycle refactoring so Results and Event Observation reuse one JDK-only common concurrency primitive without moving cursor, SSE, or domain semantics into the shared kernel.
