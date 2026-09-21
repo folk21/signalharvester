@@ -113,10 +113,11 @@ public final class AnalysisOutboxDispatcher {
     }
 
     private boolean renewLeaseBeforePublication(AnalysisOutboxEntry entry, UUID leaseToken) {
-        Instant leaseExpiresAt = clock.instant().plus(configuration.getLeaseDuration());
+        Instant renewedAt = clock.instant();
+        Instant leaseExpiresAt = renewedAt.plus(configuration.getLeaseDuration());
         try {
             transactions.executeWrite(status -> {
-                store.renewLease(entry.eventId(), leaseToken, leaseExpiresAt);
+                store.renewLease(entry.eventId(), leaseToken, renewedAt, leaseExpiresAt);
                 return null;
             });
             return true;

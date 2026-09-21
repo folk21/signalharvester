@@ -13,8 +13,8 @@ public interface AnalysisOutboxStore {
     /** Claims a bounded batch for one dispatcher lease. */
     List<AnalysisOutboxEntry> claimBatch(Instant now, UUID leaseToken, Instant leaseExpiresAt, int limit);
 
-    /** Extends ownership of one leased outbox event before publication begins. */
-    void renewLease(String eventId, UUID leaseToken, Instant leaseExpiresAt);
+    /** Extends one still-live leased outbox event before publication begins. */
+    void renewLease(String eventId, UUID leaseToken, Instant renewedAt, Instant leaseExpiresAt);
 
     /** Marks one leased outbox event as published. */
     void markPublished(String eventId, UUID leaseToken, Instant publishedAt);

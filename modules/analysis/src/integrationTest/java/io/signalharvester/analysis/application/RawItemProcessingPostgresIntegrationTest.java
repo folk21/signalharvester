@@ -258,13 +258,43 @@ class RawItemProcessingPostgresIntegrationTest {
         assertEquals(2, recoveredClaim.getFirst().publicationAttempts());
         String eventId = recoveredClaim.getFirst().eventId();
         assertThrows(AnalysisOutboxPersistenceException.class, () -> transactions.executeWrite(status -> {
-            store.renewLease(eventId, firstLease, now.plusSeconds(90));
+            store.renewLease(eventId, firstLease, now.plusSeconds(32), now.plusSeconds(90));
             return null;
         }));
         transactions.executeWrite(status -> {
-            store.renewLease(eventId, secondLease, now.plusSeconds(90));
+            store.renewLease(eventId, secondLease, now.plusSeconds(32), now.plusSeconds(90));
             return null;
         });
+    }
+
+    /** Reject renewal after lease expiry even when no successor has claimed the row yet. */
+    @Test
+    void shouldRejectOutboxLeaseRenewalAfterExpiryBeforeSuccessorClaim() {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        AnalysisOutboxStore store = context.getBean(AnalysisOutboxStore.class);
+        Instant now = Instant.parse("2026-09-15T12:05:00Z");
+        Instant expiredAt = now.plusSeconds(30);
+        Instant recoveryAt = expiredAt.plusSeconds(1);
+        UUID expiredLease = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        UUID recoveryLease = UUID.fromString("55555555-5555-5555-5555-555555555555");
+
+        var initialClaim = transactions.executeWrite(status ->
+                store.claimBatch(now, expiredLease, expiredAt, 10));
+        String eventId = initialClaim.getFirst().eventId();
+
+        assertThrows(AnalysisOutboxPersistenceException.class, () -> transactions.executeWrite(status -> {
+            store.renewLease(eventId, expiredLease, recoveryAt, recoveryAt.plusSeconds(30));
+            return null;
+        }));
+
+        var recoveredClaim = transactions.executeWrite(status ->
+                store.claimBatch(recoveryAt, recoveryLease, recoveryAt.plusSeconds(30), 10));
+
+        assertEquals(1, recoveredClaim.size());
+        assertEquals(eventId, recoveredClaim.getFirst().eventId());
+        assertEquals(2, recoveredClaim.getFirst().publicationAttempts());
     }
 
     /** Refresh a later batch entry lease immediately before send so queueing time cannot expire ownership. */
@@ -299,6 +329,34 @@ class RawItemProcessingPostgresIntegrationTest {
 
         assertEquals(2, sends.get());
         assertTrue(competingClaim.get().isEmpty());
+        assertEquals(2, outboxPublishedCount());
+    }
+
+    /** Skip a later batch entry after its original lease expires before pre-publication renewal. */
+    @Test
+    void shouldSkipExpiredLaterBatchEntryAndAllowSubsequentRecovery() throws Exception {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        service.process(rawItem(RAW_ITEM_2, SOURCE_EVENT_2, "Java Kafka"));
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-15T12:05:00Z"));
+        AtomicInteger staleSends = new AtomicInteger();
+        AnalysisKafkaClient staleClient = (topic, key, payload) -> {
+            if (staleSends.incrementAndGet() == 1) {
+                clock.advance(Duration.ofSeconds(31));
+            }
+        };
+
+        dispatcher(context.getBean(AnalysisOutboxStore.class), staleClient, clock).dispatchAvailable();
+
+        assertEquals(1, staleSends.get());
+        assertEquals(1, outboxPublishedCount());
+
+        AtomicInteger recoverySends = new AtomicInteger();
+        AnalysisKafkaClient recoveryClient = (topic, key, payload) -> recoverySends.incrementAndGet();
+        dispatcher(context.getBean(AnalysisOutboxStore.class), recoveryClient, clock).dispatchAvailable();
+
+        assertEquals(1, recoverySends.get());
         assertEquals(2, outboxPublishedCount());
     }
 
@@ -597,8 +655,8 @@ class RawItemProcessingPostgresIntegrationTest {
         }
 
         @Override
-        public void renewLease(String eventId, UUID leaseToken, Instant leaseExpiresAt) {
-            delegate.renewLease(eventId, leaseToken, leaseExpiresAt);
+        public void renewLease(String eventId, UUID leaseToken, Instant renewedAt, Instant leaseExpiresAt) {
+            delegate.renewLease(eventId, leaseToken, renewedAt, leaseExpiresAt);
         }
 
         @Override

@@ -39,6 +39,7 @@ Kafka listener interruption fencing is accepted after the developer confirmed al
 Kafka failed-poll rewind is accepted after the developer confirmed all relevant tests and validations passed. The remaining Kafka consumer lifecycle review found no additional material correctness defect in shutdown/rebalance or `max.poll.interval` behavior, so Review I is closed without further consumer tuning. Analysis outbox interruption fencing is also accepted after developer verification: lifecycle cancellation now stops the current claimed batch before ordinary publication-failure classification.
 
 Shared demand-driven polling lifecycle refactoring is accepted after developer verification. Results and Event Observation now reuse the framework-neutral `common.concurrent.DemandDrivenPollingLoop` for demand, delayed scheduling, and cancellation while retaining module-owned SSE/cursor semantics. Collection Run interruption recovery is also accepted after developer verification: publication interruption aborts run-level work and an interrupted started schedule leaves recovery to lease expiry rather than advancing `next_due_at`.
+Source-fetch worker interruption propagation is accepted after developer verification. Worker-local virtual-thread cancellation now reaches Collection run-level coordination and existing scheduler recovery semantics. The remaining background-worker/executor lifecycle review found no additional material defect in executor rejection/saturation or scheduled-task cleanup, so Review II is closed.
 
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -86,9 +87,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept `backend-source-fetch-worker-interruption-propagation`: lifecycle interruption of a Collection fetch worker must reach the coordinator and existing scheduler recovery semantics even when the coordinator thread was not initially interrupted.
-2. Continue the remaining background-worker/executor lifecycle review around executor rejection/saturation, scheduled-task cleanup, and other already-started worker shutdown behavior; do not change production code without another concrete defect.
-3. Then complete the remaining durable-ownership/crash-window review. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
+1. Verify and accept `backend-analysis-outbox-expired-lease-fencing`: pre-publication renewal must reject an already-expired lease even when the old token is still persisted and no successor has claimed the row yet.
+2. Continue the remaining durable-ownership/crash-window review across Analysis post-ack publication markers, acknowledged DLQ publication before source-offset commit, controlled replay/idempotency, and scheduled Collection Run completion; do not change production code without another concrete defect.
+3. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 

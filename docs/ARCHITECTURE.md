@@ -135,6 +135,7 @@ Analysis uses an explicit listener-completion/offset boundary:
 Terminal Analysis publication uses a module-owned transactional outbox:
 
 - dispatch claims use short expiring PostgreSQL leases;
+- pre-publication renewal requires both the exact token and a still-live persisted lease, so expired owners cannot resurrect ownership;
 - Kafka acknowledgement happens outside a JDBC transaction;
 - success/failure metadata is written afterward;
 - lifecycle interruption escapes instead of becoming ordinary retry metadata and stops the current dispatcher batch;
