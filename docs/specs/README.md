@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded implementation focus is [`active/subspecs/backend-shared-polling-lifecycle-refactoring.md`](active/subspecs/backend-shared-polling-lifecycle-refactoring.md). After SSE in-flight cancellation was accepted, a focused duplication review identified stable demand/scheduling/cancellation lifecycle duplicated by Results and Event Observation. The bounded framework-neutral common extraction is implemented and awaits verification.
+There is currently no bounded backend implementation focus. The systematic Kafka-consumer, background-worker/executor, and durable-ownership/crash-window reviews are complete after their accepted bounded fixes. Create the next sub-spec only for a concrete material backend change.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-shared-polling-lifecycle-refactoring.md`](active/subspecs/backend-shared-polling-lifecycle-refactoring.md) — share generic demand, delayed scheduling, and cancellable blocking-poll lifecycle without centralizing module-owned SSE semantics.
+- none; the backend currently has no bounded implementation sub-spec.
 
 Active supporting tracks:
 
@@ -165,6 +165,11 @@ Active supporting tracks:
 
 Accepted on 2026-09-21:
 
+- [`archive/subspecs/backend-analysis-outbox-failure-lease-fencing.md`](archive/subspecs/backend-analysis-outbox-failure-lease-fencing.md) — Analysis outbox publication-failure retry metadata now requires a still-live exact-token lease; accepted after the developer confirmed all relevant tests and validations passed. The remaining durable-ownership/crash-window review found no additional material correctness defect.
+- [`archive/subspecs/backend-analysis-outbox-expired-lease-fencing.md`](archive/subspecs/backend-analysis-outbox-expired-lease-fencing.md) — Analysis outbox pre-publication renewal now requires a still-live exact-token lease; accepted after the developer confirmed all relevant tests and validations passed.
+- [`archive/subspecs/backend-source-fetch-worker-interruption-propagation.md`](archive/subspecs/backend-source-fetch-worker-interruption-propagation.md) — Collection source-fetch worker interruption is propagated to coordinator-thread cancellation and scheduler recovery; accepted after the developer confirmed all relevant tests and validations passed.
+- [`archive/subspecs/backend-collection-run-interruption-recovery.md`](archive/subspecs/backend-collection-run-interruption-recovery.md) — Collection publication interruption aborts run-level work and interrupted scheduled runs leave next-due recovery to lease expiry; accepted after the developer confirmed all relevant tests and validations passed.
+- [`archive/subspecs/backend-shared-polling-lifecycle-refactoring.md`](archive/subspecs/backend-shared-polling-lifecycle-refactoring.md) — Results and Event Observation share one framework-neutral demand/poll/cancellation lifecycle primitive in `common`; accepted after the developer confirmed all relevant tests and validations passed.
 - [`archive/subspecs/backend-sse-inflight-poll-cancellation.md`](archive/subspecs/backend-sse-inflight-poll-cancellation.md) — active Results/Event Observation blocking SSE polls are interrupted on client cancellation; accepted after the developer confirmed all relevant tests and validations passed.
 - [`archive/subspecs/backend-analysis-outbox-interruption-fencing.md`](archive/subspecs/backend-analysis-outbox-interruption-fencing.md) — Analysis outbox lifecycle interruption stops the claimed batch before ordinary publication-failure classification; accepted after the developer confirmed all relevant tests and validations passed.
 
@@ -221,9 +226,9 @@ Accepted configuration/collection/analysis slices:
 
 ## Planned backend sub-specifications
 
-There is no planned bounded backend sub-specification at this point. Further lifecycle/reliability review remains analysis-only until it identifies another concrete material change.
+There is no planned bounded backend sub-specification at this point. The systematic lifecycle/reliability review is complete; create another backend sub-spec only when a concrete product, operational, or correctness requirement justifies one.
 
-Further scheduling refinements remain deferred until a product requirement justifies them.
+Further scheduling and capacity refinements remain deferred until measurements or a product requirement justify them.
 
 These are candidates, not active commitments.
 

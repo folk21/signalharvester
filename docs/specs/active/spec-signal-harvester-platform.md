@@ -4,7 +4,6 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-shared-polling-lifecycle-refactoring.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +25,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, and `backend-sse-inflight-poll-cancellation` are accepted after their relevant repository tests and validations passed. The remaining Kafka consumer lifecycle review found no additional material defect in rebalance/shutdown or `max.poll.interval` correctness semantics. The current bounded focus is `backend-shared-polling-lifecycle-refactoring`, which extracts stable demand/scheduling/cancellation mechanics duplicated by the two accepted SSE implementations while keeping module-owned cursor, query, and transport semantics local.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, `backend-sse-inflight-poll-cancellation`, `backend-shared-polling-lifecycle-refactoring`, `backend-collection-run-interruption-recovery`, `backend-source-fetch-worker-interruption-propagation`, `backend-analysis-outbox-expired-lease-fencing`, and `backend-analysis-outbox-failure-lease-fencing` are accepted after their relevant repository tests and validations passed. Kafka consumer lifecycle Review I, background-worker/executor lifecycle Review II, and durable-ownership/crash-window Review III found no additional material correctness defects after their bounded fixes. There is currently no bounded backend implementation focus.
 
 Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
 
@@ -888,7 +887,7 @@ Instead, the implementation must support a repeatable demonstration. Concurrent 
 
 This umbrella is implemented through bounded sub-specifications rather than a permanently maintained implementation checklist.
 
-- The current backend implementation focus is the `current_focus` sub-specification and is summarized in [`../README.md`](../README.md).
+- When `current_focus` is present, it identifies the bounded backend implementation focus and that focus is summarized in [`../README.md`](../README.md).
 - Accepted backend implementation truth belongs in current-state documentation such as `docs/IMPLEMENTATION.md`, module READMEs, and module contracts.
 - Historical accepted sub-specifications are indexed from `docs/specs/README.md` and archived after developer acceptance.
 - Frontend implementation sequencing and current status belong to the separate `signalharvester-web` specification tree.

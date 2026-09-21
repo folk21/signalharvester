@@ -54,8 +54,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * deduplication rollback when transactional outbox staging fails.
  *
  * <p>Related specifications: {@code backend-analysis-normalization-deduplication},
- * {@code backend-db-kafka-consistency}, {@code backend-analysis-outbox-lease-renewal}, and
- * {@code backend-analysis-outbox-interruption-fencing}.</p>
+ * {@code backend-db-kafka-consistency}, {@code backend-analysis-outbox-lease-renewal},
+ * {@code backend-analysis-outbox-interruption-fencing},
+ * {@code backend-analysis-outbox-expired-lease-fencing}, and
+ * {@code backend-analysis-outbox-failure-lease-fencing}.</p>
  *
  * <p>Features: {@code ANALYSIS.DEDUPLICATION}, {@code ANALYSIS.CLASSIFICATION}, {@code ANALYSIS.OUTBOX}.</p>
  */
@@ -258,13 +260,79 @@ class RawItemProcessingPostgresIntegrationTest {
         assertEquals(2, recoveredClaim.getFirst().publicationAttempts());
         String eventId = recoveredClaim.getFirst().eventId();
         assertThrows(AnalysisOutboxPersistenceException.class, () -> transactions.executeWrite(status -> {
-            store.renewLease(eventId, firstLease, now.plusSeconds(90));
+            store.renewLease(eventId, firstLease, now.plusSeconds(32), now.plusSeconds(90));
             return null;
         }));
         transactions.executeWrite(status -> {
-            store.renewLease(eventId, secondLease, now.plusSeconds(90));
+            store.renewLease(eventId, secondLease, now.plusSeconds(32), now.plusSeconds(90));
             return null;
         });
+    }
+
+    /** Reject renewal after lease expiry even when no successor has claimed the row yet. */
+    @Test
+    void shouldRejectOutboxLeaseRenewalAfterExpiryBeforeSuccessorClaim() {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        AnalysisOutboxStore store = context.getBean(AnalysisOutboxStore.class);
+        Instant now = Instant.parse("2026-09-15T12:05:00Z");
+        Instant expiredAt = now.plusSeconds(30);
+        Instant recoveryAt = expiredAt.plusSeconds(1);
+        UUID expiredLease = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        UUID recoveryLease = UUID.fromString("55555555-5555-5555-5555-555555555555");
+
+        var initialClaim = transactions.executeWrite(status ->
+                store.claimBatch(now, expiredLease, expiredAt, 10));
+        String eventId = initialClaim.getFirst().eventId();
+
+        assertThrows(AnalysisOutboxPersistenceException.class, () -> transactions.executeWrite(status -> {
+            store.renewLease(eventId, expiredLease, recoveryAt, recoveryAt.plusSeconds(30));
+            return null;
+        }));
+
+        var recoveredClaim = transactions.executeWrite(status ->
+                store.claimBatch(recoveryAt, recoveryLease, recoveryAt.plusSeconds(30), 10));
+
+        assertEquals(1, recoveredClaim.size());
+        assertEquals(eventId, recoveredClaim.getFirst().eventId());
+        assertEquals(2, recoveredClaim.getFirst().publicationAttempts());
+    }
+
+    /** Reject retry metadata after lease expiry even when no successor has claimed the row yet. */
+    @Test
+    void shouldRejectOutboxFailureMetadataAfterExpiryBeforeSuccessorClaim() throws Exception {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        AnalysisOutboxStore store = context.getBean(AnalysisOutboxStore.class);
+        Instant now = Instant.parse("2026-09-15T12:05:00Z");
+        Instant expiredAt = now.plusSeconds(30);
+        Instant failureAt = expiredAt.plusSeconds(1);
+        UUID expiredLease = UUID.fromString("66666666-6666-6666-6666-666666666666");
+        UUID recoveryLease = UUID.fromString("77777777-7777-7777-7777-777777777777");
+
+        var initialClaim = transactions.executeWrite(status ->
+                store.claimBatch(now, expiredLease, expiredAt, 10));
+        String eventId = initialClaim.getFirst().eventId();
+
+        assertThrows(AnalysisOutboxPersistenceException.class, () -> transactions.executeWrite(status -> {
+            store.markFailed(
+                    eventId,
+                    expiredLease,
+                    failureAt,
+                    failureAt.plusSeconds(2),
+                    "broker timeout after lease expiry");
+            return null;
+        }));
+        assertEquals(0, outboxFailureCount());
+
+        var recoveredClaim = transactions.executeWrite(status ->
+                store.claimBatch(failureAt, recoveryLease, failureAt.plusSeconds(30), 10));
+
+        assertEquals(1, recoveredClaim.size());
+        assertEquals(eventId, recoveredClaim.getFirst().eventId());
+        assertEquals(2, recoveredClaim.getFirst().publicationAttempts());
     }
 
     /** Refresh a later batch entry lease immediately before send so queueing time cannot expire ownership. */
@@ -299,6 +367,34 @@ class RawItemProcessingPostgresIntegrationTest {
 
         assertEquals(2, sends.get());
         assertTrue(competingClaim.get().isEmpty());
+        assertEquals(2, outboxPublishedCount());
+    }
+
+    /** Skip a later batch entry after its original lease expires before pre-publication renewal. */
+    @Test
+    void shouldSkipExpiredLaterBatchEntryAndAllowSubsequentRecovery() throws Exception {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        service.process(rawItem(RAW_ITEM_2, SOURCE_EVENT_2, "Java Kafka"));
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-15T12:05:00Z"));
+        AtomicInteger staleSends = new AtomicInteger();
+        AnalysisKafkaClient staleClient = (topic, key, payload) -> {
+            if (staleSends.incrementAndGet() == 1) {
+                clock.advance(Duration.ofSeconds(31));
+            }
+        };
+
+        dispatcher(context.getBean(AnalysisOutboxStore.class), staleClient, clock).dispatchAvailable();
+
+        assertEquals(1, staleSends.get());
+        assertEquals(1, outboxPublishedCount());
+
+        AtomicInteger recoverySends = new AtomicInteger();
+        AnalysisKafkaClient recoveryClient = (topic, key, payload) -> recoverySends.incrementAndGet();
+        dispatcher(context.getBean(AnalysisOutboxStore.class), recoveryClient, clock).dispatchAvailable();
+
+        assertEquals(1, recoverySends.get());
         assertEquals(2, outboxPublishedCount());
     }
 
@@ -342,6 +438,36 @@ class RawItemProcessingPostgresIntegrationTest {
         assertTrue(outboxPublished());
         assertEquals(2, outboxPublicationAttempts());
         assertTrue(retriedPayload.get().length > 0);
+    }
+
+    /** Leave an expired failed publication immediately reclaimable instead of applying stale retry backoff. */
+    @Test
+    void shouldLeaveExpiredFailedPublicationImmediatelyReclaimable() throws Exception {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-15T12:05:00Z"));
+        AtomicInteger staleSends = new AtomicInteger();
+        AnalysisKafkaClient staleClient = (topic, key, payload) -> {
+            staleSends.incrementAndGet();
+            clock.advance(Duration.ofSeconds(31));
+            throw new IllegalStateException("broker timeout after lease expiry");
+        };
+
+        dispatcher(context.getBean(AnalysisOutboxStore.class), staleClient, clock).dispatchAvailable();
+
+        assertEquals(1, staleSends.get());
+        assertFalse(outboxPublished());
+        assertEquals(1, outboxPublicationAttempts());
+        assertEquals(0, outboxFailureCount());
+
+        AtomicInteger recoverySends = new AtomicInteger();
+        AnalysisKafkaClient recoveryClient = (topic, key, payload) -> recoverySends.incrementAndGet();
+        dispatcher(context.getBean(AnalysisOutboxStore.class), recoveryClient, clock).dispatchAvailable();
+
+        assertEquals(1, recoverySends.get());
+        assertTrue(outboxPublished());
+        assertEquals(2, outboxPublicationAttempts());
     }
 
     /** Stop the current outbox batch when lifecycle interruption escapes synchronous Kafka publication. */
@@ -597,8 +723,8 @@ class RawItemProcessingPostgresIntegrationTest {
         }
 
         @Override
-        public void renewLease(String eventId, UUID leaseToken, Instant leaseExpiresAt) {
-            delegate.renewLease(eventId, leaseToken, leaseExpiresAt);
+        public void renewLease(String eventId, UUID leaseToken, Instant renewedAt, Instant leaseExpiresAt) {
+            delegate.renewLease(eventId, leaseToken, renewedAt, leaseExpiresAt);
         }
 
         @Override
@@ -612,8 +738,9 @@ class RawItemProcessingPostgresIntegrationTest {
         }
 
         @Override
-        public void markFailed(String eventId, UUID leaseToken, Instant nextAttemptAt, String failureMessage) {
-            delegate.markFailed(eventId, leaseToken, nextAttemptAt, failureMessage);
+        public void markFailed(
+                String eventId, UUID leaseToken, Instant failedAt, Instant nextAttemptAt, String failureMessage) {
+            delegate.markFailed(eventId, leaseToken, failedAt, nextAttemptAt, failureMessage);
         }
     }
 

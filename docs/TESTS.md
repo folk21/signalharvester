@@ -172,6 +172,7 @@ The first implementation foundation contains:
   - independent cross-profile acceptance;
   - atomic deduplication/outbox commit;
   - persisted outbox trace context and retry metadata;
+  - live-lease fencing for pre-publication renewal and publication-failure retry metadata, including immediate reclaim after stale-owner rejection;
   - identical-byte republication after Kafka ACK followed by published-marker failure;
   - claim/counter rollback when outbox staging fails;
 - `CollectionObservabilityTest` and `AnalysisObservabilityTest` for low-cardinality application metric emission with telemetry disabled safely through no-op boundaries;

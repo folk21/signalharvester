@@ -4,13 +4,13 @@ title: Backend shared demand-driven polling lifecycle refactoring
 description: Extract stable demand, delayed scheduling, and cancellation lifecycle duplicated by Results and Event Observation SSE polling into the constrained common shared kernel.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # Backend shared demand-driven polling lifecycle refactoring
 
 ## Status
 
-Implementation is complete and awaits developer verification.
+Completed and accepted on 2026-09-21 after the developer confirmed all relevant tests and validations passed.
 
 After SSE in-flight poll cancellation was accepted, a focused duplication review confirmed that Results and Event Observation independently implement the same demand accounting, blocking-task submission, delayed rescheduling, cancellation, and failure-termination lifecycle.
 

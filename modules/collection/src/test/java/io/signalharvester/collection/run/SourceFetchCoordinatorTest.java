@@ -27,6 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -200,6 +201,59 @@ class SourceFetchCoordinatorTest {
         }
     }
 
+    /** Propagate worker-thread interruption to the coordinator and cancel peer work. */
+    @Test
+    void shouldPropagateInterruptedWorkerAndCancelPeerFetch() throws Exception {
+        CountDownLatch blockingStarted = new CountDownLatch(1);
+        CountDownLatch blockingInterrupted = new CountDownLatch(1);
+        CountDownLatch releaseBlocking = new CountDownLatch(1);
+        AtomicBoolean coordinatorInterrupted = new AtomicBoolean();
+
+        ExternalSourceClient client = source -> {
+            if ("blocking".equals(source.name())) {
+                blockingStarted.countDown();
+                try {
+                    releaseBlocking.await();
+                    return content(source);
+                } catch (InterruptedException interrupted) {
+                    blockingInterrupted.countDown();
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("synthetic peer cancellation", interrupted);
+                }
+            }
+
+            await(blockingStarted);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("synthetic worker interruption");
+        };
+
+        try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 2, observability(), virtualThreads);
+            CompletableFuture<Void> result = CompletableFuture.runAsync(() -> {
+                try {
+                    coordinator.fetchEach(
+                            List.of(source("blocking"), source("interrupted")),
+                            (index, outcome) -> {});
+                } catch (RuntimeException failure) {
+                    coordinatorInterrupted.set(Thread.currentThread().isInterrupted());
+                    Thread.interrupted();
+                    throw failure;
+                }
+            });
+
+            ExecutionException failure = assertThrows(
+                    ExecutionException.class,
+                    () -> result.get(2, TimeUnit.SECONDS));
+            assertEquals("Source fetch coordination was interrupted", failure.getCause().getMessage());
+            assertTrue(coordinatorInterrupted.get(), "coordinator thread must preserve lifecycle interruption");
+            assertTrue(blockingInterrupted.await(2, TimeUnit.SECONDS),
+                    "worker interruption must cancel an in-flight peer fetch");
+        } finally {
+            releaseBlocking.countDown();
+        }
+    }
+
     /**
      * Abort on unexpected worker failure.
      */
@@ -221,6 +275,51 @@ class SourceFetchCoordinatorTest {
 
             assertEquals("programming failure", failure.getMessage());
             assertEquals(1, started.get());
+        }
+    }
+
+    /** Cancel an in-flight peer when terminal outcome handling aborts the run. */
+    @Test
+    void shouldCancelInFlightPeerWhenOutcomeHandlerFails() throws Exception {
+        CountDownLatch blockingStarted = new CountDownLatch(1);
+        CountDownLatch blockingInterrupted = new CountDownLatch(1);
+        CountDownLatch releaseBlocking = new CountDownLatch(1);
+        ExternalSourceClient client = source -> {
+            if ("blocking".equals(source.name())) {
+                blockingStarted.countDown();
+                try {
+                    releaseBlocking.await();
+                } catch (InterruptedException interrupted) {
+                    blockingInterrupted.countDown();
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("synthetic peer cancellation", interrupted);
+                }
+            } else if ("handled".equals(source.name())) {
+                await(blockingStarted);
+            }
+            return content(source);
+        };
+
+        try (ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor()) {
+            SourceFetchCoordinator coordinator = new SourceFetchCoordinator(
+                    client, () -> 2, observability(), virtualThreads);
+            CompletableFuture<Void> result = CompletableFuture.runAsync(() -> coordinator.fetchEach(
+                    List.of(source("blocking"), source("handled")),
+                    (sourceIndex, outcome) -> {
+                        if (sourceIndex == 1) {
+                            throw new IllegalStateException("synthetic handler failure");
+                        }
+                    }));
+
+            assertTrue(blockingStarted.await(2, TimeUnit.SECONDS));
+            ExecutionException failure = assertThrows(
+                    ExecutionException.class,
+                    () -> result.get(2, TimeUnit.SECONDS));
+            assertEquals("synthetic handler failure", failure.getCause().getMessage());
+            assertTrue(blockingInterrupted.await(2, TimeUnit.SECONDS),
+                    "handler failure must interrupt an in-flight peer fetch");
+        } finally {
+            releaseBlocking.countDown();
         }
     }
 

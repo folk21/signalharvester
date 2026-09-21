@@ -1,6 +1,7 @@
 package io.signalharvester.collection.run;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.signalharvester.collection.event.RawItemEventPublisher;
@@ -224,6 +225,35 @@ class CollectionRunServiceTest {
         }
     }
 
+
+    /** Abort the run when Kafka publication failure represents lifecycle interruption. */
+    @Test
+    void shouldAbortRunWhenPublicationFailureSignalsInterruption() {
+        List<ConfiguredSource> sources = List.of(source("one"), source("two"));
+        AtomicInteger publications = new AtomicInteger();
+        RawItemEventPublisher publisher = (content, context) -> {
+            publications.incrementAndGet();
+            throw new RawItemPublicationException(
+                    context.rawItemId(),
+                    context.correlationId(),
+                    RAW_ITEM_TOPIC,
+                    "synthetic interrupted Kafka publication",
+                    new InterruptedException("synthetic shutdown interruption"));
+        };
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CollectionRunService service = service(sources, CollectionRunServiceTest::content, publisher, executor);
+            try {
+                IllegalStateException failure = assertThrows(IllegalStateException.class, () -> service.run(request()));
+
+                assertEquals("Collection run interrupted while publishing raw item", failure.getMessage());
+                assertTrue(Thread.currentThread().isInterrupted(), "interruption must remain visible to the caller");
+                assertEquals(1, publications.get(), "interruption must stop later publication work");
+            } finally {
+                Thread.interrupted();
+            }
+        }
+    }
 
     /**
      * Publish one terminal outcome per extracted RSS entry while preserving source ordering.

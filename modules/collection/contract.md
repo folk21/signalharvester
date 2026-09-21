@@ -74,13 +74,15 @@ Other functional modules must not depend on Collection `run`, `source`, `sourcet
 
 ## Important invariants
 
+- Ordinary source fetch, extraction, and publication failures remain isolated terminal outcomes; lifecycle interruption is run-level cancellation and must not be downgraded to a per-source failure.
+- An interrupted already-started scheduled run does not advance `next_due_at`; its current exact-token lease remains until normal expiry/reclaim rather than using the pre-run release path.
 - a run derives information category, ordered source membership, and effective Analysis settings from the persisted Monitoring Profile; callers cannot override them;
 - every newly published `RawItemDiscovered` carries the effective profile Analysis settings snapshot used by that run;
 - automatic scheduling considers only enabled profiles and fetches only enabled member sources;
 - scheduler due-work claims and lease updates use short Collection-owned PostgreSQL transactions; external HTTP/Kafka work runs outside those transactions;
 - scheduler claims that fail before `CollectionRunner.run(...)` starts because local dispatch or heartbeat setup is rejected are released best-effort by exact lease token without advancing the due time; stale owners cannot clear a successor lease, and expiry remains the fallback if release persistence fails;
 - source/item-level failures are best-effort and do not cancel unrelated source work;
-- run-level coordination failures, including partial executor rejection, cancel already accepted in-flight fetch work best-effort before propagating the failure;
+- run-level coordination failures, including partial executor rejection, cancel already accepted in-flight fetch work best-effort before propagating the failure; interruption of a source-fetch worker is promoted to coordinator-thread interruption so lifecycle cancellation remains run-level;
 - one collection run id is reused as correlation id for raw-item events from that run;
 - raw-item identity is deterministic for equivalent source content;
 - external I/O has explicit timeout, size, redirect, and concurrency bounds; runtime destination authorization is bound to the Netty connection resolver so secure mode rejects blocked or mixed address sets before connection and revalidates redirect destinations; RSS/Atom and generic extraction have explicit item-count bounds, and RSS/Atom disables DTD/external-entity processing;

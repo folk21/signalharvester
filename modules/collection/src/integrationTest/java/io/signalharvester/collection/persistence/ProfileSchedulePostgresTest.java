@@ -230,6 +230,47 @@ class ProfileSchedulePostgresTest {
                 "heartbeat setup failure must not strand the due lease until expiry");
     }
 
+    /** Leave an interrupted started run due until lease expiry instead of advancing its schedule. */
+    @Test
+    void shouldLeaveInterruptedStartedRunDueUntilLeaseExpiry() {
+        ProfileScheduleCoordinator first = firstContext.getBean(ProfileScheduleCoordinator.class);
+        ProfileScheduleCoordinator second = secondContext.getBean(ProfileScheduleCoordinator.class);
+        ConfiguredMonitoringProfile profile = profile(1);
+        Instant due = initializeDueSchedule(first, profile);
+        AtomicBoolean runnerCalled = new AtomicBoolean();
+        CollectionRunner interruptedRunner = request -> {
+            runnerCalled.set(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(
+                    "synthetic scheduled-run interruption",
+                    new InterruptedException("synthetic shutdown interruption"));
+        };
+
+        try (ExecutorService directExecutor = directExecutor()) {
+            MonitoringProfileScheduler scheduler = new MonitoringProfileScheduler(
+                    new SingleProfileProvider(profile),
+                    first,
+                    interruptedRunner,
+                    schedulerConfiguration(),
+                    directExecutor,
+                    scheduledExecutor(firstContext),
+                    Clock.fixed(due, java.time.ZoneOffset.UTC));
+            try {
+                scheduler.poll();
+                assertTrue(Thread.currentThread().isInterrupted(),
+                        "scheduler must preserve started-run lifecycle interruption");
+            } finally {
+                Thread.interrupted();
+            }
+        }
+
+        assertTrue(runnerCalled.get());
+        assertTrue(second.claim(profile, due.plus(Duration.ofMinutes(1)), LEASE_DURATION).isEmpty(),
+                "interrupted run must not clear the live lease or advance to the next interval");
+        assertTrue(second.claim(profile, due.plus(LEASE_DURATION), LEASE_DURATION).isPresent(),
+                "interrupted due work must become reclaimable when the original lease expires");
+    }
+
     /** Recalculate next due time when persisted profile interval changes. */
     @Test
     void shouldRescheduleWhenProfileIntervalChanges() {

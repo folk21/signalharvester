@@ -88,13 +88,27 @@ public final class MonitoringProfileScheduler {
             releaseBeforeRun(lease, "heartbeat scheduling failed before collection started", failure);
             return;
         }
+        boolean interrupted = false;
         try {
             runner.run(new CollectionRunRequest(lease.profileId(), Optional.empty()));
         } catch (RuntimeException failure) {
-            LOG.error("Scheduled collection run failed for profile {}", lease.profileId().value(), failure);
+            interrupted = Thread.currentThread().isInterrupted() || hasInterruptedCause(failure);
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+                LOG.warn(
+                        "Scheduled collection run interrupted for profile {}; leaving lease to expiry recovery",
+                        lease.profileId().value(),
+                        failure);
+            } else {
+                LOG.error("Scheduled collection run failed for profile {}", lease.profileId().value(), failure);
+            }
         } finally {
             heartbeat.cancel(false);
-            if (!schedules.complete(lease, clock.instant())) {
+            if (interrupted || Thread.currentThread().isInterrupted()) {
+                LOG.warn(
+                        "Scheduled collection run for profile {} will not advance next due time after interruption",
+                        lease.profileId().value());
+            } else if (!schedules.complete(lease, clock.instant())) {
                 LOG.warn("Schedule lease was no longer owned when completing profile {}", lease.profileId().value());
             }
         }
@@ -124,6 +138,17 @@ public final class MonitoringProfileScheduler {
         } catch (RuntimeException failure) {
             LOG.warn("Schedule lease heartbeat failed for profile {}", lease.profileId().value(), failure);
         }
+    }
+
+    private static boolean hasInterruptedCause(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof InterruptedException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static void validateDurations(Duration leaseDuration, Duration heartbeatInterval) {

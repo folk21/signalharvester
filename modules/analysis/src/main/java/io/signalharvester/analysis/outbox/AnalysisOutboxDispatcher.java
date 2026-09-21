@@ -93,11 +93,12 @@ public final class AnalysisOutboxDispatcher {
                     entry.eventId(), entry.topic(), entry.publicationAttempts());
         } catch (RuntimeException failure) {
             propagateIfInterrupted("Interrupted while publishing Analysis outbox event", failure);
-            Instant nextAttemptAt = clock.instant().plus(configuration.getRetryBackoff());
+            Instant failedAt = clock.instant();
+            Instant nextAttemptAt = failedAt.plus(configuration.getRetryBackoff());
             String failureMessage = boundedMessage(failure);
             try {
                 transactions.executeWrite(status -> {
-                    store.markFailed(entry.eventId(), leaseToken, nextAttemptAt, failureMessage);
+                    store.markFailed(entry.eventId(), leaseToken, failedAt, nextAttemptAt, failureMessage);
                     return null;
                 });
             } catch (RuntimeException persistenceFailure) {
@@ -113,10 +114,11 @@ public final class AnalysisOutboxDispatcher {
     }
 
     private boolean renewLeaseBeforePublication(AnalysisOutboxEntry entry, UUID leaseToken) {
-        Instant leaseExpiresAt = clock.instant().plus(configuration.getLeaseDuration());
+        Instant renewedAt = clock.instant();
+        Instant leaseExpiresAt = renewedAt.plus(configuration.getLeaseDuration());
         try {
             transactions.executeWrite(status -> {
-                store.renewLease(entry.eventId(), leaseToken, leaseExpiresAt);
+                store.renewLease(entry.eventId(), leaseToken, renewedAt, leaseExpiresAt);
                 return null;
             });
             return true;

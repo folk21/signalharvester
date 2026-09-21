@@ -213,6 +213,7 @@ public final class CollectionRunService implements CollectionRunner {
                     Optional.of(publication.eventId()),
                     Optional.empty());
         } catch (RawItemPublicationException failure) {
+            propagateIfInterrupted("Collection run interrupted while publishing raw item", failure);
             LOG.warn("Collection run {} source {} publication failed rawItemId={}: {}",
                     runId, item.sourceId().value(), rawItemId, failureMessage(failure));
             return new CollectionSourceResult(
@@ -241,6 +242,25 @@ public final class CollectionRunService implements CollectionRunner {
         }
         long nonFailures = sourceResults.size() - failures;
         return nonFailures == 0 ? CollectionRunStatus.FAILED : CollectionRunStatus.PARTIALLY_SUCCEEDED;
+    }
+
+    private static void propagateIfInterrupted(String message, RuntimeException failure) {
+        if (!Thread.currentThread().isInterrupted() && !hasInterruptedCause(failure)) {
+            return;
+        }
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException(message, failure);
+    }
+
+    private static boolean hasInterruptedCause(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof InterruptedException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static String failureMessage(RuntimeException failure) {

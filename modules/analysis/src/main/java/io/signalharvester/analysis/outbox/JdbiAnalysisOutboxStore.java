@@ -63,10 +63,11 @@ public final class JdbiAnalysisOutboxStore implements AnalysisOutboxStore {
     }
 
     @Override
-    public void renewLease(String eventId, UUID leaseToken, Instant leaseExpiresAt) {
+    public void renewLease(String eventId, UUID leaseToken, Instant renewedAt, Instant leaseExpiresAt) {
         executeLeaseUpdate(
                 "renew Analysis outbox event lease",
                 handle -> handle.createUpdate(RENEW_LEASE_SQL)
+                        .bind("renewedAt", Timestamp.from(renewedAt))
                         .bind("leaseExpiresAt", Timestamp.from(leaseExpiresAt))
                         .bind("eventId", eventId)
                         .bind("leaseToken", leaseToken)
@@ -85,10 +86,12 @@ public final class JdbiAnalysisOutboxStore implements AnalysisOutboxStore {
     }
 
     @Override
-    public void markFailed(String eventId, UUID leaseToken, Instant nextAttemptAt, String failureMessage) {
+    public void markFailed(
+            String eventId, UUID leaseToken, Instant failedAt, Instant nextAttemptAt, String failureMessage) {
         executeLeaseUpdate(
                 "release failed Analysis outbox event",
                 handle -> handle.createUpdate(MARK_FAILED_SQL)
+                        .bind("failedAt", Timestamp.from(failedAt))
                         .bind("nextAttemptAt", Timestamp.from(nextAttemptAt))
                         .bind("failureMessage", failureMessage)
                         .bind("eventId", eventId)

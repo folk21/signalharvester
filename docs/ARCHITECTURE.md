@@ -91,7 +91,9 @@ Thread cost does not remove the need for backpressure. Collection concurrency re
 
 A Collection Run uses best-effort source isolation:
 
-- failure of one source does not cancel unrelated source work;
+- ordinary failure of one source does not cancel unrelated source work;
+- lifecycle interruption is run-level cancellation rather than a source terminal outcome, so it stops later publication work and preserves the interrupt signal; source-fetch worker interruption is propagated back to the coordinating thread instead of becoming an ordinary worker failure;
+- an interrupted already-started scheduled run does not advance `next_due_at`; its exact-token lease remains the recovery fence until normal expiry/reclaim;
 - the explicit Collection Run ID is the correlation ID for raw-item events from that run;
 - HTTP connect/read/request timeouts remain explicit;
 - response-size, redirect, connection-pool, and concurrency limits remain explicit.
@@ -133,8 +135,9 @@ Analysis uses an explicit listener-completion/offset boundary:
 Terminal Analysis publication uses a module-owned transactional outbox:
 
 - dispatch claims use short expiring PostgreSQL leases;
+- pre-publication renewal requires both the exact token and a still-live persisted lease, so expired owners cannot resurrect ownership;
 - Kafka acknowledgement happens outside a JDBC transaction;
-- success/failure metadata is written afterward;
+- success/failure metadata is written afterward; ordinary failure metadata requires the same exact-token lease to still be live, so an expired former owner cannot postpone immediate reclaim with a new retry timestamp;
 - lifecycle interruption escapes instead of becoming ordinary retry metadata and stops the current dispatcher batch;
 - a post-ack marker failure may republish the same stable event ID and payload.
 

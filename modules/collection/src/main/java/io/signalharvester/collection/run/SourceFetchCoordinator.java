@@ -16,9 +16,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.function.BiConsumer;
@@ -59,9 +59,9 @@ public final class SourceFetchCoordinator {
      * concurrency window. The handler receives the original source index so callers can preserve
      * deterministic result ordering even though outcomes are delivered in completion order.</p>
      *
-     * <p>{@link SourceFetchException} failures become source outcomes and do not cancel peer work. A
-     * coordinator interruption, unexpected fetch failure, or unexpected handler failure aborts the
-     * operation and cancels remaining in-flight fetches.</p>
+     * <p>Ordinary {@link SourceFetchException} failures become source outcomes and do not cancel peer
+     * work. Lifecycle interruption, coordinator interruption, unexpected fetch failure, or unexpected
+     * handler failure aborts the operation and cancels remaining in-flight fetches.</p>
      *
      * @param sources source configurations in desired final result order
      * @param outcomeHandler terminal handler for one completed source fetch
@@ -117,8 +117,25 @@ public final class SourceFetchCoordinator {
             ExecutorCompletionService<IndexedSourceFetchOutcome> completions,
             List<ConfiguredSource> sources,
             int index) {
-        Callable<IndexedSourceFetchOutcome> task =
-                () -> new IndexedSourceFetchOutcome(index, fetch(sources.get(index)));
+        Callable<IndexedSourceFetchOutcome> task = () -> {
+            try {
+                IndexedSourceFetchOutcome outcome =
+                        new IndexedSourceFetchOutcome(index, fetch(sources.get(index)));
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new SourceFetchWorkerInterruptedException(
+                            new InterruptedException("Source fetch worker was interrupted"));
+                }
+                return outcome;
+            } catch (SourceFetchWorkerInterruptedException interruptedWorker) {
+                throw interruptedWorker;
+            } catch (RuntimeException failure) {
+                if (Thread.currentThread().isInterrupted() || hasInterruptedCause(failure)) {
+                    Thread.currentThread().interrupt();
+                    throw new SourceFetchWorkerInterruptedException(failure);
+                }
+                throw failure;
+            }
+        };
         return completions.submit(PropagatedContext.wrapCurrent(Context.current().wrap(task)));
     }
 
@@ -131,6 +148,10 @@ public final class SourceFetchCoordinator {
             observability.recordSourceFetch("success", Duration.ofNanos(System.nanoTime() - startedAtNanos));
             return new SourceFetchOutcome.Success(source, content);
         } catch (SourceFetchException failure) {
+            if (Thread.currentThread().isInterrupted() || hasInterruptedCause(failure)) {
+                Thread.currentThread().interrupt();
+                throw new SourceFetchWorkerInterruptedException(failure);
+            }
             observability.recordSourceFetch("failure", Duration.ofNanos(System.nanoTime() - startedAtNanos));
             return new SourceFetchOutcome.Failure(source, failure);
         }
@@ -141,6 +162,11 @@ public final class SourceFetchCoordinator {
     }
 
     private static void rethrowUnexpectedFailure(Throwable cause) {
+        if (cause instanceof SourceFetchWorkerInterruptedException interruptedWorker) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(
+                    "Source fetch coordination was interrupted", interruptedWorker.getCause());
+        }
         if (cause instanceof RuntimeException runtimeException) {
             throw runtimeException;
         }
@@ -148,6 +174,23 @@ public final class SourceFetchCoordinator {
             throw error;
         }
         throw new IllegalStateException("Source fetch worker failed", cause);
+    }
+
+    private static boolean hasInterruptedCause(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof InterruptedException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static final class SourceFetchWorkerInterruptedException extends RuntimeException {
+        private SourceFetchWorkerInterruptedException(Throwable cause) {
+            super("Source fetch worker was interrupted", cause);
+        }
     }
 
     private record IndexedSourceFetchOutcome(int index, SourceFetchOutcome outcome) {
