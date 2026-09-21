@@ -3,6 +3,7 @@ package io.signalharvester.eventobservation.http;
 import io.micronaut.http.sse.Event;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.TaskScheduler;
+import io.signalharvester.common.concurrent.DemandDrivenPollingLoop;
 import io.signalharvester.eventobservation.application.EventObservationCriteria;
 import io.signalharvester.eventobservation.application.EventObservationLiveBatch;
 import io.signalharvester.eventobservation.application.EventObservationQuery;
@@ -14,17 +15,17 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
-/** Creates backpressure-aware Event Explorer SSE publishers over durable observation history. */
+/**
+ * Creates backpressure-aware Event Explorer SSE publishers over durable observation history.
+ * Generic demand, scheduling, and cancellation lifecycle is delegated to the shared polling utility.
+ */
 @Singleton
 public final class EventObservationSseStream {
 
@@ -69,11 +70,8 @@ public final class EventObservationSseStream {
     private final class LiveSubscription implements Subscription {
         private final Subscriber<? super Event<EventObservationLiveEventResponse>> subscriber;
         private final EventObservationCriteria criteria;
-        private final AtomicLong demand = new AtomicLong();
-        private final AtomicBoolean cancelled = new AtomicBoolean();
-        private final AtomicBoolean running = new AtomicBoolean();
-        private final AtomicReference<ScheduledFuture<?>> scheduled = new AtomicReference<>();
         private final Deque<Event<EventObservationLiveEventResponse>> pending = new ArrayDeque<>();
+        private final DemandDrivenPollingLoop<Event<EventObservationLiveEventResponse>> pollingLoop;
 
         private long cursor;
         private boolean initialized;
@@ -87,79 +85,47 @@ public final class EventObservationSseStream {
             this.criteria = criteria;
             this.cursor = lastEventId.orElse(0L);
             this.initialized = lastEventId.isPresent();
+            this.pollingLoop = new DemandDrivenPollingLoop<>(
+                    blockingExecutor,
+                    (delay, task) -> taskScheduler.schedule(delay, task),
+                    configuration.getPollInterval(),
+                    this::nextEvent,
+                    this::emit,
+                    subscriber::onError);
         }
 
         @Override
         public void request(long n) {
-            if (n <= 0) {
-                fail(new IllegalArgumentException("Reactive Streams demand must be positive"));
-                return;
-            }
-            demand.getAndUpdate(current -> addCap(current, n));
-            trigger();
+            pollingLoop.request(n);
         }
 
         @Override
         public void cancel() {
-            if (!cancelled.compareAndSet(false, true)) {
-                return;
-            }
-            ScheduledFuture<?> future = scheduled.getAndSet(null);
-            if (future != null) {
-                future.cancel(false);
-            }
+            pollingLoop.cancel();
         }
 
-        private void trigger() {
-            if (cancelled.get() || demand.get() == 0 || !running.compareAndSet(false, true)) {
-                return;
+        private Optional<Event<EventObservationLiveEventResponse>> nextEvent() {
+            if (!pending.isEmpty()) {
+                return Optional.of(pending.removeFirst());
             }
-            try {
-                blockingExecutor.execute(this::pollAndEmit);
-            } catch (RuntimeException failure) {
-                running.set(false);
-                fail(failure);
+            if (!initialized) {
+                cursor = query.currentCursor();
+                initialized = true;
+                return Optional.of(readyEvent(cursor));
             }
-        }
 
-        private void pollAndEmit() {
-            try {
-                while (!cancelled.get() && demand.get() > 0) {
-                    if (!pending.isEmpty()) {
-                        emit(pending.removeFirst());
-                        continue;
-                    }
-                    if (!initialized) {
-                        cursor = query.currentCursor();
-                        initialized = true;
-                        pending.add(readyEvent(cursor));
-                        continue;
-                    }
-
-                    EventObservationLiveBatch batch = query.pollAfter(cursor, criteria, configuration.getBatchSize());
-                    cursor = batch.nextCursor();
-                    for (ObservedEvent event : batch.events()) {
-                        pending.add(observedEvent(event));
-                    }
-                    if (!pending.isEmpty()) {
-                        continue;
-                    }
-                    if (keepaliveDue()) {
-                        pending.add(keepaliveEvent(cursor));
-                        continue;
-                    }
-                    break;
-                }
-
-                if (!cancelled.get() && demand.get() > 0) {
-                    scheduleNextPoll();
-                } else {
-                    running.set(false);
-                }
-            } catch (Throwable failure) {
-                running.set(false);
-                fail(failure);
+            EventObservationLiveBatch batch = query.pollAfter(cursor, criteria, configuration.getBatchSize());
+            cursor = batch.nextCursor();
+            for (ObservedEvent event : batch.events()) {
+                pending.add(observedEvent(event));
             }
+            if (!pending.isEmpty()) {
+                return Optional.of(pending.removeFirst());
+            }
+            if (keepaliveDue()) {
+                return Optional.of(keepaliveEvent(cursor));
+            }
+            return Optional.empty();
         }
 
         private Event<EventObservationLiveEventResponse> readyEvent(long eventCursor) {
@@ -188,47 +154,11 @@ public final class EventObservationSseStream {
         }
 
         private void emit(Event<EventObservationLiveEventResponse> event) {
-            if (cancelled.get()) {
+            if (pollingLoop.isCancelled()) {
                 return;
             }
             subscriber.onNext(event);
             lastEmissionNanos = System.nanoTime();
-            demand.getAndUpdate(current -> current == Long.MAX_VALUE ? Long.MAX_VALUE : current - 1);
-        }
-
-        private void scheduleNextPoll() {
-            ScheduledFuture<?> future = taskScheduler.schedule(configuration.getPollInterval(), () -> {
-                scheduled.set(null);
-                running.set(false);
-                trigger();
-            });
-            ScheduledFuture<?> previous = scheduled.getAndSet(future);
-            if (previous != null && previous != future) {
-                previous.cancel(false);
-            }
-            if (cancelled.get()) {
-                ScheduledFuture<?> cancelledFuture = scheduled.getAndSet(null);
-                if (cancelledFuture != null) {
-                    cancelledFuture.cancel(false);
-                }
-                running.set(false);
-            }
-        }
-
-        private void fail(Throwable failure) {
-            if (!cancelled.compareAndSet(false, true)) {
-                return;
-            }
-            ScheduledFuture<?> future = scheduled.getAndSet(null);
-            if (future != null) {
-                future.cancel(false);
-            }
-            subscriber.onError(failure);
-        }
-
-        private static long addCap(long current, long increment) {
-            long updated = current + increment;
-            return updated < 0 ? Long.MAX_VALUE : updated;
         }
     }
 }

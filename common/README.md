@@ -9,4 +9,7 @@ description: Entry point for intentionally small stable shared Java primitives a
 
 Read [`AGENTS.md`](AGENTS.md) before adding code here.
 
-The module currently also owns `SqlResources`, the generic classpath loader used by Jdbi persistence adapters to resolve module-owned `.sql` resources without duplicating locator classes.
+The module currently owns two deliberately small generic utilities:
+
+- `SqlResources` — classpath loading for module-owned `.sql` resources without duplicated locator classes;
+- `DemandDrivenPollingLoop` — JDK-only demand, delayed scheduling, and cancellation lifecycle reused by blocking polling adapters without owning their transport or domain semantics.

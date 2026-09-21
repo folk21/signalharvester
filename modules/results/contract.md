@@ -64,7 +64,7 @@ Other modules must not query or mutate these tables directly.
 
 No synchronous functional-module dependency is required.
 
-Results depends on the stable `common` SQL-resource utility, shared infrastructure/framework libraries, and the versioned event-contract artifact. Results SQL and row mapping remain module-local.
+Results depends on the stable `common` SQL-resource and demand-driven polling lifecycle utilities, shared infrastructure/framework libraries, and the versioned event-contract artifact. Results SQL, cursor semantics, event mapping, and row mapping remain module-local.
 
 ## Forbidden access
 
@@ -81,9 +81,12 @@ Do not import Analysis implementation/application/persistence types or read the 
 - race-free browser bootstrap opens SSE through `ready` before loading the REST snapshot, then merges buffered/live updates by logical result identity;
 - a resume cursor ahead of current durable state is normalized to the current watermark rather than starving future delivery;
 - live delivery exposes current projections, not an append-only history, so multiple disconnected updates to one logical result may collapse to the latest projection;
+- SSE client cancellation cancels pending scheduled polling and requests interruption of the active blocking poll task; cancellation-induced query unwind is not a client-visible stream failure after cancellation;
 - the Results Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic transport/key/mapping failures are dead-lettered without retry; projection failures use bounded retry;
-- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification, preserves the interrupt flag, and leaves the source record eligible for normal redelivery;
+- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification and preserves the interrupt flag;
+- when any listener failure escapes, the per-listener exception handler rewinds every partition from the failed Kafka poll to its first polled offset before normal consumption resumes, so uninvoked records remain eligible for redelivery;
+- failed-poll rewind may deliberately reprocess earlier records from the same poll and therefore relies on Results projection idempotency;
 - normal listener completion occurs only after the Results transaction commits successfully or terminal Results dead-letter publication is acknowledged; Micronaut owns the synchronous per-record source-offset commit afterward;
 - a failed Results DLQ publication must escape before successful listener completion, while framework commit failure remains outside Results application retry/DLQ classification and may result in at-least-once redelivery;
 - exhausted projection failures become eligible for framework offset commit only after acknowledged Results dead-letter publication;

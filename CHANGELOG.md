@@ -7,6 +7,11 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-21 — Added verification-pending shared demand-driven polling lifecycle refactoring so Results and Event Observation reuse one JDK-only common concurrency primitive without moving cursor, SSE, or domain semantics into the shared kernel.
+- 2026-09-21 — Accepted SSE in-flight poll cancellation after the developer confirmed all relevant tests and validations passed.
+- 2026-09-21 — Added verification-pending SSE in-flight poll cancellation so Results and Event Observation client disconnects request interruption of active blocking poll work as well as cancelling future scheduled polls.
+- 2026-09-21 — Accepted Analysis outbox interruption fencing after the developer confirmed all relevant tests and validations passed; lifecycle cancellation now stops the current claimed batch before ordinary publication-failure classification.
+- 2026-09-21 — Reframed the product overview and active umbrella around configurable data-source monitoring, with scientific, news, and financial examples, and documented SignalHarvester as a practical AI-assisted and Spec-Driven Development learning project.
 - 2026-09-20 — Added verification-pending Analysis outbox interruption fencing so lifecycle cancellation escapes ordinary publication-failure classification and stops later rows in the current claimed batch.
 - 2026-09-20 — Accepted Kafka failed-poll rewind after the developer confirmed all relevant tests and validations passed; the remaining Kafka consumer lifecycle review found no additional material correctness defect requiring shutdown/rebalance or `max.poll.interval` tuning.
 - 2026-09-20 — Added verification-pending Kafka failed-poll rewind so escaped Analysis, Results, and Event Observation listener failures rewind every partition from the current poll before normal consumption can continue.
