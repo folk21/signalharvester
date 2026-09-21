@@ -80,7 +80,9 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 - deployment-global keyword rules are a compatibility fallback only for legacy raw events without a settings snapshot;
 - the raw Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic decode/key/mapping failures are dead-lettered without retry, while application failures use a bounded retry policy;
-- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification, preserves the interrupt flag, and leaves the source record eligible for normal redelivery;
+- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification and preserves the interrupt flag;
+- when any listener failure escapes, the per-listener exception handler rewinds every partition from the failed Kafka poll to its first polled offset before normal consumption resumes, so uninvoked records remain eligible for redelivery;
+- failed-poll rewind may deliberately reprocess earlier records from the same poll and therefore relies on Analysis deduplication/outbox idempotency;
 - normal listener completion occurs only after the Analysis state/outbox transaction commits or acknowledged Analysis dead-letter publication; Micronaut owns the synchronous per-record source-offset commit afterward;
 - DLQ publication failure must escape before successful listener completion, while framework commit failure remains outside Analysis application retry/DLQ classification and may result in at-least-once redelivery;
 - deduplication writes require an active application-owned database transaction and Jdbi adapters must not self-commit;
@@ -88,6 +90,7 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 - Kafka publication happens outside database transactions through bounded expiring outbox leases;
 - each claimed outbox row renews its exact-token lease immediately before Kafka publication; a stale owner that can no longer renew must not publish the row;
 - pre-publication renewal completes before Kafka I/O and prevents local batch queueing from consuming a later row's ownership window; it does not provide distributed exactly-once delivery or guarantee that one Kafka send cannot outlive the renewed lease;
+- outbox worker interruption is lifecycle cancellation, not ordinary publication failure: it escapes before retry metadata is written for the interrupted operation, preserves/restores the interrupt flag, and stops later rows in the current claimed batch;
 - a post-ack publication-marker failure may republish the same event id/payload, so downstream persistence remains idempotent;
 - terminal input failures become eligible for framework offset commit only after acknowledged Analysis dead-letter publication;
 - operator recovery validates the current Analysis consumer group and raw input topic, requires exact dead-letter-id confirmation, reuses the normal decoder/processor, and never republishes the shared raw topic or rewrites source offsets.

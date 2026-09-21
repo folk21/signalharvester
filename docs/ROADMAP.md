@@ -34,6 +34,10 @@ Kafka offset-commit failure separation is accepted after the corrected Micronaut
 
 Scheduler expired-lease fencing is accepted after the developer confirmed all relevant tests and validations passed. Renewal and completion now require both the exact token and a still-live persisted lease, so a stalled former owner cannot resurrect or consume overdue scheduled work after `lease_until`.
 
+Kafka listener interruption fencing is accepted after the developer confirmed all relevant tests and validations passed. Interrupted Analysis, Results, and Event Observation work now escapes before application retry exhaustion or terminal DLQ classification, including zero-backoff paths.
+
+Kafka failed-poll rewind is accepted after the developer confirmed all relevant tests and validations passed. The remaining Kafka consumer lifecycle review found no additional material correctness defect in shutdown/rebalance or `max.poll.interval` behavior, so Review I is closed without further consumer tuning.
+
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
 ## P0 — repository and contract foundation
@@ -80,9 +84,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept `backend-kafka-listener-interruption-fencing`: interrupted Analysis, Results, and Event Observation work must escape before retry exhaustion or terminal DLQ classification.
-2. After acceptance, continue the Kafka consumer lifecycle review around rebalance/shutdown timing and `max.poll.interval` behavior; do not change production code without another concrete defect.
-3. Then resume the remaining background-worker/executor and durable-ownership review. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
+1. Verify and accept `backend-analysis-outbox-interruption-fencing`: lifecycle interruption during synchronous Analysis outbox publication must escape before ordinary retry classification and stop the current claimed batch.
+2. Continue the remaining background-worker/executor lifecycle review around SSE cancellation, executor rejection/saturation, scheduled-task cleanup, and already-started worker shutdown behavior; do not change production code without another concrete defect.
+3. Then complete the remaining durable-ownership/crash-window review. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 

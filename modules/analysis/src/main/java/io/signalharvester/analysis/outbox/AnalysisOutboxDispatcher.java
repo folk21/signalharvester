@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.apache.kafka.common.errors.InterruptException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +60,7 @@ public final class AnalysisOutboxDispatcher {
     /** Claims one bounded batch and publishes each record outside the database transaction. */
     @Scheduled(fixedDelay = "${signalharvester.analysis.outbox.poll-interval:1s}")
     public void dispatchAvailable() {
+        throwIfInterrupted("Interrupted before dispatching Analysis outbox events");
         Instant now = clock.instant();
         UUID leaseToken = UUID.randomUUID();
         List<AnalysisOutboxEntry> entries = transactions.executeWrite(status -> store.claimBatch(
@@ -67,6 +69,7 @@ public final class AnalysisOutboxDispatcher {
                 now.plus(configuration.getLeaseDuration()),
                 configuration.getBatchSize()));
         for (AnalysisOutboxEntry entry : entries) {
+            throwIfInterrupted("Interrupted while dispatching Analysis outbox events");
             publishOne(entry, leaseToken);
         }
     }
@@ -89,6 +92,7 @@ public final class AnalysisOutboxDispatcher {
                     "Published Analysis outbox event {} topic={} attempts={}",
                     entry.eventId(), entry.topic(), entry.publicationAttempts());
         } catch (RuntimeException failure) {
+            propagateIfInterrupted("Interrupted while publishing Analysis outbox event", failure);
             Instant nextAttemptAt = clock.instant().plus(configuration.getRetryBackoff());
             String failureMessage = boundedMessage(failure);
             try {
@@ -98,6 +102,8 @@ public final class AnalysisOutboxDispatcher {
                 });
             } catch (RuntimeException persistenceFailure) {
                 failure.addSuppressed(persistenceFailure);
+                propagateIfInterrupted(
+                        "Interrupted while recording Analysis outbox publication failure", persistenceFailure);
             }
             observability.recordOutboxPublication("failed");
             LOG.warn(
@@ -115,12 +121,38 @@ public final class AnalysisOutboxDispatcher {
             });
             return true;
         } catch (RuntimeException failure) {
+            propagateIfInterrupted("Interrupted while renewing Analysis outbox lease", failure);
             observability.recordOutboxPublication("failed");
             LOG.warn(
                     "Skipping Analysis outbox publication because lease renewal failed eventId={} topic={} attempts={}",
                     entry.eventId(), entry.topic(), entry.publicationAttempts(), failure);
             return false;
         }
+    }
+
+    private static void throwIfInterrupted(String message) {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IllegalStateException(message);
+        }
+    }
+
+    private static void propagateIfInterrupted(String message, RuntimeException failure) {
+        if (!Thread.currentThread().isInterrupted() && !hasInterruptedCause(failure)) {
+            return;
+        }
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException(message, failure);
+    }
+
+    private static boolean hasInterruptedCause(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof InterruptedException || current instanceof InterruptException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static String boundedMessage(RuntimeException failure) {
