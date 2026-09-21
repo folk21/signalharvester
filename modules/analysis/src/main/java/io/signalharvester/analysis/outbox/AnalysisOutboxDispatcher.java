@@ -93,11 +93,12 @@ public final class AnalysisOutboxDispatcher {
                     entry.eventId(), entry.topic(), entry.publicationAttempts());
         } catch (RuntimeException failure) {
             propagateIfInterrupted("Interrupted while publishing Analysis outbox event", failure);
-            Instant nextAttemptAt = clock.instant().plus(configuration.getRetryBackoff());
+            Instant failedAt = clock.instant();
+            Instant nextAttemptAt = failedAt.plus(configuration.getRetryBackoff());
             String failureMessage = boundedMessage(failure);
             try {
                 transactions.executeWrite(status -> {
-                    store.markFailed(entry.eventId(), leaseToken, nextAttemptAt, failureMessage);
+                    store.markFailed(entry.eventId(), leaseToken, failedAt, nextAttemptAt, failureMessage);
                     return null;
                 });
             } catch (RuntimeException persistenceFailure) {

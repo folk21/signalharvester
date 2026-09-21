@@ -40,6 +40,7 @@ Kafka failed-poll rewind is accepted after the developer confirmed all relevant 
 
 Shared demand-driven polling lifecycle refactoring is accepted after developer verification. Results and Event Observation now reuse the framework-neutral `common.concurrent.DemandDrivenPollingLoop` for demand, delayed scheduling, and cancellation while retaining module-owned SSE/cursor semantics. Collection Run interruption recovery is also accepted after developer verification: publication interruption aborts run-level work and an interrupted started schedule leaves recovery to lease expiry rather than advancing `next_due_at`.
 Source-fetch worker interruption propagation is accepted after developer verification. Worker-local virtual-thread cancellation now reaches Collection run-level coordination and existing scheduler recovery semantics. The remaining background-worker/executor lifecycle review found no additional material defect in executor rejection/saturation or scheduled-task cleanup, so Review II is closed.
+Analysis outbox expired-lease fencing is accepted after developer verification. Pre-publication renewal now requires both the exact token and a still-live persisted lease, so an expired former owner cannot resurrect ownership before Kafka send.
 
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -87,7 +88,7 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept `backend-analysis-outbox-expired-lease-fencing`: pre-publication renewal must reject an already-expired lease even when the old token is still persisted and no successor has claimed the row yet.
+1. Verify and accept `backend-analysis-outbox-failure-lease-fencing`: ordinary publication-failure retry metadata must require a still-live exact-token lease so an expired former owner cannot delay immediate recovery.
 2. Continue the remaining durable-ownership/crash-window review across Analysis post-ack publication markers, acknowledged DLQ publication before source-offset commit, controlled replay/idempotency, and scheduled Collection Run completion; do not change production code without another concrete defect.
 3. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
 

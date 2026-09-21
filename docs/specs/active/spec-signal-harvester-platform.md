@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-analysis-outbox-expired-lease-fencing.md
+current_focus: subspecs/backend-analysis-outbox-failure-lease-fencing.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +26,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, `backend-sse-inflight-poll-cancellation`, `backend-shared-polling-lifecycle-refactoring`, `backend-collection-run-interruption-recovery`, and `backend-source-fetch-worker-interruption-propagation` are accepted after their relevant repository tests and validations passed. Kafka consumer lifecycle Review I and background-worker/executor lifecycle Review II found no additional material defects after their bounded fixes. The current bounded focus is `backend-analysis-outbox-expired-lease-fencing`, which prevents an expired Analysis outbox owner from resurrecting stale pre-publication lease ownership.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, `backend-sse-inflight-poll-cancellation`, `backend-shared-polling-lifecycle-refactoring`, `backend-collection-run-interruption-recovery`, `backend-source-fetch-worker-interruption-propagation`, and `backend-analysis-outbox-expired-lease-fencing` are accepted after their relevant repository tests and validations passed. Kafka consumer lifecycle Review I and background-worker/executor lifecycle Review II found no additional material defects after their bounded fixes. The current bounded focus is `backend-analysis-outbox-failure-lease-fencing`, which prevents an expired Analysis outbox owner from delaying recovery by writing retry metadata after ownership has lapsed.
 
 Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
 

@@ -211,7 +211,7 @@ Successful application processing means that two pieces of state commit atomical
 - skips publication when renewal no longer proves live exact-token ownership, whether the lease already expired or another replica owns the row;
 - publishes stored bytes to Kafka outside a database transaction;
 - treats worker interruption as lifecycle cancellation, restoring/preserving the interrupt flag and stopping the current claimed batch before ordinary failure classification;
-- records success or retry state in a second short transaction for non-interruption failures.
+- records success or retry state in a second short transaction for non-interruption failures; retry metadata is accepted only while the exact-token lease remains live at the captured failure instant, otherwise the expired row stays immediately reclaimable.
 
 Multiple replicas coordinate through `FOR UPDATE SKIP LOCKED`, live exact-token pre-publication renewal, and lease expiry. Renewal requires `lease_expires_at` to still be later than the renewal instant and is committed before Kafka I/O, so an expired owner cannot reacquire the row by renewal and no JDBC transaction or PostgreSQL row lock is held while waiting for broker acknowledgement.
 

@@ -19,6 +19,7 @@ public interface AnalysisOutboxStore {
     /** Marks one leased outbox event as published. */
     void markPublished(String eventId, UUID leaseToken, Instant publishedAt);
 
-    /** Releases one leased outbox event for a later retry while recording a bounded error. */
-    void markFailed(String eventId, UUID leaseToken, Instant nextAttemptAt, String failureMessage);
+    /** Releases one still-live leased outbox event for a later retry while recording a bounded error. */
+    void markFailed(
+            String eventId, UUID leaseToken, Instant failedAt, Instant nextAttemptAt, String failureMessage);
 }

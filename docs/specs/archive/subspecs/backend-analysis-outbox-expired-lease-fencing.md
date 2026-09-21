@@ -4,13 +4,13 @@ title: Analysis outbox expired-lease fencing
 description: Prevent an expired Analysis outbox owner from renewing stale lease ownership immediately before Kafka publication.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # Analysis outbox expired-lease fencing
 
 ## Status
 
-Implementation is complete and awaits developer verification.
+Completed and accepted after the developer confirmed all relevant tests and validations passed.
 
 The durable-ownership/crash-window review found that Analysis outbox pre-publication renewal is exact-token guarded but does not prove that the persisted lease is still live. If a dispatcher stalls beyond `lease-duration` and resumes before another replica claims the expired row, the old token can currently renew the already-expired lease and publish as if ownership had never lapsed.
 

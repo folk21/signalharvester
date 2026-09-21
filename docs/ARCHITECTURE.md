@@ -137,7 +137,7 @@ Terminal Analysis publication uses a module-owned transactional outbox:
 - dispatch claims use short expiring PostgreSQL leases;
 - pre-publication renewal requires both the exact token and a still-live persisted lease, so expired owners cannot resurrect ownership;
 - Kafka acknowledgement happens outside a JDBC transaction;
-- success/failure metadata is written afterward;
+- success/failure metadata is written afterward; ordinary failure metadata requires the same exact-token lease to still be live, so an expired former owner cannot postpone immediate reclaim with a new retry timestamp;
 - lifecycle interruption escapes instead of becoming ordinary retry metadata and stops the current dispatcher batch;
 - a post-ack marker failure may republish the same stable event ID and payload.
 

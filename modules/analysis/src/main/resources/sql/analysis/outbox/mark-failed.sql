@@ -4,4 +4,5 @@ UPDATE analysis.event_outbox
        last_error = :failureMessage
  WHERE event_id = :eventId
    AND lease_token = :leaseToken
+   AND lease_expires_at > :failedAt
    AND published_at IS NULL

@@ -9,6 +9,9 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-09-21 — Reworked the root README as a human-friendly project entry point and added an end-to-end explanation of Kafka/PostgreSQL reliability, leases, transactional outbox delivery, idempotency, DLQ recovery, and lifecycle cancellation.
+- 2026-09-21 — Added verification-pending Analysis outbox failure-state lease fencing so an unsuccessful Kafka send that outlives its renewed lease cannot let the expired former owner write retry metadata and postpone immediate recovery.
+- 2026-09-21 — Accepted Analysis outbox expired-lease fencing after the developer confirmed all relevant tests and validations passed; pre-publication renewal now requires both the exact token and a still-live persisted lease.
 - 2026-09-21 — Added verification-pending Analysis outbox expired-lease fencing so pre-publication renewal requires both the exact token and a still-live persisted lease before Kafka send.
 - 2026-09-21 — Accepted source-fetch worker interruption propagation after the developer confirmed all relevant tests and validations passed; the remaining background-worker/executor lifecycle review found no additional material defect, so Review II is closed.
 - 2026-09-21 — Added verification-pending source-fetch worker interruption propagation so Collection executor shutdown cancellation reaches run-level coordination even when only a worker virtual thread is interrupted.

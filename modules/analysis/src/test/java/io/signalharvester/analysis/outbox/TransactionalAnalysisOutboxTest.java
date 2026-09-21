@@ -133,7 +133,8 @@ class TransactionalAnalysisOutboxTest {
         }
 
         @Override
-        public void markFailed(String eventId, UUID leaseToken, Instant nextAttemptAt, String failureMessage) {
+        public void markFailed(
+                String eventId, UUID leaseToken, Instant failedAt, Instant nextAttemptAt, String failureMessage) {
             throw new UnsupportedOperationException();
         }
     }
