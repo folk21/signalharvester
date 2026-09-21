@@ -46,9 +46,11 @@ SignalHarvester uses standard reliability patterns for event-driven systems: at-
 
 ### Kafka delivery is intentionally at-least-once
 
-Kafka consumers use synchronous per-record framework commits after the owning module reaches a durable terminal outcome. If a record is delivered again after a commit or process failure, module-level deduplication and idempotent persistence keep repeated processing safe.
+Kafka consumers use synchronous per-record framework commits. A source offset becomes eligible for commit only after the module has reached a durable terminal outcome: for example, Analysis has committed its database transaction, Results has durably projected the event, or an acknowledged dead-letter record has been published.
 
-Application retries are bounded. Poison or exhausted records are published to versioned dead-letter events, and operator-controlled replay sends the original payload back through the owning module's normal application path.
+If the framework cannot commit the offset after the application work succeeded, the source record may be delivered again. This is expected. Analysis deduplication, Results projection keys, and Event Observation event identity are designed so repeated delivery does not corrupt durable state.
+
+Application retries are bounded and owned by the module. Deterministic poison records are sent to a versioned dead-letter event instead of being retried forever. If DLQ publication itself fails, the listener fails rather than pretending the source record completed successfully. Operator-controlled replay reads the original payload from the DLQ and sends it back through the owning module's normal application path without rewriting Kafka consumer offsets.
 
 ### Database changes and Kafka publication use a transactional outbox
 
