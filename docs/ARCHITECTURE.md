@@ -133,6 +133,7 @@ Terminal Analysis publication uses a module-owned transactional outbox:
 - dispatch claims use short expiring PostgreSQL leases;
 - Kafka acknowledgement happens outside a JDBC transaction;
 - success/failure metadata is written afterward;
+- lifecycle interruption escapes instead of becoming ordinary retry metadata and stops the current dispatcher batch;
 - a post-ack marker failure may republish the same stable event ID and payload.
 
 Downstream consumers therefore remain idempotent. The design does not claim distributed exactly-once transactions.
@@ -205,12 +206,14 @@ Failure handling is deterministic:
 
 - decode, key, and mapping failures go directly to the owning consumer's DLQ;
 - application failures retry within a small configured bound;
-- an interrupted listener thread escapes application retry/DLQ classification and remains eligible for redelivery;
+- an interrupted listener thread escapes application retry/DLQ classification while preserving the interrupt flag;
+- any exception that escapes a listener rewinds every partition represented by the failed Kafka poll to its first polled offset before normal consumption resumes;
+- failed-poll rewind may deliberately duplicate records already completed earlier in that poll, which module idempotency must absorb;
 - retry exhaustion produces a deterministic dead-letter identity and preserves the original key/payload, source position, consumer identity, failure details, attempt count, and retryability classification.
 
 A listener returns normally only after durable application processing succeeds or acknowledged owner-specific DLQ publication completes. Micronaut then commits that completed record synchronously. Offset-commit mechanics do not re-enter SignalHarvester application retry or DLQ classification.
 
-If DLQ publication fails, the listener throws before successful completion and normal Kafka redelivery remains the recovery path. A framework-level commit failure may likewise cause later at-least-once redelivery, which module idempotency must absorb.
+If DLQ publication fails, the listener throws before successful completion and failed-poll rewind keeps uninvoked records from that poll eligible for at-least-once processing. A framework-level commit failure after normal listener completion may likewise cause later at-least-once redelivery.
 
 Automatic/bulk DLQ replay is deliberately absent. The accepted controlled recovery boundary addresses one real owner-specific DLQ position at a time, validates dead-letter identity plus consumer/group/topic ownership, and reuses the owning module's normal decoder/application path. It does not republish shared source topics or rewrite consumer offsets.
 

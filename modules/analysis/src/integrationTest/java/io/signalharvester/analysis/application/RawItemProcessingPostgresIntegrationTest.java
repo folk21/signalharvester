@@ -54,7 +54,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * deduplication rollback when transactional outbox staging fails.
  *
  * <p>Related specifications: {@code backend-analysis-normalization-deduplication},
- * {@code backend-db-kafka-consistency}, and {@code backend-analysis-outbox-lease-renewal}.</p>
+ * {@code backend-db-kafka-consistency}, {@code backend-analysis-outbox-lease-renewal}, and
+ * {@code backend-analysis-outbox-interruption-fencing}.</p>
  *
  * <p>Features: {@code ANALYSIS.DEDUPLICATION}, {@code ANALYSIS.CLASSIFICATION}, {@code ANALYSIS.OUTBOX}.</p>
  */
@@ -343,6 +344,36 @@ class RawItemProcessingPostgresIntegrationTest {
         assertTrue(retriedPayload.get().length > 0);
     }
 
+    /** Stop the current outbox batch when lifecycle interruption escapes synchronous Kafka publication. */
+    @Test
+    void shouldStopOutboxBatchWhenPublicationIsInterrupted() throws Exception {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        service.process(rawItem(RAW_ITEM_2, SOURCE_EVENT_2, "Java Kafka"));
+        AtomicInteger sends = new AtomicInteger();
+        AnalysisKafkaClient client = (topic, key, payload) -> {
+            sends.incrementAndGet();
+            throw new IllegalStateException(
+                    "Kafka acknowledgement wait interrupted",
+                    new InterruptedException("application shutdown"));
+        };
+
+        try {
+            IllegalStateException failure = assertThrows(
+                    IllegalStateException.class,
+                    () -> dispatcher(client, Instant.parse("2026-09-15T12:05:00Z")).dispatchAvailable());
+
+            assertTrue(failure.getMessage().contains("Interrupted while publishing Analysis outbox event"));
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertEquals(1, sends.get());
+            assertEquals(0, outboxPublishedCount());
+            assertEquals(0, outboxFailureCount());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
     /** Republish identical event bytes when Kafka acknowledges before the published marker can be persisted. */
     @Test
     void shouldRepublishSameBytesAfterPublishedMarkerFailure() throws Exception {
@@ -511,6 +542,13 @@ class RawItemProcessingPostgresIntegrationTest {
 
     private int outboxPublicationAttempts() throws Exception {
         return outboxScalar("SELECT publication_attempts FROM analysis.event_outbox", Integer.class);
+    }
+
+    private int outboxFailureCount() throws Exception {
+        return outboxScalar(
+                        "SELECT COUNT(*) FROM analysis.event_outbox WHERE last_error IS NOT NULL",
+                        Long.class)
+                .intValue();
     }
 
     private String outboxLastError() throws Exception {

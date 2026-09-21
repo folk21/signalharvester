@@ -187,6 +187,7 @@ Failure behavior is explicit:
 - transport, key, and mapping failures are dead-lettered immediately;
 - application failures use bounded retry;
 - listener-thread interruption escapes before retry exhaustion/DLQ classification and preserves the interrupt status;
+- any escaped listener failure rewinds every partition from the failed Kafka poll to its first polled offset before normal consumption resumes; duplicate replay is absorbed by Analysis idempotency;
 - retry exhaustion publishes the original input plus deterministic source-position dead-letter identity and failure metadata as `failure/v1/DeadLetterEvent`;
 - normal listener completion occurs only after the Analysis PostgreSQL transaction or acknowledged Analysis DLQ publication succeeds;
 - Micronaut synchronously commits the completed record afterward;
@@ -207,7 +208,8 @@ Successful application processing means that two pieces of state commit atomical
 - renews each row's exact-token lease immediately before its Kafka send so time spent behind earlier batch entries cannot expire ownership before publication begins;
 - skips publication when exact-token renewal no longer succeeds because another replica owns the row;
 - publishes stored bytes to Kafka outside a database transaction;
-- records success or retry state in a second short transaction.
+- treats worker interruption as lifecycle cancellation, restoring/preserving the interrupt flag and stopping the current claimed batch before ordinary failure classification;
+- records success or retry state in a second short transaction for non-interruption failures.
 
 Multiple replicas coordinate through `FOR UPDATE SKIP LOCKED`, exact-token pre-publication renewal, and lease expiry. Renewal is committed before Kafka I/O, so no JDBC transaction or PostgreSQL row lock is held while waiting for broker acknowledgement.
 
@@ -238,6 +240,7 @@ The Results listener uses Micronaut Kafka `SYNC_PER_RECORD`:
 - deterministic transport, key, and mapping failures go directly to the Results DLQ;
 - projection failures retry within the configured bound;
 - listener-thread interruption escapes before terminal DLQ classification and preserves the interrupt status;
+- any escaped listener failure rewinds every partition from the failed Kafka poll to its first polled offset before normal consumption resumes; repeated projection is absorbed by Results idempotency;
 - the listener returns normally only after the Results transaction completes or terminal `DeadLetterEvent` publication is acknowledged;
 - Micronaut performs the synchronous per-record offset commit after that successful listener completion.
 
@@ -281,6 +284,7 @@ The listener applies the same bounded retry/dead-letter split and Micronaut `SYN
 - deterministic decode, key, and mapping failures are terminal immediately;
 - recording failures retry;
 - listener-thread interruption escapes before terminal DLQ classification and preserves the interrupt status;
+- any escaped listener failure rewinds every partition from the failed Kafka poll to its first polled offset before normal consumption resumes; repeated observation is absorbed by event-id idempotency;
 - the listener completes normally only after recording or acknowledged DLQ publication;
 - Micronaut synchronously commits the completed source record afterward;
 - DLQ publication failure escapes before successful completion, and framework commit failures remain outside Event Observation application retry/DLQ classification.

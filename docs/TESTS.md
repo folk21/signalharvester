@@ -241,7 +241,8 @@ The Analysis module verifies:
 
 - atomic claim/outbox persistence;
 - rollback when outbox staging fails;
-- lease-driven outbox publication retry state.
+- lease-driven outbox publication retry state;
+- dispatcher interruption fencing so a wrapped interruption stops the current batch without ordinary retry metadata.
 
 Listener tests verify bounded input retry and terminal DLQ behavior. Recovery controller tests verify the ADMIN HTTP boundary and expected error mapping, while Kafka-backed integration coverage exercises real owner-specific DLQ reads, ownership validation, replay, and bounded recovery concurrency. Results integration coverage also proves that a poison record can be dead-lettered while a following record on the same partition still reaches PostgreSQL.
 

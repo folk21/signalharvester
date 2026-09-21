@@ -7,6 +7,11 @@ description: Notable project changes organized by release state, with each chang
 
 ## Unreleased
 
+- 2026-09-20 — Added verification-pending Analysis outbox interruption fencing so lifecycle cancellation escapes ordinary publication-failure classification and stops later rows in the current claimed batch.
+- 2026-09-20 — Accepted Kafka failed-poll rewind after the developer confirmed all relevant tests and validations passed; the remaining Kafka consumer lifecycle review found no additional material correctness defect requiring shutdown/rebalance or `max.poll.interval` tuning.
+- 2026-09-20 — Added verification-pending Kafka failed-poll rewind so escaped Analysis, Results, and Event Observation listener failures rewind every partition from the current poll before normal consumption can continue.
+- 2026-09-20 — Accepted Kafka listener interruption fencing after the developer confirmed all relevant tests and validations passed; interrupted processing now remains outside retry exhaustion and terminal DLQ classification.
+
 - 2026-09-20 — Added verification-pending Kafka listener interruption fencing so Analysis, Results, and Event Observation propagate interrupted processing without retry exhaustion or terminal DLQ classification, including zero-backoff paths.
 - 2026-09-20 — Accepted scheduler expired-lease fencing after developer verification confirmed stale owners cannot renew or complete after `lease_until` and overdue work remains reclaimable.
 - 2026-09-20 — Accepted module-contract discoverability hardening after the developer confirmed all relevant repository tests and validations passed; normalized module contracts and current-state navigation now provide the minimum sufficient authoritative context without duplicating implementation inventories.
