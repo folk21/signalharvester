@@ -13,9 +13,9 @@ The project is intentionally domain-neutral. Typical monitoring scenarios includ
 - news and topic-oriented information;
 - financial, company, regulatory, and public-market data.
 
-SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is deliberately organized around explicit specifications, small implementation slices, contract-first module boundaries, repeatable verification, and post-implementation reliability review. The goal is not only to build the application, but also to test how these development practices work on a realistic distributed system as it grows.
+SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.
 
-The backend starts as a **modular monolith**: one Micronaut application assembled from cohesive Gradle modules. Modules have clear ownership and communicate through explicit Java APIs or published event contracts. Kafka, PostgreSQL, Kubernetes, tracing, metrics, and logs are treated as real system components without forcing every module to become a separately deployed service.
+The backend starts as a **modular monolith**: one Micronaut application assembled from cohesive Gradle modules. Modules own complete capabilities and communicate through explicit Java APIs or published event contracts. They can be split further when scaling, isolation, ownership, or deployment needs justify it.
 
 ## How data moves through the system
 
@@ -32,35 +32,29 @@ flowchart TB
     OBS --> API
 ```
 
-The main boundaries are intentionally simple:
+The main boundaries are:
 
-- **Java interfaces** are used for synchronous calls between backend modules in the same JVM.
-- **Kafka + Protocol Buffers** are used for asynchronous processing stages.
-- **REST + JSON** are used by the frontend, tools, and external clients.
-- **SSE + JSON** provide live browser updates.
-- **PostgreSQL** stores authoritative application state owned by individual modules.
-
-The browser never connects directly to Kafka or PostgreSQL.
+- **Java interfaces** for synchronous calls between backend modules in the same JVM;
+- **Kafka + Protocol Buffers** for asynchronous processing stages;
+- **REST + JSON** for frontend, tooling, and external clients;
+- **SSE + JSON** for live updates;
+- **PostgreSQL** for durable application state owned by individual modules.
 
 ## How reliability works
 
-SignalHarvester does not try to hide distributed-system failure behind an unrealistic "exactly once everywhere" claim. The reliability model is based on explicit ownership, durable state, bounded retries, idempotency, and safe replay.
+SignalHarvester uses standard reliability patterns for event-driven systems: at-least-once delivery, bounded retries, dead-letter handling, transactional outbox, idempotent processing, lease-based ownership, and safe replay. The implementation favors explicit durable state and recovery boundaries over hidden runtime assumptions.
 
 ### Kafka delivery is intentionally at-least-once
 
-Kafka consumers use synchronous per-record framework commits. A source offset becomes eligible for commit only after the module has reached a durable terminal outcome: for example, Analysis has committed its database transaction, Results has durably projected the event, or an acknowledged dead-letter record has been published.
+Kafka consumers use synchronous per-record framework commits after the owning module reaches a durable terminal outcome. If a record is delivered again after a commit or process failure, module-level deduplication and idempotent persistence keep repeated processing safe.
 
-If the framework cannot commit the offset after the application work succeeded, the source record may be delivered again. This is expected. Analysis deduplication, Results projection keys, and Event Observation event identity are designed so repeated delivery does not corrupt durable state.
+Application retries are bounded. Poison or exhausted records are published to versioned dead-letter events, and operator-controlled replay sends the original payload back through the owning module's normal application path.
 
-Application retries are bounded and owned by the module. Deterministic poison records are sent to a versioned dead-letter event instead of being retried forever. If DLQ publication itself fails, the listener fails rather than pretending the source record completed successfully. Operator-controlled replay reads the original payload from the DLQ and sends it back through the owning module's normal application path without rewriting Kafka consumer offsets.
+### Database changes and Kafka publication use a transactional outbox
 
-### Database changes and Kafka publication are separated safely
+Analysis uses a **transactional outbox** to coordinate PostgreSQL state changes with terminal Kafka publication without holding a database transaction across broker I/O. Outbox records keep a stable event identity, and downstream consumers are designed for safe retry and replay.
 
-Analysis must update PostgreSQL and publish terminal Kafka events, but there is no distributed transaction spanning PostgreSQL and Kafka. SignalHarvester therefore uses a **transactional outbox**.
-
-The Analysis transaction stores both the authoritative Analysis state and the exact serialized event that must later be published. Only after that transaction commits does a background dispatcher publish the stored bytes to Kafka. This removes the dangerous window where database state could commit while the event describing it is lost.
-
-Kafka acknowledgement and the later `published_at` marker are still two separate durable actions. A crash between them can therefore publish the same stable event again. That is deliberate at-least-once behavior: the event id, key, topic, and payload remain stable, and downstream consumers are expected to be idempotent.
+Detailed outbox invariants and failure semantics are documented in the Analysis contract and the architecture/implementation documentation.
 
 ### Leases coordinate multiple backend replicas
 
@@ -86,13 +80,13 @@ Each functional module owns its schema and migrations. Modules do not reach into
 
 Where duplicate execution is possible, durable identities, unique constraints, processed-event state, or exact-token lease checks provide the recovery fence. The system prefers repeatable work that is safe to replay over fragile assumptions that a network or process cannot fail at a particular instant.
 
-For the detailed invariants, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md), and the owning module `contract.md` files.
+For detailed invariants, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md), and the owning module `contract.md` files.
 
 ## Companion web application
 
 The frontend lives in the separate **`signalharvester-web`** repository.
 
-This repository owns the backend behavior and the REST/OpenAPI and SSE contracts used by the UI. Frontend implementation details and frontend specifications remain in the frontend repository.
+This repository owns backend behavior and the REST/OpenAPI and SSE contracts used by the UI. Frontend implementation details and frontend specifications remain in the frontend repository.
 
 Backend [`docs/INSTALLATION.md`](docs/INSTALLATION.md) and [`docs/USAGE.md`](docs/USAGE.md) cover backend and infrastructure workflows only.
 
@@ -144,7 +138,7 @@ signalharvester/
 
 ## What is implemented today
 
-The backend already covers the full core pipeline from configuration to collection, analysis, persistence, diagnostics, and live results.
+The backend covers the core pipeline from configuration and collection through analysis, persistence, diagnostics, and live results.
 
 ### Configuration and collection
 
@@ -183,7 +177,7 @@ The backend already covers the full core pipeline from configuration to collecti
 - Backend-owned Kubernetes deployment with PostgreSQL, Redpanda, Prometheus, Loki, Tempo, Grafana Alloy, kube-state-metrics, and Grafana.
 - Live resilience verification for restart, persistence outage, Kafka lag, retry/DLQ, outbox recovery, scheduler leases, authorization, telemetry, and one-to-three replica Kafka consumer scaling.
 
-The default host-run local profile remains an explicitly trusted unauthenticated compatibility mode. The `security` environment enables authentication/RBAC and the restrictive outbound-source policy.
+The default host-run local profile is an explicitly trusted unauthenticated compatibility mode. The `security` environment enables authentication/RBAC and the restrictive outbound-source policy.
 
 For detailed accepted state, use [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md). For current and upcoming work, use [`docs/ROADMAP.md`](docs/ROADMAP.md). Historical implementation slices belong in [`docs/specs/archive/`](docs/specs/archive/), not in this overview.
 
@@ -202,15 +196,29 @@ For local overrides:
 
 See [`infra/docker-compose/README.md`](infra/docker-compose/README.md) for details.
 
+## Code structure
+
+The backend follows a **functional modular-monolith** structure. Each module owns a capability end to end: its application logic, persistence, adapters, integration points, tests, and public boundary. The repository keeps decomposing capabilities into modules when that makes ownership or dependencies clearer, without splitting code mechanically or introducing service boundaries without a concrete reason.
+
+Every functional module has an authoritative `contract.md`. Cross-module synchronous Java APIs live in explicit `api` packages, while REST/OpenAPI and Kafka/Protobuf contracts live under `contracts/`. Private persistence and implementation packages stay module-local.
+
+These boundaries are useful both for normal development and for AI-assisted work. A module can often be understood from its contract and public API without loading its private implementation. This keeps model context focused on the relevant capability and reduces unrelated repository detail during analysis or implementation work.
+
+The small `common` module is reserved for genuinely generic, stable primitives that do not belong to a functional module. Shared code is moved there only when the boundary is clear and reuse is established.
+
 ## Documentation model
 
-Current-state documentation and active specifications serve different purposes:
+SignalHarvester documentation is organized to support a **Spec-Driven Development** workflow without turning specifications into a second copy of the implementation.
 
-- active specifications describe unresolved intended changes;
-- architecture, implementation, configuration, usage, testing, and quality documents describe accepted current state;
-- completed implementation specifications move to the archive.
+- Active specifications describe bounded intended changes and their acceptance criteria.
+- Accepted behavior belongs in current-state architecture, implementation, configuration, usage, testing, and module documentation.
+- Completed implementation specifications move to the archive and become historical context.
 
-Stable capability names live in [`docs/FEATURES.md`](docs/FEATURES.md). Development rules live in [`AGENTS.md`](AGENTS.md) and the nearest local `AGENTS.md`.
+Managed documentation uses **Open Knowledge Format (OKF)** metadata headers, represented as YAML frontmatter. Common fields such as `type`, `title`, and `description` make documents easier to identify and navigate; specifications add lifecycle metadata where needed.
+
+Stable capability identifiers are defined in [`docs/FEATURES.md`](docs/FEATURES.md). Feature IDs such as `ANALYSIS.OUTBOX` provide a shared vocabulary for cross-references between specifications, current-state documentation, tests, and important implementation entry points without coupling those references to class names or temporary implementation stages.
+
+Development rules live in [`AGENTS.md`](AGENTS.md) and the nearest local `AGENTS.md`. Specification lifecycle and structure are documented in [`docs/specs/README.md`](docs/specs/README.md).
 
 ## License
 
