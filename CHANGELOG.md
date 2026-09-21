@@ -9,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-09-21 — Added verification-pending source-fetch worker interruption propagation so Collection executor shutdown cancellation reaches run-level coordination even when only a worker virtual thread is interrupted.
+- 2026-09-21 — Accepted Collection Run interruption recovery after the developer confirmed all relevant tests and validations passed.
 - 2026-09-21 — Added verification-pending shared demand-driven polling lifecycle refactoring so Results and Event Observation reuse one JDK-only common concurrency primitive without moving cursor, SSE, or domain semantics into the shared kernel.
 - 2026-09-21 — Accepted SSE in-flight poll cancellation after the developer confirmed all relevant tests and validations passed.
 - 2026-09-21 — Added verification-pending SSE in-flight poll cancellation so Results and Event Observation client disconnects request interruption of active blocking poll work as well as cancelling future scheduled polls.

@@ -123,7 +123,7 @@ The generic HTTP path uses Micronaut-managed low-level absolute-URI requests wit
 
 Fetch completion is pipelined into terminal publication with backpressure. Only the bounded in-flight window may retain raw payload bodies. Final per-source results are reconstructed in configured-source order.
 
-Source-level fetch or publication failures are best-effort terminal outcomes and do not cancel unrelated source work. Lifecycle interruption is different: wrapped interruption during acknowledged raw-event publication aborts the Collection Run, preserves the worker interrupt signal, and stops later publication work rather than becoming `PUBLICATION_FAILED`.
+Source-level fetch or publication failures are best-effort terminal outcomes and do not cancel unrelated source work. Lifecycle interruption is different: wrapped interruption during acknowledged raw-event publication aborts the Collection Run, preserves the worker interrupt signal, and stops later publication work rather than becoming `PUBLICATION_FAILED`. If executor shutdown interrupts only a source-fetch worker virtual thread, `SourceFetchCoordinator` promotes that worker-local interruption to the coordinating thread before propagation so the same run/scheduler recovery boundary applies.
 
 Extraction behavior is source-type specific:
 

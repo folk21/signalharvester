@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded implementation focus is [`active/subspecs/backend-collection-run-interruption-recovery.md`](active/subspecs/backend-collection-run-interruption-recovery.md). The remaining background-worker/executor lifecycle review found that Collection can classify publication interruption as an ordinary source failure and that an interrupted scheduled run can still advance its next-due time. The bounded recovery fix is implemented and awaits verification.
+The current bounded implementation focus is [`active/subspecs/backend-source-fetch-worker-interruption-propagation.md`](active/subspecs/backend-source-fetch-worker-interruption-propagation.md). The remaining background-worker/executor lifecycle review found that executor shutdown can interrupt a Collection source-fetch worker virtual thread without directly interrupting the coordinator thread. The bounded propagation fix is implemented and awaits verification.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-collection-run-interruption-recovery.md`](active/subspecs/backend-collection-run-interruption-recovery.md) — propagate Collection lifecycle interruption as run-level cancellation and leave interrupted scheduled work to lease-expiry recovery.
+- [`active/subspecs/backend-source-fetch-worker-interruption-propagation.md`](active/subspecs/backend-source-fetch-worker-interruption-propagation.md) — propagate source-fetch worker lifecycle interruption through the coordinator so scheduled recovery preserves cancellation semantics.
 
 Active supporting tracks:
 
@@ -165,6 +165,7 @@ Active supporting tracks:
 
 Accepted on 2026-09-21:
 
+- [`archive/subspecs/backend-collection-run-interruption-recovery.md`](archive/subspecs/backend-collection-run-interruption-recovery.md) — Collection publication interruption aborts run-level work and interrupted scheduled runs leave next-due recovery to lease expiry; accepted after the developer confirmed all relevant tests and validations passed.
 - [`archive/subspecs/backend-shared-polling-lifecycle-refactoring.md`](archive/subspecs/backend-shared-polling-lifecycle-refactoring.md) — Results and Event Observation share one framework-neutral demand/poll/cancellation lifecycle primitive in `common`; accepted after the developer confirmed all relevant tests and validations passed.
 - [`archive/subspecs/backend-sse-inflight-poll-cancellation.md`](archive/subspecs/backend-sse-inflight-poll-cancellation.md) — active Results/Event Observation blocking SSE polls are interrupted on client cancellation; accepted after the developer confirmed all relevant tests and validations passed.
 - [`archive/subspecs/backend-analysis-outbox-interruption-fencing.md`](archive/subspecs/backend-analysis-outbox-interruption-fencing.md) — Analysis outbox lifecycle interruption stops the claimed batch before ordinary publication-failure classification; accepted after the developer confirmed all relevant tests and validations passed.

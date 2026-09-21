@@ -92,7 +92,7 @@ Thread cost does not remove the need for backpressure. Collection concurrency re
 A Collection Run uses best-effort source isolation:
 
 - ordinary failure of one source does not cancel unrelated source work;
-- lifecycle interruption is run-level cancellation rather than a source terminal outcome, so it stops later publication work and preserves the interrupt signal;
+- lifecycle interruption is run-level cancellation rather than a source terminal outcome, so it stops later publication work and preserves the interrupt signal; source-fetch worker interruption is propagated back to the coordinating thread instead of becoming an ordinary worker failure;
 - an interrupted already-started scheduled run does not advance `next_due_at`; its exact-token lease remains the recovery fence until normal expiry/reclaim;
 - the explicit Collection Run ID is the correlation ID for raw-item events from that run;
 - HTTP connect/read/request timeouts remain explicit;

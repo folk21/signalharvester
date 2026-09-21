@@ -4,13 +4,13 @@ title: Collection Run interruption recovery
 description: Keep Collection lifecycle interruption outside per-source publication failure classification and prevent interrupted scheduled runs from advancing their next-due time.
 document_role: subspec
 parent: ../spec-signal-harvester-platform.md
-spec_status: verification-pending
+spec_status: completed
 ---
 # Collection Run interruption recovery
 
 ## Status
 
-Implementation is complete and awaits developer verification.
+Completed and accepted after the developer confirmed all relevant tests and validations passed.
 
 The remaining background-worker/executor lifecycle review found a cancellation gap across Collection Run publication and scheduler completion. A lifecycle interrupt during acknowledged Kafka publication can be wrapped as `RawItemPublicationException` and classified as an ordinary per-source publication failure. A scheduled run that exits under lifecycle interruption is then still finalized through `ProfileScheduleCoordinator.complete(...)`, advancing `next_due_at` even though the local worker was cancelled.
 
