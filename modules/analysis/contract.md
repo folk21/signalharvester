@@ -80,6 +80,7 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 - deployment-global keyword rules are a compatibility fallback only for legacy raw events without a settings snapshot;
 - the raw Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic decode/key/mapping failures are dead-lettered without retry, while application failures use a bounded retry policy;
+- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification, preserves the interrupt flag, and leaves the source record eligible for normal redelivery;
 - normal listener completion occurs only after the Analysis state/outbox transaction commits or acknowledged Analysis dead-letter publication; Micronaut owns the synchronous per-record source-offset commit afterward;
 - DLQ publication failure must escape before successful listener completion, while framework commit failure remains outside Analysis application retry/DLQ classification and may result in at-least-once redelivery;
 - deduplication writes require an active application-owned database transaction and Jdbi adapters must not self-commit;

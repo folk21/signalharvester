@@ -117,6 +117,42 @@ class ProfileSchedulePostgresTest {
         }
     }
 
+    /** Reject renewal after lease expiry even when no successor has claimed the row yet. */
+    @Test
+    void shouldNotRenewExpiredLeaseBeforeSuccessorClaim() {
+        ProfileScheduleCoordinator first = firstContext.getBean(ProfileScheduleCoordinator.class);
+        ProfileScheduleCoordinator second = secondContext.getBean(ProfileScheduleCoordinator.class);
+        ConfiguredMonitoringProfile profile = profile(1);
+
+        assertTrue(first.claim(profile, START, LEASE_DURATION).isEmpty());
+        Instant due = START.plus(Duration.ofMinutes(1));
+        ProfileScheduleLease expiredLease = first.claim(profile, due, LEASE_DURATION).orElseThrow();
+        Instant afterExpiry = due.plus(LEASE_DURATION);
+
+        assertFalse(first.renew(expiredLease, afterExpiry, LEASE_DURATION),
+                "expired owner must not resurrect its lease before another replica claims it");
+        assertTrue(second.claim(profile, afterExpiry, LEASE_DURATION).isPresent(),
+                "expired due work must remain reclaimable after stale renewal is rejected");
+    }
+
+    /** Reject completion after lease expiry so stale work cannot advance the due schedule. */
+    @Test
+    void shouldNotCompleteExpiredLeaseBeforeSuccessorClaim() {
+        ProfileScheduleCoordinator first = firstContext.getBean(ProfileScheduleCoordinator.class);
+        ProfileScheduleCoordinator second = secondContext.getBean(ProfileScheduleCoordinator.class);
+        ConfiguredMonitoringProfile profile = profile(1);
+
+        assertTrue(first.claim(profile, START, LEASE_DURATION).isEmpty());
+        Instant due = START.plus(Duration.ofMinutes(1));
+        ProfileScheduleLease expiredLease = first.claim(profile, due, LEASE_DURATION).orElseThrow();
+        Instant afterExpiry = due.plus(LEASE_DURATION);
+
+        assertFalse(first.complete(expiredLease, afterExpiry),
+                "expired owner must not advance next_due_at before another replica claims the row");
+        assertTrue(second.claim(profile, afterExpiry, LEASE_DURATION).isPresent(),
+                "expired due work must remain reclaimable after stale completion is rejected");
+    }
+
     /** Release a claimed due schedule without advancing its next-due time. */
     @Test
     void shouldReleaseClaimWithoutAdvancingNextDueTime() {

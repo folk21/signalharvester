@@ -99,6 +99,7 @@ public class AnalysisOutcomeKafkaListener {
                 processing.run();
                 break;
             } catch (RuntimeException retryableFailure) {
+                propagateIfInterrupted(retryableFailure);
                 if (attempt >= reliabilityConfiguration.getMaxAttempts()) {
                     deadLetterPublisher.publish(
                             topic, partition, offset, key, payload, retryableFailure, attempt, true);
@@ -124,6 +125,7 @@ public class AnalysisOutcomeKafkaListener {
             int partition,
             String topic,
             RuntimeException failure) {
+        propagateIfInterrupted(failure);
         deadLetterPublisher.publish(topic, partition, offset, key, payload, failure, 1, false);
         logDeadLetter(topic, partition, offset, 1, failure);
     }
@@ -134,7 +136,16 @@ public class AnalysisOutcomeKafkaListener {
     }
 
 
+    private static void propagateIfInterrupted(RuntimeException failure) {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IllegalStateException("Interrupted while processing Results Kafka record", failure);
+        }
+    }
+
     private static void sleepBeforeRetry(Duration backoff) {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IllegalStateException("Interrupted while waiting to retry Results Kafka record");
+        }
         if (backoff.isZero()) {
             return;
         }

@@ -69,6 +69,7 @@ The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, Mic
 - Event Observation repositories execute only inside application-owned Micronaut transactions; Jdbi does not own business transaction boundaries;
 - the Event Observation Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic transport/key/mapping failures are dead-lettered without retry; recording failures use bounded retry;
+- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification, preserves the interrupt flag, and leaves the source record eligible for normal redelivery;
 - normal listener completion occurs only after the observation transaction succeeds or terminal Event Observation dead-letter publication is acknowledged; Micronaut owns the synchronous per-record source-offset commit afterward;
 - failed Event Observation DLQ publication must escape before successful listener completion, while framework commit failure remains outside recording retry/DLQ classification and may result in at-least-once redelivery;
 - retention is explicitly bounded by age and count;

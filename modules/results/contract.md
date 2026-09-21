@@ -83,6 +83,7 @@ Do not import Analysis implementation/application/persistence types or read the 
 - live delivery exposes current projections, not an append-only history, so multiple disconnected updates to one logical result may collapse to the latest projection;
 - the Results Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic transport/key/mapping failures are dead-lettered without retry; projection failures use bounded retry;
+- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification, preserves the interrupt flag, and leaves the source record eligible for normal redelivery;
 - normal listener completion occurs only after the Results transaction commits successfully or terminal Results dead-letter publication is acknowledged; Micronaut owns the synchronous per-record source-offset commit afterward;
 - a failed Results DLQ publication must escape before successful listener completion, while framework commit failure remains outside Results application retry/DLQ classification and may result in at-least-once redelivery;
 - exhausted projection failures become eligible for framework offset commit only after acknowledged Results dead-letter publication;

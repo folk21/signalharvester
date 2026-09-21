@@ -25,8 +25,9 @@ import org.junit.jupiter.api.Test;
  * Verifies {@link EventObservationKafkaListener} bounded retry and dead-letter handling without allowing
  * a failed diagnostic record to block its Kafka partition indefinitely.
  *
- * <p>Related specifications: {@code backend-reliability-failure-handling} and
- * {@code backend-kafka-offset-commit-failure-separation}.</p>
+ * <p>Related specifications: {@code backend-reliability-failure-handling},
+ * {@code backend-kafka-offset-commit-failure-separation}, and
+ * {@code backend-kafka-listener-interruption-fencing}.</p>
  *
  * <p>Features: {@code DIAGNOSTICS.EVENT_OBSERVATION}, {@code RELIABILITY.KAFKA_RETRY}, {@code RELIABILITY.DEAD_LETTER}.</p>
  */
@@ -91,6 +92,26 @@ class EventObservationKafkaListenerTest {
         assertThrows(IllegalStateException.class, () ->
                 listener.receiveRaw(RAW_ITEM_ID, rawEvent().toByteArray(), 7L, 2, TOPIC));
 
+    }
+
+    /** Propagate lifecycle interruption instead of classifying interrupted recording as a terminal DLQ failure. */
+    @Test
+    void shouldPropagateInterruptedRecordingWithoutDeadLettering() {
+        EventObservationRecorder recorder = event -> {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("recording interrupted");
+        };
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        EventObservationKafkaListener listener = listener(recorder, deadLetters, 1, Duration.ZERO);
+
+        try {
+            assertThrows(IllegalStateException.class, () ->
+                    listener.receiveRaw(RAW_ITEM_ID, rawEvent().toByteArray(), 7L, 2, TOPIC));
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertTrue(deadLetters.failures.isEmpty());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     /** Reject retry backoff that exceeds the bounded listener policy. */

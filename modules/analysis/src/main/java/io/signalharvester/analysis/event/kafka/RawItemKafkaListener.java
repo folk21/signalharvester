@@ -65,6 +65,7 @@ public class RawItemKafkaListener {
         try {
             rawItem = decoder.decode(key, payload);
         } catch (RuntimeException permanentFailure) {
+            propagateIfInterrupted(permanentFailure);
             deadLetterPublisher.publish(
                     topic, partition, offset, key, payload, permanentFailure, 1, false);
             logDeadLetter(topic, partition, offset, 1, permanentFailure);
@@ -78,6 +79,7 @@ public class RawItemKafkaListener {
                 processor.process(rawItem);
                 break;
             } catch (RuntimeException retryableFailure) {
+                propagateIfInterrupted(retryableFailure);
                 if (attempt >= reliabilityConfiguration.getMaxAttempts()) {
                     deadLetterPublisher.publish(
                             topic, partition, offset, key, payload, retryableFailure, attempt, true);
@@ -97,7 +99,16 @@ public class RawItemKafkaListener {
     }
 
 
+    private static void propagateIfInterrupted(RuntimeException failure) {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IllegalStateException("Interrupted while processing Analysis Kafka record", failure);
+        }
+    }
+
     private static void sleepBeforeRetry(Duration backoff) {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IllegalStateException("Interrupted while waiting to retry Analysis Kafka record");
+        }
         if (backoff.isZero()) {
             return;
         }

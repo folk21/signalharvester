@@ -27,8 +27,9 @@ import org.junit.jupiter.api.Test;
  * Verifies {@link RawItemKafkaListener} bounded retry, poison-record dead-letter handling, and synchronous per-record
  * offset strategy after successful processing or acknowledged DLQ publication.
  *
- * <p>Related specifications: {@code backend-reliability-failure-handling} and
- * {@code backend-kafka-offset-commit-failure-separation}.</p>
+ * <p>Related specifications: {@code backend-reliability-failure-handling},
+ * {@code backend-kafka-offset-commit-failure-separation}, and
+ * {@code backend-kafka-listener-interruption-fencing}.</p>
  *
  * <p>Features: {@code RELIABILITY.KAFKA_RETRY}, {@code RELIABILITY.DEAD_LETTER}, {@code ANALYSIS.CLASSIFICATION}.</p>
  */
@@ -171,6 +172,25 @@ class RawItemKafkaListenerTest {
         assertThrows(IllegalStateException.class, () ->
                 listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC));
 
+    }
+
+    /** Propagate lifecycle interruption instead of classifying interrupted processing as a terminal DLQ failure. */
+    @Test
+    void shouldPropagateInterruptedProcessingWithoutDeadLettering() {
+        RecordingDeadLetterPublisher deadLetters = new RecordingDeadLetterPublisher();
+        RawItemKafkaListener listener = listener(rawItem -> {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("processing interrupted");
+        }, deadLetters, 1, Duration.ZERO);
+
+        try {
+            assertThrows(IllegalStateException.class, () ->
+                    listener.receive(RAW_ITEM_ID, event().toByteArray(), 7L, 2, TOPIC));
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertTrue(deadLetters.failures.isEmpty());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     /** Reject retry backoff that exceeds the bounded listener policy. */

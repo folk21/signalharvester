@@ -32,6 +32,8 @@ Analysis outbox pre-publication lease renewal is accepted after focused Analysis
 
 Kafka offset-commit failure separation is accepted after the corrected Micronaut `SYNC_PER_RECORD` implementation passed focused listener verification, `HttpPipelineSmokeIntegrationTest`, and the canonical repository gate. Analysis, Results, and Event Observation keep application retry/DLQ handling inside their listeners while framework-owned per-record commit remains outside those application failure domains.
 
+Scheduler expired-lease fencing is accepted after the developer confirmed all relevant tests and validations passed. Renewal and completion now require both the exact token and a still-live persisted lease, so a stalled former owner cannot resurrect or consume overdue scheduled work after `lease_until`.
+
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
 ## P0 — repository and contract foundation
@@ -78,9 +80,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Resume the systematic backend lifecycle/reliability review across remaining Kafka shutdown/rebalance paths, background workers, executor rejection, durable ownership, and resource cleanup.
-2. Create a bounded sub-specification only when that review identifies a concrete material change requiring explicit semantics and acceptance criteria.
-3. If no material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement. Additional scheduling refinements or KEDA remain deferred until a product/operational requirement justifies them.
+1. Verify and accept `backend-kafka-listener-interruption-fencing`: interrupted Analysis, Results, and Event Observation work must escape before retry exhaustion or terminal DLQ classification.
+2. After acceptance, continue the Kafka consumer lifecycle review around rebalance/shutdown timing and `max.poll.interval` behavior; do not change production code without another concrete defect.
+3. Then resume the remaining background-worker/executor and durable-ownership review. If no further material backend defect is found, keep the verified backend/OpenAPI baseline stable and continue with the next concrete product or companion-frontend requirement.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 
