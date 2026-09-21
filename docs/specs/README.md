@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded implementation focus is [`active/subspecs/backend-analysis-outbox-interruption-fencing.md`](active/subspecs/backend-analysis-outbox-interruption-fencing.md). The background-worker lifecycle review identified a material cancellation-classification defect: interrupted Analysis outbox publication could otherwise be recorded as an ordinary failure and allow later rows from the same claimed batch to continue. The bounded fix is implemented and awaits verification.
+The current bounded implementation focus is [`active/subspecs/backend-shared-polling-lifecycle-refactoring.md`](active/subspecs/backend-shared-polling-lifecycle-refactoring.md). After SSE in-flight cancellation was accepted, a focused duplication review identified stable demand/scheduling/cancellation lifecycle duplicated by Results and Event Observation. The bounded framework-neutral common extraction is implemented and awaits verification.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-analysis-outbox-interruption-fencing.md`](active/subspecs/backend-analysis-outbox-interruption-fencing.md) — stop Analysis outbox dispatch on lifecycle interruption without writing ordinary failure metadata or continuing the claimed batch.
+- [`active/subspecs/backend-shared-polling-lifecycle-refactoring.md`](active/subspecs/backend-shared-polling-lifecycle-refactoring.md) — share generic demand, delayed scheduling, and cancellable blocking-poll lifecycle without centralizing module-owned SSE semantics.
 
 Active supporting tracks:
 
@@ -162,6 +162,11 @@ Active supporting tracks:
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
 
 ## Recently completed sub-specifications
+
+Accepted on 2026-09-21:
+
+- [`archive/subspecs/backend-sse-inflight-poll-cancellation.md`](archive/subspecs/backend-sse-inflight-poll-cancellation.md) — active Results/Event Observation blocking SSE polls are interrupted on client cancellation; accepted after the developer confirmed all relevant tests and validations passed.
+- [`archive/subspecs/backend-analysis-outbox-interruption-fencing.md`](archive/subspecs/backend-analysis-outbox-interruption-fencing.md) — Analysis outbox lifecycle interruption stops the claimed batch before ordinary publication-failure classification; accepted after the developer confirmed all relevant tests and validations passed.
 
 Accepted on 2026-09-20:
 

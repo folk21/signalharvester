@@ -54,6 +54,8 @@ Internal implementation packages and private database tables are never cross-mod
 
 Each module root also contains a concise `contract.md`. It indexes the module's Java, OpenAPI, and event surfaces plus ownership, dependency rules, and invariants. It does not duplicate source signatures.
 
+The constrained `common` shared kernel may contain only stable JDK-level primitives/utilities with real cross-module reuse. It does not own functional-module contracts or business semantics; shared polling lifecycle is limited to generic demand, scheduling, and cancellation mechanics while owning modules retain cursor, query, and transport behavior.
+
 ## Communication boundaries
 
 Use the transport that matches the boundary:
@@ -223,7 +225,7 @@ Micronaut Netty event-loop threads must not run blocking application work.
 
 REST controllers that invoke database work, blocking HTTP, or other imperative blocking workflows use `@ExecuteOn(TaskExecutors.BLOCKING)` or an equivalent explicit blocking boundary. On Java 21 this uses Virtual Threads.
 
-True streaming endpoints such as SSE keep their `Publisher`/reactive execution model. Do not move them to blocking execution mechanically.
+True streaming endpoints such as SSE keep their `Publisher`/reactive execution model. Do not move them to blocking execution mechanically. When a stream offloads bounded blocking polling, subscription cancellation should release future scheduled work and request cancellation of the active poll task when a cancellable executor handle is available.
 
 Expected application/domain failures are translated through Micronaut `ExceptionHandler` implementations at the HTTP boundary. Avoid repeated controller-local `try/catch` translation.
 

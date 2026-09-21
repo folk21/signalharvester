@@ -7,10 +7,13 @@ description: Entry point for the modular event-driven backend, its architecture,
 
 SignalHarvester is a modular event-driven backend for collecting, analyzing, and presenting information from configurable external sources.
 
-The first product focus is:
+The initial product focus is configurable data-source monitoring across domains such as:
 
-- job-vacancy monitoring;
-- selected information-topic monitoring.
+- scientific data and publications;
+- news and topic-oriented information;
+- financial data and public market information.
+
+SignalHarvester is also a practical engineering project for studying and applying AI-assisted development and Spec-Driven Development. Its repository intentionally exercises explicit specifications, contract-first boundaries, iterative verification, reliability analysis, and repository-driven development workflows.
 
 The backend is **modular monolith first**. One Micronaut application is assembled from cohesive Gradle modules with explicit Java and event contracts.
 

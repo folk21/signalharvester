@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-analysis-outbox-interruption-fencing.md
+current_focus: subspecs/backend-shared-polling-lifecycle-refactoring.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +26,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, and `backend-kafka-listener-failed-poll-rewind` are accepted after their relevant repository tests and validations passed. The remaining Kafka consumer lifecycle review found no additional material defect in rebalance/shutdown or `max.poll.interval` correctness semantics. The current bounded focus is `backend-analysis-outbox-interruption-fencing`, identified by the background-worker lifecycle review after it found that dispatcher interruption could otherwise be classified as an ordinary publication failure and allow the current outbox batch to continue.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, and `backend-sse-inflight-poll-cancellation` are accepted after their relevant repository tests and validations passed. The remaining Kafka consumer lifecycle review found no additional material defect in rebalance/shutdown or `max.poll.interval` correctness semantics. The current bounded focus is `backend-shared-polling-lifecycle-refactoring`, which extracts stable demand/scheduling/cancellation mechanics duplicated by the two accepted SSE implementations while keeping module-owned cursor, query, and transport semantics local.
 
 Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
 
@@ -38,7 +38,7 @@ Deliver an observable event-driven information collection and analysis platform 
 
 - let a user define what information should be collected and from which external sources;
 - periodically query configured external sources without requiring code changes for every newly added compatible source;
-- collect at least job vacancies and topic-oriented information such as technology news or articles;
+- collect configurable external information such as scientific data, news/topic information, and financial data;
 - move collected items through an asynchronous processing pipeline;
 - normalize, deduplicate, analyze, score, classify, and persist collected information;
 - present newly discovered and analyzed information in a browser UI that updates automatically without manual page refresh;
@@ -48,27 +48,28 @@ Deliver an observable event-driven information collection and analysis platform 
 - provide production-style technical observability through metrics, logs, distributed traces, and health information;
 - run locally in Kubernetes as a realistic distributed-system learning environment.
 
-The project is intentionally both a useful application and a learning platform for Java concurrency, Kafka, PostgreSQL, Kubernetes, event-driven design, reliability patterns, and observability.
+The project is intentionally both a useful application and a learning platform for Java concurrency, Kafka, PostgreSQL, Kubernetes, event-driven design, reliability patterns, observability, AI-assisted development, and Spec-Driven Development.
 
 ## Product concept
 
 SignalHarvester collects external information according to user-defined monitoring profiles.
 
-A monitoring profile describes a topic of interest, for example:
+A monitoring profile describes a topic or data stream of interest, for example:
 
-- `Senior Java Backend jobs`;
-- `Kotlin backend jobs`;
-- `AI-assisted software development`;
-- `Java platform and JVM developments`.
+- `Recent climate-research publications`;
+- `AI-assisted software development news`;
+- `Central-bank policy announcements`;
+- `Public-company earnings releases`.
 
 A profile references one or more configured sources and defines collection frequency and optional search, filtering, and analysis rules.
 
-The initial product supports two primary information categories:
+The initial product demonstrates configurable monitoring across representative information domains such as:
 
-1. **Job vacancies** — structured or semi-structured job opportunities collected from configured external sources.
-2. **Topic information** — news, articles, posts, release notes, or other externally published information relevant to configured topics.
+1. **Scientific information** — publications, datasets, announcements, or other research-oriented material exposed by configured sources.
+2. **News and topic information** — news, articles, posts, release notes, or other externally published information relevant to configured topics.
+3. **Financial information** — market, company, regulatory, or other finance-oriented data exposed by configured sources.
 
-The internal processing model should remain sufficiently generic to support additional information categories later without redesigning the entire pipeline.
+These are representative examples rather than hardcoded domain limits. The internal processing model must remain generic enough to support additional information categories without redesigning the pipeline.
 
 ## System context
 
@@ -247,8 +248,8 @@ Collection adapters must isolate external protocol, parsing, and source-specific
 
 The initial implementation must support at least:
 
-- one real external job-vacancy source;
-- one real external topic-information source.
+- one real structured or semi-structured external data source;
+- one real external topic/news information source.
 
 Synthetic sources may be used for deterministic tests and demonstrations but do not satisfy this requirement by themselves.
 
@@ -380,25 +381,16 @@ Feature: `RESULTS.BROWSING`.
 
 The web application must let the user browse and inspect collected results.
 
-For job vacancies, the initial view should expose at least:
+For monitored external information, the initial view should expose at least:
 
-- title;
-- organization when available;
-- location or remote status when available;
-- source;
-- discovery/publication time when available;
-- relevant extracted tags or technologies;
-- analysis score or classification when configured;
-- link to the original source.
-
-For topic information, the initial view should expose at least:
-
-- title;
+- title or primary label;
 - source;
 - publication/discovery time when available;
 - summary or extracted description when available;
+- relevant category-specific attributes when available;
+- extracted tags or topics when available;
 - analysis score or classification when configured;
-- link to the original source.
+- link to the original source when available.
 
 ### R16 — live technical event explorer
 
@@ -691,15 +683,15 @@ Detailed React routing, layout, presentation, and component behavior belong to t
 
 ## Scenarios
 
-### S1 — configure and collect Java backend vacancies
+### S1 — configure and collect scientific data
 
-A user creates a monitoring profile named `Java Backend Jobs`, enables several configured vacancy sources, sets a collection interval, and enables the profile.
+A user creates a monitoring profile named `Recent Climate Research`, enables several configured scientific-data sources, sets a collection interval, and enables the profile.
 
 At the next due time the system creates a collection run and queries the enabled sources.
 
-It emits discovered items into Kafka-backed processing, removes duplicates, analyzes the remaining vacancies, stores accepted results, and pushes newly available results to the open browser feed.
+It emits discovered items into Kafka-backed processing, removes duplicates, analyzes the remaining items, stores accepted results, and pushes newly available results to the open browser feed.
 
-The user sees the new vacancies without refreshing the page.
+The user sees the newly collected information without refreshing the page.
 
 ### S2 — add a compatible source without deployment
 
@@ -719,7 +711,7 @@ It deduplicates previously seen entries, applies configured topic analysis, stor
 
 ### S4 — inspect one item's event path
 
-The user opens a newly collected vacancy and selects its technical processing view.
+The user opens a newly collected item and selects its technical processing view.
 
 The UI reconstructs the item's correlated path from source collection through Kafka-backed processing, analysis, and persistence.
 
@@ -727,7 +719,7 @@ The user can inspect timestamps, relevant event metadata, analysis outcome, and 
 
 ### S5 — duplicate rediscovery
 
-A source returns the same vacancy on several scheduled collection runs.
+A source returns the same external item on several scheduled collection runs.
 
 The first discovery creates the normal domain result. Later discoveries are recognized according to the deduplication contract and do not create uncontrolled duplicate records.
 
@@ -871,8 +863,8 @@ Initial umbrella acceptance requires a working end-to-end deployment in which:
 1. the complete application runs in a local Kubernetes environment;
 2. PostgreSQL stores application configuration and collected results;
 3. Kafka carries real asynchronous application events between backend processing stages;
-4. at least one real job-vacancy source is configured and collected successfully;
-5. at least one real topic-information source is configured and collected successfully;
+4. at least one real structured or semi-structured external data source is configured and collected successfully;
+5. at least one real topic/news information source is configured and collected successfully;
 6. a source compatible with an existing generic collector can be added through configuration without a backend redeployment;
 7. the browser can create and edit monitoring profiles and sources;
 8. scheduled collection operates without manual triggering;

@@ -39,7 +39,7 @@ The application uses:
 
 Synchronous REST controllers that invoke database work or blocking collection work use `@ExecuteOn(TaskExecutors.BLOCKING)`.
 
-Results and Event Observation SSE controllers remain streaming `Publisher` boundaries. Their PostgreSQL polling is submitted to the blocking executor instead of running database work on the Netty event loop.
+Results and Event Observation SSE controllers remain streaming `Publisher` boundaries. Their PostgreSQL polling is submitted to the blocking executor instead of running database work on the Netty event loop. Each subscription retains the active polling future so client cancellation can request interruption of in-flight blocking work as well as cancel the next scheduled poll.
 
 ## Persistence execution convention
 
@@ -267,7 +267,7 @@ SSE behavior is:
 - disconnected updates to one logical result may collapse to the latest projection;
 - resume cursors ahead of current durable state are normalized to the current watermark.
 
-Jdbi-backed polling runs on the blocking executor while the controller remains a streaming `Publisher` boundary.
+Jdbi-backed polling runs on the blocking executor while the controller remains a streaming `Publisher` boundary. Results and Event Observation share the framework-neutral `common.concurrent.DemandDrivenPollingLoop` for demand, delayed rescheduling, and task cancellation while retaining module-owned cursor/query/event semantics. Client cancellation cancels any pending scheduled poll and requests interruption of the active blocking poll task; cancellation-induced query unwind is not emitted as an SSE error after the subscription is already cancelled.
 
 The cursor table is shared PostgreSQL state. The Kafka consumer and SSE client can therefore be served by different backend replicas.
 
@@ -307,6 +307,7 @@ Public diagnostic APIs are:
 
 - `GET /api/v1/events` — bounded technical history filters;
 - `GET /api/v1/events/stream` — durable `ready`, `event`, and `keepalive` SSE cursors with `Last-Event-ID` resume;
+- client cancellation releases future scheduled polling and requests interruption of the current blocking history poll;
 - `GET /api/v1/flows/collection-runs/{collectionRunId}` — run-level Processing Flow;
 - the run-scoped item variant — item Processing Flow.
 

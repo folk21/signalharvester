@@ -54,7 +54,7 @@ PostgreSQL schema `event_observation` is owned by migrations under `modules/even
 
 No synchronous dependency on another functional module is required.
 
-The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, Micronaut-managed Jdbi, and Micronaut HTTP/SSE/runtime infrastructure.
+The module depends on the event-contract artifact, the stable `common` demand-driven polling lifecycle utility, Kafka, PostgreSQL/Flyway, Micronaut-managed Jdbi, and Micronaut HTTP/SSE/runtime infrastructure. Event Observation cursor/query/event-mapping semantics remain module-local.
 
 ## Forbidden access
 
@@ -69,13 +69,16 @@ The module depends on the event-contract artifact, Kafka, PostgreSQL/Flyway, Mic
 - Event Observation repositories execute only inside application-owned Micronaut transactions; Jdbi does not own business transaction boundaries;
 - the Event Observation Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic transport/key/mapping failures are dead-lettered without retry; recording failures use bounded retry;
-- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification, preserves the interrupt flag, and leaves the source record eligible for normal redelivery;
+- listener-thread interruption is a lifecycle cancellation signal: interrupted processing escapes retry/DLQ classification and preserves the interrupt flag;
+- when any listener failure escapes, the per-listener exception handler rewinds every partition from the failed Kafka poll to its first polled offset before normal consumption resumes, so uninvoked records remain eligible for redelivery;
+- failed-poll rewind may deliberately reprocess earlier records from the same poll and therefore relies on event-id idempotency;
 - normal listener completion occurs only after the observation transaction succeeds or terminal Event Observation dead-letter publication is acknowledged; Micronaut owns the synchronous per-record source-offset commit afterward;
 - failed Event Observation DLQ publication must escape before successful listener completion, while framework commit failure remains outside recording retry/DLQ classification and may result in at-least-once redelivery;
 - retention is explicitly bounded by age and count;
 - current collection-run correlation uses the event `correlation_id`;
 - REST/SSE expose decoded JSON, not generated Protobuf types;
 - an SSE resume cursor may have fallen behind retention and clients must tolerate missing expired diagnostic rows;
+- SSE client cancellation cancels pending scheduled polling and requests interruption of the active blocking history poll task; cancellation-induced query unwind is not a client-visible stream failure after cancellation;
 - flow lineage links terminal events to raw discoveries by published `sourceEventId`;
 - reconstructed stages explicitly identify observed, derived, and currently unobserved evidence;
 - Results persistence is not claimed as completed until an observation signal proves it;
