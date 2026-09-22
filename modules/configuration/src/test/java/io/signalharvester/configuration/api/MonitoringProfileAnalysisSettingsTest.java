@@ -2,6 +2,7 @@ package io.signalharvester.configuration.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -23,10 +24,21 @@ class MonitoringProfileAnalysisSettingsTest {
         assertEquals(2, settings.minimumMatches());
     }
 
-    /** Reject empty keywords and thresholds above the unique keyword count. */
+    /** Represent all-relevant analysis with no keywords and a zero threshold. */
+    @Test
+    void shouldRepresentAllRelevantAnalysis() {
+        MonitoringProfileAnalysisSettings settings = MonitoringProfileAnalysisSettings.allRelevant();
+
+        assertEquals(List.of(), settings.keywords());
+        assertEquals(0, settings.minimumMatches());
+        assertTrue(settings.isAllRelevant());
+    }
+
+    /** Reject mixed empty/threshold states and thresholds above the unique keyword count. */
     @Test
     void shouldRejectInvalidSettings() {
         assertThrows(IllegalArgumentException.class, () -> new MonitoringProfileAnalysisSettings(List.of(), 1));
+        assertThrows(IllegalArgumentException.class, () -> new MonitoringProfileAnalysisSettings(List.of("java"), 0));
         assertThrows(IllegalArgumentException.class, () ->
                 new MonitoringProfileAnalysisSettings(List.of("java", "JAVA"), 2));
     }

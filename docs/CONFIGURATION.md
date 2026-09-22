@@ -202,11 +202,13 @@ Automatic/bulk replay remains intentionally absent. The accepted controlled reco
 
 ### Profile-owned Analysis configuration
 
-Monitoring Profiles own the effective deterministic keyword settings used by new collection events. The persisted typed settings contain normalized unique keywords plus a positive `minimumMatches` threshold that cannot exceed the keyword count. Collection snapshots those settings into `RawItemDiscovered`, and Analysis uses that immutable snapshot instead of looking up the latest profile.
+Monitoring Profiles own the effective deterministic relevance settings used by new collection events. `keywords=[]` with `minimumMatches=0` is the explicit all-relevant state. With non-empty keywords, the normalized unique list requires a positive `minimumMatches` threshold no greater than the keyword count. Collection snapshots those settings into `RawItemDiscovered`, and Analysis uses that immutable snapshot instead of looking up the latest profile.
 
-The checked-in `signalharvester.analysis.keyword-rules` values and `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` now exist only for compatibility. A create request from an older client that omits `analysisSettings` materializes those defaults into the new profile. A pre-migration profile without explicit settings resolves the same defaults until its next update, when they become persisted. An already-published legacy raw event without the snapshot also uses those defaults in Analysis. New clients should always round-trip `analysisSettings`.
+A create request that omits `analysisSettings` persists the all-relevant state. A replacement update that omits the field preserves the profile's current effective settings.
 
-Compatibility defaults must satisfy the same keyword/threshold invariant as persisted settings.
+The checked-in `signalharvester.analysis.keyword-rules` values and `SIGNALHARVESTER_ANALYSIS_MINIMUM_KEYWORD_MATCHES` exist only for compatibility with pre-migration profile rows and already-published legacy raw events that have no Analysis settings snapshot. New clients should round-trip effective `analysisSettings`.
+
+Compatibility keyword defaults must satisfy the non-empty keyword/threshold invariant.
 
 Secrets must not be committed.
 

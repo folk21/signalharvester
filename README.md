@@ -13,6 +13,8 @@ The project is intentionally domain-neutral. Typical monitoring scenarios includ
 - news and topic-oriented information;
 - financial, company, regulatory, and public-market data.
 
+The current bounded backend implementation focus is verification of explicit all-relevant Analysis settings for Monitoring Profiles without keyword filtering.
+
 SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.
 
 The backend starts as a **modular monolith**: one Micronaut application assembled from cohesive Gradle modules. Modules own complete capabilities and communicate through explicit Java APIs or published event contracts. They can be split further when scaling, isolation, ownership, or deployment needs justify it.
@@ -145,7 +147,7 @@ The backend covers the core pipeline from configuration and collection through a
 ### Configuration and collection
 
 - PostgreSQL-backed Sources and Monitoring Profiles.
-- Typed, profile-owned Analysis settings.
+- Typed, profile-owned Analysis settings, including an explicit all-relevant state when no keyword filter is configured.
 - Source CRUD and persisted-source diagnostic testing.
 - RSS/Atom, REST/JSON, and HTML extraction paths.
 - Manual and scheduled profile-driven Collection Runs.
@@ -156,7 +158,7 @@ The backend covers the core pipeline from configuration and collection through a
 
 - Versioned Protobuf events for discovered, analyzed, rejected, and dead-letter records.
 - Deterministic normalization and profile-scoped deduplication.
-- Deterministic keyword analysis from immutable settings snapshots carried with collected events.
+- Deterministic Analysis from immutable settings snapshots carried with collected events, with either opt-in keyword filtering or explicit all-relevant classification.
 - Transactional Analysis outbox publication.
 - Idempotent Results materialization in PostgreSQL.
 - Results REST browsing with filters, indexed text search, and opaque keyset continuation.

@@ -84,7 +84,7 @@ Configuration administration is an internal application boundary used by module-
 
 `SourceConfigurationManager` implements both the internal administration boundary and the published provider contract.
 
-PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed keyword settings. Application use cases own write transactions. Configuration persistence uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while preserving those application transaction boundaries. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new/updated rows persist effective settings.
+PostgreSQL schema `configuration` is created by `db/migration/configuration/V1__create_source_configuration.sql`. `V13__add_monitoring_profile_analysis_settings.sql` adds persisted typed Analysis settings, and `V15__allow_all_relevant_analysis_settings.sql` permits the explicit `[]/0` all-relevant state. Application use cases own write transactions. Configuration persistence uses Micronaut-managed Jdbi with named bindings and module-owned classpath SQL resources while preserving those application transaction boundaries. Legacy profile rows without explicit settings resolve the previous deployment defaults until their next replacement update; new creates without keyword filtering persist all-relevant settings and updates persist effective settings.
 
 See [`../modules/configuration/README.md`](../modules/configuration/README.md) and [`../modules/configuration/contract.md`](../modules/configuration/contract.md).
 
@@ -132,7 +132,7 @@ Extraction behavior is source-type specific:
 - HTML with `html.*` settings uses jsoup CSS selectors;
 - REST/HTML without those settings keeps one-response passthrough behavior.
 
-Extracted metadata populates `RawItemDiscovered` fields for external ID, title, URL, content, content type, and publication time. Collection also publishes the effective profile keyword Analysis settings as additive field 12.
+Extracted metadata populates `RawItemDiscovered` fields for external ID, title, URL, content, content type, and publication time. Collection also publishes the effective profile Analysis settings as additive field 12. Empty keywords with a zero threshold explicitly mean all relevant; non-empty settings retain deterministic keyword filtering.
 
 The Collection Run ID is reused as event correlation ID.
 

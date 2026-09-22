@@ -6,7 +6,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
-/** Immutable deterministic keyword-analysis settings owned by one monitoring profile. */
+/** Immutable deterministic Analysis settings owned by one monitoring profile. */
 public record MonitoringProfileAnalysisSettings(List<String> keywords, int minimumMatches) {
 
     public MonitoringProfileAnalysisSettings {
@@ -19,14 +19,27 @@ public record MonitoringProfileAnalysisSettings(List<String> keywords, int minim
             normalized.add(keyword.strip().toLowerCase(Locale.ROOT));
         }
         if (normalized.isEmpty()) {
-            throw new IllegalArgumentException("keywords must not be empty");
-        }
-        if (minimumMatches < 1) {
-            throw new IllegalArgumentException("minimumMatches must be positive");
-        }
-        if (minimumMatches > normalized.size()) {
-            throw new IllegalArgumentException("minimumMatches must not exceed the number of unique keywords");
+            if (minimumMatches != 0) {
+                throw new IllegalArgumentException("minimumMatches must be zero when no keywords are configured");
+            }
+        } else {
+            if (minimumMatches < 1) {
+                throw new IllegalArgumentException("minimumMatches must be positive when keywords are configured");
+            }
+            if (minimumMatches > normalized.size()) {
+                throw new IllegalArgumentException("minimumMatches must not exceed the number of unique keywords");
+            }
         }
         keywords = List.copyOf(normalized);
+    }
+
+    /** Returns settings that classify every analyzed item as relevant. */
+    public static MonitoringProfileAnalysisSettings allRelevant() {
+        return new MonitoringProfileAnalysisSettings(List.of(), 0);
+    }
+
+    /** Returns whether this profile intentionally bypasses keyword filtering. */
+    public boolean isAllRelevant() {
+        return keywords.isEmpty();
     }
 }

@@ -127,9 +127,9 @@ class MonitoringProfileControllerPostgresTest {
         assertEquals(404, send("GET", "/api/v1/monitoring-profiles/" + profileId, null).statusCode());
     }
 
-    /** Materialize and persist compatibility defaults when an older create request omits Analysis settings. */
+    /** Persist all-relevant settings when create omits Analysis settings. */
     @Test
-    void shouldPersistCompatibilityDefaultsWhenCreateOmitsAnalysisSettings() throws Exception {
+    void shouldPersistAllRelevantSettingsWhenCreateOmitsAnalysisSettings() throws Exception {
         UUID sourceId = createSource("Compatibility source", "https://example.test/compatibility");
 
         HttpResponse<String> created = send("POST", "/api/v1/monitoring-profiles", """
@@ -143,9 +143,29 @@ class MonitoringProfileControllerPostgresTest {
 
         assertEquals(201, created.statusCode());
         UUID profileId = extractId(created.body());
-        assertTrue(created.body().contains("\"keywords\":[\"legacy-default\",\"fallback\"]"));
-        assertTrue(created.body().contains("\"minimumMatches\":2"));
-        assertPersistedAnalysisSettings(profileId, 2, 2);
+        assertAllRelevantAnalysisSettings(created.body());
+        assertPersistedAnalysisSettings(profileId, 0, 0);
+    }
+
+    /** Accept an explicit all-relevant Analysis settings payload. */
+    @Test
+    void shouldAcceptExplicitAllRelevantAnalysisSettings() throws Exception {
+        UUID sourceId = createSource("All relevant source", "https://example.test/all-relevant");
+
+        HttpResponse<String> created = send("POST", "/api/v1/monitoring-profiles", """
+                {
+                  "name": "All relevant profile",
+                  "informationCategory": "TOPIC",
+                  "collectionIntervalMinutes": 20,
+                  "sourceIds": ["%s"],
+                  "analysisSettings": {"keywords": [], "minimumMatches": 0}
+                }
+                """.formatted(sourceId));
+
+        assertEquals(201, created.statusCode());
+        UUID profileId = extractId(created.body());
+        assertAllRelevantAnalysisSettings(created.body());
+        assertPersistedAnalysisSettings(profileId, 0, 0);
     }
 
     /** Reject unknown sources and invalid empty membership. */
@@ -183,6 +203,28 @@ class MonitoringProfileControllerPostgresTest {
                 }
                 """.formatted(sourceId));
         assertEquals(400, invalidAnalysis.statusCode());
+
+        HttpResponse<String> invalidEmptyThreshold = send("POST", "/api/v1/monitoring-profiles", """
+                {
+                  "name": "Invalid empty threshold",
+                  "informationCategory": "JOB",
+                  "collectionIntervalMinutes": 15,
+                  "sourceIds": ["%s"],
+                  "analysisSettings": {"keywords": [], "minimumMatches": 1}
+                }
+                """.formatted(sourceId));
+        assertEquals(400, invalidEmptyThreshold.statusCode());
+
+        HttpResponse<String> invalidKeywordThreshold = send("POST", "/api/v1/monitoring-profiles", """
+                {
+                  "name": "Invalid keyword threshold",
+                  "informationCategory": "JOB",
+                  "collectionIntervalMinutes": 15,
+                  "sourceIds": ["%s"],
+                  "analysisSettings": {"keywords": ["java"], "minimumMatches": 0}
+                }
+                """.formatted(sourceId));
+        assertEquals(400, invalidKeywordThreshold.statusCode());
     }
 
     /** Resolve pre-migration profiles from compatibility defaults and persist them on the next replacement. */
@@ -262,6 +304,12 @@ class MonitoringProfileControllerPostgresTest {
             membership.executeUpdate();
         }
         return profileId;
+    }
+
+    private static void assertAllRelevantAnalysisSettings(String body) {
+        assertTrue(body.contains("\"analysisSettings\":"));
+        assertTrue(body.contains("\"keywords\":[]"));
+        assertTrue(body.contains("\"minimumMatches\":0"));
     }
 
     private static void assertPersistedAnalysisSettings(UUID profileId, int expectedMinimumMatches, int expectedKeywords)

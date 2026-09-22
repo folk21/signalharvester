@@ -1418,7 +1418,7 @@ components:
           additionalProperties:
             type: string
         analysisSettings:
-          description: Optional compatibility bridge. Create omission uses deployment defaults; update omission preserves the current effective settings. New clients should round-trip this field.
+          description: Optional replacement field. Create omission means all analyzed items are relevant; update omission preserves the current effective settings. New clients should round-trip this field.
           $ref: '#/components/schemas/MonitoringProfileAnalysisSettings'
     MonitoringProfileAnalysisSettings:
       type: object
@@ -1428,16 +1428,17 @@ components:
       properties:
         keywords:
           type: array
-          minItems: 1
+          minItems: 0
           uniqueItems: true
+          description: Normalized keyword filters. An empty list means all analyzed items are relevant.
           items:
             type: string
             minLength: 1
             pattern: .*\S.*
         minimumMatches:
           type: integer
-          minimum: 1
-          description: Must not exceed the number of unique normalized keywords.
+          minimum: 0
+          description: Must be zero when keywords is empty; otherwise must be positive and no greater than the number of unique normalized keywords.
     CollectionRunRequest:
       type: object
       required:

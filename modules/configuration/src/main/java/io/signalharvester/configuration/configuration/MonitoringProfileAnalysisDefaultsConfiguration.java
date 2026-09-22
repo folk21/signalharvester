@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
 
 /**
- * Supplies compatibility defaults for profiles that predate persisted Analysis settings or omit them on create.
+ * Supplies compatibility defaults for profiles that predate persisted Analysis settings.
  */
 @ConfigurationProperties("signalharvester.analysis.keyword-rules")
 public final class MonitoringProfileAnalysisDefaultsConfiguration {

@@ -13,7 +13,7 @@ Source configuration is persisted in the configuration-owned PostgreSQL schema t
 
 The OpenAPI configuration contract is implemented under `/api/v1/sources` and `/api/v1/monitoring-profiles`. HTTP request records are separate from persistence types, Jakarta Validation enforces the input boundary, omitted `enabled` values default to `false`, expected not-found/invalid-configuration failures use centralized Micronaut `ExceptionHandler` beans, and the controller runs on `TaskExecutors.BLOCKING` for blocking database work.
 
-Backend consumers read source and Monitoring Profile configuration through the narrow `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider` APIs rather than through persistence. Effective profiles include typed Analysis settings. Configuration CRUD operations remain internal application boundaries behind module-owned HTTP adapters. Omitted settings are only a compatibility bridge: create materializes deployment defaults, while replacement update preserves the profile's current effective settings.
+Backend consumers read source and Monitoring Profile configuration through the narrow `SourceConfigurationProvider` and `MonitoringProfileConfigurationProvider` APIs rather than through persistence. Effective profiles include typed Analysis settings. Configuration CRUD operations remain internal application boundaries behind module-owned HTTP adapters. Create omission now persists explicit all-relevant settings (`keywords=[]`, `minimumMatches=0`), while replacement update omission preserves the profile's current effective settings. Deployment keyword defaults remain a compatibility bridge only for pre-migration profile rows.
 
 ## Operational and security notes
 

@@ -40,6 +40,23 @@ class KeywordContentAnalyzerTest {
         assertEquals("keyword-v1", decision.analyzer());
     }
 
+
+    /** Classify every item as relevant when the profile has no keyword filter. */
+    @Test
+    void shouldClassifyAllItemsAsRelevantWithoutKeywordFilter() {
+        KeywordContentAnalyzer analyzer = new KeywordContentAnalyzer();
+        KeywordAnalysisSettings settings = new KeywordAnalysisSettings(List.of(), 0);
+
+        AnalysisDecision decision = analyzer.analyze(
+                item("Unrelated title", "Content without configured matching terms"), settings);
+
+        assertTrue(decision.relevant());
+        assertEquals(KeywordContentAnalyzer.ALL_RELEVANT_CLASSIFICATION, decision.classification());
+        assertEquals(100, decision.score());
+        assertEquals(List.of(), decision.tags());
+        assertEquals("No keyword filter configured; all analyzed items are relevant", decision.explanation());
+    }
+
     /** Reject impossible minimum-match settings before analysis executes. */
     @Test
     void shouldRejectImpossibleMinimumMatchSettings() {

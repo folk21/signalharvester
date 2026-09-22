@@ -77,6 +77,21 @@ class RawItemDiscoveredSerializationTest {
         assertEquals(RAW_ITEM_ID, decoded.getRawItemId());
     }
 
+    /** Preserve the explicit empty-keyword all-relevant settings snapshot. */
+    @Test
+    void shouldRoundTripAllRelevantAnalysisSettings() throws IOException {
+        RawItemDiscovered original = representativeEvent().toBuilder()
+                .setAnalysisSettings(KeywordAnalysisSettings.newBuilder()
+                        .setMinimumMatches(0))
+                .build();
+
+        RawItemDiscovered decoded = RawItemDiscovered.parseFrom(original.toByteArray());
+
+        assertTrue(decoded.hasAnalysisSettings());
+        assertEquals(java.util.List.of(), decoded.getAnalysisSettings().getKeywordsList());
+        assertEquals(0, decoded.getAnalysisSettings().getMinimumMatches());
+    }
+
     private static RawItemDiscovered representativeEvent() {
         Timestamp occurredAt = Timestamp.newBuilder()
                 .setSeconds(1_725_817_600L)

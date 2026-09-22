@@ -49,9 +49,9 @@ message RawItemDiscovered {
 
 // Immutable keyword-analysis settings captured from the effective Monitoring Profile.
 message KeywordAnalysisSettings {
-  // Case-normalized unique keywords evaluated by the deterministic analyzer.
+  // Case-normalized unique keywords evaluated by the deterministic analyzer. Empty means all items are relevant.
   repeated string keywords = 1;
 
-  // Minimum number of matching keywords required for relevance.
+  // Minimum number of matching keywords required for relevance. Zero is valid only when keywords is empty.
   int32 minimum_matches = 2;
 }

@@ -168,10 +168,10 @@ public final class JdbiMonitoringProfileRepository implements MonitoringProfileR
             return new MonitoringProfileAnalysisSettings(
                     analysisDefaults.getKeywords(), analysisDefaults.getMinimumMatches());
         }
-        if (minimumMatches == null || keywords.isEmpty()) {
+        if (minimumMatches == null) {
             throw new SourcePersistenceException(
                     "Monitoring profile has incomplete persisted Analysis settings: " + id.value(),
-                    new IllegalStateException("analysis minimum and keywords must be persisted together"));
+                    new IllegalStateException("analysis minimum must be persisted when Analysis settings are explicit"));
         }
         try {
             return new MonitoringProfileAnalysisSettings(keywords, minimumMatches);

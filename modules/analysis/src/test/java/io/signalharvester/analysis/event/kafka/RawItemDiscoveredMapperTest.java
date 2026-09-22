@@ -35,6 +35,20 @@ class RawItemDiscoveredMapperTest {
         assertEquals(2, mapped.analysisSettings().minimumMatches());
     }
 
+    /** Preserve the explicit all-relevant settings snapshot. */
+    @Test
+    void shouldUseCapturedAllRelevantSettings() {
+        RawItemDiscoveredMapper mapper = new RawItemDiscoveredMapper(defaults(List.of("legacy"), 1));
+        RawItemDiscovered event = baseEvent().toBuilder()
+                .setAnalysisSettings(KeywordAnalysisSettings.newBuilder().setMinimumMatches(0))
+                .build();
+
+        DiscoveredRawItem mapped = mapper.map(event);
+
+        assertEquals(List.of(), mapped.analysisSettings().keywords());
+        assertEquals(0, mapped.analysisSettings().minimumMatches());
+    }
+
     /** Use deployment defaults only for legacy events that have no settings snapshot. */
     @Test
     void shouldUseLegacyDefaultsWhenSnapshotIsAbsent() {

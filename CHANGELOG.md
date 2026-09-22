@@ -8,6 +8,7 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Added verification-pending Collection Run interruption recovery so lifecycle cancellation escapes per-source publication failure classification and interrupted scheduled work does not advance its next-due time.
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
+- 2026-09-22 — Added verification-pending all-relevant Monitoring Profile Analysis settings so omitted keyword filtering persists `[]/0`, new items classify as `ALL_RELEVANT`, and legacy persisted/event compatibility defaults remain unchanged.
 
 - 2026-09-21 — Accepted Analysis outbox failure-state lease fencing after the developer confirmed all relevant tests and validations passed; the remaining durable-ownership/crash-window review found no additional material correctness defect, closing the systematic backend reliability review.
 - 2026-09-21 — Recorded deferred operational-capacity follow-ups for outbox observability/retention/draining, scheduler transaction scaling, SSE polling fan-out, and large Monitoring Profile source validation; these remain measurement-driven backlog items rather than active correctness work.
