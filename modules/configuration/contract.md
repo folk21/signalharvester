@@ -79,8 +79,8 @@ Do not expose repository, Jdbi/JDBC, Micronaut HTTP, or persistence types throug
 - `SourceId` is the stable source identity;
 - `MonitoringProfileId` is the stable Monitoring Profile identity;
 - a Monitoring Profile references at least one existing source;
-- effective Analysis settings contain normalized unique keywords and a positive threshold no greater than the keyword count;
-- new/updated profiles persist effective Analysis settings; legacy rows without explicit settings resolve compatibility defaults until their next update;
+- effective Analysis settings are either explicit all-relevant (`keywords=[]`, `minimumMatches=0`) or normalized unique keywords with a positive threshold no greater than the keyword count;
+- create omission persists all-relevant settings; update omission preserves current effective settings; legacy rows without explicit settings resolve compatibility defaults until their next update;
 - source names are not unique identities;
 - configured-source writes are transactional;
 - persisted source URLs do not imply outbound network authorization.

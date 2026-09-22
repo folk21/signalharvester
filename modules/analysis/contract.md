@@ -76,7 +76,7 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 ## Important invariants
 
 - deduplication identity is scoped by Monitoring Profile;
-- deterministic classification uses the immutable settings snapshot carried by the raw event and does not synchronously query Configuration;
+- deterministic classification uses the immutable settings snapshot carried by the raw event and does not synchronously query Configuration; an empty-keyword/zero-threshold snapshot classifies every item as relevant;
 - deployment-global keyword rules are a compatibility fallback only for legacy raw events without a settings snapshot;
 - the raw Kafka listener uses Micronaut `SYNC_PER_RECORD` and must not call `Consumer.commitSync()` directly;
 - deterministic decode/key/mapping failures are dead-lettered without retry, while application failures use a bounded retry policy;

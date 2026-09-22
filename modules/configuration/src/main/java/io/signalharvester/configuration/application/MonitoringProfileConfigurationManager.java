@@ -7,7 +7,6 @@ import io.signalharvester.configuration.api.MonitoringProfileConfigurationProvid
 import io.signalharvester.configuration.api.MonitoringProfileId;
 import io.signalharvester.configuration.api.SourceConfigurationProvider;
 import io.signalharvester.configuration.api.SourceId;
-import io.signalharvester.configuration.configuration.MonitoringProfileAnalysisDefaultsConfiguration;
 import io.signalharvester.configuration.persistence.MonitoringProfileRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
@@ -26,19 +25,16 @@ public final class MonitoringProfileConfigurationManager
 
     private final MonitoringProfileRepository repository;
     private final SourceConfigurationProvider sources;
-    private final MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults;
     private final TransactionOperations<Connection> transactions;
     private final Validator validator;
 
     public MonitoringProfileConfigurationManager(
             MonitoringProfileRepository repository,
             SourceConfigurationProvider sources,
-            MonitoringProfileAnalysisDefaultsConfiguration analysisDefaults,
             @Named("default") TransactionOperations<Connection> transactions,
             Validator validator) {
         this.repository = repository;
         this.sources = sources;
-        this.analysisDefaults = analysisDefaults;
         this.transactions = transactions;
         this.validator = validator;
     }
@@ -46,8 +42,8 @@ public final class MonitoringProfileConfigurationManager
     @Override
     public ConfiguredMonitoringProfile create(MonitoringProfileConfigurationCommand command) {
         validateCommand(command);
-        MonitoringProfileAnalysisSettings effectiveSettings = command.analysisSettings().orElseGet(() ->
-                new MonitoringProfileAnalysisSettings(analysisDefaults.getKeywords(), analysisDefaults.getMinimumMatches()));
+        MonitoringProfileAnalysisSettings effectiveSettings = command.analysisSettings()
+                .orElseGet(MonitoringProfileAnalysisSettings::allRelevant);
         ConfiguredMonitoringProfile profile = materialize(
                 MonitoringProfileId.of(UUID.randomUUID()), command, effectiveSettings);
         validateSources(profile);

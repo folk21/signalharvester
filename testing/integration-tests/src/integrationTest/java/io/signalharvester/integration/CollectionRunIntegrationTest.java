@@ -169,8 +169,8 @@ class CollectionRunIntegrationTest {
             assertEquals(result.collectionRunId(), event.getEnvelope().getCorrelationId());
             assertEquals(profile.id().value().toString(), event.getMonitoringProfileId());
             assertEquals("JOB", event.getInformationCategory());
-            assertEquals(List.of("java"), event.getAnalysisSettings().getKeywordsList());
-            assertEquals(1, event.getAnalysisSettings().getMinimumMatches());
+            assertEquals(List.of(), event.getAnalysisSettings().getKeywordsList());
+            assertEquals(0, event.getAnalysisSettings().getMinimumMatches());
             publishedSourceIds.add(event.getSourceId());
             rawItemIds.add(event.getRawItemId());
             eventIds.add(event.getEnvelope().getEventId());

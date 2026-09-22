@@ -48,7 +48,7 @@ Flyway applies Configuration, Analysis, Collection, Results, Event Observation, 
 The backend exposes:
 
 - Source CRUD and diagnostic testing under `/api/v1/sources`;
-- Monitoring Profile CRUD, including typed keyword Analysis settings, under `/api/v1/monitoring-profiles`;
+- Monitoring Profile CRUD, including typed Analysis relevance settings where no keyword filter means all relevant, under `/api/v1/monitoring-profiles`;
 - Collection Run operations under `/api/v1/admin/collection-runs`;
 - `DIAGNOSTICS.ANALYSIS_INSPECTION` under `/api/v1/admin/analysis/items`.
 

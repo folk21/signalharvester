@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-There is currently no bounded backend implementation focus. The systematic Kafka-consumer, background-worker/executor, and durable-ownership/crash-window reviews are complete after their accepted bounded fixes. Create the next sub-spec only for a concrete material backend change.
+The current bounded backend implementation focus is [`active/subspecs/backend-analysis-all-relevant-default.md`](active/subspecs/backend-analysis-all-relevant-default.md). It makes omitted Monitoring Profile keyword filtering explicitly all-relevant while preserving legacy persisted/event compatibility.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- none; the backend currently has no bounded implementation sub-spec.
+- [`active/subspecs/backend-analysis-all-relevant-default.md`](active/subspecs/backend-analysis-all-relevant-default.md) — explicit all-relevant Analysis settings for profiles without keyword filtering; verification pending.
 
 Active supporting tracks:
 

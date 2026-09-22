@@ -24,6 +24,8 @@ The following platform work is also accepted:
 - live system resilience acceptance;
 - `SCALABILITY.KAFKA_CONSUMERS` with live one-to-three replica backlog-drain acceptance.
 
+Profile-owned typed Analysis settings remain accepted. A bounded follow-up is verification-pending on 2026-09-22: profiles without keyword filtering now use an explicit all-relevant state instead of materializing deployment keyword defaults on create. Legacy persisted rows and raw events still use compatibility defaults.
+
 Profile-owned typed Analysis settings are accepted after the canonical repository gate passed. Monitoring Profiles are now authoritative for deterministic keyword behavior and carry the effective settings through `RawItemDiscovered`.
 
 Production-oriented Results browsing and controlled owner-specific dead-letter recovery are accepted after their canonical repository gates passed. The repository-wide Jdbi persistence refactoring is also accepted after the final Results slice and Security handle-lifecycle correction passed the canonical repository gate. The scheduler pre-run lease recovery identified by the subsequent backend closure review is accepted as well: if local dispatch or heartbeat setup fails before a collection run starts, the exact-token lease is released without advancing its due time.
