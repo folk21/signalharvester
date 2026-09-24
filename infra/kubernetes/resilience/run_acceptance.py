@@ -298,9 +298,13 @@ def require_string(value: dict[str, Any], key: str) -> str:
     return candidate
 
 
-def run_preflight(runner: CommandRunner) -> None:
+def run_preflight(runner: CommandRunner, timeout: str | None = None) -> None:
     print("==> Kubernetes deployment preflight")
-    completed = runner.run(["env", f"SIGNALHARVESTER_K8S_NAMESPACE={runner.namespace}", "sh", str(VERIFY_LOCAL)], check=False)
+    command = ["env", f"SIGNALHARVESTER_K8S_NAMESPACE={runner.namespace}"]
+    if timeout is not None:
+        command.append(f"SIGNALHARVESTER_K8S_VERIFY_TIMEOUT={timeout}")
+    command.extend(["sh", str(VERIFY_LOCAL)])
+    completed = runner.run(command, check=False)
     if completed.returncode != 0:
         raise AcceptanceError(
             f"verify-local.sh failed before resilience acceptance\n{completed.stdout}\n{completed.stderr}"
@@ -993,7 +997,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         ensure_commands()
         if not args.skip_preflight:
-            run_preflight(runner)
+            run_preflight(runner, args.rollout_timeout)
         if backend_replicas(runner) < 2:
             raise AcceptanceError("resilience acceptance requires at least two backend replicas")
 

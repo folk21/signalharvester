@@ -8,6 +8,10 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Added verification-pending Collection Run interruption recovery so lifecycle cancellation escapes per-source publication failure classification and interrupted scheduled work does not advance its next-due time.
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
+- 2026-09-24 — Hardened the capacity baseline against Redpanda `rpk` aggregate consumer-group JSON by tolerating transient empty partition lists, waiting for stable group coordination before zero-lag validation, and recording starting group states.
+- 2026-09-24 — Hardened local Kubernetes verification to fail fast on NotReady cluster nodes before workload rollout waits, surfacing node status and recent cluster events for stale local-volume/topology failures.
+- 2026-09-24 — Improved Kubernetes capacity/resilience preflight diagnostics so readiness timeouts identify the failed workload, show relevant pods/workload/events, and honor the caller rollout timeout.
+- 2026-09-24 — Added a verification-pending Kubernetes capacity/observability baseline harness that drives a bounded deterministic Collection-to-Results workload, samples Kafka/Analysis/outbox/Results progress, and writes machine-readable environment-specific evidence without inventing performance budgets.
 - 2026-09-22 — Added verification-pending all-relevant Monitoring Profile Analysis settings so omitted keyword filtering persists `[]/0`, new items classify as `ALL_RELEVANT`, and legacy persisted/event compatibility defaults remain unchanged.
 
 - 2026-09-21 — Accepted Analysis outbox failure-state lease fencing after the developer confirmed all relevant tests and validations passed; the remaining durable-ownership/crash-window review found no additional material correctness defect, closing the systematic backend reliability review.

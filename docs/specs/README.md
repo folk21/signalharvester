@@ -154,7 +154,11 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-analysis-all-relevant-default.md`](active/subspecs/backend-analysis-all-relevant-default.md) — explicit all-relevant Analysis settings for profiles without keyword filtering; verification pending.
+- [`active/subspecs/backend-capacity-observability-baseline.md`](active/subspecs/backend-capacity-observability-baseline.md) — bounded deterministic Kubernetes pipeline capacity measurement with machine-readable evidence; verification pending.
+
+Verification-pending carryover:
+
+- [`active/subspecs/backend-analysis-all-relevant-default.md`](active/subspecs/backend-analysis-all-relevant-default.md) — explicit all-relevant Analysis settings for profiles without keyword filtering; implementation complete, canonical acceptance still pending.
 
 Active supporting tracks:
 

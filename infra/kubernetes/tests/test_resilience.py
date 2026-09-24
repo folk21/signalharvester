@@ -83,6 +83,24 @@ class KubernetesResilienceAssetsTest(unittest.TestCase):
         self.assertIsNone(opener.request.get_header("Content-type"))
         self.assertEqual("csrf-proof", opener.request.get_header("X-csrf-token"))
 
+    def test_preflight_forwards_the_requested_rollout_timeout(self):
+        class FakeRunner:
+            namespace = "signalharvester-test"
+
+            def __init__(self):
+                self.args = None
+
+            def run(self, args, **kwargs):
+                self.args = args
+                return acceptance.CommandResult("ok", "", 0)
+
+        runner = FakeRunner()
+        acceptance.run_preflight(runner, "45s")
+
+        self.assertEqual("env", runner.args[0])
+        self.assertIn("SIGNALHARVESTER_K8S_NAMESPACE=signalharvester-test", runner.args)
+        self.assertIn("SIGNALHARVESTER_K8S_VERIFY_TIMEOUT=45s", runner.args)
+
     def test_topic_record_count_parser_sums_partition_ranges(self):
         sample = """
 PARTITION  LEADER  EPOCH  REPLICAS  LOG-START-OFFSET  HIGH-WATERMARK

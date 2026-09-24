@@ -45,6 +45,8 @@ Source-fetch worker interruption propagation is accepted after developer verific
 Analysis outbox expired-lease fencing is accepted after developer verification. Pre-publication renewal now requires both the exact token and a still-live persisted lease, so an expired former owner cannot resurrect ownership before Kafka send.
 Analysis outbox failure-state lease fencing is accepted after developer verification. Publication-failure retry metadata now requires a still-live exact-token lease, so an unsuccessful send that outlives ownership cannot postpone immediate reclaim. The remaining durable-ownership/crash-window review found no additional material correctness defect across post-ack publication markers, DLQ acknowledgement before framework offset commit, controlled replay/idempotency, and scheduled Collection completion; Review III is closed.
 
+The current bounded backend implementation stage is a verification-pending capacity and observability baseline. It adds a deterministic Kubernetes pipeline measurement and JSON evidence without introducing performance budgets or changing production reliability semantics. The earlier all-relevant Analysis follow-up remains separately verification-pending until canonical acceptance is recorded.
+
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
 ## P0 — repository and contract foundation
@@ -91,9 +93,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Keep the verified backend/OpenAPI baseline stable unless a concrete correctness, operational, or product requirement justifies another bounded backend change.
-2. Continue with the next concrete product or companion-frontend requirement; backend contract changes should be introduced only when that bounded slice requires them.
-3. Use the deferred operational-capacity backlog below when measurements or production-scale requirements justify a focused performance stage.
+1. Complete the capacity baseline live run on the local Kubernetes stack and retain the machine-readable measurement evidence; do not infer SLOs from one environment.
+2. Add the missing capacity-oriented telemetry only where the baseline cannot explain saturation clearly, starting with Analysis outbox backlog/age and then scheduler/SSE signals when those paths are exercised.
+3. Expand into ramp/spike/soak and read/SSE workload modes, then select optimizations only from measured bottlenecks. Product/backend contract work may continue in parallel when it is independent of capacity semantics.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 

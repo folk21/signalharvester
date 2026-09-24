@@ -39,6 +39,14 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 
 The script prints a final PASS/FAIL summary for every routine step that actually ran. It also lists relevant test and problems-report locations.
 
+The Kubernetes capacity baseline is an opt-in live measurement, not a routine correctness gate:
+
+```bash
+python3 infra/kubernetes/performance/run_baseline.py
+```
+
+It requires an already verified local Kubernetes deployment and writes `build/reports/performance/capacity-baseline.json`. The report records observed timings/rates and must not be interpreted as a repository performance budget.
+
 Use focused Gradle commands during development. Run `./run_checks.sh` before treating a substantial PATCH or branch as functionally verified.
 
 Slower coverage, static analysis, dependency analysis, and repository-size metrics run through `./run_rare_checks.sh`. Quality-tool policy and report ownership are documented in [`QUALITY.md`](QUALITY.md).

@@ -1,0 +1,76 @@
+---
+type: Infrastructure Guide
+title: Kubernetes capacity baseline
+description: Reproducible bounded pipeline measurement for the local SignalHarvester Kubernetes stack.
+---
+# Kubernetes capacity baseline
+
+This directory owns the first measurement-oriented capacity workflow for the local Kubernetes deployment.
+
+The workflow is intentionally a **baseline measurement**, not a benchmark claim or a production SLO. It creates deterministic RSS workload, measures the real Collection -> Kafka -> Analysis -> outbox -> Results path, and writes a machine-readable report without enforcing arbitrary latency or throughput thresholds.
+
+## What it measures
+
+`run_baseline.py`:
+
+1. verifies the existing local Kubernetes deployment;
+2. deploys the repository-owned deterministic fixture;
+3. temporarily allowlists the fixture Service CIDR for backend source access;
+4. disables scheduled Collection temporarily and sets an explicit backend replica count;
+5. waits for Analysis, Results, and Event Observation consumer groups to settle after rollout, then requires zero starting lag plus an empty pending Analysis outbox;
+6. creates bounded Sources and one disabled Monitoring Profile;
+7. runs one synchronous Collection Run;
+8. samples Analysis/Results/Event Observation consumer lag, Analysis durable rows, Results durable rows, and pending outbox rows until the workload drains;
+9. verifies that the healthy run did not advance the Analysis DLQ;
+10. writes a JSON report and removes temporary Source/Profile configuration.
+
+The workflow does not delete durable Collection/Analysis/Results history because the application contract intentionally has no bulk test-history cleanup operation. Use a disposable local database when clean history matters.
+
+## Run
+
+Build/load/deploy the backend and pass the normal local verification first. The preflight prints each workload while it waits; if a rollout fails, it prints the failed workload, matching pods, workload description, and recent namespace events before stopping. Then run from the repository root:
+
+```bash
+python3 infra/kubernetes/performance/run_baseline.py
+```
+
+The default workload is bounded to 6 Sources x 200 items with one backend replica. The report is written to:
+
+```text
+build/reports/performance/capacity-baseline.json
+```
+
+Useful comparison runs include:
+
+```bash
+python3 infra/kubernetes/performance/run_baseline.py --replicas 1 --sources 6 --items-per-source 200 \
+  --output build/reports/performance/capacity-1-replica.json
+
+python3 infra/kubernetes/performance/run_baseline.py --replicas 3 --sources 6 --items-per-source 200 \
+  --output build/reports/performance/capacity-3-replicas.json
+```
+
+The raw-event topic currently has three partitions, so increasing backend replicas beyond available Kafka partitions does not imply additional Analysis parallelism.
+
+## Report semantics
+
+The report records workload shape, backend replica count/image, starting lag/outbox/DLQ state, periodic pipeline samples, Collection publication duration, final drain duration, and derived observed rates.
+
+Treat rates as **environment-specific observations**. Do not copy one developer machine's values into SLOs, CI pass/fail thresholds, or production capacity claims. First collect repeated measurements on controlled hardware and understand variance.
+
+The runner accepts both partition-detail and aggregate `rpk group describe --format json` shapes. A transient `PreparingRebalance`/`CompletingRebalance` state is not accepted as the comparable starting point even when `total_lag` is zero; the runner waits for `Stable` before recording the baseline.
+
+## Current limits
+
+This first slice does not yet provide:
+
+- ramp, spike, or soak scenarios;
+- concurrent Results REST load;
+- many-subscriber SSE load;
+- scheduler-heavy workloads;
+- Prometheus time-series export into the report;
+- hard performance budgets;
+- automatic optimization or autoscaling decisions;
+- ML-based anomaly detection.
+
+Those are follow-up stages after the baseline is reproducible and the missing capacity telemetry is explicit.

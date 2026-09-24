@@ -112,6 +112,20 @@ class KubernetesAssetsTest(unittest.TestCase):
         self.assertIn("get secret signalharvester-observability-secrets", script)
         self.assertNotIn("kubectl apply -f -", script)
 
+    def test_local_verification_reports_the_workload_that_failed_readiness(self):
+        script = (K8S / "verify-local.sh").read_text()
+        self.assertIn('echo "==> Waiting for $workload"', script)
+        self.assertIn('ERROR: workload did not become ready: $workload', script)
+        self.assertIn('get pods -l "app.kubernetes.io/name=$workload_name" -o wide', script)
+        self.assertIn('get events --sort-by=.lastTimestamp', script)
+
+    def test_local_verification_fails_fast_when_cluster_nodes_are_not_ready(self):
+        script = (K8S / "verify-local.sh").read_text()
+        self.assertIn('echo "==> Checking Kubernetes node readiness"', script)
+        self.assertIn('kubectl get nodes -o custom-columns=', script)
+        self.assertIn('ERROR: Kubernetes cluster has nodes that are not Ready', script)
+        self.assertIn('kubectl get events -A --sort-by=.lastTimestamp', script)
+
     def test_frontend_boundary_remains_separate_from_backend_artifact(self):
         frontend = (K8S / "frontend" / "frontend.yaml").read_text()
         root = (K8S / "kustomization.yaml").read_text()

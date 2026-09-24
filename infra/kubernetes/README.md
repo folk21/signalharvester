@@ -71,7 +71,7 @@ kubectl apply -k infra/kubernetes
 
 The backend runs with `MICRONAUT_ENVIRONMENTS=security`, so authentication/RBAC and the restrictive external-source destination policy are enabled. The local port-forward workflow intentionally sets the authentication cookie `Secure` flag to `false`; this local manifest is not a production Internet exposure configuration and does not define TLS/Ingress.
 
-Wait for the cluster and run the live verification:
+Wait for the cluster and run the live verification. The verifier prints each workload before waiting and emits focused pod/workload/event diagnostics if readiness times out:
 
 ```bash
 ./infra/kubernetes/verify-local.sh
@@ -84,6 +84,8 @@ python3 infra/kubernetes/resilience/run_acceptance.py
 ```
 
 The resilience harness is opt-in because it intentionally injects failures and restarts. Read [`resilience/README.md`](resilience/README.md) before running it. After that workflow passes, `python3 infra/kubernetes/scaling/run_acceptance.py` demonstrates partition-bounded Kafka worker scaling; see [`scaling/README.md`](scaling/README.md).
+
+For measurement-oriented capacity work, run `python3 infra/kubernetes/performance/run_baseline.py` after the normal local verification. It creates a bounded deterministic pipeline workload and writes environment-specific JSON evidence without enforcing a benchmark threshold; see [`performance/README.md`](performance/README.md).
 
 ## Access local services
 
@@ -141,6 +143,24 @@ The routine infrastructure tests do not require Kubernetes:
 ```
 
 They validate resource references, versioned images, secret separation, backend security/probe wiring, observability data-source wiring, dashboard JSON, and the backend container contract. The canonical repository gate also runs them through `./run_checks.sh`.
+
+## Troubleshooting stale local cluster nodes
+
+`verify-local.sh` fails before workload rollout checks when any Kubernetes node is not `Ready`. Workload readiness and local-path PersistentVolume scheduling are not reliable while a node is `NotReady` or `unreachable`. Inspect the cluster first:
+
+```bash
+kubectl get nodes -o wide
+```
+
+For k3d, a stopped or transiently broken local cluster may recover after a cluster restart:
+
+```bash
+k3d cluster stop signalharvester
+k3d cluster start signalharvester
+kubectl get nodes -o wide
+```
+
+If nodes remain unavailable, recreate the disposable local cluster with the same topology originally used for acceptance, then recreate SignalHarvester secrets, re-import the local backend image, apply the manifests, and rerun verification. Recreating only individual stateful pods is not sufficient when their local PersistentVolumes are bound to unavailable nodes.
 
 ## Reset
 
