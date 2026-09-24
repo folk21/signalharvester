@@ -99,9 +99,24 @@ class KubernetesAssetsTest(unittest.TestCase):
             "Analysis items",
             "Analysis average duration",
             "PostgreSQL span average latency",
+            "Analysis outbox pending rows",
+            "Analysis outbox oldest pending age",
+            "Analysis outbox average batch size",
+            "Analysis outbox average batch duration",
+            "Analysis outbox Kafka publish latency",
+            "Analysis outbox database operation latency",
             "Backend logs",
         }
         self.assertTrue(expected.issubset(titles))
+
+    def test_dashboard_uses_replica_safe_outbox_backlog_aggregation(self):
+        dashboard = json.loads((K8S / "observability" / "signalharvester-overview.json").read_text())
+        by_title = {panel["title"]: panel for panel in dashboard["panels"]}
+        pending = by_title["Analysis outbox pending rows"]["targets"][0]["expr"]
+        oldest = by_title["Analysis outbox oldest pending age"]["targets"][0]["expr"]
+        self.assertIn("max(signalharvester_analysis_outbox_pending", pending)
+        self.assertIn("max(signalharvester_analysis_outbox_oldest_pending_age_seconds", oldest)
+        self.assertNotIn("sum(signalharvester_analysis_outbox_pending", pending)
 
     def test_secret_generation_is_external_to_manifests(self):
         manifests = "\n".join(path.read_text() for path in K8S.rglob("*.yaml"))
@@ -125,6 +140,11 @@ class KubernetesAssetsTest(unittest.TestCase):
         self.assertIn('kubectl get nodes -o custom-columns=', script)
         self.assertIn('ERROR: Kubernetes cluster has nodes that are not Ready', script)
         self.assertIn('kubectl get events -A --sort-by=.lastTimestamp', script)
+
+    def test_local_verification_requires_outbox_capacity_gauges(self):
+        script = (K8S / "verify-local.sh").read_text()
+        self.assertIn("signalharvester_analysis_outbox_pending", script)
+        self.assertIn("signalharvester_analysis_outbox_oldest_pending_age_seconds", script)
 
     def test_frontend_boundary_remains_separate_from_backend_artifact(self):
         frontend = (K8S / "frontend" / "frontend.yaml").read_text()

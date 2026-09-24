@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.apache.kafka.common.errors.InterruptException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,14 +64,24 @@ public final class AnalysisOutboxDispatcher {
         throwIfInterrupted("Interrupted before dispatching Analysis outbox events");
         Instant now = clock.instant();
         UUID leaseToken = UUID.randomUUID();
-        List<AnalysisOutboxEntry> entries = transactions.executeWrite(status -> store.claimBatch(
-                now,
-                leaseToken,
-                now.plus(configuration.getLeaseDuration()),
-                configuration.getBatchSize()));
-        for (AnalysisOutboxEntry entry : entries) {
-            throwIfInterrupted("Interrupted while dispatching Analysis outbox events");
-            publishOne(entry, leaseToken);
+        List<AnalysisOutboxEntry> entries = measureDatabaseOperation(
+                "claim",
+                () -> transactions.executeWrite(status -> store.claimBatch(
+                        now,
+                        leaseToken,
+                        now.plus(configuration.getLeaseDuration()),
+                        configuration.getBatchSize())));
+        if (entries.isEmpty()) {
+            return;
+        }
+        long batchStarted = System.nanoTime();
+        try {
+            for (AnalysisOutboxEntry entry : entries) {
+                throwIfInterrupted("Interrupted while dispatching Analysis outbox events");
+                publishOne(entry, leaseToken);
+            }
+        } finally {
+            observability.recordOutboxBatch(entries.size(), elapsed(batchStarted));
         }
     }
 
@@ -79,14 +90,12 @@ public final class AnalysisOutboxDispatcher {
             return;
         }
         try {
-            observability.withTraceparent(
-                    entry.traceparent(),
-                    () -> kafkaClient.send(entry.topic(), entry.eventKey(), entry.payload()));
+            publishToKafka(entry);
             Instant publishedAt = clock.instant();
-            transactions.executeWrite(status -> {
+            measureDatabaseOperation("mark_published", () -> transactions.executeWrite(status -> {
                 store.markPublished(entry.eventId(), leaseToken, publishedAt);
                 return null;
-            });
+            }));
             observability.recordOutboxPublication("published");
             LOG.debug(
                     "Published Analysis outbox event {} topic={} attempts={}",
@@ -97,10 +106,10 @@ public final class AnalysisOutboxDispatcher {
             Instant nextAttemptAt = failedAt.plus(configuration.getRetryBackoff());
             String failureMessage = boundedMessage(failure);
             try {
-                transactions.executeWrite(status -> {
+                measureDatabaseOperation("mark_failed", () -> transactions.executeWrite(status -> {
                     store.markFailed(entry.eventId(), leaseToken, failedAt, nextAttemptAt, failureMessage);
                     return null;
-                });
+                }));
             } catch (RuntimeException persistenceFailure) {
                 failure.addSuppressed(persistenceFailure);
                 propagateIfInterrupted(
@@ -117,10 +126,10 @@ public final class AnalysisOutboxDispatcher {
         Instant renewedAt = clock.instant();
         Instant leaseExpiresAt = renewedAt.plus(configuration.getLeaseDuration());
         try {
-            transactions.executeWrite(status -> {
+            measureDatabaseOperation("renew_lease", () -> transactions.executeWrite(status -> {
                 store.renewLease(entry.eventId(), leaseToken, renewedAt, leaseExpiresAt);
                 return null;
-            });
+            }));
             return true;
         } catch (RuntimeException failure) {
             propagateIfInterrupted("Interrupted while renewing Analysis outbox lease", failure);
@@ -130,6 +139,35 @@ public final class AnalysisOutboxDispatcher {
                     entry.eventId(), entry.topic(), entry.publicationAttempts(), failure);
             return false;
         }
+    }
+
+    private void publishToKafka(AnalysisOutboxEntry entry) {
+        long started = System.nanoTime();
+        try {
+            observability.withTraceparent(
+                    entry.traceparent(),
+                    () -> kafkaClient.send(entry.topic(), entry.eventKey(), entry.payload()));
+            observability.recordOutboxKafkaPublish("success", elapsed(started));
+        } catch (RuntimeException failure) {
+            observability.recordOutboxKafkaPublish("failed", elapsed(started));
+            throw failure;
+        }
+    }
+
+    private <T> T measureDatabaseOperation(String operation, Supplier<T> action) {
+        long started = System.nanoTime();
+        try {
+            T result = action.get();
+            observability.recordOutboxDatabaseOperation(operation, "success", elapsed(started));
+            return result;
+        } catch (RuntimeException failure) {
+            observability.recordOutboxDatabaseOperation(operation, "failed", elapsed(started));
+            throw failure;
+        }
+    }
+
+    private static Duration elapsed(long started) {
+        return Duration.ofNanos(Math.max(0L, System.nanoTime() - started));
     }
 
     private static void throwIfInterrupted(String message) {

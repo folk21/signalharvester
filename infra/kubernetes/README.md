@@ -114,6 +114,7 @@ The backend exports OTLP traces directly to Tempo. Tempo derives span metrics an
 The provisioned **SignalHarvester Overview** dashboard includes:
 
 - backend replica availability and restarts;
+- Analysis outbox pending depth, oldest-pending age, batch behavior, Kafka publication latency, and database-operation latency;
 - HTTP request rate and average latency;
 - Collection Run and external-source outcomes;
 - Analysis throughput and duration;

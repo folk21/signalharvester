@@ -95,6 +95,7 @@ Do not turn internal strategy/repository interfaces into published APIs solely b
 - a post-ack publication-marker failure may republish the same event id/payload, so downstream persistence remains idempotent;
 - terminal input failures become eligible for framework offset commit only after acknowledged Analysis dead-letter publication;
 - operator recovery validates the current Analysis consumer group and raw input topic, requires exact dead-letter-id confirmation, reuses the normal decoder/processor, and never republishes the shared raw topic or rewrites source offsets.
+- outbox capacity telemetry is observational only: backlog sampling must not participate in lease ownership/publication transactions, and metrics labels must remain bounded and free of event/profile/source identities.
 
 ## Extension points
 

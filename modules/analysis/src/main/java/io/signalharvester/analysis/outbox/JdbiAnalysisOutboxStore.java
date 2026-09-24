@@ -22,6 +22,7 @@ public final class JdbiAnalysisOutboxStore implements AnalysisOutboxStore {
 
     private static final String SQL_PATH = "analysis/outbox";
     private static final String INSERT_SQL = SqlResources.load(SQL_PATH, "insert");
+    private static final String BACKLOG_SQL = SqlResources.load(SQL_PATH, "backlog");
     private static final String CLAIM_SQL = SqlResources.load(SQL_PATH, "claim");
     private static final String RENEW_LEASE_SQL = SqlResources.load(SQL_PATH, "renew-lease");
     private static final String MARK_PUBLISHED_SQL = SqlResources.load(SQL_PATH, "mark-published");
@@ -48,6 +49,15 @@ public final class JdbiAnalysisOutboxStore implements AnalysisOutboxStore {
                     () -> update.bindNull("traceparent", Types.VARCHAR));
             update.execute();
         });
+    }
+
+    @Override
+    public AnalysisOutboxBacklog inspectBacklog() {
+        return execute("Failed to inspect Analysis outbox backlog", handle -> handle.createQuery(BACKLOG_SQL)
+                .map((rows, context) -> new AnalysisOutboxBacklog(
+                        rows.getLong("pending_count"),
+                        Optional.ofNullable(rows.getTimestamp("oldest_created_at")).map(Timestamp::toInstant)))
+                .one());
     }
 
     @Override

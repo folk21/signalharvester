@@ -10,7 +10,7 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Implementation of the first bounded measurement harness is complete and verification is pending.
+Implementation and live bounded measurement are complete; canonical repository verification is still pending.
 
 The previous `backend-analysis-all-relevant-default` slice remains independently verification-pending. This capacity slice does not change or claim acceptance of that behavior.
 
@@ -133,7 +133,7 @@ Before this slice is accepted, run the canonical backend gate:
 ./run_checks.sh
 ```
 
-Acceptance evidence must include generated JSON from the live Kubernetes scenario. The one-replica S1 run was completed by the developer on 2026-09-24 with 1,200 expected items and a fully drained pipeline; its numeric values remain environment-specific observations rather than generalized capacity limits. S2 remains pending until the same workload is measured with the configured replica comparison.
+Acceptance evidence must include generated JSON from the live Kubernetes scenario. The one-replica S1 run and same-workload one-versus-three S2 comparison were completed by the developer on 2026-09-24 with 1,200 expected items per run and fully drained pipelines. Their numeric values remain environment-specific observations rather than generalized capacity limits. The comparison exposed mixed downstream timing and justified the separate `backend-capacity-telemetry-expansion` follow-up before broader stress testing.
 
 ## Implementation tasks
 
@@ -146,7 +146,7 @@ Acceptance evidence must include generated JSON from the live Kubernetes scenari
 - [x] tolerate aggregate `rpk` group JSON during transient rebalance while requiring a settled group before baseline measurement;
 - [x] run a live Kubernetes one-replica baseline and retain/report its measurements;
 - [x] add a same-workload replica-comparison runner that preserves raw reports and emits neutral deltas/ratios;
-- [ ] run the live one-versus-three replica comparison and retain/report its measurements;
+- [x] run the live one-versus-three replica comparison and retain/report its measurements;
 - [ ] run `./run_checks.sh` successfully in a Docker-capable environment;
 - [ ] accept/archive this spec only after the live measurement and canonical gate pass.
 

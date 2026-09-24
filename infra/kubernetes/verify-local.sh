@@ -102,7 +102,10 @@ wait_http http://127.0.0.1:18080/health/readiness
 wait_http http://127.0.0.1:19090/-/ready
 wait_http http://127.0.0.1:13000/api/health
 
-curl -fsS http://127.0.0.1:18080/prometheus | grep -q 'signalharvester_'
+BACKEND_METRICS=$(curl -fsS http://127.0.0.1:18080/prometheus)
+printf '%s\n' "$BACKEND_METRICS" | grep -q 'signalharvester_'
+printf '%s\n' "$BACKEND_METRICS" | grep -q 'signalharvester_analysis_outbox_pending'
+printf '%s\n' "$BACKEND_METRICS" | grep -q 'signalharvester_analysis_outbox_oldest_pending_age_seconds'
 
 query_equals() {
   query=$1

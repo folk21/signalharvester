@@ -25,6 +25,10 @@ COMPARISON_METRICS = (
     "resultsLagDrainSeconds",
     "eventObservationLagDrainSeconds",
     "outboxDrainSeconds",
+    "maxAnalysisLag",
+    "maxResultsLag",
+    "maxEventObservationLag",
+    "maxPendingOutboxRows",
     "collectionPublishRateItemsPerSecond",
     "endToEndRateItemsPerSecond",
 )

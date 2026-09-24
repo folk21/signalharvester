@@ -55,6 +55,8 @@ python3 infra/kubernetes/performance/run_comparison.py
 
 The default comparison sequence is one replica followed by three replicas. It writes both baseline reports and a neutral `capacity-comparison.json` under `build/reports/performance/replica-comparison/`.
 
+The follow-up capacity-telemetry slice adds Analysis outbox Prometheus metrics and Grafana panels. Deterministic tests protect metric/report/dashboard wiring; live acceptance requires rebuilding/redeploying the backend, running a bounded capacity workload, and confirming the new outbox metrics are present on `/prometheus` and populated in Grafana.
+
 Use focused Gradle commands during development. Run `./run_checks.sh` before treating a substantial PATCH or branch as functionally verified.
 
 Slower coverage, static analysis, dependency analysis, and repository-size metrics run through `./run_rare_checks.sh`. Quality-tool policy and report ownership are documented in [`QUALITY.md`](QUALITY.md).

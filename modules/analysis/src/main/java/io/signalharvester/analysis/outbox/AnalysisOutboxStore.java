@@ -10,6 +10,9 @@ public interface AnalysisOutboxStore {
     /** Appends one serialized terminal event atomically with Analysis state changes. */
     void append(AnalysisOutboxEntry entry);
 
+    /** Reads the current unpublished backlog for operational telemetry. */
+    AnalysisOutboxBacklog inspectBacklog();
+
     /** Claims a bounded batch for one dispatcher lease. */
     List<AnalysisOutboxEntry> claimBatch(Instant now, UUID leaseToken, Instant leaseExpiresAt, int limit);
 

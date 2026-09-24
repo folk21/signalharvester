@@ -8,6 +8,7 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Added verification-pending Collection Run interruption recovery so lifecycle cancellation escapes per-source publication failure classification and interrupted scheduled work does not advance its next-due time.
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
+- 2026-09-24 — Added verification-pending Analysis outbox capacity telemetry for global pending depth/oldest age, dispatcher batch behavior, Kafka publication latency, and short database-operation latency, plus Grafana capacity panels and report high-water marks selected from the live replica comparison.
 - 2026-09-24 — Added a same-workload one-versus-three backend replica comparison workflow that preserves both capacity baseline reports and emits neutral per-metric deltas/ratios without performance budgets or winner selection.
 - 2026-09-24 — Hardened the capacity baseline against Redpanda `rpk` aggregate consumer-group JSON by tolerating transient empty partition lists, waiting for stable group coordination before zero-lag validation, and recording starting group states.
 - 2026-09-24 — Hardened local Kubernetes verification to fail fast on NotReady cluster nodes before workload rollout waits, surfacing node status and recent cluster events for stale local-volume/topology failures.

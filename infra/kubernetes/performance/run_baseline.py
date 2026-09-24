@@ -331,6 +331,10 @@ def build_summary(
         "resultsLagDrainSeconds": first_elapsed(samples, lambda sample: sample.results_lag == 0),
         "eventObservationLagDrainSeconds": first_elapsed(samples, lambda sample: sample.event_observation_lag == 0),
         "outboxDrainSeconds": first_elapsed(samples, lambda sample: sample.pending_outbox == 0),
+        "maxAnalysisLag": max(sample.analysis_lag for sample in samples),
+        "maxResultsLag": max(sample.results_lag for sample in samples),
+        "maxEventObservationLag": max(sample.event_observation_lag for sample in samples),
+        "maxPendingOutboxRows": max(sample.pending_outbox for sample in samples),
         "collectionPublishRateItemsPerSecond": round(expected / collection_seconds, 3) if collection_seconds > 0 else None,
         "endToEndRateItemsPerSecond": round(expected / final_elapsed, 3) if final_elapsed > 0 else None,
     }

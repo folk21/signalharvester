@@ -52,13 +52,19 @@ The raw-event topic currently has three partitions, so increasing backend replic
 
 ## Report semantics
 
-The report records workload shape, backend replica count/image, starting lag/outbox/DLQ state, periodic pipeline samples, Collection publication duration, final drain duration, and derived observed rates.
+The report records workload shape, backend replica count/image, starting lag/outbox/DLQ state, periodic pipeline samples, Collection publication duration, final drain duration, derived observed rates, and lag/outbox high-water marks from those samples.
 
 Treat rates as **environment-specific observations**. Do not copy one developer machine's values into SLOs, CI pass/fail thresholds, or production capacity claims. First collect repeated measurements on controlled hardware and understand variance.
 
 `run_comparison.py` keeps the same workload arguments across every requested replica count. Its comparison JSON records raw report paths, run order, per-metric values, absolute differences, and ratios to the first run. These fields are descriptive evidence only; lower timing ratios or higher throughput ratios are not acceptance criteria.
 
 The runner accepts both partition-detail and aggregate `rpk group describe --format json` shapes. A transient `PreparingRebalance`/`CompletingRebalance` state is not accepted as the comparable starting point even when `total_lag` is zero; the runner waits for `Stable` before recording the baseline.
+
+## Capacity telemetry follow-up
+
+The measured one-versus-three comparison justified an outbox-focused observability slice before broader stress testing. The backend exposes global outbox pending depth and oldest-pending age plus local batch, Kafka-publication, and database-operation timing metrics. Grafana uses `max` for the database-global backlog gauges because each backend replica samples the same PostgreSQL backlog. Timer/summary metrics aggregate local work across replicas.
+
+These signals are diagnostic context for subsequent ramp/spike/soak work. They do not change the no-budget/no-winner interpretation of this directory's measurement reports.
 
 ## Current limits
 
@@ -73,4 +79,4 @@ This first slice does not yet provide:
 - automatic optimization or autoscaling decisions;
 - ML-based anomaly detection.
 
-Those are follow-up stages after the baseline is reproducible and the missing capacity telemetry is explicit.
+Those remain follow-up stages after the outbox capacity telemetry is live-verified and repeated measurements establish which additional paths need instrumentation.

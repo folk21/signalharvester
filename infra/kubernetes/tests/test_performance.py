@@ -86,6 +86,10 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertEqual(2.5, summary["resultsLagDrainSeconds"])
         self.assertEqual(2.5, summary["eventObservationLagDrainSeconds"])
         self.assertEqual(2.5, summary["outboxDrainSeconds"])
+        self.assertEqual(6, summary["maxAnalysisLag"])
+        self.assertEqual(5, summary["maxResultsLag"])
+        self.assertEqual(4, summary["maxEventObservationLag"])
+        self.assertEqual(2, summary["maxPendingOutboxRows"])
         self.assertEqual(20.0, summary["collectionPublishRateItemsPerSecond"])
         self.assertEqual(4.0, summary["endToEndRateItemsPerSecond"])
 
@@ -133,6 +137,10 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
                 "resultsLagDrainSeconds": 30.0,
                 "eventObservationLagDrainSeconds": 45.0,
                 "outboxDrainSeconds": 60.0,
+                "maxAnalysisLag": 100,
+                "maxResultsLag": 80,
+                "maxEventObservationLag": 70,
+                "maxPendingOutboxRows": 50,
                 "collectionPublishRateItemsPerSecond": 100.0,
                 "endToEndRateItemsPerSecond": 20.0,
             },
@@ -172,20 +180,21 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn("ramp, spike, or soak scenarios", text)
         self.assertIn("ML-based anomaly detection", text)
 
-    def test_capacity_spec_is_current_focus_without_accepting_all_relevant_carryover(self):
+    def test_capacity_telemetry_is_current_focus_with_measurement_carryover(self):
         umbrella = (ROOT / "docs" / "specs" / "active" / "spec-signal-harvester-platform.md").read_text()
         index = (ROOT / "docs" / "specs" / "README.md").read_text()
-        capacity_spec = (
+        telemetry_spec = (
             ROOT
             / "docs"
             / "specs"
             / "active"
             / "subspecs"
-            / "backend-capacity-observability-baseline.md"
+            / "backend-capacity-telemetry-expansion.md"
         ).read_text()
-        self.assertIn("current_focus: subspecs/backend-capacity-observability-baseline.md", umbrella)
-        self.assertIn("spec_status: verification-pending", capacity_spec)
+        self.assertIn("current_focus: subspecs/backend-capacity-telemetry-expansion.md", umbrella)
+        self.assertIn("spec_status: verification-pending", telemetry_spec)
         self.assertIn("Verification-pending carryover", index)
+        self.assertIn("backend-capacity-observability-baseline.md", index)
         self.assertIn("backend-analysis-all-relevant-default.md", index)
 
 

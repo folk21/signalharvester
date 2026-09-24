@@ -471,7 +471,7 @@ Collection records low-cardinality Collection Run/source-fetch metrics and creat
 
 Its Virtual-Thread fetch fan-out wraps submitted work with Micronaut `PropagatedContext`, so HTTP client spans remain attached to the Collection trace.
 
-Analysis records processing and outbox metrics.
+Analysis records processing and outbox metrics. Outbox capacity telemetry includes global unpublished-row count and oldest-pending age sampled from PostgreSQL, plus local claimed-batch size/duration, Kafka publication latency, and short outbox database-operation latency. Backlog gauges are database-global snapshots repeated by each backend replica, so infrastructure views aggregate them with `max` rather than `sum`.
 
 `V11__add_analysis_outbox_trace_context.sql` persists active W3C `traceparent` with staged terminal-event bytes. The dispatcher restores it around Kafka send.
 

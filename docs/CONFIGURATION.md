@@ -66,6 +66,7 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_ANALYSIS_OUTBOX_BATCH_SIZE` | `100` | Maximum outbox rows claimed per pass; bounded to 500. |
 | `SIGNALHARVESTER_ANALYSIS_OUTBOX_LEASE_DURATION` | `30s` | Cross-replica claim lease for one dispatch batch; bounded to five minutes. |
 | `SIGNALHARVESTER_ANALYSIS_OUTBOX_RETRY_BACKOFF` | `2s` | Delay before a failed outbox row becomes claimable again; bounded to one minute. |
+| `SIGNALHARVESTER_ANALYSIS_OUTBOX_METRICS_INTERVAL` | `5s` | Sampling interval for global Analysis outbox pending-count and oldest-pending-age gauges; bounded from 1 second to 1 minute. |
 | `SIGNALHARVESTER_RESULTS_ENABLED` | `true` | Enables Results consumption/materialization of terminal Analysis events. |
 | `SIGNALHARVESTER_RESULTS_CONSUMER_GROUP` | `signalharvester-results-v1` | Consumer group for the Results terminal-analysis listeners. |
 | `SIGNALHARVESTER_RESULTS_KAFKA_MAX_ATTEMPTS` | `3` | Maximum Results projection attempts for a validated Kafka record, including the initial attempt; bounded to 10. |
