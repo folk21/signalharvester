@@ -39,6 +39,24 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 
 The script prints a final PASS/FAIL summary for every routine step that actually ran. It also lists relevant test and problems-report locations.
 
+The Kubernetes capacity baseline is an opt-in live measurement, not a routine correctness gate:
+
+```bash
+python3 infra/kubernetes/performance/run_baseline.py
+```
+
+It requires an already verified local Kubernetes deployment and writes `build/reports/performance/capacity-baseline.json`. The report records observed timings/rates and must not be interpreted as a repository performance budget.
+
+To compare the same bounded workload across explicit backend replica counts without introducing a pass/fail performance threshold, run:
+
+```bash
+python3 infra/kubernetes/performance/run_comparison.py
+```
+
+The default comparison sequence is one replica followed by three replicas. It writes both baseline reports and a neutral `capacity-comparison.json` under `build/reports/performance/replica-comparison/`.
+
+The follow-up capacity-telemetry slice adds Analysis outbox Prometheus metrics and Grafana panels. Deterministic tests protect metric/report/dashboard wiring; live acceptance requires rebuilding/redeploying the backend, running a bounded capacity workload, and confirming the new outbox metrics are present on `/prometheus` and populated in Grafana.
+
 Use focused Gradle commands during development. Run `./run_checks.sh` before treating a substantial PATCH or branch as functionally verified.
 
 Slower coverage, static analysis, dependency analysis, and repository-size metrics run through `./run_rare_checks.sh`. Quality-tool policy and report ownership are documented in [`QUALITY.md`](QUALITY.md).

@@ -393,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         resilience.ensure_commands()
         if not args.skip_preflight:
-            resilience.run_preflight(runner)
+            resilience.run_preflight(runner, args.rollout_timeout)
 
         replica_guard = BackendReplicaGuard(runner, args.rollout_timeout)
         print("==> Deploy deterministic scaling fixture")

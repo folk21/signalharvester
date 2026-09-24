@@ -11,6 +11,7 @@ import io.micronaut.inject.qualifiers.Qualifiers;
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.analysis.event.AnalysisPublicationResult;
 import io.signalharvester.analysis.outbox.AnalysisOutbox;
+import io.signalharvester.analysis.outbox.AnalysisOutboxBacklog;
 import io.signalharvester.analysis.outbox.AnalysisOutboxPersistenceException;
 import io.signalharvester.analysis.outbox.AnalysisOutboxDispatcher;
 import io.signalharvester.analysis.outbox.AnalysisOutboxEntry;
@@ -233,6 +234,26 @@ class RawItemProcessingPostgresIntegrationTest {
         assertEquals(result.eventId(), outboxEventId());
         assertEquals(TRACEPARENT, outboxTraceparent());
         assertTrue(inspection.find(DEFAULT_PROFILE_ID, result.normalizedItemId()).isPresent());
+    }
+
+    /** Expose pending count and oldest row timestamp for outbox capacity telemetry. */
+    @Test
+    void shouldInspectOutboxBacklog() {
+        AnalysisOutbox transactionalOutbox = context.getBean(AnalysisOutbox.class);
+        RawItemProcessingService service = service(matchingAnalyzer(), transactionalOutbox);
+        service.process(rawItem(RAW_ITEM_1, SOURCE_EVENT_1, "Java Kafka"));
+        AnalysisOutboxStore store = context.getBean(AnalysisOutboxStore.class);
+
+        AnalysisOutboxBacklog pending = transactions.executeRead(status -> store.inspectBacklog());
+
+        assertEquals(1L, pending.pendingCount());
+        assertTrue(pending.oldestCreatedAt().isPresent());
+
+        dispatcher((topic, key, payload) -> { }, Instant.parse("2026-09-15T12:05:00Z")).dispatchAvailable();
+
+        AnalysisOutboxBacklog drained = transactions.executeRead(status -> store.inspectBacklog());
+        assertEquals(0L, drained.pendingCount());
+        assertTrue(drained.oldestCreatedAt().isEmpty());
     }
 
     /** Prevent a second replica from claiming a live lease and allow recovery after lease expiry. */
@@ -714,6 +735,11 @@ class RawItemProcessingPostgresIntegrationTest {
         @Override
         public void append(AnalysisOutboxEntry entry) {
             delegate.append(entry);
+        }
+
+        @Override
+        public AnalysisOutboxBacklog inspectBacklog() {
+            return delegate.inspectBacklog();
         }
 
         @Override

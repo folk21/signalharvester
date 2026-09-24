@@ -1,91 +1,370 @@
 {
-  "annotations": {"list": []},
+  "annotations": {
+    "list": []
+  },
   "editable": false,
   "graphTooltip": 1,
   "panels": [
     {
       "type": "stat",
       "title": "Backend replicas available",
-      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
-      "targets": [{"refId": "A", "expr": "kube_deployment_status_replicas_available{namespace=\"signalharvester\",deployment=\"signalharvester-backend\"}"}]
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "kube_deployment_status_replicas_available{namespace=\"signalharvester\",deployment=\"signalharvester-backend\"}"
+        }
+      ]
     },
     {
       "type": "stat",
       "title": "Backend container restarts",
-      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
-      "targets": [{"refId": "A", "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"signalharvester\",container=\"signalharvester-backend\"})"}]
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"signalharvester\",container=\"signalharvester-backend\"})"
+        }
+      ]
     },
     {
       "type": "stat",
       "title": "Kafka consumer lag",
-      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
-      "targets": [{"refId": "A", "expr": "sum(redpanda_kafka_consumer_group_lag_sum{job=\"redpanda\"})"}]
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(redpanda_kafka_consumer_group_lag_sum{job=\"redpanda\"})"
+        }
+      ]
     },
     {
       "type": "stat",
       "title": "JVM heap used",
-      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
-      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
-      "targets": [{"refId": "A", "expr": "sum(jvm_memory_used_bytes{job=\"signalharvester-backend\",area=\"heap\"})"}]
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jvm_memory_used_bytes{job=\"signalharvester-backend\",area=\"heap\"})"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "HTTP request rate",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
-      "targets": [{"refId": "A", "expr": "sum by (status) (rate(http_server_requests_seconds_count{job=\"signalharvester-backend\"}[5m]))", "legendFormat": "{{status}}"}]
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(http_server_requests_seconds_count{job=\"signalharvester-backend\"}[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "HTTP average latency",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "targets": [{"refId": "A", "expr": "sum(rate(http_server_requests_seconds_sum{job=\"signalharvester-backend\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"signalharvester-backend\"}[5m])), 0.000001)"}]
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_sum{job=\"signalharvester-backend\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"signalharvester-backend\"}[5m])), 0.000001)"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "Collection runs",
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 13},
-      "targets": [{"refId": "A", "expr": "sum by (status) (rate(signalharvester_collection_runs_total{job=\"signalharvester-backend\"}[5m]))", "legendFormat": "{{status}}"}]
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(signalharvester_collection_runs_total{job=\"signalharvester-backend\"}[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "External source fetches",
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 13},
-      "targets": [{"refId": "A", "expr": "sum by (outcome) (rate(signalharvester_collection_source_fetches_total{job=\"signalharvester-backend\"}[5m]))", "legendFormat": "{{outcome}}"}]
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(signalharvester_collection_source_fetches_total{job=\"signalharvester-backend\"}[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "Analysis items",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 13},
-      "targets": [{"refId": "A", "expr": "sum by (status) (rate(signalharvester_analysis_items_total{job=\"signalharvester-backend\"}[5m]))", "legendFormat": "{{status}}"}]
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(signalharvester_analysis_items_total{job=\"signalharvester-backend\"}[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "Analysis average duration",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "targets": [{"refId": "A", "expr": "sum(rate(signalharvester_analysis_processing_duration_seconds_sum{job=\"signalharvester-backend\"}[5m])) / clamp_min(sum(rate(signalharvester_analysis_processing_duration_seconds_count{job=\"signalharvester-backend\"}[5m])), 0.000001)"}]
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(signalharvester_analysis_processing_duration_seconds_sum{job=\"signalharvester-backend\"}[5m])) / clamp_min(sum(rate(signalharvester_analysis_processing_duration_seconds_count{job=\"signalharvester-backend\"}[5m])), 0.000001)"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "PostgreSQL span average latency",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 21},
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
-      "targets": [{"refId": "A", "expr": "sum(rate(traces_spanmetrics_latency_sum{db_system=\"postgresql\"}[5m])) / clamp_min(sum(rate(traces_spanmetrics_latency_count{db_system=\"postgresql\"}[5m])), 0.000001)"}]
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(traces_spanmetrics_latency_sum{db_system=\"postgresql\"}[5m])) / clamp_min(sum(rate(traces_spanmetrics_latency_count{db_system=\"postgresql\"}[5m])), 0.000001)"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Analysis outbox pending rows",
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 0,
+        "y": 29
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(signalharvester_analysis_outbox_pending{job=\"signalharvester-backend\"})"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Analysis outbox oldest pending age",
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 6,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(signalharvester_analysis_outbox_oldest_pending_age_seconds{job=\"signalharvester-backend\"})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Analysis outbox average batch size",
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 12,
+        "y": 29
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(signalharvester_analysis_outbox_batch_size_sum{job=\"signalharvester-backend\"}[5m])) / clamp_min(sum(rate(signalharvester_analysis_outbox_batch_size_count{job=\"signalharvester-backend\"}[5m])), 0.000001)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Analysis outbox average batch duration",
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(signalharvester_analysis_outbox_batch_duration_seconds_sum{job=\"signalharvester-backend\"}[5m])) / clamp_min(sum(rate(signalharvester_analysis_outbox_batch_duration_seconds_count{job=\"signalharvester-backend\"}[5m])), 0.000001)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Analysis outbox Kafka publish latency",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(signalharvester_analysis_outbox_kafka_publish_duration_seconds_sum{job=\"signalharvester-backend\"}[5m])) / clamp_min(sum by (outcome) (rate(signalharvester_analysis_outbox_kafka_publish_duration_seconds_count{job=\"signalharvester-backend\"}[5m])), 0.000001)",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Analysis outbox database operation latency",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation, outcome) (rate(signalharvester_analysis_outbox_database_operation_duration_seconds_sum{job=\"signalharvester-backend\"}[5m])) / clamp_min(sum by (operation, outcome) (rate(signalharvester_analysis_outbox_database_operation_duration_seconds_count{job=\"signalharvester-backend\"}[5m])), 0.000001)",
+          "legendFormat": "{{operation}} / {{outcome}}"
+        }
+      ]
     },
     {
       "type": "logs",
       "title": "Backend logs",
-      "datasource": {"type": "loki", "uid": "loki"},
-      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 29},
-      "targets": [{"refId": "A", "expr": "{namespace=\"signalharvester\", app=\"signalharvester-backend\"}"}]
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{namespace=\"signalharvester\", app=\"signalharvester-backend\"}"
+        }
+      ]
     }
   ],
   "refresh": "15s",
   "schemaVersion": 41,
-  "tags": ["signalharvester", "kubernetes"],
-  "templating": {"list": []},
-  "time": {"from": "now-30m", "to": "now"},
+  "tags": [
+    "signalharvester",
+    "kubernetes"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
   "timezone": "browser",
   "title": "SignalHarvester Overview",
   "uid": "signalharvester-overview",

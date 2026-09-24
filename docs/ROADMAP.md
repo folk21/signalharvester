@@ -45,6 +45,8 @@ Source-fetch worker interruption propagation is accepted after developer verific
 Analysis outbox expired-lease fencing is accepted after developer verification. Pre-publication renewal now requires both the exact token and a still-live persisted lease, so an expired former owner cannot resurrect ownership before Kafka send.
 Analysis outbox failure-state lease fencing is accepted after developer verification. Publication-failure retry metadata now requires a still-live exact-token lease, so an unsuccessful send that outlives ownership cannot postpone immediate reclaim. The remaining durable-ownership/crash-window review found no additional material correctness defect across post-ack publication markers, DLQ acknowledgement before framework offset commit, controlled replay/idempotency, and scheduled Collection completion; Review III is closed.
 
+The current bounded backend implementation stage is a verification-pending capacity telemetry expansion. The one-replica and same-workload one-versus-three live pipeline measurements completed successfully on 2026-09-24 and showed enough mixed downstream timing to justify Analysis outbox backlog/latency telemetry before broader stress testing. The preceding capacity baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
+
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
 ## P0 — repository and contract foundation
@@ -91,9 +93,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Keep the verified backend/OpenAPI baseline stable unless a concrete correctness, operational, or product requirement justifies another bounded backend change.
-2. Continue with the next concrete product or companion-frontend requirement; backend contract changes should be introduced only when that bounded slice requires them.
-3. Use the deferred operational-capacity backlog below when measurements or production-scale requirements justify a focused performance stage.
+1. Verify the new Analysis outbox capacity telemetry live: pending depth, oldest age, batch behavior, Kafka publication latency, and short outbox database-operation latency; retain the existing reliability semantics.
+2. Expand the deterministic capacity tooling into ramp/spike/soak modes plus bounded Results REST/SSE load so scheduler/SSE telemetry is added only when those paths are actually exercised.
+3. Select throughput optimizations only from repeated measurements and observed bottlenecks; keep KEDA/autoscaling, backlog-drain changes, and ML-based anomaly analysis separate until the evidence justifies them.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 

@@ -14,6 +14,6 @@ The stack uses:
 - Tempo for OTLP traces and span-metric generation;
 - Grafana Alloy for namespace pod-log collection;
 - kube-state-metrics for replica/restart/workload state;
-- Grafana for provisioned Prometheus/Loki/Tempo exploration and dashboards.
+- Grafana for provisioned Prometheus/Loki/Tempo exploration and dashboards, including Analysis outbox capacity/backlog views.
 
 This directory remains the stable infrastructure-observability entry point if non-Kubernetes deployment variants are added later.

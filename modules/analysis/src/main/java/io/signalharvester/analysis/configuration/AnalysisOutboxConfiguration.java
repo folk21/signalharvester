@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.time.Duration;
 
-/** Provides bounded polling, leasing, and retry settings for Analysis outbox delivery. */
+/** Provides bounded polling, leasing, retry, and telemetry settings for Analysis outbox delivery. */
 @Context
 @ConfigurationProperties("signalharvester.analysis.outbox")
 public interface AnalysisOutboxConfiguration {
@@ -37,4 +37,9 @@ public interface AnalysisOutboxConfiguration {
     @NotNull
     @Bindable(defaultValue = "2s")
     Duration getRetryBackoff();
+
+    /** Returns the interval for sampling global outbox backlog gauges. */
+    @NotNull
+    @Bindable(defaultValue = "5s")
+    Duration getMetricsInterval();
 }

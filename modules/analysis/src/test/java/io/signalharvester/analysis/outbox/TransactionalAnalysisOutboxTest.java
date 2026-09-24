@@ -118,6 +118,11 @@ class TransactionalAnalysisOutboxTest {
         }
 
         @Override
+        public AnalysisOutboxBacklog inspectBacklog() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public List<AnalysisOutboxEntry> claimBatch(Instant now, UUID leaseToken, Instant leaseExpiresAt, int limit) {
             throw new UnsupportedOperationException();
         }
