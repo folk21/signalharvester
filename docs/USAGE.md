@@ -43,7 +43,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies Configuration, Analysis, Collection, Results, Event Observation, and Security migrations at startup.
+Flyway applies Configuration, Analysis, Collection, Results, Event Observation, Security, and Operations migrations at startup.
 
 The backend exposes:
 
@@ -198,6 +198,24 @@ Extraction behavior is:
 Analysis consumes the raw events, normalizes and deduplicates them, runs deterministic keyword analysis, and atomically stages `ItemAnalyzed` or `ItemRejected` bytes in the Analysis outbox.
 
 The outbox dispatcher publishes committed records to Kafka. Results consumes terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST and resumable SSE. `GET /api/v1/results` also supports optional `search` and opaque `cursor` parameters. The response body remains the existing Result summary array; when more rows exist, read the `X-Next-Cursor` response header and pass it back as `cursor` for the next page. The cursor is tied to the filters/search expression that produced it, while `limit` may change between pages.
+
+### Inspect operational changes and foundation Health Reports
+
+ADMIN operators can inspect the bounded operational change journal and capture the current pre-detector Health Snapshot:
+
+```bash
+curl -s -b build/tmp/auth.cookies http://localhost:8080/api/v1/admin/operations/changes
+
+curl -i -X POST -b build/tmp/auth.cookies \
+  -H "X-CSRF-TOKEN: $csrf_token" \
+  http://localhost:8080/api/v1/admin/operations/health/snapshots
+
+curl -s -b build/tmp/auth.cookies http://localhost:8080/api/v1/admin/operations/health/reports/latest
+```
+
+The current `foundation-v1` snapshot is deliberately `UNKNOWN` with score `0`; it persists available capacity signals, recent change references, and missing-evidence reasons. Deterministic/statistical health scoring belongs to the next active implementation stage.
+
+Repository-owned tooling can record sanitized `DEPLOYMENT_TUNING` or `TEST_SCENARIO` markers through `/api/v1/admin/operations/changes/markers`. Source/Profile/user mutations and successful controlled DLQ replay record their own journal evidence; direct database edits and arbitrary external `kubectl` changes are outside the automatic journal guarantee.
 
 ## Inspect application observability
 

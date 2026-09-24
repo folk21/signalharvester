@@ -101,6 +101,7 @@ class SecurityAuthorizationIntegrationTest {
         assertEquals(403, viewer.send("GET", "/api/v1/admin/results/dead-letters/0/0", null, false).statusCode());
         assertEquals(403, viewer.send(
                 "GET", "/api/v1/admin/event-observation/dead-letters/0/0", null, false).statusCode());
+        assertEquals(403, viewer.send("GET", "/api/v1/admin/operations/changes", null, false).statusCode());
 
         HttpResponse<java.util.stream.Stream<String>> stream = viewer.sendLines("/api/v1/results/stream");
         assertEquals(200, stream.statusCode());
@@ -282,6 +283,7 @@ class SecurityAuthorizationIntegrationTest {
             statement.execute("DROP SCHEMA IF EXISTS results CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS event_observation CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS security CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS operations CASCADE");
             statement.execute("DROP TABLE IF EXISTS flyway_schema_history");
         }
     }

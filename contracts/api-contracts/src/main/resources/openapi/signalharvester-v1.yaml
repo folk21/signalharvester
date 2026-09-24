@@ -25,6 +25,8 @@ tags:
   description: ADMIN-only persistent identity and role administration.
 - name: Dead Letter Recovery
   description: ADMIN-only inspection and deliberate owner-specific recovery of terminal Kafka consumer failures.
+- name: Operational Intelligence
+  description: ADMIN-only operational change history and persisted Health Snapshot/report foundation.
 security:
 - cookieAuth: []
 - bearerAuth: []
@@ -887,6 +889,105 @@ paths:
         '422': { description: DLQ record or stored source record is invalid for Event Observation recovery }
         '429': { description: Event Observation recovery concurrency limit reached }
         '503': { description: Kafka unavailable }
+  /api/v1/admin/operations/changes:
+    get:
+      tags: [Operational Intelligence]
+      operationId: listOperationalChanges
+      summary: List recent sanitized operational changes
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      responses:
+        '200':
+          description: Recent operational changes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/OperationalChange'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required}
+  /api/v1/admin/operations/changes/markers:
+    post:
+      tags: [Operational Intelligence]
+      operationId: createOperationalMarker
+      summary: Record a bounded operational tooling or scenario marker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OperationalMarkerRequest'}
+      responses:
+        '201':
+          description: Operational marker recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OperationalChange'}
+        '400': {description: Invalid or unsafe operational marker}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required or CSRF validation failed}
+  /api/v1/admin/operations/health/snapshots:
+    post:
+      tags: [Operational Intelligence]
+      operationId: captureFoundationHealthSnapshot
+      summary: Capture the current bounded foundation Health Snapshot
+      responses:
+        '201':
+          description: Persisted Health Snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HealthSnapshot'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required or CSRF validation failed}
+  /api/v1/admin/operations/health/snapshots/latest:
+    get:
+      tags: [Operational Intelligence]
+      operationId: getLatestHealthSnapshot
+      summary: Return the latest persisted Health Snapshot
+      responses:
+        '200':
+          description: Latest Health Snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HealthSnapshot'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required}
+        '404': {description: No Health Snapshot has been captured yet}
+  /api/v1/admin/operations/health/reports/latest:
+    get:
+      tags: [Operational Intelligence]
+      operationId: getLatestHealthReport
+      summary: Export the latest bounded Health Report as Markdown
+      responses:
+        '200':
+          description: Latest bounded Health Report
+          content:
+            text/plain:
+              schema: {type: string}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required}
+        '404': {description: No Health Snapshot has been captured yet}
+  /api/v1/admin/operations/changes/{changeId}/health-correlation:
+    parameters:
+    - name: changeId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    get:
+      tags: [Operational Intelligence]
+      operationId: getOperationalChangeHealthCorrelation
+      summary: Return nearest persisted Health Snapshots before and after a change
+      responses:
+        '200':
+          description: Change with nearest before/after snapshots
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OperationalHealthCorrelation'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required}
+        '404': {description: Operational change not found}
   /api/v1/admin/users:
     get:
       tags:
@@ -1783,6 +1884,87 @@ components:
           items:
             type: string
             enum: [HISTORY_QUERY_LIMIT_REACHED, MISSING_RAW_DISCOVERY, RESULTS_PERSISTENCE_NOT_OBSERVED]
+    OperationalChange:
+      type: object
+      required: [id, changedAt, category, targetType, targetId, beforeState, afterState, outcome, source, actorId, correlationId, traceId, applicationVersion]
+      properties:
+        id: {type: string, format: uuid}
+        changedAt: {type: string, format: date-time}
+        category:
+          type: string
+          enum: [SOURCE_CONFIGURATION, MONITORING_PROFILE_CONFIGURATION, SECURITY_ADMINISTRATION, DEPLOYMENT_TUNING, DEAD_LETTER_RECOVERY, TEST_SCENARIO]
+        targetType:
+          type: string
+          enum: [SOURCE, MONITORING_PROFILE, USER, DEPLOYMENT, DEAD_LETTER_RECORD, SCENARIO]
+        targetId: {type: string}
+        beforeState:
+          type: object
+          additionalProperties: {type: string}
+        afterState:
+          type: object
+          additionalProperties: {type: string}
+        outcome: {type: string, enum: [APPLIED, REJECTED]}
+        source: {type: string, enum: [REST_UI, SYSTEM, TOOLING, TEST_SCENARIO, RECOVERY]}
+        actorId: {type: string}
+        correlationId: {type: string}
+        traceId: {type: string}
+        applicationVersion: {type: string}
+    OperationalMarkerRequest:
+      type: object
+      required: [category, targetType, targetId]
+      properties:
+        category:
+          type: string
+          enum: [DEPLOYMENT_TUNING, TEST_SCENARIO]
+        targetType:
+          type: string
+          enum: [DEPLOYMENT, SCENARIO]
+        targetId: {type: string, minLength: 1, maxLength: 256}
+        details:
+          type: object
+          maxProperties: 32
+          additionalProperties: {type: string, maxLength: 512}
+    HealthSnapshot:
+      type: object
+      required: [id, generatedAt, windowStartedAt, windowEndedAt, overallStatus, healthScore, policyVersion, componentStatuses, signalValues, anomalyCandidates, recentChangeIds, applicationVersion, evidenceComplete, unknownReasons]
+      properties:
+        id: {type: string, format: uuid}
+        generatedAt: {type: string, format: date-time}
+        windowStartedAt: {type: string, format: date-time}
+        windowEndedAt: {type: string, format: date-time}
+        overallStatus: {type: string, enum: [HEALTHY, DEGRADED, UNHEALTHY, UNKNOWN]}
+        healthScore: {type: integer, minimum: 0, maximum: 100}
+        policyVersion: {type: string}
+        componentStatuses:
+          type: object
+          additionalProperties: {type: string}
+        signalValues:
+          type: object
+          additionalProperties: {type: number, format: double}
+        anomalyCandidates:
+          type: array
+          items: {type: string}
+        recentChangeIds:
+          type: array
+          items: {type: string, format: uuid}
+        applicationVersion: {type: string}
+        evidenceComplete: {type: boolean}
+        unknownReasons:
+          type: array
+          items: {type: string}
+    OperationalHealthCorrelation:
+      type: object
+      required: [change, before, after]
+      properties:
+        change: {$ref: '#/components/schemas/OperationalChange'}
+        before:
+          anyOf:
+          - {$ref: '#/components/schemas/HealthSnapshot'}
+          - {type: 'null'}
+        after:
+          anyOf:
+          - {$ref: '#/components/schemas/HealthSnapshot'}
+          - {type: 'null'}
     ResultSummary:
       type: object
       required:

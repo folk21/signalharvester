@@ -88,6 +88,8 @@ Focused commands follow the same source-set split:
 ./gradlew :modules:analysis:integrationTest
 ./gradlew :modules:results:test
 ./gradlew :modules:results:integrationTest
+./gradlew :modules:operations:test
+./gradlew :modules:operations:integrationTest
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
 ./gradlew :testing:integration-tests:integrationTest
@@ -108,6 +110,7 @@ Container-backed integration ownership is:
 - `modules:configuration` — PostgreSQL persistence/server boundary;
 - `modules:collection` — Kafka producer/consumer transport boundary;
 - `modules:analysis` — PostgreSQL durable deduplication;
+- `modules:operations` — PostgreSQL change-journal and Health Snapshot/report persistence/correlation;
 - `modules:results` — PostgreSQL + Kafka terminal-event consumption and idempotent projection persistence;
 - `testing:integration-tests` — PostgreSQL + Kafka cross-module Collection Run and Collection-to-Analysis flows.
 

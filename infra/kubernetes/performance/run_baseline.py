@@ -239,6 +239,37 @@ def authenticated_admin_session(runner: CommandRunner, backend_port: int, http_t
         yield admin
 
 
+
+
+def record_operational_marker(
+    admin: ApiSession,
+    category: str,
+    target_type: str,
+    target_id: str,
+    details: dict[str, str],
+) -> None:
+    """Records a bounded operational marker for health/change correlation."""
+
+    admin.post_json(
+        "/api/v1/admin/operations/changes/markers",
+        {
+            "category": category,
+            "targetType": target_type,
+            "targetId": target_id,
+            "details": details,
+        },
+    )
+
+
+def capture_foundation_health_snapshot(admin: ApiSession) -> dict[str, Any]:
+    """Captures the current bounded foundation Health Snapshot after the measured workload."""
+
+    status, body = admin.request("POST", "/api/v1/admin/operations/health/snapshots")
+    if status != 201 or not isinstance(body, dict):
+        raise AcceptanceError(f"Health Snapshot capture returned HTTP {status}: {body!r}")
+    return body
+
+
 def create_profile(admin: ApiSession, tracker: ResourceTracker, source_ids: list[str]) -> str:
     profile = admin.post_json(
         "/api/v1/monitoring-profiles",
@@ -422,6 +453,28 @@ def main(argv: list[str] | None = None) -> int:
 
         with authenticated_admin_session(runner, args.backend_port, args.http_timeout) as admin:
             tracker = ResourceTracker(admin)
+            record_operational_marker(
+                admin,
+                "DEPLOYMENT_TUNING",
+                "DEPLOYMENT",
+                BACKEND_DEPLOYMENT,
+                {
+                    "reason": "capacity-baseline",
+                    "previousReplicas": str(replica_guard.original),
+                    "backendReplicas": str(args.replicas),
+                },
+            )
+            record_operational_marker(
+                admin,
+                "TEST_SCENARIO",
+                "SCENARIO",
+                "pipeline-capacity-baseline",
+                {
+                    "sources": str(args.sources),
+                    "itemsPerSource": str(args.items_per_source),
+                    "backendReplicas": str(args.replicas),
+                },
+            )
             run_token = uuid.uuid4().hex[:8]
             source_ids = [
                 tracker.source(
@@ -495,6 +548,12 @@ def main(argv: list[str] | None = None) -> int:
                 },
                 "summary": build_summary(expected, collection_seconds, samples),
                 "samples": [asdict(sample) for sample in samples],
+            }
+            health_snapshot = capture_foundation_health_snapshot(admin)
+            report["healthSnapshot"] = {
+                "id": health_snapshot.get("id"),
+                "overallStatus": health_snapshot.get("overallStatus"),
+                "policyVersion": health_snapshot.get("policyVersion"),
             }
             write_report(output_path, report)
             print(f"    report: {output_path}")

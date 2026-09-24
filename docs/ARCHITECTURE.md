@@ -261,6 +261,16 @@ The default local environment remains an explicitly trusted compatibility mode.
 
 Shared or public deployments must enable the protected security profile and provide deployment-owned JWT/CSRF secrets.
 
+## Operations boundary
+
+The Operations module owns the durable cross-capability operational change journal and persisted Health Snapshot/report foundation. Its PostgreSQL tables are private to the module. Other modules record supported behavior-affecting changes only through the published `io.signalharvester.operations.api..` journal boundary and never query Operations tables directly.
+
+Configuration and Security record supported REST/UI mutations through that API. Analysis, Results, and Event Observation use the same narrow boundary to record successful controlled DLQ replay actions. Repository-owned tooling may emit typed deployment/scenario markers through the ADMIN Operations HTTP boundary.
+
+Applied Configuration/Security mutations record the corresponding sanitized journal entry within the application transaction where the mutation owns a PostgreSQL transaction. Recovery/tooling markers are auxiliary best-effort evidence and must not turn an already successful operator action into a business failure if journaling is unavailable. Secret values, credentials, source-setting values, and other sensitive material are excluded from journal state.
+
+The first Health Snapshot/report implementation is intentionally a foundation, not a health detector: until the deterministic/statistical Health Engine is active it persists `UNKNOWN` with policy `foundation-v1`, evidence-completeness reasons, available low-cardinality capacity signals, and recent change references. The Operations module is the intended owner of later detector and assisted-investigation capabilities defined by the active specification.
+
 ## UI boundary
 
 The web UI lives in the separate `signalharvester-web` repository.

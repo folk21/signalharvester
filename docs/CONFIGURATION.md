@@ -21,6 +21,8 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | Variable | Default | Purpose |
 |---|---:|---|
 | `SIGNALHARVESTER_HTTP_PORT` | `8080` | Backend HTTP server port. |
+| `SIGNALHARVESTER_BUILD_VERSION` | `dev` | Build/deployment identity persisted with operational change records and Health Snapshots for correlation. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT` | `1000` | Maximum persisted Health Snapshots retained by the Operations foundation; bounded to 1..100000. |
 | `SIGNALHARVESTER_METRICS_ENABLED` | `true` | Enables Micrometer application/runtime metrics. |
 | `SIGNALHARVESTER_PROMETHEUS_ENABLED` | `true` | Enables the Prometheus registry and `/prometheus` scrape endpoint. |
 | `SIGNALHARVESTER_OTEL_TRACES_EXPORTER` | `none` | OpenTelemetry trace exporter; use `otlp` when an OTLP collector is available. |

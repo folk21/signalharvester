@@ -432,7 +432,7 @@ Generated Protobuf Java classes are build output. They remain transport types at
 
 ## Persistence and Flyway
 
-Configuration, Analysis, Collection, Results, Event Observation, and Security share one physical datasource and one Flyway schema history. Each module still owns its PostgreSQL schema and tables.
+Configuration, Analysis, Collection, Results, Event Observation, Security, and Operations share one physical datasource and one Flyway schema history. Each module still owns its PostgreSQL schema and tables.
 
 Migration locations are configured in `app/src/main/resources/application.properties`.
 
@@ -450,7 +450,10 @@ Because Flyway history is shared, versions are globally coordinated across modul
 - `V10` — Analysis event outbox;
 - `V11` — Analysis outbox trace context;
 - `V12` — Security identities and roles;
-- `V13` — Configuration Monitoring Profile Analysis settings.
+- `V13` — Configuration Monitoring Profile Analysis settings;
+- `V14` — Results browsing/full-text indexes;
+- `V15` — Configuration explicit all-relevant Analysis settings;
+- `V16` — Operations change journal and Health Snapshot foundation.
 
 Direct cross-module table access remains forbidden.
 
@@ -478,6 +481,16 @@ Analysis records processing and outbox metrics. Outbox capacity telemetry includ
 Logback keeps console output as the deployment logging boundary. OpenTelemetry MDC integration adds `trace_id` and `span_id` when a valid span is current.
 
 Event Explorer and Processing Flow remain separate retained application diagnostics. They are not reconstructed from trace storage.
+
+### Operational intelligence foundation
+
+The `operations` module owns `operations.change_journal` and `operations.health_snapshots`, created by `V16__create_operational_intelligence.sql`. It publishes only the narrow `OperationalChangeJournal` Java API to other functional modules.
+
+Supported Source/Monitoring Profile REST mutations, Security user administration, and first-ADMIN bootstrap record sanitized change metadata. Applied Configuration/Security mutations journal inside their application transaction; rejected mutation journaling is best-effort and does not replace the original error. Successful controlled Analysis/Results/Event Observation DLQ replay records an auxiliary recovery marker without exposing source payload bytes. Repository-owned capacity tooling records typed deployment/scenario markers through `/api/v1/admin/operations/changes/markers`.
+
+The ADMIN Operations HTTP boundary exposes bounded recent change history, explicit tooling markers, persisted foundation Health Snapshots, the latest Markdown-formatted report, and nearest snapshot correlation around a selected change. Foundation snapshots use `UNKNOWN`, score `0`, and policy `foundation-v1` until the next specification stage activates deterministic/statistical scoring. Snapshot retention is count-bounded by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT` (default `1000`). They currently capture available Analysis outbox backlog gauges plus recent change references and evidence-completeness reasons.
+
+`SIGNALHARVESTER_BUILD_VERSION` supplies the build/deployment identity persisted with journal records and Health Snapshots; it defaults to `dev`.
 
 ## Kubernetes and infrastructure observability
 

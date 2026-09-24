@@ -10,9 +10,23 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Active and prioritized for implementation immediately after the current capacity-telemetry instrumentation landed.
+Active. Initial implementation stage 1 is implemented and verification-pending: the Operations module now owns durable sanitized change records plus persisted `foundation-v1` Health Snapshots/reports and nearest before/after snapshot correlation. Deterministic/statistical health scoring remains stage 2.
 
 The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until their canonical acceptance is recorded. This specification does not weaken or replace those acceptance gates.
+
+## Implementation progress
+
+Stage 1 is implemented and verification-pending. The current bounded slice includes:
+
+- Operations-owned `V16` persistence for sanitized change records and Health Snapshots;
+- journal integration for supported Source/Monitoring Profile mutations, Security administration, and bootstrap ADMIN creation;
+- best-effort markers for successful controlled Analysis/Results/Event Observation DLQ replay;
+- typed repository-tooling markers for deployment tuning and deterministic scenarios;
+- ADMIN change-history, snapshot capture/latest, Markdown report, and change-correlation endpoints;
+- capacity baseline markers plus a persisted foundation snapshot reference in the generated report;
+- count-bounded Health Snapshot retention configured by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT`.
+
+The foundation snapshot intentionally reports `UNKNOWN`, score `0`, policy `foundation-v1`, and explicit incomplete-evidence reasons. It is not a substitute for OI5. Stage 2 must replace this placeholder interpretation with versioned deterministic/statistical scoring while preserving the persisted model and evidence boundaries.
 
 ## Feature scope
 

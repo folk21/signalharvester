@@ -2,29 +2,36 @@ package io.signalharvester.configuration.application;
 
 import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceId;
+import io.signalharvester.operations.api.OperationalChangeContext;
 import java.util.List;
 
-/**
- * Internal application boundary for administering configured external sources.
- *
- * <p>Configuration-owned inbound adapters depend on this contract instead of the concrete application
- * implementation. It is not a published cross-module API; other functional modules consume the narrower
- * {@code configuration.api} contracts only.</p>
- */
+/** Internal application boundary for administering configured external sources. */
 public interface SourceConfigurationOperations {
 
-    /** Creates and persists a source with a new stable identifier. */
-    ConfiguredSource create(SourceConfigurationCommand command);
+    /** Creates a source without asserting that the caller belongs to the supported journaled mutation path. */
+    default ConfiguredSource create(SourceConfigurationCommand command) {
+        return create(command, OperationalChangeContext.untrackedSystem());
+    }
 
-    /** Returns all configured sources in deterministic display order. */
+    /** Creates and journals a source under the supplied operational context. */
+    ConfiguredSource create(SourceConfigurationCommand command, OperationalChangeContext changeContext);
+
     List<ConfiguredSource> list();
-
-    /** Returns one configured source or fails when it does not exist. */
     ConfiguredSource get(SourceId sourceId);
 
-    /** Replaces an existing source configuration while preserving its stable identifier. */
-    ConfiguredSource update(SourceId sourceId, SourceConfigurationCommand command);
+    /** Updates a source without asserting that the caller belongs to the supported journaled mutation path. */
+    default ConfiguredSource update(SourceId sourceId, SourceConfigurationCommand command) {
+        return update(sourceId, command, OperationalChangeContext.untrackedSystem());
+    }
 
-    /** Deletes an existing configured source. */
-    void delete(SourceId sourceId);
+    /** Replaces and journals an existing source. */
+    ConfiguredSource update(SourceId sourceId, SourceConfigurationCommand command, OperationalChangeContext changeContext);
+
+    /** Deletes a source without asserting that the caller belongs to the supported journaled mutation path. */
+    default void delete(SourceId sourceId) {
+        delete(sourceId, OperationalChangeContext.untrackedSystem());
+    }
+
+    /** Deletes and journals an existing source. */
+    void delete(SourceId sourceId, OperationalChangeContext changeContext);
 }

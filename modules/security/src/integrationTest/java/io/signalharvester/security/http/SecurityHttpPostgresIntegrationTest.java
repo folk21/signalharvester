@@ -136,6 +136,12 @@ class SecurityHttpPostgresIntegrationTest {
         String storedHash = scalarString("SELECT password_hash FROM security.users WHERE username = '" + ADMIN_USERNAME + "'");
         assertNotEquals(ADMIN_PASSWORD, storedHash);
         assertTrue(storedHash.startsWith("pbkdf2-sha256$"));
+        assertEquals(1L, scalarLong("SELECT COUNT(*) FROM operations.change_journal "
+                + "WHERE category = 'SECURITY_ADMINISTRATION' AND change_source = 'SYSTEM'"));
+        String bootstrapJournalState = scalarString("SELECT after_state::text FROM operations.change_journal "
+                + "WHERE category = 'SECURITY_ADMINISTRATION' AND change_source = 'SYSTEM' LIMIT 1");
+        assertTrue(bootstrapJournalState.contains("passwordChanged"));
+        assertFalse(bootstrapJournalState.contains(ADMIN_PASSWORD));
         assertEquals(0, scalarLong("""
                 SELECT COUNT(*)
                 FROM information_schema.tables
@@ -643,6 +649,7 @@ class SecurityHttpPostgresIntegrationTest {
                 Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
                 Map.entry("flyway.datasources.default.enabled", true),
                 Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/security"),
+                Map.entry("flyway.datasources.default.locations[1]", "classpath:db/migration/operations"),
                 Map.entry("micronaut.security.enabled", true),
                 Map.entry("micronaut.security.authentication", "cookie"),
                 Map.entry("micronaut.security.redirect.enabled", false),
@@ -710,6 +717,7 @@ class SecurityHttpPostgresIntegrationTest {
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA IF EXISTS security CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS operations CASCADE");
             statement.execute("DROP TABLE IF EXISTS flyway_schema_history");
         }
     }

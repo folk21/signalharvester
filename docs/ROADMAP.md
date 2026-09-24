@@ -93,7 +93,7 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Implement the first `backend-observability-intelligence` slice: durable redacted `OPERATIONS.CHANGE_JOURNAL` records, persisted versioned Health Snapshots, bounded JSON/Markdown Health Reports, and before/after change correlation. This must work without an LLM.
+1. Verify and accept the implemented first `backend-observability-intelligence` slice: durable redacted `OPERATIONS.CHANGE_JOURNAL` records, persisted versioned foundation Health Snapshots, bounded JSON/Markdown Health Reports, and before/after change correlation.
 2. Add the deterministic/statistical Health Engine and use existing resilience/capacity scenarios as labeled evaluation evidence. Add manual sanitized Health Report export, then a provider-neutral structured LLM-analysis boundary with deterministic fake-provider coverage.
 3. Add bounded read-only Prometheus/Loki/Tempo/change-history tools for optional event-driven/periodic assisted investigation and application-owned alert policy. Continue ramp/spike/soak and Results REST/SSE load as both capacity work and operational-intelligence evaluation data; select throughput optimizations or custom ML/neural models only from repeated evidence.
 

@@ -23,6 +23,7 @@ dependencies {
     testAnnotationProcessor("io.micronaut.validation:micronaut-validation-processor")
 
     implementation(project(":common"))
+    implementation(project(":modules:operations"))
     implementation(project(":contracts:event-contracts"))
 
     implementation("io.micronaut.kafka:micronaut-kafka")
