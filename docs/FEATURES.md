@@ -93,9 +93,12 @@ Tests and documents must use IDs from this catalog. Do not invent local feature 
 - `DIAGNOSTICS.PROCESSING_FLOW` — run/item processing-flow reconstruction. Owner: Event Observation. Related umbrella requirement: R17.
 - `OBSERVABILITY.APPLICATION` — metrics, structured logs, distributed traces, and health/readiness. Owner: App + producing/consuming modules. Related umbrella requirement: R18.
 - `OBSERVABILITY.INFRASTRUCTURE` — infrastructure telemetry and Grafana-oriented operational views. Owner: Infrastructure. Related umbrella requirement: R19.
+- `OBSERVABILITY.HEALTH_INTELLIGENCE` — persisted health snapshots/reports, deterministic or statistical anomaly detection, and evidence-based operational health correlation. Owner: operational observability backend capability. Related umbrella requirement: R33.
+- `OBSERVABILITY.ASSISTED_INVESTIGATION` — optional provider-neutral LLM-assisted investigation over bounded read-only telemetry tools and structured evidence. Owner: operational observability backend capability. Related umbrella requirement: R35.
 
-### Reliability and runtime
+### Reliability, runtime, and operations
 
+- `OPERATIONS.CHANGE_JOURNAL` — durable redacted history of behavior-affecting configuration, deployment/tuning changes, and operator actions for timeline inspection and health correlation. Owner: mutating capability owners + operational read model. Related umbrella requirement: R34.
 - `RELIABILITY.KAFKA_RETRY` — bounded retry for asynchronous Kafka processing failures. Owner: consuming modules. Related umbrella requirement: R20.
 - `RELIABILITY.DEAD_LETTER` — terminal dead-letter handling plus controlled owner-specific operator recovery for poison or exhausted Kafka records. Owner: consuming modules + Event Contracts. Related umbrella requirement: R20.
 - `RELIABILITY.IDEMPOTENCY` — duplicate-safe consumer and persistence behavior. Owner: consuming modules. Related umbrella requirement: R21.

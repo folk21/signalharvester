@@ -13,7 +13,7 @@ The project is intentionally domain-neutral. Typical monitoring scenarios includ
 - news and topic-oriented information;
 - financial, company, regulatory, and public-market data.
 
-The current bounded backend implementation focus is a verification-pending capacity telemetry expansion: Analysis outbox backlog, batch, Kafka-publication, and database-operation signals selected from the completed local one-versus-three replica measurement before broader stress testing or ML-based operational analysis. The preceding capacity baseline and explicit all-relevant Analysis follow-up remain separately verification-pending until their canonical acceptance is recorded.
+The current bounded backend implementation focus is operational health intelligence: persisted Health Snapshots/Reports, a durable redacted journal of behavior-affecting changes, lightweight anomaly detection, and optional provider-neutral LLM-assisted investigation over bounded read-only telemetry tools. The capacity-telemetry, capacity-baseline, and explicit all-relevant Analysis slices remain separately verification-pending until their canonical acceptance is recorded.
 
 SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.
 

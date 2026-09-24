@@ -180,9 +180,18 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn("ramp, spike, or soak scenarios", text)
         self.assertIn("ML-based anomaly detection", text)
 
-    def test_capacity_telemetry_is_current_focus_with_measurement_carryover(self):
+    def test_observability_intelligence_is_current_focus_with_capacity_carryover(self):
         umbrella = (ROOT / "docs" / "specs" / "active" / "spec-signal-harvester-platform.md").read_text()
         index = (ROOT / "docs" / "specs" / "README.md").read_text()
+        features = (ROOT / "docs" / "FEATURES.md").read_text()
+        intelligence_spec = (
+            ROOT
+            / "docs"
+            / "specs"
+            / "active"
+            / "subspecs"
+            / "backend-observability-intelligence.md"
+        ).read_text()
         telemetry_spec = (
             ROOT
             / "docs"
@@ -191,9 +200,14 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
             / "subspecs"
             / "backend-capacity-telemetry-expansion.md"
         ).read_text()
-        self.assertIn("current_focus: subspecs/backend-capacity-telemetry-expansion.md", umbrella)
+        self.assertIn("current_focus: subspecs/backend-observability-intelligence.md", umbrella)
+        self.assertIn("spec_status: active", intelligence_spec)
+        self.assertIn("OBSERVABILITY.HEALTH_INTELLIGENCE", features)
+        self.assertIn("OPERATIONS.CHANGE_JOURNAL", features)
+        self.assertIn("OBSERVABILITY.ASSISTED_INVESTIGATION", features)
         self.assertIn("spec_status: verification-pending", telemetry_spec)
         self.assertIn("Verification-pending carryover", index)
+        self.assertIn("backend-capacity-telemetry-expansion.md", index)
         self.assertIn("backend-capacity-observability-baseline.md", index)
         self.assertIn("backend-analysis-all-relevant-default.md", index)
 
