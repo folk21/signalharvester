@@ -40,23 +40,23 @@ The default workload is bounded to 6 Sources x 200 items with one backend replic
 build/reports/performance/capacity-baseline.json
 ```
 
-Useful comparison runs include:
+For a controlled one-versus-three replica comparison with the same workload shape, run:
 
 ```bash
-python3 infra/kubernetes/performance/run_baseline.py --replicas 1 --sources 6 --items-per-source 200 \
-  --output build/reports/performance/capacity-1-replica.json
-
-python3 infra/kubernetes/performance/run_baseline.py --replicas 3 --sources 6 --items-per-source 200 \
-  --output build/reports/performance/capacity-3-replicas.json
+python3 infra/kubernetes/performance/run_comparison.py
 ```
 
-The raw-event topic currently has three partitions, so increasing backend replicas beyond available Kafka partitions does not imply additional Analysis parallelism.
+The comparison workflow runs the baseline sequentially for one and three backend replicas by default, preserves each raw baseline report under `build/reports/performance/replica-comparison/`, and writes `capacity-comparison.json` with neutral absolute differences and ratios relative to the first run. Use `--replicas 1,2,3` or a different `--output-dir` when a broader local comparison is useful.
+
+The raw-event topic currently has three partitions, so increasing backend replicas beyond available Kafka partitions does not imply additional Analysis parallelism. Run order can affect a single developer-machine observation, so the comparison report does not declare a winner or performance budget. Repeat controlled runs before treating a difference as stable.
 
 ## Report semantics
 
 The report records workload shape, backend replica count/image, starting lag/outbox/DLQ state, periodic pipeline samples, Collection publication duration, final drain duration, and derived observed rates.
 
 Treat rates as **environment-specific observations**. Do not copy one developer machine's values into SLOs, CI pass/fail thresholds, or production capacity claims. First collect repeated measurements on controlled hardware and understand variance.
+
+`run_comparison.py` keeps the same workload arguments across every requested replica count. Its comparison JSON records raw report paths, run order, per-metric values, absolute differences, and ratios to the first run. These fields are descriptive evidence only; lower timing ratios or higher throughput ratios are not acceptance criteria.
 
 The runner accepts both partition-detail and aggregate `rpk group describe --format json` shapes. A transient `PreparingRebalance`/`CompletingRebalance` state is not accepted as the comparable starting point even when `total_lag` is zero; the runner waits for `Stable` before recording the baseline.
 

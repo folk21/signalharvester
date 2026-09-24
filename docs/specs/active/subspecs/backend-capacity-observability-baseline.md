@@ -94,9 +94,9 @@ Generate a bounded deterministic workload against one backend replica and persis
 
 ### S2 — replica comparison
 
-Repeat the same workload shape with another explicit replica count and compare reports manually. The scenario records observations but does not declare an expected performance winner.
+Repeat the same workload shape with another explicit replica count and preserve each raw report. A comparison artifact may calculate absolute differences and ratios relative to the first ordered run, but it must not declare an expected performance winner or introduce a pass/fail performance threshold.
 
-Kafka partition count remains a real upper bound on parallel consumer ownership.
+The default local comparison is one backend replica followed by three replicas. Kafka partition count remains a real upper bound on parallel consumer ownership, and sequential run order remains an environment-specific source of variance.
 
 ## Non-goals
 
@@ -133,7 +133,7 @@ Before this slice is accepted, run the canonical backend gate:
 ./run_checks.sh
 ```
 
-Acceptance evidence must include at least one generated JSON report from the live Kubernetes scenario. Numeric results must be reported as observations for that environment, not generalized capacity limits.
+Acceptance evidence must include generated JSON from the live Kubernetes scenario. The one-replica S1 run was completed by the developer on 2026-09-24 with 1,200 expected items and a fully drained pipeline; its numeric values remain environment-specific observations rather than generalized capacity limits. S2 remains pending until the same workload is measured with the configured replica comparison.
 
 ## Implementation tasks
 
@@ -144,7 +144,9 @@ Acceptance evidence must include at least one generated JSON report from the liv
 - [x] wire the workflow into test/roadmap navigation;
 - [x] make live preflight readiness failures identify the workload and emit focused diagnostics;
 - [x] tolerate aggregate `rpk` group JSON during transient rebalance while requiring a settled group before baseline measurement;
-- [ ] run a live Kubernetes baseline and retain/report its measurements;
+- [x] run a live Kubernetes one-replica baseline and retain/report its measurements;
+- [x] add a same-workload replica-comparison runner that preserves raw reports and emits neutral deltas/ratios;
+- [ ] run the live one-versus-three replica comparison and retain/report its measurements;
 - [ ] run `./run_checks.sh` successfully in a Docker-capable environment;
 - [ ] accept/archive this spec only after the live measurement and canonical gate pass.
 

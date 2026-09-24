@@ -1,5 +1,6 @@
 import importlib.util
 import inspect
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -12,6 +13,12 @@ baseline = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 sys.modules[spec.name] = baseline
 spec.loader.exec_module(baseline)
+
+comparison_spec = importlib.util.spec_from_file_location("performance_comparison", PERFORMANCE / "run_comparison.py")
+comparison = importlib.util.module_from_spec(comparison_spec)
+assert comparison_spec.loader is not None
+sys.modules[comparison_spec.name] = comparison
+comparison_spec.loader.exec_module(comparison)
 
 
 class KubernetesPerformanceAssetsTest(unittest.TestCase):
@@ -96,6 +103,68 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn("items_per_source > 500", source)
         self.assertIn("sources > 20", source)
         self.assertIn('"build" / "reports" / "performance" / "capacity-baseline.json"', source)
+
+    def test_comparison_replica_parser_requires_ordered_unique_positive_counts(self):
+        self.assertEqual([1, 3], comparison.parse_replica_counts("1,3"))
+        with self.assertRaises(Exception):
+            comparison.parse_replica_counts("1")
+        with self.assertRaises(Exception):
+            comparison.parse_replica_counts("1,1")
+        with self.assertRaises(Exception):
+            comparison.parse_replica_counts("0,3")
+
+    def test_comparison_report_keeps_neutral_observations_without_budget_or_winner(self):
+        base_report = {
+            "scenario": "pipeline-capacity-baseline",
+            "startedAt": "2026-09-24T10:00:00+00:00",
+            "environment": {
+                "backendReplicas": 1,
+                "backendImage": "signalharvester-backend:local",
+                "consumerMembersBefore": {"signalharvester-analysis-v1": 1},
+            },
+            "workload": {"sources": 6, "itemsPerSource": 200, "expectedItems": 1200},
+            "summary": {
+                "collectionSeconds": 12.0,
+                "pipelineCompletionSeconds": 60.0,
+                "postCollectionDrainSeconds": 48.0,
+                "analysisCompletionSeconds": 40.0,
+                "resultsCompletionSeconds": 60.0,
+                "analysisLagDrainSeconds": 40.0,
+                "resultsLagDrainSeconds": 30.0,
+                "eventObservationLagDrainSeconds": 45.0,
+                "outboxDrainSeconds": 60.0,
+                "collectionPublishRateItemsPerSecond": 100.0,
+                "endToEndRateItemsPerSecond": 20.0,
+            },
+        }
+        scaled_report = json.loads(json.dumps(base_report))
+        scaled_report["environment"]["backendReplicas"] = 3
+        scaled_report["environment"]["consumerMembersBefore"] = {"signalharvester-analysis-v1": 3}
+        scaled_report["summary"]["pipelineCompletionSeconds"] = 30.0
+        scaled_report["summary"]["endToEndRateItemsPerSecond"] = 40.0
+
+        report = comparison.build_comparison([
+            (1, Path("one.json"), base_report),
+            (3, Path("three.json"), scaled_report),
+        ])
+
+        self.assertEqual("pipeline-capacity-replica-comparison", report["scenario"])
+        self.assertFalse(report["interpretation"]["performanceBudgetApplied"])
+        self.assertFalse(report["interpretation"]["winnerDeclared"])
+        pipeline = report["metrics"]["pipelineCompletionSeconds"]["observations"]
+        self.assertEqual(0.5, pipeline[1]["ratioToReference"])
+        self.assertEqual(-30.0, pipeline[1]["differenceFromReference"])
+        rate = report["metrics"]["endToEndRateItemsPerSecond"]["observations"]
+        self.assertEqual(2.0, rate[1]["ratioToReference"])
+
+    def test_comparison_runner_uses_same_workload_and_distinct_report_files(self):
+        source = (PERFORMANCE / "run_comparison.py").read_text()
+        self.assertIn('default=parse_replica_counts("1,3")', source)
+        self.assertIn('"--sources"', source)
+        self.assertIn('"--items-per-source"', source)
+        self.assertIn('"--replicas"', source)
+        self.assertIn('capacity-comparison.json', source)
+        self.assertIn('skip_preflight=index > 0', source)
 
     def test_capacity_documentation_keeps_stress_and_ml_as_follow_up_work(self):
         text = (PERFORMANCE / "README.md").read_text()

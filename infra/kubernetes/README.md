@@ -85,7 +85,7 @@ python3 infra/kubernetes/resilience/run_acceptance.py
 
 The resilience harness is opt-in because it intentionally injects failures and restarts. Read [`resilience/README.md`](resilience/README.md) before running it. After that workflow passes, `python3 infra/kubernetes/scaling/run_acceptance.py` demonstrates partition-bounded Kafka worker scaling; see [`scaling/README.md`](scaling/README.md).
 
-For measurement-oriented capacity work, run `python3 infra/kubernetes/performance/run_baseline.py` after the normal local verification. It creates a bounded deterministic pipeline workload and writes environment-specific JSON evidence without enforcing a benchmark threshold; see [`performance/README.md`](performance/README.md).
+For measurement-oriented capacity work, run `python3 infra/kubernetes/performance/run_baseline.py` after the normal local verification. It creates a bounded deterministic pipeline workload and writes environment-specific JSON evidence without enforcing a benchmark threshold. Use `python3 infra/kubernetes/performance/run_comparison.py` for a same-workload replica comparison with separate raw reports and a neutral comparison JSON; see [`performance/README.md`](performance/README.md).
 
 ## Access local services
 
