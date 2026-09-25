@@ -25,7 +25,8 @@ Own the durable operational timeline used to correlate behavior-affecting change
 - own the `operations` PostgreSQL schema and retention/query model;
 - build bounded sanitized LLM analysis packages;
 - validate and persist structured Incident Assessments from manual or explicitly invoked providers;
-- own the provider-neutral `IncidentAnalyst` boundary and optional OpenAI-compatible adapter.
+- own the provider-neutral `IncidentAnalyst` boundary and optional OpenAI-compatible adapter;
+- own the allowlisted read-only investigation-tool boundary, telemetry sanitization, and per-investigation budgets.
 
 ## Public integration surface
 
@@ -85,9 +86,12 @@ Other modules must not import Operations application, persistence, model, or HTT
 - temporal change/health correlation never asserts causality;
 - assisted-investigation packages contain bounded sanitized evidence and explicitly mark telemetry as untrusted input;
 - model output cannot change persisted Health Snapshot status/score and is persisted only after bounded schema and evidence-reference validation;
-- provider HTTP calls happen outside database transactions and are explicit-only in Stage 3;
-- provider credentials are runtime secrets and are never journaled or persisted with assessments.
+- provider HTTP/tool calls happen outside database transactions and remain explicit-only in Stage 4a;
+- provider credentials are runtime secrets and are never journaled or persisted with assessments;
+- investigation tools are application-defined and read-only; no arbitrary PromQL/LogQL/SQL/shell/Kubernetes/filesystem/unrestricted-HTTP capability is exposed;
+- tool results are bounded, sanitized, marked as untrusted evidence, and any tool-discovered evidence reference must be validated before persistence;
+- model rounds, tool calls, wall-clock investigation duration, telemetry lookback, log rows, trace results, and tool-result characters are bounded by configuration.
 
 ## Extension points
 
-Future stages may add bounded Prometheus/Loki/Tempo investigation tools, event/periodic trigger policy, alert policy, and later ML evaluation. Keep those behind Operations-owned boundaries instead of coupling mutating modules to observability/model providers.
+Future stages may add multi-replica-safe event/periodic trigger policy, alert policy, and later ML evaluation. Keep those behind Operations-owned boundaries instead of coupling mutating modules to observability/model providers.

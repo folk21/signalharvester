@@ -12,7 +12,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,26 +27,31 @@ public final class OperationalHealthSignalCollector {
     private final Optional<MeterRegistry> meterRegistry;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final OperationalPrometheusQueryCatalog queryCatalog;
 
     public OperationalHealthSignalCollector(
             HealthPolicyConfiguration configuration,
-            Optional<MeterRegistry> meterRegistry) {
+            Optional<MeterRegistry> meterRegistry,
+            OperationalPrometheusQueryCatalog queryCatalog) {
         this(
                 configuration,
                 meterRegistry,
                 HttpClient.newBuilder().connectTimeout(configuration.getPrometheusQueryTimeout()).build(),
-                new ObjectMapper());
+                new ObjectMapper(),
+                queryCatalog);
     }
 
     OperationalHealthSignalCollector(
             HealthPolicyConfiguration configuration,
             Optional<MeterRegistry> meterRegistry,
             HttpClient httpClient,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            OperationalPrometheusQueryCatalog queryCatalog) {
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.queryCatalog = Objects.requireNonNull(queryCatalog, "queryCatalog");
     }
 
     HealthSignalEvidence collect() {
@@ -61,7 +65,7 @@ public final class OperationalHealthSignalCollector {
             return new HealthSignalEvidence(values, unknownReasons);
         }
 
-        Map<String, String> queries = queries(configuration.getWindow());
+        Map<String, String> queries = queryCatalog.queries(configuration.getWindow());
         Map<String, CompletableFuture<HttpResponse<String>>> pending = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : queries.entrySet()) {
             try {
@@ -114,56 +118,6 @@ public final class OperationalHealthSignalCollector {
         if (Double.isFinite(value)) {
             target.put(key, value);
         }
-    }
-
-    private Map<String, String> queries(Duration window) {
-        long seconds = Math.max(1L, window.toSeconds());
-        String range = "[" + seconds + "s]";
-        Map<String, String> queries = new LinkedHashMap<>();
-        queries.put(
-                DeterministicStatisticalHealthEngine.BACKEND_UNAVAILABLE_REPLICAS,
-                "clamp_min(sum(kube_deployment_spec_replicas{namespace=\"signalharvester\",deployment=\"signalharvester-backend\"})"
-                        + " - sum(kube_deployment_status_replicas_available{namespace=\"signalharvester\",deployment=\"signalharvester-backend\"}), 0)");
-        queries.put(
-                DeterministicStatisticalHealthEngine.KAFKA_CONSUMER_LAG,
-                "sum(redpanda_kafka_consumer_group_lag_sum{job=\"redpanda\"})");
-        queries.put(
-                DeterministicStatisticalHealthEngine.HTTP_ERROR_RATIO,
-                "(sum(rate(http_server_requests_seconds_count{job=\"signalharvester-backend\",status=~\"5..\"}"
-                        + range + ")) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"signalharvester-backend\"}"
-                        + range + ")), 0.000001)) or vector(0)");
-        queries.put(
-                DeterministicStatisticalHealthEngine.HTTP_AVERAGE_LATENCY_SECONDS,
-                "(sum(rate(http_server_requests_seconds_sum{job=\"signalharvester-backend\"}" + range
-                        + ")) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"signalharvester-backend\"}"
-                        + range + ")), 0.000001)) or vector(0)");
-        queries.put(
-                DeterministicStatisticalHealthEngine.COLLECTION_SOURCE_FAILURE_RATIO,
-                "(sum(rate(signalharvester_collection_source_fetches_total{job=\"signalharvester-backend\",outcome=\"failure\"}"
-                        + range + ")) / clamp_min(sum(rate(signalharvester_collection_source_fetches_total{job=\"signalharvester-backend\"}"
-                        + range + ")), 0.000001)) or vector(0)");
-        queries.put(
-                DeterministicStatisticalHealthEngine.ANALYSIS_FAILURE_RATIO,
-                "(sum(rate(signalharvester_analysis_items_total{job=\"signalharvester-backend\",status=\"FAILED_EXCEPTION\"}"
-                        + range + ")) / clamp_min(sum(rate(signalharvester_analysis_items_total{job=\"signalharvester-backend\"}"
-                        + range + ")), 0.000001)) or vector(0)");
-        queries.put(
-                DeterministicStatisticalHealthEngine.POSTGRES_AVERAGE_LATENCY_SECONDS,
-                "(sum(rate(traces_spanmetrics_latency_sum{db_system=\"postgresql\"}" + range
-                        + ")) / clamp_min(sum(rate(traces_spanmetrics_latency_count{db_system=\"postgresql\"}" + range
-                        + ")), 0.000001)) or vector(0)");
-        queries.put(
-                DeterministicStatisticalHealthEngine.OUTBOX_PENDING,
-                "max(signalharvester_analysis_outbox_pending{job=\"signalharvester-backend\"})");
-        queries.put(
-                DeterministicStatisticalHealthEngine.OUTBOX_OLDEST_PENDING_AGE_SECONDS,
-                "max(signalharvester_analysis_outbox_oldest_pending_age_seconds{job=\"signalharvester-backend\"})");
-        queries.put(
-                DeterministicStatisticalHealthEngine.OUTBOX_PUBLICATION_FAILURE_RATIO,
-                "(sum(rate(signalharvester_analysis_outbox_publications_total{job=\"signalharvester-backend\",outcome=\"failed\"}"
-                        + range + ")) / clamp_min(sum(rate(signalharvester_analysis_outbox_publications_total{job=\"signalharvester-backend\"}"
-                        + range + ")), 0.000001)) or vector(0)");
-        return Map.copyOf(queries);
     }
 
     private URI queryUri(String baseUrl, String query) {

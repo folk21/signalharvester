@@ -3,6 +3,8 @@ package io.signalharvester.operations.assisted;
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
 import io.signalharvester.operations.model.HealthAnalysisPackage;
+import io.signalharvester.operations.assisted.tools.InvestigationBudgetExceededException;
+import io.signalharvester.operations.assisted.tools.InvestigationToolbox;
 import io.signalharvester.operations.model.IncidentAssessment;
 import io.signalharvester.operations.model.IncidentAssessmentDraft;
 import io.signalharvester.operations.model.IncidentAssessmentSource;
@@ -25,6 +27,7 @@ public final class AssistedInvestigationService implements AssistedInvestigation
     private final TransactionOperations<Connection> transactions;
     private final List<IncidentAnalyst> analysts;
     private final AssistedInvestigationConfiguration configuration;
+    private final InvestigationToolbox toolbox;
     private final Clock clock;
 
     public AssistedInvestigationService(
@@ -32,8 +35,9 @@ public final class AssistedInvestigationService implements AssistedInvestigation
             OperationalIntelligenceRepository repository,
             @Named("default") TransactionOperations<Connection> transactions,
             List<IncidentAnalyst> analysts,
-            AssistedInvestigationConfiguration configuration) {
-        this(operations, repository, transactions, analysts, configuration, Clock.systemUTC());
+            AssistedInvestigationConfiguration configuration,
+            InvestigationToolbox toolbox) {
+        this(operations, repository, transactions, analysts, configuration, toolbox, Clock.systemUTC());
     }
 
     AssistedInvestigationService(
@@ -42,12 +46,14 @@ public final class AssistedInvestigationService implements AssistedInvestigation
             TransactionOperations<Connection> transactions,
             List<IncidentAnalyst> analysts,
             AssistedInvestigationConfiguration configuration,
+            InvestigationToolbox toolbox,
             Clock clock) {
         this.operations = Objects.requireNonNull(operations, "operations");
         this.repository = Objects.requireNonNull(repository, "repository");
         this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.analysts = List.copyOf(Objects.requireNonNull(analysts, "analysts"));
         this.configuration = Objects.requireNonNull(configuration, "configuration");
+        this.toolbox = Objects.requireNonNull(toolbox, "toolbox");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -69,9 +75,18 @@ public final class AssistedInvestigationService implements AssistedInvestigation
     public IncidentAssessment analyzeLatest() {
         HealthAnalysisPackage analysisPackage = operations.latestAnalysisPackage();
         IncidentAnalyst analyst = configuredAnalyst();
-        IncidentAssessmentDraft draft = analyst.analyze(analysisPackage);
+        var toolSession = toolbox.openSession(analysisPackage.snapshotId());
+        IncidentInvestigationResult investigation;
         try {
-            validateEvidenceReferences(draft, analysisPackage);
+            investigation = analyst.investigate(analysisPackage, toolSession);
+        } catch (InvestigationBudgetExceededException exception) {
+            throw new IncidentAnalystException("LLM investigation exceeded an application-owned budget", exception);
+        }
+        try {
+            validateEvidenceReferences(
+                    investigation.assessment(),
+                    analysisPackage,
+                    toolSession.discoveredEvidenceReferences());
         } catch (InvalidIncidentAssessmentException exception) {
             throw new IncidentAnalystException("LLM provider returned an assessment with invalid evidence references", exception);
         }
@@ -80,7 +95,7 @@ public final class AssistedInvestigationService implements AssistedInvestigation
                 IncidentAssessmentSource.PROVIDER,
                 analyst.providerId(),
                 analyst.modelId(),
-                draft);
+                investigation.assessment());
     }
 
     @Override
@@ -138,7 +153,15 @@ public final class AssistedInvestigationService implements AssistedInvestigation
     private static void validateEvidenceReferences(
             IncidentAssessmentDraft draft,
             HealthAnalysisPackage analysisPackage) {
+        validateEvidenceReferences(draft, analysisPackage, List.of());
+    }
+
+    private static void validateEvidenceReferences(
+            IncidentAssessmentDraft draft,
+            HealthAnalysisPackage analysisPackage,
+            List<String> discoveredEvidenceReferences) {
         Set<String> allowed = new HashSet<>(analysisPackage.allowedEvidenceReferences());
+        allowed.addAll(discoveredEvidenceReferences);
         List<String> invalid = draft.evidenceReferences().stream().filter(reference -> !allowed.contains(reference)).toList();
         if (!invalid.isEmpty()) {
             throw new InvalidIncidentAssessmentException("Assessment contains unsupported evidence references: " + invalid);

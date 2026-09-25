@@ -7,7 +7,7 @@ description: Current implementation of the operational change journal, Health En
 
 See [`contract.md`](contract.md) for authoritative ownership and dependency rules.
 
-The module currently provides the accepted foundation and Health Engine plus verification-pending assisted-investigation Stage 3:
+The module currently provides the accepted foundation, Health Engine, and Stage 3 manual/provider-neutral assisted investigation plus verification-pending Stage 4a read-only agentic investigation:
 
 - durable sanitized operational change records;
 - transactional journaling hooks used by Source, Monitoring Profile, and security-administration mutations;
@@ -21,9 +21,12 @@ The module currently provides the accepted foundation and Health Engine plus ver
 - bounded sanitized `health-analysis-v1` packages for manual model use;
 - persisted validated structured Incident Assessments with bounded retention;
 - manual assessment import plus explicit provider-neutral invocation through `IncidentAnalyst`;
-- an optional JDK-HTTP OpenAI-compatible adapter for local or external endpoints, disabled by default.
+- an optional JDK-HTTP OpenAI-compatible adapter for local or external endpoints, disabled by default;
+- bounded application-owned read-only investigation tools for Health context, allowlisted Prometheus queries, Loki log patterns, Tempo trace search/retrieval, change history, and capacity markers;
+- strict per-investigation limits for model rounds, tool calls, wall-clock duration, telemetry lookback, result size, log rows, and trace search results;
+- telemetry/tool-result redaction plus evidence-reference propagation into the final structured Incident Assessment.
 
-If Prometheus or required signals are unavailable, the engine records explicit uncertainty and may return `UNKNOWN` rather than treating missing telemetry as healthy. Assisted investigation never overrides that deterministic health state. Provider invocation is explicit only in this stage, model output is schema/evidence-reference validated before persistence, and provider failures do not stop the business pipeline.
+If Prometheus or required signals are unavailable, the engine records explicit uncertainty and may return `UNKNOWN` rather than treating missing telemetry as healthy. Assisted investigation never overrides that deterministic health state. Provider invocation remains explicit only in Stage 4a. Model output is schema/evidence-reference validated before persistence, tool results are marked untrusted and sanitized, arbitrary PromQL/LogQL/SQL/shell/HTTP tools are not exposed, and provider/tool failures do not stop the business pipeline. Automatic event/periodic triggering is intentionally deferred until a multi-replica-safe lease/dedup boundary is implemented.
 
 ## Read next
 

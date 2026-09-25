@@ -1028,7 +1028,7 @@ paths:
       tags: [Operational Intelligence]
       operationId: analyzeLatestHealthSnapshot
       summary: Explicitly invoke the configured provider for the latest Health Snapshot
-      description: Never runs automatically in this stage. Provider output is validated and cannot override deterministic health status or score.
+      description: The provider may perform a bounded read-only investigation through application-owned allowlisted tools. It never runs automatically in this stage, and provider output cannot override deterministic health status or score.
       responses:
         '201':
           description: Validated provider assessment persisted

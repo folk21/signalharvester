@@ -558,6 +558,26 @@ def main(argv: list[str] | None = None) -> int:
                 "evidenceComplete": health_snapshot.get("evidenceComplete"),
                 "anomalyCandidates": health_snapshot.get("anomalyCandidates", []),
             }
+            summary = report["summary"]
+            record_operational_marker(
+                admin,
+                "TEST_SCENARIO",
+                "SCENARIO",
+                "pipeline-capacity-baseline-result",
+                {
+                    "backendReplicas": str(args.replicas),
+                    "expectedItems": str(expected),
+                    "pipelineCompletionSeconds": str(summary.get("pipelineCompletionSeconds")),
+                    "endToEndRateItemsPerSecond": str(summary.get("endToEndRateItemsPerSecond")),
+                    "maxAnalysisLag": str(summary.get("maxAnalysisLag")),
+                    "maxResultsLag": str(summary.get("maxResultsLag")),
+                    "maxEventObservationLag": str(summary.get("maxEventObservationLag")),
+                    "maxPendingOutboxRows": str(summary.get("maxPendingOutboxRows")),
+                    "healthSnapshotId": str(health_snapshot.get("id")),
+                    "healthStatus": str(health_snapshot.get("overallStatus")),
+                    "healthScore": str(health_snapshot.get("healthScore")),
+                },
+            )
             write_report(output_path, report)
             print(f"    report: {output_path}")
             print(json.dumps(report["summary"], indent=2, sort_keys=True))

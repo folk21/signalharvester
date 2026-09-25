@@ -17,6 +17,10 @@ import io.signalharvester.operations.api.OperationalChangeRequest;
 import io.signalharvester.operations.api.OperationalChangeTargetType;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
 import io.signalharvester.operations.assisted.AssistedInvestigationOperations;
+import io.signalharvester.operations.assisted.tools.InvestigationBudgetExceededException;
+import io.signalharvester.operations.assisted.tools.InvestigationToolName;
+import io.signalharvester.operations.assisted.tools.InvestigationToolRequest;
+import io.signalharvester.operations.assisted.tools.InvestigationToolbox;
 import io.signalharvester.operations.model.HealthStatus;
 import io.signalharvester.operations.model.IncidentAssessmentDraft;
 import io.signalharvester.operations.model.IncidentAssessmentSource;
@@ -64,6 +68,7 @@ class OperationalIntelligencePostgresIntegrationTest {
                 Map.entry("signalharvester.operations.health-snapshot-retention-count", 2),
                 Map.entry("signalharvester.operations.health.sampling-enabled", false),
                 Map.entry("signalharvester.operations.assisted-investigation.provider", "fake"),
+                Map.entry("signalharvester.operations.assisted-investigation.max-tool-calls", 1),
                 Map.entry("signalharvester.operations.assisted-investigation.assessment-retention-count", 2)));
     }
 
@@ -153,6 +158,7 @@ class OperationalIntelligencePostgresIntegrationTest {
     void shouldExportAndPersistStructuredAssistedInvestigation() throws Exception {
         OperationalIntelligenceOperations operations = context.getBean(OperationalIntelligenceOperations.class);
         AssistedInvestigationOperations assisted = context.getBean(AssistedInvestigationOperations.class);
+        var previousSnapshot = operations.captureHealthSnapshot();
         var snapshot = operations.captureHealthSnapshot();
         var analysisPackage = assisted.latestAnalysisPackage();
 
@@ -177,8 +183,30 @@ class OperationalIntelligencePostgresIntegrationTest {
         assertEquals("fake", provider.provider());
         assertEquals("deterministic-test-model", provider.model());
         assertTrue(provider.humanAttentionSuggested());
+        assertTrue(provider.evidenceReferences().contains("health-snapshot:" + previousSnapshot.id()));
         assertEquals(2L, scalarLong("SELECT count(*) FROM operations.incident_assessments"));
         assertEquals(2, assisted.recentAssessments(10).size());
+    }
+
+
+    /** Enforce the application-owned tool-call budget independently from provider behavior. */
+    @Test
+    void shouldRejectToolCallsBeyondConfiguredBudget() {
+        OperationalIntelligenceOperations operations = context.getBean(OperationalIntelligenceOperations.class);
+        InvestigationToolbox toolbox = context.getBean(InvestigationToolbox.class);
+        var snapshot = operations.captureHealthSnapshot();
+        var session = toolbox.openSession(snapshot.id());
+
+        var first = session.execute(new InvestigationToolRequest(
+                "health-context-1",
+                InvestigationToolName.HEALTH_CONTEXT,
+                Map.of()));
+        assertTrue(first.success());
+        assertEquals(1, session.toolCallCount());
+        assertThrows(InvestigationBudgetExceededException.class, () -> session.execute(new InvestigationToolRequest(
+                "health-context-2",
+                InvestigationToolName.HEALTH_CONTEXT,
+                Map.of())));
     }
 
     /** Reject structured assessments that cite evidence not present in the exported package. */

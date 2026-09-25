@@ -117,6 +117,9 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn('report["healthSnapshot"]', source)
         self.assertIn('"healthScore": health_snapshot.get("healthScore")', source)
         self.assertIn('"anomalyCandidates": health_snapshot.get("anomalyCandidates", [])', source)
+        self.assertIn('"pipeline-capacity-baseline-result"', source)
+        self.assertIn('"maxPendingOutboxRows": str(summary.get("maxPendingOutboxRows"))', source)
+        self.assertIn('"healthSnapshotId": str(health_snapshot.get("id"))', source)
 
     def test_comparison_replica_parser_requires_ordered_unique_positive_counts(self):
         self.assertEqual([1, 3], comparison.parse_replica_counts("1,3"))

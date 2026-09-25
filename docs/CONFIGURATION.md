@@ -59,9 +59,18 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_REQUEST_TIMEOUT` | `30s` | Timeout for one explicit model HTTP request. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_REPORT_CHARS` | `50000` | Maximum Health Report characters included in one exported analysis package. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_RESPONSE_BYTES` | `32768` | Maximum provider response bytes accepted before structured parsing. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_ROUNDS` | `4` | Maximum model/tool interaction rounds in one explicit investigation. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TOOL_CALLS` | `8` | Maximum application-authorized read-only tool calls in one investigation; `0` disables tool exposure. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_INVESTIGATION_DURATION` | `45s` | Wall-clock bound covering model turns and tool queries. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TOOL_RESULT_CHARS` | `12000` | Maximum sanitized characters returned by one tool call. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TELEMETRY_LOOKBACK` | `30m` | Maximum Prometheus/Loki lookback available to read-only tools. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_LOG_ENTRIES` | `50` | Maximum Loki entries requested by one tool call. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TRACE_RESULTS` | `20` | Maximum Tempo search results requested by one tool call. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_LOKI_BASE_URL` | _(empty)_ | Loki base URL; empty disables the Loki tool. Kubernetes sets `http://loki:3100`. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_TEMPO_BASE_URL` | _(empty)_ | Tempo base URL; empty disables Tempo search/trace tools. Kubernetes sets `http://tempo:3200`. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_ASSESSMENT_RETENTION_COUNT` | `500` | Maximum persisted structured Incident Assessments. |
 
-The assisted-investigation provider defaults to `off`; enabling `openai-compatible` requires an explicit endpoint/model and, when needed, a secret-managed API key. Stage 3 never invokes a provider automatically.
+The assisted-investigation provider defaults to `off`; enabling `openai-compatible` requires an explicit endpoint/model and, when needed, a secret-managed API key. Stage 4a still never invokes a provider automatically. Prometheus tool access reuses `SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_BASE_URL`; Loki/Tempo tools are exposed only when their base URLs are configured. Setting max tool calls to `0` keeps provider invocation single-shot.
 
 The initial health thresholds are versioned operational heuristics for anomaly triage, not SLOs or production capacity guarantees. Tune them only from measured evidence, and change `SIGNALHARVESTER_OPERATIONS_HEALTH_POLICY_VERSION` when the effective interpretation policy changes materially.
 | `SIGNALHARVESTER_METRICS_ENABLED` | `true` | Enables Micrometer application/runtime metrics. |

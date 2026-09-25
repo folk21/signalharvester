@@ -31,6 +31,8 @@ class KubernetesAssetsTest(unittest.TestCase):
         self.assertIn("MICRONAUT_ENVIRONMENTS=security", kustomization)
         self.assertIn("SIGNALHARVESTER_OTEL_TRACES_EXPORTER=otlp", kustomization)
         self.assertIn("http://tempo:4317", kustomization)
+        self.assertIn("SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_LOKI_BASE_URL=http://loki:3100", kustomization)
+        self.assertIn("SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_TEMPO_BASE_URL=http://tempo:3200", kustomization)
         self.assertIn("SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_BASE_URL=http://prometheus:9090", kustomization)
         self.assertIn("signalharvester-runtime-secrets", deployment)
         self.assertIn("/health/liveness", deployment)

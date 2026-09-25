@@ -9,6 +9,7 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-09-25 — Added verification-pending assisted-investigation Stage 4a with application-owned bounded read-only Health/Prometheus/Loki/Tempo/change/capacity tools, OpenAI-compatible multi-turn tool calling, telemetry redaction, tool/evidence validation, and strict call/round/duration/result-size budgets while keeping automatic triggers disabled.
 - 2026-09-25 — Added verification-pending assisted-investigation Stage 3: bounded sanitized health-analysis packages, persisted structured Incident Assessments, manual import, evidence-reference validation, deterministic fake-provider coverage, and explicit optional OpenAI-compatible provider invocation without tools or automatic triggers.
 - 2026-09-25 — Accepted the deterministic/statistical operational Health Engine after the developer confirmed the canonical repository gate, then removed the remaining direct Java-test `Thread.sleep(...)` synchronization and added a `check`-lifecycle guard that prevents its reintroduction.
 - 2026-09-25 — Isolated Event Observation Kafka integration scenarios with per-test consumer groups/topics, explicit assignment readiness, and durable-state Awaitility barriers to eliminate cross-test offset/rebalance leakage.
