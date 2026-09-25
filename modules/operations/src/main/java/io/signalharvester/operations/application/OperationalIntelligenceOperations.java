@@ -1,6 +1,7 @@
 package io.signalharvester.operations.application;
 
 import io.signalharvester.operations.api.OperationalChangeRecord;
+import io.signalharvester.operations.model.HealthAnalysisPackage;
 import io.signalharvester.operations.model.HealthSnapshot;
 import java.util.List;
 import java.util.UUID;
@@ -11,5 +12,7 @@ public interface OperationalIntelligenceOperations {
     HealthSnapshot captureHealthSnapshot();
     HealthSnapshot latestSnapshot();
     String latestMarkdownReport();
+    HealthAnalysisPackage latestAnalysisPackage();
+    HealthAnalysisPackage analysisPackage(UUID snapshotId);
     OperationalHealthCorrelation correlateChange(UUID changeId);
 }

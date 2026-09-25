@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). It introduces persisted Health Snapshots/Reports, a durable behavior-affecting change journal, lightweight anomaly detection, and optional provider-neutral LLM-assisted investigation over the existing observability stack.
+The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Stages 1 and 2 are accepted; Stage 3 is implemented and verification-pending with bounded sanitized analysis packages, structured Incident Assessments, manual import, and explicit provider-neutral LLM invocation. Read-only agentic telemetry tools remain the next slice.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 

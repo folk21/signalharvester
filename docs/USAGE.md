@@ -201,7 +201,7 @@ The outbox dispatcher publishes committed records to Kafka. Results consumes ter
 
 ### Inspect operational changes and Health Reports
 
-ADMIN operators can inspect the bounded operational change journal and capture the current pre-detector Health Snapshot:
+ADMIN operators can inspect the bounded operational change journal and capture the current deterministic/statistical Health Snapshot:
 
 ```bash
 curl -s -b build/tmp/auth.cookies http://localhost:8080/api/v1/admin/operations/changes
@@ -213,9 +213,32 @@ curl -i -X POST -b build/tmp/auth.cookies \
 curl -s -b build/tmp/auth.cookies http://localhost:8080/api/v1/admin/operations/health/reports/latest
 ```
 
-The verification-pending `deterministic-statistical-v1` snapshot uses configurable hard rules plus rolling median/MAD comparison against prior snapshots. In Kubernetes it consumes bounded allowlisted Prometheus signals; missing required telemetry is reported explicitly and may yield `UNKNOWN`. The latest Markdown report includes structured anomalies, previous-snapshot deltas, and referenced operational changes.
+The accepted `deterministic-statistical-v1` snapshot uses configurable hard rules plus rolling median/MAD comparison against prior snapshots. In Kubernetes it consumes bounded allowlisted Prometheus signals; missing required telemetry is reported explicitly and may yield `UNKNOWN`. The latest Markdown report includes structured anomalies, previous-snapshot deltas, and referenced operational changes.
 
 Repository-owned tooling can record sanitized `DEPLOYMENT_TUNING` or `TEST_SCENARIO` markers through `/api/v1/admin/operations/changes/markers`. Source/Profile/user mutations and successful controlled DLQ replay record their own journal evidence; direct database edits and arbitrary external `kubectl` changes are outside the automatic journal guarantee.
+
+### Manual and explicit assisted investigation
+
+After at least one Health Snapshot exists, export a bounded sanitized package for manual local/external LLM analysis:
+
+```bash
+curl -s -b build/tmp/auth.cookies \
+  http://localhost:8080/api/v1/admin/operations/health/analysis-packages/latest
+```
+
+The package contains the Health Report, an evidence-reference allowlist, and an explicit instruction that telemetry is untrusted evidence rather than model instructions. It contains no raw unlimited logs/traces and cannot change deterministic health state.
+
+A structured assessment produced manually can be posted back to `/api/v1/admin/operations/health/assessments/manual`; every evidence reference must come from the exported package. Recent validated assessments are available through `GET /api/v1/admin/operations/health/assessments`.
+
+Provider invocation is optional and explicit only in Stage 3. Configure `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_PROVIDER=openai-compatible`, a full chat-completions endpoint, model identifier, and any bearer key through secret-managed environment configuration. Then an ADMIN may call:
+
+```bash
+curl -i -X POST -b build/tmp/auth.cookies \
+  -H "X-CSRF-TOKEN: $csrf_token" \
+  http://localhost:8080/api/v1/admin/operations/health/assessments/analyze-latest
+```
+
+One request produces at most one validated assessment. Stage 3 has no scheduled/event-driven model invocation, model tool calls, alert authority, or remediation actions.
 
 ## Inspect application observability
 

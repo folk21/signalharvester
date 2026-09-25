@@ -454,7 +454,8 @@ Because Flyway history is shared, versions are globally coordinated across modul
 - `V14` — Results browsing/full-text indexes;
 - `V15` — Configuration explicit all-relevant Analysis settings;
 - `V16` — Operations change journal and Health Snapshot foundation;
-- `V17` — structured deterministic/statistical Health Snapshot anomaly evidence.
+- `V17` — structured deterministic/statistical Health Snapshot anomaly evidence;
+- `V18` — persisted structured assisted-investigation Incident Assessments.
 
 Direct cross-module table access remains forbidden.
 
@@ -489,9 +490,11 @@ The `operations` module owns `operations.change_journal` and `operations.health_
 
 Supported Source/Monitoring Profile REST mutations, Security user administration, and first-ADMIN bootstrap record sanitized change metadata. Applied Configuration/Security mutations journal inside their application transaction; rejected mutation journaling is best-effort and does not replace the original error. Successful controlled Analysis/Results/Event Observation DLQ replay records an auxiliary recovery marker without exposing source payload bytes. Repository-owned capacity tooling records typed deployment/scenario markers through `/api/v1/admin/operations/changes/markers`.
 
-The ADMIN Operations HTTP boundary exposes bounded recent change history, explicit tooling markers, persisted Health Snapshots, the latest Markdown-formatted report, and nearest before/after snapshot correlation with numeric score/signal deltas around a selected change. The verification-pending `deterministic-statistical-v1` Health Engine evaluates configurable hard thresholds plus rolling median/MAD deviation over prior snapshots. In Kubernetes it reads an allowlisted bounded Prometheus signal set for backend availability, Kafka lag, HTTP errors/latency, Collection/Analysis failures, PostgreSQL span latency, and Analysis outbox backlog/publication failures; local Analysis-outbox gauges remain a fallback. Snapshot retention is count-bounded by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT` (default `1000`). A scheduled sampler is enabled by default and uses a PostgreSQL advisory lock plus latest-snapshot freshness check so multiple backend replicas do not intentionally persist duplicate samples; Prometheus I/O occurs before the short database transaction.
+The ADMIN Operations HTTP boundary exposes bounded recent change history, explicit tooling markers, persisted Health Snapshots, the latest Markdown-formatted report, a bounded sanitized analysis package, structured assessment import/listing, explicit provider analysis, and nearest before/after snapshot correlation with numeric score/signal deltas around a selected change. The accepted `deterministic-statistical-v1` Health Engine evaluates configurable hard thresholds plus rolling median/MAD deviation over prior snapshots. In Kubernetes it reads an allowlisted bounded Prometheus signal set for backend availability, Kafka lag, HTTP errors/latency, Collection/Analysis failures, PostgreSQL span latency, and Analysis outbox backlog/publication failures; local Analysis-outbox gauges remain a fallback. Snapshot retention is count-bounded by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT` (default `1000`). A scheduled sampler is enabled by default and uses a PostgreSQL advisory lock plus latest-snapshot freshness check so multiple backend replicas do not intentionally persist duplicate samples; Prometheus I/O occurs before the short database transaction.
 
 `SIGNALHARVESTER_BUILD_VERSION` supplies the build/deployment identity persisted with journal records and Health Snapshots; it defaults to `dev`.
+
+Assisted-investigation Stage 3 is verification-pending. `HealthAnalysisPackageFactory` bounds the already-sanitized Health Report, declares telemetry content untrusted, and enumerates stable evidence references (`health-snapshot:*`, `signal:*`, `anomaly:*`, `change:*`). Manual structured assessments and explicit provider results use the same `IncidentAssessmentDraft` schema and are persisted only after every evidence reference is validated against the selected package. The optional `OpenAiCompatibleIncidentAnalyst` uses JDK `HttpClient`, a configured timeout/response-size bound, and a bearer secret when supplied; it does not expose tools, retry automatically, or run on a schedule. Provider output is parsed into the structured schema and raw responses are not persisted.
 
 ## Kubernetes and infrastructure observability
 

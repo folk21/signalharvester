@@ -110,7 +110,8 @@ Container-backed integration ownership is:
 - `modules:configuration` — PostgreSQL persistence/server boundary;
 - `modules:collection` — Kafka producer/consumer transport boundary;
 - `modules:analysis` — PostgreSQL durable deduplication;
-- `modules:operations` — deterministic/statistical Health Engine unit coverage plus PostgreSQL change-journal, Health Snapshot/report persistence, rolling-baseline history, and change/health correlation;
+- `modules:operations` — deterministic/statistical Health Engine and analysis-package unit coverage plus PostgreSQL change-journal, Health Snapshot/report/Incident Assessment persistence, evidence-reference validation, deterministic fake-provider assisted investigation, rolling-baseline history, and change/health correlation;
+  External/local real-model acceptance is opt-in and must remain outside the canonical offline gate; repository tests use a deterministic fake `IncidentAnalyst` and never require model credentials or public network access.
 - `modules:results` — PostgreSQL + Kafka terminal-event consumption and idempotent projection persistence;
 - `testing:integration-tests` — PostgreSQL + Kafka cross-module Collection Run and Collection-to-Analysis flows.
 

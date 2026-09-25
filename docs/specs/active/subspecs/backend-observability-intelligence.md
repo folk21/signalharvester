@@ -10,7 +10,7 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Active. Stages 1 and 2 are accepted after the developer confirmed the canonical repository gate. Operations persists sanitized operational changes and Health Snapshots/Reports, evaluates versioned deterministic/statistical health from bounded Prometheus/local evidence, persists structured anomalies, samples periodically across multiple replicas, and exposes numeric before/after health deltas. Manual/provider-neutral LLM analysis remains stage 3.
+Active. Stages 1 and 2 are accepted after the developer confirmed the canonical repository gate. Stage 3 manual/provider-neutral LLM analysis is implemented and verification-pending: Operations exports bounded sanitized analysis packages, validates/persists structured Incident Assessments, supports manual import, and provides an explicit optional OpenAI-compatible local/external adapter behind the provider-neutral `IncidentAnalyst` boundary. No automatic triggers or telemetry tools are enabled yet.
 
 The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until their canonical acceptance is recorded. This specification does not weaken or replace those acceptance gates.
 
@@ -26,7 +26,7 @@ Stages 1 and 2 are accepted. The implemented scope now includes:
 - capacity baseline markers plus a persisted Health Snapshot reference in the generated report;
 - count-bounded Health Snapshot retention configured by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT`.
 
-Stage 2 replaces the placeholder interpretation with policy `deterministic-statistical-v1`: configurable hard thresholds, rolling median/MAD deviation, structured anomaly evidence, cluster-wide allowlisted Prometheus signals with local outbox fallback, and explicit uncertainty when required telemetry or rolling history is unavailable. Periodic sampling is multi-replica coordinated and telemetry I/O stays outside database transactions. The next bounded stage is manual/provider-neutral LLM analysis.
+Stage 2 replaces the placeholder interpretation with policy `deterministic-statistical-v1`: configurable hard thresholds, rolling median/MAD deviation, structured anomaly evidence, cluster-wide allowlisted Prometheus signals with local outbox fallback, and explicit uncertainty when required telemetry or rolling history is unavailable. Periodic sampling is multi-replica coordinated and telemetry I/O stays outside database transactions. Stage 3 adds `health-analysis-v1`, persisted `IncidentAssessment`, manual assessment import, deterministic fake-provider verification, and an explicit OpenAI-compatible HTTP adapter. The next bounded stage is read-only agentic investigation plus trigger/alert policy.
 
 ## Feature scope
 
@@ -60,7 +60,7 @@ LLM analysis is an optional secondary reasoning layer. It may use either an exte
 
 The accepted observability baseline already provides Micrometer/Prometheus metrics, OpenTelemetry traces in Tempo, trace-correlated logs in Loki, Kubernetes/Redpanda telemetry, Grafana dashboards, resilience evidence, and deterministic capacity reports. The latest capacity work also exposes Analysis outbox backlog and dispatcher latency signals.
 
-What is still missing is a persisted operational interpretation layer. There is no general durable Health Snapshot, no versioned health-scoring/anomaly policy, no general cross-capability journal of behavior-affecting changes, and no provider-neutral workflow for manual or agentic LLM investigation.
+Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot, versioned health-scoring/anomaly policy, and cross-capability change journal. The remaining gap is assisted investigation: Stage 3 now provides manual/provider-neutral structured assessment, while bounded read-only telemetry tools, trigger policy, and alert integration remain future work.
 
 Security administration already emits audit-safe logs, but log lines are not a sufficient general change journal for correlating configuration/runtime changes with later health behavior. Event Observation is also not the authoritative store for this purpose because it is a bounded diagnostic materialization of pipeline events.
 
@@ -297,9 +297,9 @@ Each implementation stage must add focused deterministic tests before broader li
 - [x] expose timeline/before-after correlation between changes and health;
 - [x] add lightweight deterministic/statistical detector boundary and baseline implementation;
 - [ ] reuse resilience/capacity scenarios as labeled operational-analysis evidence;
-- [ ] add manual sanitized report export;
-- [ ] add provider-neutral structured `IncidentAssessment` and deterministic fake provider;
-- [ ] add optional local/external LLM adapter behind explicit secrets/policy;
+- [x] add manual sanitized report export;
+- [x] add provider-neutral structured `IncidentAssessment` and deterministic fake provider;
+- [x] add optional local/external LLM adapter behind explicit secrets/policy;
 - [ ] add bounded read-only Prometheus/Loki/Tempo/change-history investigation tools;
 - [ ] add alert decision policy that does not delegate authority to free-form LLM text;
 - [ ] run focused and canonical validation, then move accepted behavior into owning current-state documentation.

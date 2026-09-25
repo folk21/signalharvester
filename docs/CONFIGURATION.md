@@ -52,6 +52,16 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_OPERATIONS_HEALTH_FAILURE_RATIO_UNHEALTHY` | `0.50` | Shared Collection/Analysis/outbox failure-ratio threshold for `UNHEALTHY`. |
 | `SIGNALHARVESTER_OPERATIONS_HEALTH_DEGRADED_PENALTY` | `15` | Health-score penalty for each strongest `DEGRADED` signal anomaly. |
 | `SIGNALHARVESTER_OPERATIONS_HEALTH_UNHEALTHY_PENALTY` | `35` | Health-score penalty for each strongest `UNHEALTHY` signal anomaly. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_PROVIDER` | `off` | Explicit provider adapter. Stage 3 supports `off` or `openai-compatible`; manual package export/import remains available while off. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_ENDPOINT` | _(empty)_ | Full HTTP(S) chat-completions endpoint for `openai-compatible`. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_API_KEY` | _(empty)_ | Optional bearer credential for the configured provider. Treat as a deployment secret; never store it in repository configuration. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MODEL` | _(empty)_ | Provider model identifier passed only during explicit invocation. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_REQUEST_TIMEOUT` | `30s` | Timeout for one explicit model HTTP request. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_REPORT_CHARS` | `50000` | Maximum Health Report characters included in one exported analysis package. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_RESPONSE_BYTES` | `32768` | Maximum provider response bytes accepted before structured parsing. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_ASSESSMENT_RETENTION_COUNT` | `500` | Maximum persisted structured Incident Assessments. |
+
+The assisted-investigation provider defaults to `off`; enabling `openai-compatible` requires an explicit endpoint/model and, when needed, a secret-managed API key. Stage 3 never invokes a provider automatically.
 
 The initial health thresholds are versioned operational heuristics for anomaly triage, not SLOs or production capacity guarantees. Tune them only from measured evidence, and change `SIGNALHARVESTER_OPERATIONS_HEALTH_POLICY_VERSION` when the effective interpretation policy changes materially.
 | `SIGNALHARVESTER_METRICS_ENABLED` | `true` | Enables Micrometer application/runtime metrics. |

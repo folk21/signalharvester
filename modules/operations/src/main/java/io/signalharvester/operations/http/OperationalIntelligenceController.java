@@ -21,6 +21,7 @@ import io.signalharvester.operations.api.OperationalChangeRequest;
 import io.signalharvester.operations.api.OperationalChangeSource;
 import io.signalharvester.operations.api.OperationalChangeTargetType;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
+import io.signalharvester.operations.assisted.AssistedInvestigationOperations;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -41,12 +42,15 @@ public class OperationalIntelligenceController {
             "password", "secret", "token", "authorization", "credential", "cookie", "apikey", "api_key");
 
     private final OperationalIntelligenceOperations operations;
+    private final AssistedInvestigationOperations assistedInvestigation;
     private final OperationalChangeJournal changeJournal;
 
     public OperationalIntelligenceController(
             OperationalIntelligenceOperations operations,
+            AssistedInvestigationOperations assistedInvestigation,
             OperationalChangeJournal changeJournal) {
         this.operations = operations;
+        this.assistedInvestigation = assistedInvestigation;
         this.changeJournal = changeJournal;
     }
 
@@ -97,6 +101,35 @@ public class OperationalIntelligenceController {
     @Produces(MediaType.TEXT_PLAIN)
     public HttpResponse<String> latestReport() {
         return HttpResponse.ok(operations.latestMarkdownReport()).contentType(MediaType.TEXT_PLAIN_TYPE);
+    }
+
+    /** Returns a bounded sanitized prompt package for manual local/external LLM analysis. */
+    @Get("/health/analysis-packages/latest")
+    public HealthAnalysisPackageResponse latestAnalysisPackage() {
+        return HealthAnalysisPackageResponse.from(assistedInvestigation.latestAnalysisPackage());
+    }
+
+    /** Persists one validated structured assessment produced outside SignalHarvester. */
+    @Post("/health/assessments/manual")
+    public HttpResponse<IncidentAssessmentResponse> submitManualAssessment(
+            @Body @Valid @NotNull IncidentAssessmentSubmissionRequest request) {
+        return HttpResponse.created(IncidentAssessmentResponse.from(
+                assistedInvestigation.submitManual(request.snapshotId(), request.toDraft())));
+    }
+
+    /** Explicitly invokes the configured provider for the latest Health Snapshot; never scheduled automatically. */
+    @Post("/health/assessments/analyze-latest")
+    public HttpResponse<IncidentAssessmentResponse> analyzeLatest() {
+        return HttpResponse.created(IncidentAssessmentResponse.from(assistedInvestigation.analyzeLatest()));
+    }
+
+    /** Returns recent persisted validated assessments. */
+    @Get("/health/assessments")
+    public List<IncidentAssessmentResponse> assessments(
+            @QueryValue(defaultValue = "20") @Min(1) @Max(200) int limit) {
+        return assistedInvestigation.recentAssessments(limit).stream()
+                .map(IncidentAssessmentResponse::from)
+                .toList();
     }
 
     /** Returns nearest persisted snapshots before and after the selected change. */

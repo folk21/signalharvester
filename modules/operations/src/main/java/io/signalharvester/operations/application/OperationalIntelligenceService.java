@@ -3,6 +3,9 @@ package io.signalharvester.operations.application;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.operations.api.OperationalChangeRecord;
+import io.signalharvester.operations.assisted.AssistedInvestigationConfiguration;
+import io.signalharvester.operations.assisted.HealthAnalysisPackageFactory;
+import io.signalharvester.operations.model.HealthAnalysisPackage;
 import io.signalharvester.operations.model.HealthAnomaly;
 import io.signalharvester.operations.model.HealthSnapshot;
 import io.signalharvester.operations.persistence.OperationalIntelligenceRepository;
@@ -26,6 +29,8 @@ public final class OperationalIntelligenceService implements OperationalIntellig
     private final OperationalIntelligenceRepository repository;
     private final TransactionOperations<Connection> transactions;
     private final HealthReportRenderer reportRenderer;
+    private final HealthAnalysisPackageFactory analysisPackageFactory;
+    private final AssistedInvestigationConfiguration assistedConfiguration;
     private final OperationalHealthSignalCollector signalCollector;
     private final HealthEngine healthEngine;
     private final HealthPolicyConfiguration healthConfiguration;
@@ -37,6 +42,8 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             OperationalIntelligenceRepository repository,
             @Named("default") TransactionOperations<Connection> transactions,
             HealthReportRenderer reportRenderer,
+            HealthAnalysisPackageFactory analysisPackageFactory,
+            AssistedInvestigationConfiguration assistedConfiguration,
             OperationalHealthSignalCollector signalCollector,
             HealthEngine healthEngine,
             HealthPolicyConfiguration healthConfiguration,
@@ -46,6 +53,8 @@ public final class OperationalIntelligenceService implements OperationalIntellig
                 repository,
                 transactions,
                 reportRenderer,
+                analysisPackageFactory,
+                assistedConfiguration,
                 signalCollector,
                 healthEngine,
                 healthConfiguration,
@@ -58,6 +67,8 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             OperationalIntelligenceRepository repository,
             TransactionOperations<Connection> transactions,
             HealthReportRenderer reportRenderer,
+            HealthAnalysisPackageFactory analysisPackageFactory,
+            AssistedInvestigationConfiguration assistedConfiguration,
             OperationalHealthSignalCollector signalCollector,
             HealthEngine healthEngine,
             HealthPolicyConfiguration healthConfiguration,
@@ -67,6 +78,8 @@ public final class OperationalIntelligenceService implements OperationalIntellig
         this.repository = Objects.requireNonNull(repository, "repository");
         this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.reportRenderer = Objects.requireNonNull(reportRenderer, "reportRenderer");
+        this.analysisPackageFactory = Objects.requireNonNull(analysisPackageFactory, "analysisPackageFactory");
+        this.assistedConfiguration = Objects.requireNonNull(assistedConfiguration, "assistedConfiguration");
         this.signalCollector = Objects.requireNonNull(signalCollector, "signalCollector");
         this.healthEngine = Objects.requireNonNull(healthEngine, "healthEngine");
         this.healthConfiguration = Objects.requireNonNull(healthConfiguration, "healthConfiguration");
@@ -115,7 +128,42 @@ public final class OperationalIntelligenceService implements OperationalIntellig
 
     @Override
     public String latestMarkdownReport() {
+        return renderReport(latestSnapshot());
+    }
+
+    @Override
+    public HealthAnalysisPackage latestAnalysisPackage() {
         HealthSnapshot snapshot = latestSnapshot();
+        return analysisPackageFactory.create(
+                snapshot,
+                renderReport(snapshot),
+                assistedConfiguration.getMaxReportChars());
+    }
+
+    @Override
+    public HealthAnalysisPackage analysisPackage(UUID snapshotId) {
+        Objects.requireNonNull(snapshotId, "snapshotId");
+        HealthSnapshot snapshot = transactions.executeRead(status -> repository.findSnapshot(snapshotId)
+                .orElseThrow(HealthSnapshotNotFoundException::new));
+        return analysisPackageFactory.create(
+                snapshot,
+                renderReport(snapshot),
+                assistedConfiguration.getMaxReportChars());
+    }
+
+    @Override
+    public OperationalHealthCorrelation correlateChange(UUID changeId) {
+        return transactions.executeRead(status -> {
+            OperationalChangeRecord change = repository.findChange(changeId)
+                    .orElseThrow(() -> new OperationalChangeNotFoundException(changeId));
+            HealthSnapshot before = repository.findLatestSnapshotAtOrBefore(change.changedAt()).orElse(null);
+            HealthSnapshot after = repository.findEarliestSnapshotAtOrAfter(change.changedAt()).orElse(null);
+            return OperationalHealthCorrelation.between(change, before, after);
+        });
+    }
+
+
+    private String renderReport(HealthSnapshot snapshot) {
         Set<UUID> referenced = Set.copyOf(snapshot.recentChangeIds());
         record ReportEvidence(List<OperationalChangeRecord> changes, HealthSnapshot previous) {}
         ReportEvidence reportEvidence = transactions.executeRead(status -> {
@@ -130,17 +178,6 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             return new ReportEvidence(changes, previous);
         });
         return reportRenderer.render(snapshot, reportEvidence.previous(), reportEvidence.changes());
-    }
-
-    @Override
-    public OperationalHealthCorrelation correlateChange(UUID changeId) {
-        return transactions.executeRead(status -> {
-            OperationalChangeRecord change = repository.findChange(changeId)
-                    .orElseThrow(() -> new OperationalChangeNotFoundException(changeId));
-            HealthSnapshot before = repository.findLatestSnapshotAtOrBefore(change.changedAt()).orElse(null);
-            HealthSnapshot after = repository.findEarliestSnapshotAtOrAfter(change.changedAt()).orElse(null);
-            return OperationalHealthCorrelation.between(change, before, after);
-        });
     }
 
     private HealthSnapshot captureInCurrentTransaction(Instant generatedAt, HealthSignalEvidence evidence) {

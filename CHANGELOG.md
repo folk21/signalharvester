@@ -9,6 +9,7 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-09-25 — Added verification-pending assisted-investigation Stage 3: bounded sanitized health-analysis packages, persisted structured Incident Assessments, manual import, evidence-reference validation, deterministic fake-provider coverage, and explicit optional OpenAI-compatible provider invocation without tools or automatic triggers.
 - 2026-09-25 — Accepted the deterministic/statistical operational Health Engine after the developer confirmed the canonical repository gate, then removed the remaining direct Java-test `Thread.sleep(...)` synchronization and added a `check`-lifecycle guard that prevents its reintroduction.
 - 2026-09-25 — Isolated Event Observation Kafka integration scenarios with per-test consumer groups/topics, explicit assignment readiness, and durable-state Awaitility barriers to eliminate cross-test offset/rebalance leakage.
 - 2026-09-25 — Replaced PostgreSQL test readiness with authenticated JDBC Awaitility polling, moved the shared async polling helper onto Awaitility, and prohibited direct `Thread.sleep(...)` synchronization in new Java tests ahead of the repository-wide migration.

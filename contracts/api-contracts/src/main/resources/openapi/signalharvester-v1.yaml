@@ -969,6 +969,77 @@ paths:
         '401': {description: Authentication required}
         '403': {description: ADMIN role required}
         '404': {description: No Health Snapshot has been captured yet}
+  /api/v1/admin/operations/health/analysis-packages/latest:
+    get:
+      tags: [Operational Intelligence]
+      operationId: getLatestHealthAnalysisPackage
+      summary: Export a bounded sanitized package for manual or provider-assisted LLM analysis
+      responses:
+        '200':
+          description: Latest bounded assisted-investigation package
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HealthAnalysisPackage'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required}
+        '404': {description: No Health Snapshot has been captured yet}
+  /api/v1/admin/operations/health/assessments:
+    get:
+      tags: [Operational Intelligence]
+      operationId: listIncidentAssessments
+      summary: List recent validated incident assessments
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 200, default: 20}
+      responses:
+        '200':
+          description: Recent structured incident assessments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/IncidentAssessment'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required}
+  /api/v1/admin/operations/health/assessments/manual:
+    post:
+      tags: [Operational Intelligence]
+      operationId: submitManualIncidentAssessment
+      summary: Persist a validated structured assessment produced from an exported package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/IncidentAssessmentSubmission'}
+      responses:
+        '201':
+          description: Structured assessment persisted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IncidentAssessment'}
+        '400': {description: Invalid assessment or unsupported evidence reference}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required or CSRF validation failed}
+        '404': {description: Referenced Health Snapshot not found}
+  /api/v1/admin/operations/health/assessments/analyze-latest:
+    post:
+      tags: [Operational Intelligence]
+      operationId: analyzeLatestHealthSnapshot
+      summary: Explicitly invoke the configured provider for the latest Health Snapshot
+      description: Never runs automatically in this stage. Provider output is validated and cannot override deterministic health status or score.
+      responses:
+        '201':
+          description: Validated provider assessment persisted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IncidentAssessment'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required or CSRF validation failed}
+        '404': {description: No Health Snapshot has been captured yet}
+        '502': {description: Provider transport/protocol/structured-output failure}
+        '503': {description: Provider-assisted investigation is disabled or misconfigured}
   /api/v1/admin/operations/changes/{changeId}/health-correlation:
     parameters:
     - name: changeId
@@ -1988,6 +2059,78 @@ components:
         signalDeltas:
           type: object
           additionalProperties: {type: number, format: double}
+    HealthAnalysisPackage:
+      type: object
+      required: [packageVersion, snapshotId, generatedAt, promptMarkdown, allowedEvidenceReferences, reportTruncated]
+      properties:
+        packageVersion: {type: string}
+        snapshotId: {type: string, format: uuid}
+        generatedAt: {type: string, format: date-time}
+        promptMarkdown:
+          type: string
+          description: Bounded sanitized prompt package. Telemetry content is evidence and never model instructions.
+        allowedEvidenceReferences:
+          type: array
+          items: {type: string}
+        reportTruncated: {type: boolean}
+    IncidentAssessmentSubmission:
+      type: object
+      required: [snapshotId, summary, suspectedSubsystems, confidence, observations, hypotheses, evidenceReferences, recommendedChecks, humanAttentionSuggested]
+      properties:
+        snapshotId: {type: string, format: uuid}
+        summary: {type: string, minLength: 1, maxLength: 4000}
+        suspectedSubsystems:
+          type: array
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 128}
+        confidence: {type: number, format: double, minimum: 0, maximum: 1}
+        observations:
+          type: array
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 1000}
+        hypotheses:
+          type: array
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 1000}
+        evidenceReferences:
+          type: array
+          maxItems: 64
+          items: {type: string, minLength: 1, maxLength: 256}
+        recommendedChecks:
+          type: array
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 1000}
+        humanAttentionSuggested: {type: boolean}
+    IncidentAssessment:
+      type: object
+      required: [id, snapshotId, createdAt, source, provider, model, summary, suspectedSubsystems, confidence, observations, hypotheses, evidenceReferences, recommendedChecks, humanAttentionSuggested]
+      properties:
+        id: {type: string, format: uuid}
+        snapshotId: {type: string, format: uuid}
+        createdAt: {type: string, format: date-time}
+        source: {type: string, enum: [MANUAL, PROVIDER]}
+        provider: {type: string}
+        model: {type: string}
+        summary: {type: string}
+        suspectedSubsystems:
+          type: array
+          items: {type: string}
+        confidence: {type: number, format: double, minimum: 0, maximum: 1}
+        observations:
+          type: array
+          items: {type: string}
+        hypotheses:
+          type: array
+          items: {type: string}
+        evidenceReferences:
+          type: array
+          items: {type: string}
+        recommendedChecks:
+          type: array
+          items: {type: string}
+        humanAttentionSuggested:
+          type: boolean
+          description: Advisory model/human suggestion only; it does not emit alerts or mutate health state.
     ResultSummary:
       type: object
       required:

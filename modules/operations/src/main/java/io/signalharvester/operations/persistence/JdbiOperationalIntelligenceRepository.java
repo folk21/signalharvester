@@ -12,6 +12,8 @@ import io.signalharvester.operations.api.OperationalChangeTargetType;
 import io.signalharvester.operations.model.HealthAnomaly;
 import io.signalharvester.operations.model.HealthSnapshot;
 import io.signalharvester.operations.model.HealthStatus;
+import io.signalharvester.operations.model.IncidentAssessment;
+import io.signalharvester.operations.model.IncidentAssessmentSource;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.ResultSet;
@@ -36,10 +38,14 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
     private static final String INSERT_SNAPSHOT = SqlResources.load(SQL_PATH, "insert-snapshot");
     private static final String DELETE_OLD_SNAPSHOTS = SqlResources.load(SQL_PATH, "delete-old-snapshots");
     private static final String FIND_LATEST_SNAPSHOT = SqlResources.load(SQL_PATH, "find-latest-snapshot");
+    private static final String FIND_SNAPSHOT = SqlResources.load(SQL_PATH, "find-snapshot");
     private static final String FIND_RECENT_SNAPSHOTS_BEFORE = SqlResources.load(SQL_PATH, "find-recent-snapshots-before");
     private static final String TRY_HEALTH_SAMPLING_LOCK = SqlResources.load(SQL_PATH, "try-health-sampling-lock");
     private static final String FIND_SNAPSHOT_BEFORE = SqlResources.load(SQL_PATH, "find-snapshot-before");
     private static final String FIND_SNAPSHOT_AFTER = SqlResources.load(SQL_PATH, "find-snapshot-after");
+    private static final String INSERT_INCIDENT_ASSESSMENT = SqlResources.load(SQL_PATH, "insert-incident-assessment");
+    private static final String FIND_RECENT_INCIDENT_ASSESSMENTS = SqlResources.load(SQL_PATH, "find-recent-incident-assessments");
+    private static final String DELETE_OLD_INCIDENT_ASSESSMENTS = SqlResources.load(SQL_PATH, "delete-old-incident-assessments");
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {};
     private static final TypeReference<Map<String, Double>> DOUBLE_MAP = new TypeReference<>() {};
@@ -135,6 +141,14 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
     }
 
     @Override
+    public Optional<HealthSnapshot> findSnapshot(UUID snapshotId) {
+        return execute("Failed to read Health Snapshot", handle -> handle.createQuery(FIND_SNAPSHOT)
+                .bind("snapshotId", snapshotId)
+                .map((rows, context) -> mapSnapshot(rows))
+                .findFirst());
+    }
+
+    @Override
     public List<HealthSnapshot> findRecentSnapshotsBefore(Instant instant, int limit) {
         return execute("Failed to read rolling Health Snapshot baseline", handle -> handle.createQuery(FIND_RECENT_SNAPSHOTS_BEFORE)
                 .bind("instant", Timestamp.from(instant))
@@ -166,6 +180,42 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
                 .findFirst());
     }
 
+
+    @Override
+    public void insertIncidentAssessment(IncidentAssessment assessment) {
+        executeVoid("Failed to record incident assessment", handle -> handle.createUpdate(INSERT_INCIDENT_ASSESSMENT)
+                .bind("assessmentId", assessment.id())
+                .bind("snapshotId", assessment.snapshotId())
+                .bind("createdAt", Timestamp.from(assessment.createdAt()))
+                .bind("source", assessment.source().name())
+                .bind("provider", assessment.provider())
+                .bind("model", assessment.model())
+                .bind("summary", assessment.summary())
+                .bind("suspectedSubsystems", writeJson(assessment.suspectedSubsystems()))
+                .bind("confidence", assessment.confidence())
+                .bind("observations", writeJson(assessment.observations()))
+                .bind("hypotheses", writeJson(assessment.hypotheses()))
+                .bind("evidenceReferences", writeJson(assessment.evidenceReferences()))
+                .bind("recommendedChecks", writeJson(assessment.recommendedChecks()))
+                .bind("humanAttentionSuggested", assessment.humanAttentionSuggested())
+                .execute());
+    }
+
+    @Override
+    public List<IncidentAssessment> findRecentIncidentAssessments(int limit) {
+        return execute("Failed to list incident assessments", handle -> handle.createQuery(FIND_RECENT_INCIDENT_ASSESSMENTS)
+                .bind("limit", limit)
+                .map((rows, context) -> mapIncidentAssessment(rows))
+                .list());
+    }
+
+    @Override
+    public void deleteIncidentAssessmentsBeyond(int keepCount) {
+        executeVoid("Failed to enforce incident-assessment retention", handle -> handle.createUpdate(DELETE_OLD_INCIDENT_ASSESSMENTS)
+                .bind("keepCount", keepCount)
+                .execute());
+    }
+
     private OperationalChangeRecord mapChange(ResultSet rows) throws SQLException {
         return new OperationalChangeRecord(
                 rows.getObject("change_id", UUID.class),
@@ -181,6 +231,25 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
                 rows.getString("correlation_id"),
                 rows.getString("trace_id"),
                 rows.getString("application_version"));
+    }
+
+
+    private IncidentAssessment mapIncidentAssessment(ResultSet rows) throws SQLException {
+        return new IncidentAssessment(
+                rows.getObject("assessment_id", UUID.class),
+                rows.getObject("snapshot_id", UUID.class),
+                rows.getTimestamp("created_at").toInstant(),
+                IncidentAssessmentSource.valueOf(rows.getString("source")),
+                rows.getString("provider"),
+                rows.getString("model"),
+                rows.getString("summary"),
+                readJson(rows.getString("suspected_subsystems"), STRING_LIST),
+                rows.getDouble("confidence"),
+                readJson(rows.getString("observations"), STRING_LIST),
+                readJson(rows.getString("hypotheses"), STRING_LIST),
+                readJson(rows.getString("evidence_references"), STRING_LIST),
+                readJson(rows.getString("recommended_checks"), STRING_LIST),
+                rows.getBoolean("human_attention_suggested"));
     }
 
     private HealthSnapshot mapSnapshot(ResultSet rows) throws SQLException {

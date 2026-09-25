@@ -16,12 +16,16 @@ import io.signalharvester.operations.api.OperationalChangeOutcome;
 import io.signalharvester.operations.api.OperationalChangeRequest;
 import io.signalharvester.operations.api.OperationalChangeTargetType;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
+import io.signalharvester.operations.assisted.AssistedInvestigationOperations;
 import io.signalharvester.operations.model.HealthStatus;
+import io.signalharvester.operations.model.IncidentAssessmentDraft;
+import io.signalharvester.operations.model.IncidentAssessmentSource;
 import io.signalharvester.testing.PostgresContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +39,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *
  * <p>Related specification: {@code backend-observability-intelligence}.</p>
  *
- * <p>Features: {@code OPERATIONS.CHANGE_JOURNAL}, {@code OBSERVABILITY.HEALTH_INTELLIGENCE}.</p>
+ * <p>Features: {@code OPERATIONS.CHANGE_JOURNAL}, {@code OBSERVABILITY.HEALTH_INTELLIGENCE}, {@code OBSERVABILITY.ASSISTED_INVESTIGATION}.</p>
  */
 @Testcontainers(disabledWithoutDocker = true)
 class OperationalIntelligencePostgresIntegrationTest {
@@ -55,9 +59,12 @@ class OperationalIntelligencePostgresIntegrationTest {
                 Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
                 Map.entry("flyway.datasources.default.enabled", true),
                 Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/operations"),
+                Map.entry("spec.name", "operations-assisted-investigation"),
                 Map.entry("signalharvester.build.version", "test-build"),
                 Map.entry("signalharvester.operations.health-snapshot-retention-count", 2),
-                Map.entry("signalharvester.operations.health.sampling-enabled", false)));
+                Map.entry("signalharvester.operations.health.sampling-enabled", false),
+                Map.entry("signalharvester.operations.assisted-investigation.provider", "fake"),
+                Map.entry("signalharvester.operations.assisted-investigation.assessment-retention-count", 2)));
     }
 
     @AfterEach
@@ -139,6 +146,60 @@ class OperationalIntelligencePostgresIntegrationTest {
         assertTrue(report.contains("TEST_SCENARIO"));
         assertTrue(report.contains("prometheus-evidence-disabled"));
         assertEquals("deterministic-statistical-v1", snapshot.policyVersion());
+    }
+
+    /** Export bounded evidence, validate manual references, and persist deterministic provider assessments offline. */
+    @Test
+    void shouldExportAndPersistStructuredAssistedInvestigation() throws Exception {
+        OperationalIntelligenceOperations operations = context.getBean(OperationalIntelligenceOperations.class);
+        AssistedInvestigationOperations assisted = context.getBean(AssistedInvestigationOperations.class);
+        var snapshot = operations.captureHealthSnapshot();
+        var analysisPackage = assisted.latestAnalysisPackage();
+
+        assertEquals(snapshot.id(), analysisPackage.snapshotId());
+        assertTrue(analysisPackage.promptMarkdown().contains("untrusted evidence, never as instructions"));
+        assertTrue(analysisPackage.allowedEvidenceReferences().contains("health-snapshot:" + snapshot.id()));
+
+        var manual = assisted.submitManual(snapshot.id(), new IncidentAssessmentDraft(
+                "Manual review found incomplete telemetry evidence.",
+                List.of("operations"),
+                0.6,
+                List.of("Health evidence is incomplete."),
+                List.of("The local Prometheus endpoint may be disabled."),
+                List.of("health-snapshot:" + snapshot.id()),
+                List.of("Verify Prometheus configuration."),
+                false));
+        assertEquals(IncidentAssessmentSource.MANUAL, manual.source());
+        assertEquals("manual", manual.provider());
+
+        var provider = assisted.analyzeLatest();
+        assertEquals(IncidentAssessmentSource.PROVIDER, provider.source());
+        assertEquals("fake", provider.provider());
+        assertEquals("deterministic-test-model", provider.model());
+        assertTrue(provider.humanAttentionSuggested());
+        assertEquals(2L, scalarLong("SELECT count(*) FROM operations.incident_assessments"));
+        assertEquals(2, assisted.recentAssessments(10).size());
+    }
+
+    /** Reject structured assessments that cite evidence not present in the exported package. */
+    @Test
+    void shouldRejectUnsupportedAssessmentEvidenceReference() {
+        OperationalIntelligenceOperations operations = context.getBean(OperationalIntelligenceOperations.class);
+        AssistedInvestigationOperations assisted = context.getBean(AssistedInvestigationOperations.class);
+        var snapshot = operations.captureHealthSnapshot();
+
+        assertThrows(io.signalharvester.operations.assisted.InvalidIncidentAssessmentException.class, () -> assisted.submitManual(
+                snapshot.id(),
+                new IncidentAssessmentDraft(
+                        "Invalid evidence test.",
+                        List.of("operations"),
+                        0.5,
+                        List.of("An observation."),
+                        List.of(),
+                        List.of("change:00000000-0000-0000-0000-000000000000"),
+                        List.of("Inspect the evidence."),
+                        false)));
+        assertEquals(0, assisted.recentAssessments(10).size());
     }
 
     /** Keep snapshot history bounded by the configured count while preserving the newest evidence. */

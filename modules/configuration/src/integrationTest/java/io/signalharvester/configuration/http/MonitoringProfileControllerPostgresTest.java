@@ -69,7 +69,7 @@ class MonitoringProfileControllerPostgresTest {
             statement.execute("TRUNCATE TABLE configuration.monitoring_profile_criteria, "
                     + "configuration.monitoring_profile_sources, configuration.monitoring_profiles, "
                     + "configuration.source_settings, configuration.sources CASCADE");
-            statement.execute("TRUNCATE TABLE operations.change_journal, operations.health_snapshots");
+            statement.execute("TRUNCATE TABLE operations.change_journal");
         }
     }
 

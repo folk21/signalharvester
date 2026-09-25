@@ -81,7 +81,7 @@ class SourceControllerPostgresTest {
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 Statement statement = connection.createStatement()) {
             statement.execute("TRUNCATE TABLE configuration.source_settings, configuration.sources CASCADE");
-            statement.execute("TRUNCATE TABLE operations.change_journal, operations.health_snapshots");
+            statement.execute("TRUNCATE TABLE operations.change_journal");
         }
     }
 

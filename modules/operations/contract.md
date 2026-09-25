@@ -1,7 +1,7 @@
 ---
 type: Module Contract
 title: SignalHarvester module contract — Operations
-description: Ownership of operational change history, persisted health snapshots/reports, and future health-intelligence analysis boundaries.
+description: Ownership of operational change history, persisted health snapshots/reports, and assisted-investigation boundaries.
 ---
 # SignalHarvester module contract — Operations
 
@@ -13,7 +13,7 @@ Own the durable operational timeline used to correlate behavior-affecting change
 
 - `OPERATIONS.CHANGE_JOURNAL`
 - `OBSERVABILITY.HEALTH_INTELLIGENCE`
-- future implementation boundary for `OBSERVABILITY.ASSISTED_INVESTIGATION`
+- `OBSERVABILITY.ASSISTED_INVESTIGATION`
 
 ## Owned responsibilities
 
@@ -22,7 +22,10 @@ Own the durable operational timeline used to correlate behavior-affecting change
 - persist and query versioned Health Snapshots;
 - render bounded JSON/Markdown Health Reports from persisted evidence;
 - expose ADMIN operational-history/health HTTP reads, explicit Health Snapshot capture, and typed tooling/scenario markers;
-- own the `operations` PostgreSQL schema and retention/query model.
+- own the `operations` PostgreSQL schema and retention/query model;
+- build bounded sanitized LLM analysis packages;
+- validate and persist structured Incident Assessments from manual or explicitly invoked providers;
+- own the provider-neutral `IncidentAnalyst` boundary and optional OpenAI-compatible adapter.
 
 ## Public integration surface
 
@@ -42,7 +45,7 @@ Published data types define stable change category/source/target/outcome vocabul
 
 Authoritative schema: `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`.
 
-Operations owns ADMIN routes under `/api/v1/admin/operations` for bounded change-history reads, explicit Health Snapshot capture, latest snapshot/report export, and nearest before/after snapshot correlation around one change.
+Operations owns ADMIN routes under `/api/v1/admin/operations` for bounded change-history reads, explicit Health Snapshot capture, latest snapshot/report/package export, structured assessment import/listing, explicit provider invocation, and nearest before/after snapshot correlation around one change.
 
 ### Events
 
@@ -53,7 +56,8 @@ None.
 PostgreSQL schema `operations` owns:
 
 - `operations.change_journal`;
-- `operations.health_snapshots`.
+- `operations.health_snapshots`;
+- `operations.incident_assessments`.
 
 Other modules must not query or mutate these tables directly.
 
@@ -78,8 +82,12 @@ Other modules must not import Operations application, persistence, model, or HTT
 - periodic multi-replica sampling uses a PostgreSQL transaction-scoped advisory lock and freshness check, while Prometheus queries happen outside that transaction;
 - successful controlled DLQ recovery markers are best-effort evidence and never turn an already successful replay into an operator-visible replay failure;
 - persisted Health Snapshot count is bounded by Operations runtime configuration;
-- temporal change/health correlation never asserts causality.
+- temporal change/health correlation never asserts causality;
+- assisted-investigation packages contain bounded sanitized evidence and explicitly mark telemetry as untrusted input;
+- model output cannot change persisted Health Snapshot status/score and is persisted only after bounded schema and evidence-reference validation;
+- provider HTTP calls happen outside database transactions and are explicit-only in Stage 3;
+- provider credentials are runtime secrets and are never journaled or persisted with assessments.
 
 ## Extension points
 
-Future stages may add scheduled health sampling, statistical detectors, Prometheus/Loki/Tempo readers, provider-neutral LLM analysis, and alert policy. Keep those behind Operations-owned boundaries instead of coupling mutating modules to observability providers.
+Future stages may add bounded Prometheus/Loki/Tempo investigation tools, event/periodic trigger policy, alert policy, and later ML evaluation. Keep those behind Operations-owned boundaries instead of coupling mutating modules to observability/model providers.

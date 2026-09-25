@@ -45,7 +45,7 @@ Source-fetch worker interruption propagation is accepted after developer verific
 Analysis outbox expired-lease fencing is accepted after developer verification. Pre-publication renewal now requires both the exact token and a still-live persisted lease, so an expired former owner cannot resurrect ownership before Kafka send.
 Analysis outbox failure-state lease fencing is accepted after developer verification. Publication-failure retry metadata now requires a still-live exact-token lease, so an unsuccessful send that outlives ownership cannot postpone immediate reclaim. The remaining durable-ownership/crash-window review found no additional material correctness defect across post-ack publication markers, DLQ acknowledgement before framework offset commit, controlled replay/idempotency, and scheduled Collection completion; Review III is closed.
 
-The latest capacity-telemetry implementation remains verification-pending, but its live baseline already exposed the next control-plane gap: SignalHarvester can collect rich telemetry yet cannot persist a compact health interpretation, correlate health changes with configuration/runtime changes, or perform bounded assisted investigation. The current implementation priority is therefore `OBSERVABILITY.HEALTH_INTELLIGENCE` + `OPERATIONS.CHANGE_JOURNAL`, followed by optional `OBSERVABILITY.ASSISTED_INVESTIGATION`. The preceding capacity telemetry/baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
+The latest capacity-telemetry implementation remains verification-pending, but the operational-intelligence foundation and deterministic/statistical Health Engine are accepted. Stage 3 assisted investigation is now implemented and verification-pending: bounded sanitized analysis packages, structured Incident Assessments, manual import, and explicit optional provider invocation. The next priority is bounded read-only investigation tools plus event/periodic trigger and alert policy. The preceding capacity telemetry/baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
 
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -93,9 +93,9 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept the implemented deterministic/statistical Health Engine: versioned scoring, scheduled snapshots, rolling median/MAD baselines, bounded Prometheus evidence, structured anomalies, and numeric change-before/after deltas.
-2. Add manual sanitized Health Report packaging plus a provider-neutral structured `IncidentAssessment` boundary with deterministic fake-provider coverage; no external provider is required for the canonical gate.
-3. Add bounded read-only Prometheus/Loki/Tempo/change-history tools for optional event-driven/periodic assisted investigation and application-owned alert policy. Continue ramp/spike/soak and Results REST/SSE load as both capacity work and operational-intelligence evaluation data; select throughput optimizations or custom ML/neural models only from repeated evidence.
+1. Operations foundation and deterministic/statistical Health Engine are accepted.
+2. Stage 3 manual/provider-neutral assisted investigation is implemented and verification-pending; the canonical gate uses a deterministic fake provider and requires no external model.
+3. After Stage 3 acceptance, add bounded read-only Prometheus/Loki/Tempo/change-history tools for optional event-driven/periodic assisted investigation and application-owned alert policy. Continue ramp/spike/soak and Results REST/SSE load as both capacity work and operational-intelligence evaluation data; select throughput optimizations or custom ML/neural models only from repeated evidence.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 
