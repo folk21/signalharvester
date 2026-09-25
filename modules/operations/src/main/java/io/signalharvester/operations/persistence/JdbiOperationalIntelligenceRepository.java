@@ -9,6 +9,7 @@ import io.signalharvester.operations.api.OperationalChangeOutcome;
 import io.signalharvester.operations.api.OperationalChangeRecord;
 import io.signalharvester.operations.api.OperationalChangeSource;
 import io.signalharvester.operations.api.OperationalChangeTargetType;
+import io.signalharvester.operations.model.HealthAnomaly;
 import io.signalharvester.operations.model.HealthSnapshot;
 import io.signalharvester.operations.model.HealthStatus;
 import jakarta.inject.Named;
@@ -35,12 +36,15 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
     private static final String INSERT_SNAPSHOT = SqlResources.load(SQL_PATH, "insert-snapshot");
     private static final String DELETE_OLD_SNAPSHOTS = SqlResources.load(SQL_PATH, "delete-old-snapshots");
     private static final String FIND_LATEST_SNAPSHOT = SqlResources.load(SQL_PATH, "find-latest-snapshot");
+    private static final String FIND_RECENT_SNAPSHOTS_BEFORE = SqlResources.load(SQL_PATH, "find-recent-snapshots-before");
+    private static final String TRY_HEALTH_SAMPLING_LOCK = SqlResources.load(SQL_PATH, "try-health-sampling-lock");
     private static final String FIND_SNAPSHOT_BEFORE = SqlResources.load(SQL_PATH, "find-snapshot-before");
     private static final String FIND_SNAPSHOT_AFTER = SqlResources.load(SQL_PATH, "find-snapshot-after");
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {};
     private static final TypeReference<Map<String, Double>> DOUBLE_MAP = new TypeReference<>() {};
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
+    private static final TypeReference<List<HealthAnomaly>> HEALTH_ANOMALY_LIST = new TypeReference<>() {};
     private static final TypeReference<List<UUID>> UUID_LIST = new TypeReference<>() {};
 
     private final Jdbi jdbi;
@@ -108,6 +112,7 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
                 .bind("componentStatuses", writeJson(snapshot.componentStatuses()))
                 .bind("signalValues", writeJson(snapshot.signalValues()))
                 .bind("anomalyCandidates", writeJson(snapshot.anomalyCandidates()))
+                .bind("anomalyDetails", writeJson(snapshot.anomalyDetails()))
                 .bind("recentChangeIds", writeJson(snapshot.recentChangeIds()))
                 .bind("applicationVersion", snapshot.applicationVersion())
                 .bind("evidenceComplete", snapshot.evidenceComplete())
@@ -127,6 +132,22 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
         return execute("Failed to read latest Health Snapshot", handle -> handle.createQuery(FIND_LATEST_SNAPSHOT)
                 .map((rows, context) -> mapSnapshot(rows))
                 .findFirst());
+    }
+
+    @Override
+    public List<HealthSnapshot> findRecentSnapshotsBefore(Instant instant, int limit) {
+        return execute("Failed to read rolling Health Snapshot baseline", handle -> handle.createQuery(FIND_RECENT_SNAPSHOTS_BEFORE)
+                .bind("instant", Timestamp.from(instant))
+                .bind("limit", limit)
+                .map((rows, context) -> mapSnapshot(rows))
+                .list());
+    }
+
+    @Override
+    public boolean tryAcquireHealthSamplingLock() {
+        return execute("Failed to acquire Health Snapshot sampling lock", handle -> handle.createQuery(TRY_HEALTH_SAMPLING_LOCK)
+                .mapTo(Boolean.class)
+                .one());
     }
 
     @Override
@@ -174,6 +195,7 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
                 readJson(rows.getString("component_statuses"), STRING_MAP),
                 readJson(rows.getString("signal_values"), DOUBLE_MAP),
                 readJson(rows.getString("anomaly_candidates"), STRING_LIST),
+                readJson(rows.getString("anomaly_details"), HEALTH_ANOMALY_LIST),
                 readJson(rows.getString("recent_change_ids"), UUID_LIST),
                 rows.getString("application_version"),
                 rows.getBoolean("evidence_complete"),

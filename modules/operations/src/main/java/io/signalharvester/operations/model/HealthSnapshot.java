@@ -18,6 +18,7 @@ public record HealthSnapshot(
         Map<String, String> componentStatuses,
         Map<String, Double> signalValues,
         List<String> anomalyCandidates,
+        List<HealthAnomaly> anomalyDetails,
         List<UUID> recentChangeIds,
         String applicationVersion,
         boolean evidenceComplete,
@@ -36,6 +37,7 @@ public record HealthSnapshot(
         componentStatuses = Map.copyOf(Objects.requireNonNull(componentStatuses, "componentStatuses"));
         signalValues = Map.copyOf(Objects.requireNonNull(signalValues, "signalValues"));
         anomalyCandidates = List.copyOf(Objects.requireNonNull(anomalyCandidates, "anomalyCandidates"));
+        anomalyDetails = List.copyOf(Objects.requireNonNull(anomalyDetails, "anomalyDetails"));
         recentChangeIds = List.copyOf(Objects.requireNonNull(recentChangeIds, "recentChangeIds"));
         applicationVersion = requireText(applicationVersion, "applicationVersion");
         unknownReasons = List.copyOf(Objects.requireNonNull(unknownReasons, "unknownReasons"));

@@ -23,6 +23,7 @@ import io.signalharvester.security.model.IdentityType;
 import io.signalharvester.security.model.UserId;
 import io.signalharvester.security.model.UserRole;
 import io.signalharvester.testing.BrowserHttpSession;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.net.HttpCookie;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -70,10 +71,7 @@ class SecurityHttpPostgresIntegrationTest {
     private static final Pattern ID_PATTERN = Pattern.compile("\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private EmbeddedServer server;
     private HttpClient httpClient;

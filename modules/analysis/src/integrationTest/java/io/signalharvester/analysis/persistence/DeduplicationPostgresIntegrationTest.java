@@ -11,6 +11,7 @@ import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.analysis.application.AnalysisItemInspection;
 import io.signalharvester.analysis.application.AnalysisItemInspectionQuery;
 import io.signalharvester.analysis.model.NormalizedContentItem;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -60,10 +61,7 @@ class DeduplicationPostgresIntegrationTest {
     private static final String SOURCE_EVENT_3 = "event-03";
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
 

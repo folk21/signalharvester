@@ -199,7 +199,7 @@ Analysis consumes the raw events, normalizes and deduplicates them, runs determi
 
 The outbox dispatcher publishes committed records to Kafka. Results consumes terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST and resumable SSE. `GET /api/v1/results` also supports optional `search` and opaque `cursor` parameters. The response body remains the existing Result summary array; when more rows exist, read the `X-Next-Cursor` response header and pass it back as `cursor` for the next page. The cursor is tied to the filters/search expression that produced it, while `limit` may change between pages.
 
-### Inspect operational changes and foundation Health Reports
+### Inspect operational changes and Health Reports
 
 ADMIN operators can inspect the bounded operational change journal and capture the current pre-detector Health Snapshot:
 
@@ -213,7 +213,7 @@ curl -i -X POST -b build/tmp/auth.cookies \
 curl -s -b build/tmp/auth.cookies http://localhost:8080/api/v1/admin/operations/health/reports/latest
 ```
 
-The current `foundation-v1` snapshot is deliberately `UNKNOWN` with score `0`; it persists available capacity signals, recent change references, and missing-evidence reasons. Deterministic/statistical health scoring belongs to the next active implementation stage.
+The verification-pending `deterministic-statistical-v1` snapshot uses configurable hard rules plus rolling median/MAD comparison against prior snapshots. In Kubernetes it consumes bounded allowlisted Prometheus signals; missing required telemetry is reported explicitly and may yield `UNKNOWN`. The latest Markdown report includes structured anomalies, previous-snapshot deltas, and referenced operational changes.
 
 Repository-owned tooling can record sanitized `DEPLOYMENT_TUNING` or `TEST_SCENARIO` markers through `/api/v1/admin/operations/changes/markers`. Source/Profile/user mutations and successful controlled DLQ replay record their own journal evidence; direct database edits and arbitrary external `kubectl` changes are outside the automatic journal guarantee.
 

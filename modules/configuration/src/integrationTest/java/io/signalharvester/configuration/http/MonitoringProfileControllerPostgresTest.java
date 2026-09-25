@@ -11,6 +11,7 @@ import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.application.InvalidMonitoringProfileConfigurationException;
 import io.signalharvester.configuration.application.MonitoringProfileConfigurationCommand;
 import io.signalharvester.configuration.application.MonitoringProfileConfigurationOperations;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -48,10 +49,7 @@ class MonitoringProfileControllerPostgresTest {
     private static final Duration HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(15);
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private EmbeddedServer server;
     private HttpClient client;

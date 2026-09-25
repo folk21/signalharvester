@@ -110,7 +110,7 @@ Container-backed integration ownership is:
 - `modules:configuration` — PostgreSQL persistence/server boundary;
 - `modules:collection` — Kafka producer/consumer transport boundary;
 - `modules:analysis` — PostgreSQL durable deduplication;
-- `modules:operations` — PostgreSQL change-journal and Health Snapshot/report persistence/correlation;
+- `modules:operations` — deterministic/statistical Health Engine unit coverage plus PostgreSQL change-journal, Health Snapshot/report persistence, rolling-baseline history, and change/health correlation;
 - `modules:results` — PostgreSQL + Kafka terminal-event consumption and idempotent projection persistence;
 - `testing:integration-tests` — PostgreSQL + Kafka cross-module Collection Run and Collection-to-Analysis flows.
 
@@ -119,6 +119,16 @@ These tests require a supported Docker-compatible runtime.
 The full `integrationTest` suite intentionally disables Gradle project parallelism.
 
 Several modules start PostgreSQL and Kafka Testcontainers. Running those project tasks concurrently can overload developer Docker runtimes and cause container-readiness timeouts.
+
+PostgreSQL integration fixtures must use `PostgresContainerSupport.create()` from `testing:test-support` instead of constructing `PostgreSQLContainer` directly. The repository helper uses mapped-port readiness only as the transport phase, then uses Awaitility to require an authenticated JDBC `SELECT 1` before `start()` returns. This avoids Testcontainers' fragile two-log-line heuristic without assuming that an open TCP socket alone means the database is ready for Flyway or test setup. The bounded startup budget is two minutes.
+
+Kafka integration fixtures must likewise use `KafkaContainerSupport.create()`. The helper overrides Testcontainers' image-specific log-message readiness with mapped-listener readiness and a two-minute budget. Kafka-backed tests then establish protocol-level readiness through their normal bounded Admin/topic setup before starting application consumers or producers. This avoids coupling repository tests to Kafka image log wording while still failing when the broker cannot serve the protocol.
+
+Asynchronous Kafka integration assertions must wait for a causal completion signal from the record they just published. Prefer a durable projection keyed by that record or, when idempotency/retention means the row count may not change, the owning consumer group's committed offset. Do not use fixed sleeps or wait on an aggregate value that was already true before publication.
+
+When a Kafka integration class creates and closes application consumers for every test method while sharing one broker container, each method must also own an isolated Kafka namespace. Use a unique consumer group plus unique source/DLQ topics per test method, and wait for the expected source-topic assignments before publishing test records. Reusing one group/topics across repeated consumer lifecycles is forbidden unless the test explicitly validates rebalance or resume behavior, because committed offsets and records from earlier methods otherwise leak into later scenarios.
+
+Java tests must not use direct `Thread.sleep(...)` as a synchronization mechanism. Awaitility is the repository-standard library for bounded polling of eventual conditions. When the test owns both threads, prefer deterministic primitives such as `CountDownLatch`, barriers, phasers, or controllable clocks instead of polling. The existing `io.signalharvester.testing.Await` compatibility helper delegates to Awaitility; remaining direct sleeps are scheduled for repository-wide removal in the next cleanup slice.
 
 The normal `clean check` phase may still use its normal parallelism behavior.
 

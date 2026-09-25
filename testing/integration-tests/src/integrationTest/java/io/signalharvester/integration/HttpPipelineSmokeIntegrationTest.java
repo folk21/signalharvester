@@ -1,5 +1,6 @@
 package io.signalharvester.integration;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -11,6 +12,7 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.runtime.server.EmbeddedServer;
 import io.signalharvester.testing.Await;
 import io.signalharvester.testing.KafkaContainerSupport;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,7 +26,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -33,6 +34,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -80,10 +82,7 @@ class HttpPipelineSmokeIntegrationTest {
             "\\\"normalizedItemId\\\"\\s*:\\s*\\\"([0-9a-f]{64})\\\"");
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     @Container
     private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
@@ -357,23 +356,33 @@ class HttpPipelineSmokeIntegrationTest {
     }
 
     private static String readSseUntil(BufferedReader reader, String target, Duration timeout) throws Exception {
-        Instant deadline = Instant.now().plus(timeout);
         StringBuilder received = new StringBuilder();
-        while (Instant.now().isBefore(deadline)) {
-            if (!reader.ready()) {
-                Thread.sleep(10);
-                continue;
-            }
+        try {
+            await()
+                    .alias("SSE content " + target)
+                    .pollDelay(Duration.ZERO)
+                    .pollInterval(Duration.ofMillis(10))
+                    .atMost(timeout)
+                    .until(() -> drainReadySseLines(reader, target, received));
+            return received.toString();
+        } catch (ConditionTimeoutException timeoutFailure) {
+            throw new AssertionError("Timed out waiting for SSE content " + target + ": " + received, timeoutFailure);
+        }
+    }
+
+    private static boolean drainReadySseLines(BufferedReader reader, String target, StringBuilder received)
+            throws Exception {
+        while (reader.ready()) {
             String line = reader.readLine();
             if (line == null) {
-                break;
+                return false;
             }
             received.append(line).append('\n');
             if (line.contains(target)) {
-                return received.toString();
+                return true;
             }
         }
-        throw new AssertionError("Timed out waiting for SSE content " + target + ": " + received);
+        return false;
     }
 
     private HttpResponse<String> send(String method, String path, String body) throws Exception {

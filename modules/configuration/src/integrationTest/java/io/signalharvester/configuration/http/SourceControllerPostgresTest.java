@@ -12,6 +12,7 @@ import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.persistence.JdbiSourceRepository;
 import io.signalharvester.configuration.persistence.SourceRepository;
+import io.signalharvester.testing.PostgresContainerSupport;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.net.http.HttpClient;
@@ -60,10 +61,7 @@ class SourceControllerPostgresTest {
     private static final Duration HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(15);
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
     private EmbeddedServer server;

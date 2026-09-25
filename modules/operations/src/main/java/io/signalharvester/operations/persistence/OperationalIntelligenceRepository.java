@@ -16,6 +16,8 @@ public interface OperationalIntelligenceRepository {
     void insertSnapshot(HealthSnapshot snapshot);
     void deleteSnapshotsBeyond(int keepCount);
     Optional<HealthSnapshot> findLatestSnapshot();
+    List<HealthSnapshot> findRecentSnapshotsBefore(Instant instant, int limit);
+    boolean tryAcquireHealthSamplingLock();
     Optional<HealthSnapshot> findLatestSnapshotAtOrBefore(Instant instant);
     Optional<HealthSnapshot> findEarliestSnapshotAtOrAfter(Instant instant);
 }

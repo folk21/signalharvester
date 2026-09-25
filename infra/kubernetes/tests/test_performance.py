@@ -108,13 +108,15 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn("sources > 20", source)
         self.assertIn('"build" / "reports" / "performance" / "capacity-baseline.json"', source)
 
-    def test_runner_records_operational_markers_and_foundation_snapshot(self):
+    def test_runner_records_operational_markers_and_health_snapshot(self):
         source = (PERFORMANCE / "run_baseline.py").read_text()
         self.assertIn('/api/v1/admin/operations/changes/markers', source)
         self.assertIn('"DEPLOYMENT_TUNING"', source)
         self.assertIn('"TEST_SCENARIO"', source)
         self.assertIn('/api/v1/admin/operations/health/snapshots', source)
         self.assertIn('report["healthSnapshot"]', source)
+        self.assertIn('"healthScore": health_snapshot.get("healthScore")', source)
+        self.assertIn('"anomalyCandidates": health_snapshot.get("anomalyCandidates", [])', source)
 
     def test_comparison_replica_parser_requires_ordered_unique_positive_counts(self):
         self.assertEqual([1, 3], comparison.parse_replica_counts("1,3"))

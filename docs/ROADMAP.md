@@ -93,8 +93,8 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify and accept the implemented first `backend-observability-intelligence` slice: durable redacted `OPERATIONS.CHANGE_JOURNAL` records, persisted versioned foundation Health Snapshots, bounded JSON/Markdown Health Reports, and before/after change correlation.
-2. Add the deterministic/statistical Health Engine and use existing resilience/capacity scenarios as labeled evaluation evidence. Add manual sanitized Health Report export, then a provider-neutral structured LLM-analysis boundary with deterministic fake-provider coverage.
+1. Verify and accept the implemented deterministic/statistical Health Engine: versioned scoring, scheduled snapshots, rolling median/MAD baselines, bounded Prometheus evidence, structured anomalies, and numeric change-before/after deltas.
+2. Add manual sanitized Health Report packaging plus a provider-neutral structured `IncidentAssessment` boundary with deterministic fake-provider coverage; no external provider is required for the canonical gate.
 3. Add bounded read-only Prometheus/Loki/Tempo/change-history tools for optional event-driven/periodic assisted investigation and application-owned alert policy. Continue ramp/spike/soak and Results REST/SSE load as both capacity work and operational-intelligence evaluation data; select throughput optimizations or custom ML/neural models only from repeated evidence.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.

@@ -20,6 +20,7 @@ public record HealthSnapshotResponse(
         Map<String, String> componentStatuses,
         Map<String, Double> signalValues,
         List<String> anomalyCandidates,
+        List<HealthAnomalyResponse> anomalies,
         List<UUID> recentChangeIds,
         String applicationVersion,
         boolean evidenceComplete,
@@ -30,6 +31,7 @@ public record HealthSnapshotResponse(
                 snapshot.id(), snapshot.generatedAt(), snapshot.windowStartedAt(), snapshot.windowEndedAt(),
                 snapshot.overallStatus().name(), snapshot.healthScore(), snapshot.policyVersion(),
                 snapshot.componentStatuses(), snapshot.signalValues(), snapshot.anomalyCandidates(),
+                snapshot.anomalyDetails().stream().map(HealthAnomalyResponse::from).toList(),
                 snapshot.recentChangeIds(), snapshot.applicationVersion(), snapshot.evidenceComplete(),
                 snapshot.unknownReasons());
     }

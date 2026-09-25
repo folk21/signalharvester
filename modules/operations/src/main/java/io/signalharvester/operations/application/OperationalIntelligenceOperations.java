@@ -8,7 +8,7 @@ import java.util.UUID;
 /** Internal application boundary for operational timeline and Health Snapshot/report administration. */
 public interface OperationalIntelligenceOperations {
     List<OperationalChangeRecord> recentChanges(int limit);
-    HealthSnapshot captureFoundationSnapshot();
+    HealthSnapshot captureHealthSnapshot();
     HealthSnapshot latestSnapshot();
     String latestMarkdownReport();
     OperationalHealthCorrelation correlateChange(UUID changeId);

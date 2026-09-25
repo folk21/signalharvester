@@ -10,23 +10,23 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Active. Initial implementation stage 1 is implemented and verification-pending: the Operations module now owns durable sanitized change records plus persisted `foundation-v1` Health Snapshots/reports and nearest before/after snapshot correlation. Deterministic/statistical health scoring remains stage 2.
+Active. Stage 1 is accepted after the developer confirmed the canonical repository gate. Stage 2 is implemented and verification-pending: Operations now evaluates versioned deterministic/statistical Health Snapshots from bounded Prometheus/local evidence, persists structured anomalies, samples periodically across multiple replicas, and exposes numeric before/after health deltas. Manual/provider-neutral LLM analysis remains stage 3.
 
 The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until their canonical acceptance is recorded. This specification does not weaken or replace those acceptance gates.
 
 ## Implementation progress
 
-Stage 1 is implemented and verification-pending. The current bounded slice includes:
+Stage 1 is accepted. Stage 2 is implemented and verification-pending. The implemented scope now includes:
 
 - Operations-owned `V16` persistence for sanitized change records and Health Snapshots;
 - journal integration for supported Source/Monitoring Profile mutations, Security administration, and bootstrap ADMIN creation;
 - best-effort markers for successful controlled Analysis/Results/Event Observation DLQ replay;
 - typed repository-tooling markers for deployment tuning and deterministic scenarios;
 - ADMIN change-history, snapshot capture/latest, Markdown report, and change-correlation endpoints;
-- capacity baseline markers plus a persisted foundation snapshot reference in the generated report;
+- capacity baseline markers plus a persisted Health Snapshot reference in the generated report;
 - count-bounded Health Snapshot retention configured by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT`.
 
-The foundation snapshot intentionally reports `UNKNOWN`, score `0`, policy `foundation-v1`, and explicit incomplete-evidence reasons. It is not a substitute for OI5. Stage 2 must replace this placeholder interpretation with versioned deterministic/statistical scoring while preserving the persisted model and evidence boundaries.
+Stage 2 replaces the placeholder interpretation with policy `deterministic-statistical-v1`: configurable hard thresholds, rolling median/MAD deviation, structured anomaly evidence, cluster-wide allowlisted Prometheus signals with local outbox fallback, and explicit uncertainty when required telemetry or rolling history is unavailable. Periodic sampling is multi-replica coordinated and telemetry I/O stays outside database transactions. The next bounded stage is manual/provider-neutral LLM analysis.
 
 ## Feature scope
 
@@ -291,11 +291,11 @@ Each implementation stage must add focused deterministic tests before broader li
 
 ## Implementation tasks
 
-- [ ] define ownership/persistence boundaries for Health Snapshot and operational change journal;
-- [ ] add `OPERATIONS.CHANGE_JOURNAL` capture for initial configuration/security/tooling mutations;
-- [ ] add persisted versioned Health Snapshot and bounded Health Report generation;
-- [ ] expose timeline/before-after correlation between changes and health;
-- [ ] add lightweight deterministic/statistical detector boundary and baseline implementation;
+- [x] define ownership/persistence boundaries for Health Snapshot and operational change journal;
+- [x] add `OPERATIONS.CHANGE_JOURNAL` capture for initial configuration/security/tooling mutations;
+- [x] add persisted versioned Health Snapshot and bounded Health Report generation;
+- [x] expose timeline/before-after correlation between changes and health;
+- [x] add lightweight deterministic/statistical detector boundary and baseline implementation;
 - [ ] reuse resilience/capacity scenarios as labeled operational-analysis evidence;
 - [ ] add manual sanitized report export;
 - [ ] add provider-neutral structured `IncidentAssessment` and deterministic fake provider;

@@ -269,7 +269,7 @@ Configuration and Security record supported REST/UI mutations through that API. 
 
 Applied Configuration/Security mutations record the corresponding sanitized journal entry within the application transaction where the mutation owns a PostgreSQL transaction. Recovery/tooling markers are auxiliary best-effort evidence and must not turn an already successful operator action into a business failure if journaling is unavailable. Secret values, credentials, source-setting values, and other sensitive material are excluded from journal state.
 
-The first Health Snapshot/report implementation is intentionally a foundation, not a health detector: until the deterministic/statistical Health Engine is active it persists `UNKNOWN` with policy `foundation-v1`, evidence-completeness reasons, available low-cardinality capacity signals, and recent change references. The Operations module is the intended owner of later detector and assisted-investigation capabilities defined by the active specification.
+The Operations module owns the persisted Health Snapshot/report model and the verification-pending deterministic/statistical Health Engine. Health interpretation is versioned/configurable, uses bounded allowlisted telemetry evidence plus rolling persisted baselines, and keeps missing evidence explicit. Periodic sampling is auxiliary, multi-replica coordinated through PostgreSQL, and does not hold database transactions while querying Prometheus. Operations remains the owner of later assisted-investigation capabilities defined by the active specification.
 
 ## UI boundary
 

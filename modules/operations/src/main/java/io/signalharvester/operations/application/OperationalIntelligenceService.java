@@ -1,40 +1,34 @@
 package io.signalharvester.operations.application;
 
-import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.operations.api.OperationalChangeRecord;
+import io.signalharvester.operations.model.HealthAnomaly;
 import io.signalharvester.operations.model.HealthSnapshot;
-import io.signalharvester.operations.model.HealthStatus;
 import io.signalharvester.operations.persistence.OperationalIntelligenceRepository;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.Connection;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/** Owns bounded operational timeline reads and the pre-detector Health Snapshot/report foundation. */
+/** Owns operational timeline reads plus versioned deterministic/statistical Health Snapshot evaluation. */
 @Singleton
 public final class OperationalIntelligenceService implements OperationalIntelligenceOperations {
-    static final String FOUNDATION_POLICY = "foundation-v1";
     private static final int MAX_RECENT_CHANGES = 20;
     private static final int MAX_REPORT_CHANGE_LOOKUP = 100;
-    private static final Duration FOUNDATION_WINDOW = Duration.ofMinutes(5);
 
     private final OperationalIntelligenceRepository repository;
     private final TransactionOperations<Connection> transactions;
     private final HealthReportRenderer reportRenderer;
-    private final Optional<MeterRegistry> meterRegistry;
+    private final OperationalHealthSignalCollector signalCollector;
+    private final HealthEngine healthEngine;
+    private final HealthPolicyConfiguration healthConfiguration;
     private final Clock clock;
     private final String applicationVersion;
     private final int snapshotRetentionCount;
@@ -43,14 +37,18 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             OperationalIntelligenceRepository repository,
             @Named("default") TransactionOperations<Connection> transactions,
             HealthReportRenderer reportRenderer,
-            Optional<MeterRegistry> meterRegistry,
+            OperationalHealthSignalCollector signalCollector,
+            HealthEngine healthEngine,
+            HealthPolicyConfiguration healthConfiguration,
             @Value("${signalharvester.build.version:dev}") String applicationVersion,
             @Value("${signalharvester.operations.health-snapshot-retention-count:1000}") int snapshotRetentionCount) {
         this(
                 repository,
                 transactions,
                 reportRenderer,
-                meterRegistry,
+                signalCollector,
+                healthEngine,
+                healthConfiguration,
                 Clock.systemUTC(),
                 applicationVersion,
                 snapshotRetentionCount);
@@ -60,14 +58,18 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             OperationalIntelligenceRepository repository,
             TransactionOperations<Connection> transactions,
             HealthReportRenderer reportRenderer,
-            Optional<MeterRegistry> meterRegistry,
+            OperationalHealthSignalCollector signalCollector,
+            HealthEngine healthEngine,
+            HealthPolicyConfiguration healthConfiguration,
             Clock clock,
             String applicationVersion,
             int snapshotRetentionCount) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.transactions = Objects.requireNonNull(transactions, "transactions");
         this.reportRenderer = Objects.requireNonNull(reportRenderer, "reportRenderer");
-        this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
+        this.signalCollector = Objects.requireNonNull(signalCollector, "signalCollector");
+        this.healthEngine = Objects.requireNonNull(healthEngine, "healthEngine");
+        this.healthConfiguration = Objects.requireNonNull(healthConfiguration, "healthConfiguration");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.applicationVersion = requireText(applicationVersion, "applicationVersion");
         if (snapshotRetentionCount < 1 || snapshotRetentionCount > 100_000) {
@@ -83,35 +85,25 @@ public final class OperationalIntelligenceService implements OperationalIntellig
     }
 
     @Override
-    public HealthSnapshot captureFoundationSnapshot() {
+    public HealthSnapshot captureHealthSnapshot() {
+        HealthSignalEvidence evidence = signalCollector.collect();
         Instant generatedAt = clock.instant();
-        List<OperationalChangeRecord> changes = transactions.executeRead(status -> repository.findChangesBetween(
-                generatedAt.minus(FOUNDATION_WINDOW), generatedAt, MAX_RECENT_CHANGES));
-        Map<String, Double> signals = captureSignals();
-        List<String> unknownReasons = new ArrayList<>();
-        unknownReasons.add("deterministic-statistical-health-engine-not-active");
-        if (signals.isEmpty()) {
-            unknownReasons.add("foundation-capacity-signals-unavailable");
-        }
-        HealthSnapshot snapshot = new HealthSnapshot(
-                UUID.randomUUID(),
-                generatedAt,
-                generatedAt.minus(FOUNDATION_WINDOW),
-                generatedAt,
-                HealthStatus.UNKNOWN,
-                0,
-                FOUNDATION_POLICY,
-                Map.of("operational-intelligence", HealthStatus.UNKNOWN.name()),
-                signals,
-                List.of(),
-                changes.stream().map(OperationalChangeRecord::id).toList(),
-                applicationVersion,
-                false,
-                unknownReasons);
+        return transactions.executeWrite(status -> captureInCurrentTransaction(generatedAt, evidence));
+    }
+
+    Optional<HealthSnapshot> captureScheduledSnapshot() {
+        HealthSignalEvidence evidence = signalCollector.collect();
+        Instant generatedAt = clock.instant();
         return transactions.executeWrite(status -> {
-            repository.insertSnapshot(snapshot);
-            repository.deleteSnapshotsBeyond(snapshotRetentionCount);
-            return snapshot;
+            if (!repository.tryAcquireHealthSamplingLock()) {
+                return Optional.empty();
+            }
+            Optional<HealthSnapshot> latest = repository.findLatestSnapshot();
+            if (latest.isPresent()
+                    && latest.get().generatedAt().plus(healthConfiguration.getSamplingInterval()).isAfter(generatedAt)) {
+                return Optional.empty();
+            }
+            return Optional.of(captureInCurrentTransaction(generatedAt, evidence));
         });
     }
 
@@ -125,12 +117,19 @@ public final class OperationalIntelligenceService implements OperationalIntellig
     public String latestMarkdownReport() {
         HealthSnapshot snapshot = latestSnapshot();
         Set<UUID> referenced = Set.copyOf(snapshot.recentChangeIds());
-        List<OperationalChangeRecord> changes = transactions.executeRead(status -> repository.findChangesBetween(
-                        snapshot.windowStartedAt(), snapshot.windowEndedAt(), MAX_REPORT_CHANGE_LOOKUP))
-                .stream()
-                .filter(change -> referenced.contains(change.id()))
-                .toList();
-        return reportRenderer.render(snapshot, changes);
+        record ReportEvidence(List<OperationalChangeRecord> changes, HealthSnapshot previous) {}
+        ReportEvidence reportEvidence = transactions.executeRead(status -> {
+            List<OperationalChangeRecord> changes = repository.findChangesBetween(
+                            snapshot.windowStartedAt(), snapshot.windowEndedAt(), MAX_REPORT_CHANGE_LOOKUP)
+                    .stream()
+                    .filter(change -> referenced.contains(change.id()))
+                    .toList();
+            HealthSnapshot previous = repository.findRecentSnapshotsBefore(snapshot.generatedAt(), 1).stream()
+                    .findFirst()
+                    .orElse(null);
+            return new ReportEvidence(changes, previous);
+        });
+        return reportRenderer.render(snapshot, reportEvidence.previous(), reportEvidence.changes());
     }
 
     @Override
@@ -140,32 +139,43 @@ public final class OperationalIntelligenceService implements OperationalIntellig
                     .orElseThrow(() -> new OperationalChangeNotFoundException(changeId));
             HealthSnapshot before = repository.findLatestSnapshotAtOrBefore(change.changedAt()).orElse(null);
             HealthSnapshot after = repository.findEarliestSnapshotAtOrAfter(change.changedAt()).orElse(null);
-            return new OperationalHealthCorrelation(change, before, after);
+            return OperationalHealthCorrelation.between(change, before, after);
         });
     }
 
-    private Map<String, Double> captureSignals() {
-        if (meterRegistry.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, Double> values = new LinkedHashMap<>();
-        captureGauge(values, "analysis.outbox.pending", "signalharvester.analysis.outbox.pending");
-        captureGauge(
-                values,
-                "analysis.outbox.oldestPendingAgeSeconds",
-                "signalharvester.analysis.outbox.oldest.pending.age");
-        return Map.copyOf(values);
+    private HealthSnapshot captureInCurrentTransaction(Instant generatedAt, HealthSignalEvidence evidence) {
+        Instant windowStartedAt = generatedAt.minus(healthConfiguration.getWindow());
+        List<OperationalChangeRecord> changes = repository.findChangesBetween(
+                windowStartedAt, generatedAt, MAX_RECENT_CHANGES);
+        List<HealthSnapshot> baseline = repository.findRecentSnapshotsBefore(
+                generatedAt, healthConfiguration.getBaselineMaxSamples());
+        HealthEvaluation evaluation = healthEngine.evaluate(evidence, baseline);
+        List<String> anomalyCandidates = evaluation.anomalies().stream()
+                .map(OperationalIntelligenceService::candidateSummary)
+                .toList();
+        HealthSnapshot snapshot = new HealthSnapshot(
+                UUID.randomUUID(),
+                generatedAt,
+                windowStartedAt,
+                generatedAt,
+                evaluation.overallStatus(),
+                evaluation.healthScore(),
+                healthConfiguration.getPolicyVersion(),
+                evaluation.componentStatuses(),
+                evaluation.signalValues(),
+                anomalyCandidates,
+                evaluation.anomalies(),
+                changes.stream().map(OperationalChangeRecord::id).toList(),
+                applicationVersion,
+                evaluation.evidenceComplete(),
+                evaluation.unknownReasons());
+        repository.insertSnapshot(snapshot);
+        repository.deleteSnapshotsBeyond(snapshotRetentionCount);
+        return snapshot;
     }
 
-    private void captureGauge(Map<String, Double> target, String key, String meterName) {
-        Gauge gauge = meterRegistry.orElseThrow().find(meterName).gauge();
-        if (gauge == null) {
-            return;
-        }
-        double value = gauge.value();
-        if (Double.isFinite(value)) {
-            target.put(key, value);
-        }
+    private static String candidateSummary(HealthAnomaly anomaly) {
+        return anomaly.signal() + ":" + anomaly.severity().name() + ":" + anomaly.detector();
     }
 
     private static String requireText(String value, String name) {

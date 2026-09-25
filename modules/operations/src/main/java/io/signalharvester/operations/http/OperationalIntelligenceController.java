@@ -32,7 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** ADMIN HTTP boundary for operational change history and Health Snapshot/report foundation. */
+/** ADMIN HTTP boundary for operational change history and deterministic/statistical health intelligence. */
 @Validated
 @Controller("/api/v1/admin/operations")
 @ExecuteOn(TaskExecutors.BLOCKING)
@@ -80,10 +80,10 @@ public class OperationalIntelligenceController {
         return HttpResponse.created(OperationalChangeResponse.from(change));
     }
 
-    /** Captures the explicit pre-detector foundation snapshot from currently available local signals. */
+    /** Captures and persists the current deterministic/statistical Health Snapshot. */
     @Post("/health/snapshots")
     public HttpResponse<HealthSnapshotResponse> captureSnapshot() {
-        return HttpResponse.created(HealthSnapshotResponse.from(operations.captureFoundationSnapshot()));
+        return HttpResponse.created(HealthSnapshotResponse.from(operations.captureHealthSnapshot()));
     }
 
     /** Returns the latest persisted Health Snapshot. */

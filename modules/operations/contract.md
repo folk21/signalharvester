@@ -21,7 +21,7 @@ Own the durable operational timeline used to correlate behavior-affecting change
 - expose the small synchronous change-journal API used by mutating modules;
 - persist and query versioned Health Snapshots;
 - render bounded JSON/Markdown Health Reports from persisted evidence;
-- expose ADMIN operational-history/health HTTP reads, explicit foundation snapshot capture, and typed tooling/scenario markers;
+- expose ADMIN operational-history/health HTTP reads, explicit Health Snapshot capture, and typed tooling/scenario markers;
 - own the `operations` PostgreSQL schema and retention/query model.
 
 ## Public integration surface
@@ -42,7 +42,7 @@ Published data types define stable change category/source/target/outcome vocabul
 
 Authoritative schema: `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`.
 
-Operations owns ADMIN routes under `/api/v1/admin/operations` for bounded change-history reads, explicit foundation snapshot capture, latest snapshot/report export, and nearest before/after snapshot correlation around one change.
+Operations owns ADMIN routes under `/api/v1/admin/operations` for bounded change-history reads, explicit Health Snapshot capture, latest snapshot/report export, and nearest before/after snapshot correlation around one change.
 
 ### Events
 
@@ -74,7 +74,8 @@ Other modules must not import Operations application, persistence, model, or HTT
 - a failed journal write must roll back an otherwise-applied transactional configuration mutation;
 - rejected mutation journaling is best-effort and must not mask the original rejection;
 - Health Snapshot/report generation is auxiliary and must not affect Collection/Analysis/Results correctness;
-- the foundation snapshot policy is explicitly `UNKNOWN` until the deterministic/statistical Health Engine is implemented;
+- health status and score are produced by a versioned configurable deterministic/statistical policy; missing required telemetry must remain explicit as uncertainty/`UNKNOWN` rather than being treated as healthy;
+- periodic multi-replica sampling uses a PostgreSQL transaction-scoped advisory lock and freshness check, while Prometheus queries happen outside that transaction;
 - successful controlled DLQ recovery markers are best-effort evidence and never turn an already successful replay into an operator-visible replay failure;
 - persisted Health Snapshot count is bounded by Operations runtime configuration;
 - temporal change/health correlation never asserts causality.

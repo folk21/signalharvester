@@ -453,7 +453,8 @@ Because Flyway history is shared, versions are globally coordinated across modul
 - `V13` — Configuration Monitoring Profile Analysis settings;
 - `V14` — Results browsing/full-text indexes;
 - `V15` — Configuration explicit all-relevant Analysis settings;
-- `V16` — Operations change journal and Health Snapshot foundation.
+- `V16` — Operations change journal and Health Snapshot foundation;
+- `V17` — structured deterministic/statistical Health Snapshot anomaly evidence.
 
 Direct cross-module table access remains forbidden.
 
@@ -482,13 +483,13 @@ Logback keeps console output as the deployment logging boundary. OpenTelemetry M
 
 Event Explorer and Processing Flow remain separate retained application diagnostics. They are not reconstructed from trace storage.
 
-### Operational intelligence foundation
+### Operational intelligence
 
 The `operations` module owns `operations.change_journal` and `operations.health_snapshots`, created by `V16__create_operational_intelligence.sql`. It publishes only the narrow `OperationalChangeJournal` Java API to other functional modules.
 
 Supported Source/Monitoring Profile REST mutations, Security user administration, and first-ADMIN bootstrap record sanitized change metadata. Applied Configuration/Security mutations journal inside their application transaction; rejected mutation journaling is best-effort and does not replace the original error. Successful controlled Analysis/Results/Event Observation DLQ replay records an auxiliary recovery marker without exposing source payload bytes. Repository-owned capacity tooling records typed deployment/scenario markers through `/api/v1/admin/operations/changes/markers`.
 
-The ADMIN Operations HTTP boundary exposes bounded recent change history, explicit tooling markers, persisted foundation Health Snapshots, the latest Markdown-formatted report, and nearest snapshot correlation around a selected change. Foundation snapshots use `UNKNOWN`, score `0`, and policy `foundation-v1` until the next specification stage activates deterministic/statistical scoring. Snapshot retention is count-bounded by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT` (default `1000`). They currently capture available Analysis outbox backlog gauges plus recent change references and evidence-completeness reasons.
+The ADMIN Operations HTTP boundary exposes bounded recent change history, explicit tooling markers, persisted Health Snapshots, the latest Markdown-formatted report, and nearest before/after snapshot correlation with numeric score/signal deltas around a selected change. The verification-pending `deterministic-statistical-v1` Health Engine evaluates configurable hard thresholds plus rolling median/MAD deviation over prior snapshots. In Kubernetes it reads an allowlisted bounded Prometheus signal set for backend availability, Kafka lag, HTTP errors/latency, Collection/Analysis failures, PostgreSQL span latency, and Analysis outbox backlog/publication failures; local Analysis-outbox gauges remain a fallback. Snapshot retention is count-bounded by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT` (default `1000`). A scheduled sampler is enabled by default and uses a PostgreSQL advisory lock plus latest-snapshot freshness check so multiple backend replicas do not intentionally persist duplicate samples; Prometheus I/O occurs before the short database transaction.
 
 `SIGNALHARVESTER_BUILD_VERSION` supplies the build/deployment identity persisted with journal records and Health Snapshots; it defaults to `dev`.
 

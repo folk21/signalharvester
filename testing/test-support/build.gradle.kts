@@ -10,5 +10,7 @@ java {
 
 dependencies {
     implementation(libs.testcontainers.kafka)
+    implementation(libs.testcontainers.postgresql)
+    api(libs.awaitility)
     testImplementation(libs.junit.jupiter)
 }

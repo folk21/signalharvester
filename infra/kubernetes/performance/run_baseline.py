@@ -261,8 +261,8 @@ def record_operational_marker(
     )
 
 
-def capture_foundation_health_snapshot(admin: ApiSession) -> dict[str, Any]:
-    """Captures the current bounded foundation Health Snapshot after the measured workload."""
+def capture_health_snapshot(admin: ApiSession) -> dict[str, Any]:
+    """Captures the current bounded Health Snapshot after the measured workload."""
 
     status, body = admin.request("POST", "/api/v1/admin/operations/health/snapshots")
     if status != 201 or not isinstance(body, dict):
@@ -549,11 +549,14 @@ def main(argv: list[str] | None = None) -> int:
                 "summary": build_summary(expected, collection_seconds, samples),
                 "samples": [asdict(sample) for sample in samples],
             }
-            health_snapshot = capture_foundation_health_snapshot(admin)
+            health_snapshot = capture_health_snapshot(admin)
             report["healthSnapshot"] = {
                 "id": health_snapshot.get("id"),
                 "overallStatus": health_snapshot.get("overallStatus"),
+                "healthScore": health_snapshot.get("healthScore"),
                 "policyVersion": health_snapshot.get("policyVersion"),
+                "evidenceComplete": health_snapshot.get("evidenceComplete"),
+                "anomalyCandidates": health_snapshot.get("anomalyCandidates", []),
             }
             write_report(output_path, report)
             print(f"    report: {output_path}")

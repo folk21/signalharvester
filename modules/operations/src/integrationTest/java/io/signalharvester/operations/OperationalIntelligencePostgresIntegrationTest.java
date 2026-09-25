@@ -17,6 +17,7 @@ import io.signalharvester.operations.api.OperationalChangeRequest;
 import io.signalharvester.operations.api.OperationalChangeTargetType;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
 import io.signalharvester.operations.model.HealthStatus;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -40,10 +41,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 class OperationalIntelligencePostgresIntegrationTest {
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
 
@@ -58,7 +56,8 @@ class OperationalIntelligencePostgresIntegrationTest {
                 Map.entry("flyway.datasources.default.enabled", true),
                 Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/operations"),
                 Map.entry("signalharvester.build.version", "test-build"),
-                Map.entry("signalharvester.operations.health-snapshot-retention-count", 2)));
+                Map.entry("signalharvester.operations.health-snapshot-retention-count", 2),
+                Map.entry("signalharvester.operations.health.sampling-enabled", false)));
     }
 
     @AfterEach
@@ -112,9 +111,9 @@ class OperationalIntelligencePostgresIntegrationTest {
         assertEquals(0L, scalarLong("SELECT count(*) FROM operations.change_journal"));
     }
 
-    /** Capture an honest UNKNOWN foundation snapshot and render bounded manual-analysis evidence. */
+    /** Capture an UNKNOWN snapshot when required telemetry is unavailable and render bounded evidence. */
     @Test
-    void shouldCaptureFoundationSnapshotAndReportChangeCorrelation() {
+    void shouldCaptureHealthSnapshotAndReportChangeCorrelation() {
         OperationalChangeJournal journal = context.getBean(OperationalChangeJournal.class);
         OperationalIntelligenceOperations operations = context.getBean(OperationalIntelligenceOperations.class);
         var change = journal.record(new OperationalChangeRequest(
@@ -126,7 +125,7 @@ class OperationalIntelligencePostgresIntegrationTest {
                 OperationalChangeOutcome.APPLIED,
                 OperationalChangeContext.tooling("test-harness", "scenario-1")));
 
-        var snapshot = operations.captureFoundationSnapshot();
+        var snapshot = operations.captureHealthSnapshot();
         var correlation = operations.correlateChange(change.id());
         String report = operations.latestMarkdownReport();
 
@@ -138,7 +137,8 @@ class OperationalIntelligencePostgresIntegrationTest {
         assertEquals(snapshot.id(), correlation.after().id());
         assertTrue(report.contains("SignalHarvester Health Report"));
         assertTrue(report.contains("TEST_SCENARIO"));
-        assertTrue(report.contains("deterministic-statistical-health-engine-not-active"));
+        assertTrue(report.contains("prometheus-evidence-disabled"));
+        assertEquals("deterministic-statistical-v1", snapshot.policyVersion());
     }
 
     /** Keep snapshot history bounded by the configured count while preserving the newest evidence. */
@@ -146,9 +146,9 @@ class OperationalIntelligencePostgresIntegrationTest {
     void shouldEnforceSnapshotRetentionCount() throws Exception {
         OperationalIntelligenceOperations operations = context.getBean(OperationalIntelligenceOperations.class);
 
-        operations.captureFoundationSnapshot();
-        operations.captureFoundationSnapshot();
-        var latest = operations.captureFoundationSnapshot();
+        operations.captureHealthSnapshot();
+        operations.captureHealthSnapshot();
+        var latest = operations.captureHealthSnapshot();
 
         assertEquals(2L, scalarLong("SELECT count(*) FROM operations.health_snapshots"));
         assertEquals(latest.id(), operations.latestSnapshot().id());
