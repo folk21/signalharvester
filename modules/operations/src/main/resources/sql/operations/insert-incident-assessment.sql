@@ -1,0 +1,31 @@
+INSERT INTO operations.incident_assessments (
+    assessment_id,
+    snapshot_id,
+    created_at,
+    source,
+    provider,
+    model,
+    summary,
+    suspected_subsystems,
+    confidence,
+    observations,
+    hypotheses,
+    evidence_references,
+    recommended_checks,
+    human_attention_suggested
+) VALUES (
+    :assessmentId,
+    :snapshotId,
+    :createdAt,
+    :source,
+    :provider,
+    :model,
+    :summary,
+    CAST(:suspectedSubsystems AS jsonb),
+    :confidence,
+    CAST(:observations AS jsonb),
+    CAST(:hypotheses AS jsonb),
+    CAST(:evidenceReferences AS jsonb),
+    CAST(:recommendedChecks AS jsonb),
+    :humanAttentionSuggested
+)

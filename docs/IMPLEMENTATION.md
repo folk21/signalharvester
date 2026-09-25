@@ -432,7 +432,7 @@ Generated Protobuf Java classes are build output. They remain transport types at
 
 ## Persistence and Flyway
 
-Configuration, Analysis, Collection, Results, Event Observation, and Security share one physical datasource and one Flyway schema history. Each module still owns its PostgreSQL schema and tables.
+Configuration, Analysis, Collection, Results, Event Observation, Security, and Operations share one physical datasource and one Flyway schema history. Each module still owns its PostgreSQL schema and tables.
 
 Migration locations are configured in `app/src/main/resources/application.properties`.
 
@@ -450,7 +450,12 @@ Because Flyway history is shared, versions are globally coordinated across modul
 - `V10` — Analysis event outbox;
 - `V11` — Analysis outbox trace context;
 - `V12` — Security identities and roles;
-- `V13` — Configuration Monitoring Profile Analysis settings.
+- `V13` — Configuration Monitoring Profile Analysis settings;
+- `V14` — Results browsing/full-text indexes;
+- `V15` — Configuration explicit all-relevant Analysis settings;
+- `V16` — Operations change journal and Health Snapshot foundation;
+- `V17` — structured deterministic/statistical Health Snapshot anomaly evidence;
+- `V18` — persisted structured assisted-investigation Incident Assessments.
 
 Direct cross-module table access remains forbidden.
 
@@ -478,6 +483,18 @@ Analysis records processing and outbox metrics. Outbox capacity telemetry includ
 Logback keeps console output as the deployment logging boundary. OpenTelemetry MDC integration adds `trace_id` and `span_id` when a valid span is current.
 
 Event Explorer and Processing Flow remain separate retained application diagnostics. They are not reconstructed from trace storage.
+
+### Operational intelligence
+
+The `operations` module owns `operations.change_journal` and `operations.health_snapshots`, created by `V16__create_operational_intelligence.sql`. It publishes only the narrow `OperationalChangeJournal` Java API to other functional modules.
+
+Supported Source/Monitoring Profile REST mutations, Security user administration, and first-ADMIN bootstrap record sanitized change metadata. Applied Configuration/Security mutations journal inside their application transaction; rejected mutation journaling is best-effort and does not replace the original error. Successful controlled Analysis/Results/Event Observation DLQ replay records an auxiliary recovery marker without exposing source payload bytes. Repository-owned capacity tooling records typed deployment/scenario markers through `/api/v1/admin/operations/changes/markers`.
+
+The ADMIN Operations HTTP boundary exposes bounded recent change history, explicit tooling markers, persisted Health Snapshots, the latest Markdown-formatted report, a bounded sanitized analysis package, structured assessment import/listing, explicit provider analysis, and nearest before/after snapshot correlation with numeric score/signal deltas around a selected change. The accepted `deterministic-statistical-v1` Health Engine evaluates configurable hard thresholds plus rolling median/MAD deviation over prior snapshots. In Kubernetes it reads an allowlisted bounded Prometheus signal set for backend availability, Kafka lag, HTTP errors/latency, Collection/Analysis failures, PostgreSQL span latency, and Analysis outbox backlog/publication failures; local Analysis-outbox gauges remain a fallback. Snapshot retention is count-bounded by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT` (default `1000`). A scheduled sampler is enabled by default and uses a PostgreSQL advisory lock plus latest-snapshot freshness check so multiple backend replicas do not intentionally persist duplicate samples; Prometheus I/O occurs before the short database transaction.
+
+`SIGNALHARVESTER_BUILD_VERSION` supplies the build/deployment identity persisted with journal records and Health Snapshots; it defaults to `dev`.
+
+Assisted-investigation Stage 3 is accepted. `HealthAnalysisPackageFactory` bounds the already-sanitized Health Report, declares telemetry content untrusted, and enumerates stable evidence references (`health-snapshot:*`, `signal:*`, `anomaly:*`, `change:*`). Manual structured assessments and explicit provider results use the same `IncidentAssessmentDraft` schema and are persisted only after every evidence reference is validated against the selected package. Verification-pending Stage 4a adds `ReadOnlyInvestigationToolbox`: each explicit provider invocation opens a snapshot-scoped session with an allowlisted tool catalog, maximum tool-call count, maximum wall-clock duration, telemetry lookback bounds, result-size bounds, and redaction. The OpenAI-compatible JDK-HTTP adapter implements bounded multi-turn tool calling and caps model rounds; arbitrary model-generated PromQL/LogQL/SQL/shell/Kubernetes/filesystem/unrestricted HTTP is not exposed. Prometheus uses the same stable query catalog as Health Engine collection, Loki exposes only fixed backend error/warning/trace-ID patterns, Tempo exposes bounded service search and exact trace retrieval, and change/capacity tools read only Operations-owned sanitized journal state. Provider/tool I/O stays outside database transactions, raw model/tool payloads are not persisted, and only validated final assessment fields/evidence references are stored.
 
 ## Kubernetes and infrastructure observability
 

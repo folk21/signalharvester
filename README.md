@@ -13,7 +13,7 @@ The project is intentionally domain-neutral. Typical monitoring scenarios includ
 - news and topic-oriented information;
 - financial, company, regulatory, and public-market data.
 
-The current bounded backend implementation focus is a verification-pending capacity telemetry expansion: Analysis outbox backlog, batch, Kafka-publication, and database-operation signals selected from the completed local one-versus-three replica measurement before broader stress testing or ML-based operational analysis. The preceding capacity baseline and explicit all-relevant Analysis follow-up remain separately verification-pending until their canonical acceptance is recorded.
+The current bounded backend implementation focus is operational health intelligence. The foundation, deterministic/statistical Health Engine, and Stage 3 manual/provider-neutral assisted investigation are accepted. Stage 4a is implemented and verification-pending: explicit provider investigation can now use application-owned bounded read-only Health/Prometheus/Loki/Tempo/change/capacity tools with strict call/round/duration/result-size budgets and telemetry redaction. Multi-replica-safe automatic event/periodic triggering remains the next slice. The capacity-telemetry, capacity-baseline, and explicit all-relevant Analysis slices remain separately verification-pending until their canonical acceptance is recorded.
 
 SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.
 
@@ -126,7 +126,8 @@ signalharvester/
 │   ├── analysis/
 │   ├── results/
 │   ├── event-observation/
-│   └── security/
+│   ├── security/
+│   └── operations/
 ├── testing/
 │   ├── test-support/
 │   └── integration-tests/

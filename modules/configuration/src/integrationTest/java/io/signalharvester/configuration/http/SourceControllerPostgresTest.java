@@ -12,6 +12,7 @@ import io.signalharvester.configuration.api.ConfiguredSource;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.persistence.JdbiSourceRepository;
 import io.signalharvester.configuration.persistence.SourceRepository;
+import io.signalharvester.testing.PostgresContainerSupport;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.net.http.HttpClient;
@@ -19,6 +20,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.Duration;
 import java.util.List;
@@ -59,10 +61,7 @@ class SourceControllerPostgresTest {
     private static final Duration HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(15);
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
     private EmbeddedServer server;
@@ -82,6 +81,7 @@ class SourceControllerPostgresTest {
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 Statement statement = connection.createStatement()) {
             statement.execute("TRUNCATE TABLE configuration.source_settings, configuration.sources CASCADE");
+            statement.execute("TRUNCATE TABLE operations.change_journal");
         }
     }
 
@@ -108,6 +108,17 @@ class SourceControllerPostgresTest {
                 """);
         assertEquals(201, created.statusCode());
         UUID sourceId = extractId(created.body());
+        String journalState = scalarString("""
+                SELECT after_state::text
+                FROM operations.change_journal
+                WHERE category = 'SOURCE_CONFIGURATION'
+                  AND target_id = '%s'
+                ORDER BY changed_at ASC
+                LIMIT 1
+                """.formatted(sourceId));
+        assertTrue(journalState.contains("settingKeys"));
+        assertTrue(journalState.contains("query"));
+        assertFalse(journalState.contains("java backend"));
 
         HttpResponse<String> listed = send("GET", "/api/v1/sources", null);
         assertEquals(200, listed.statusCode());
@@ -256,6 +267,16 @@ class SourceControllerPostgresTest {
         return UUID.fromString(matcher.group(1));
     }
 
+    private static String scalarString(String sql) throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet rows = statement.executeQuery(sql)) {
+            rows.next();
+            return rows.getString(1);
+        }
+    }
+
     private static Map<String, Object> serverProperties() {
         return Map.ofEntries(
                 Map.entry("spec.name", SPEC_NAME),
@@ -266,7 +287,8 @@ class SourceControllerPostgresTest {
                 Map.entry("datasources.default.password", POSTGRES.getPassword()),
                 Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
                 Map.entry("flyway.datasources.default.enabled", true),
-                Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/configuration"));
+                Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/configuration"),
+                Map.entry("flyway.datasources.default.locations[1]", "classpath:db/migration/operations"));
     }
 
     private static void resetDatabase() throws Exception {
@@ -274,6 +296,7 @@ class SourceControllerPostgresTest {
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA IF EXISTS configuration CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS operations CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
         }
     }

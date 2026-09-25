@@ -34,7 +34,8 @@ class ModuleBoundaryArchitectureTest {
             "analysis", "io.signalharvester.analysis",
             "results", "io.signalharvester.results",
             "event-observation", "io.signalharvester.eventobservation",
-            "security", "io.signalharvester.security");
+            "security", "io.signalharvester.security",
+            "operations", "io.signalharvester.operations");
 
     private static final List<String> API_FORBIDDEN_DEPENDENCY_PREFIXES = List.of(
             "io.micronaut.",

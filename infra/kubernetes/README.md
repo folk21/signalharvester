@@ -109,6 +109,8 @@ kubectl -n signalharvester port-forward service/prometheus 9090:9090
 
 The backend exports OTLP traces directly to Tempo. Tempo derives span metrics and remote-writes them to Prometheus. Alloy collects namespace pod logs through the Kubernetes API and sends them to Loki. Grafana is preconfigured with all three data sources.
 
+The local Kubernetes backend also receives `SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_BASE_URL=http://prometheus:9090`. The verification-pending Operations Health Engine uses only its fixed allowlisted PromQL set for periodic Health Snapshots; unavailable Prometheus evidence degrades to explicit uncertainty and does not affect business processing.
+
 ## Operational dashboard
 
 The provisioned **SignalHarvester Overview** dashboard includes:

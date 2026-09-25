@@ -1,6 +1,7 @@
 package io.signalharvester.configuration.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -10,6 +11,7 @@ import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.application.InvalidMonitoringProfileConfigurationException;
 import io.signalharvester.configuration.application.MonitoringProfileConfigurationCommand;
 import io.signalharvester.configuration.application.MonitoringProfileConfigurationOperations;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -47,10 +49,7 @@ class MonitoringProfileControllerPostgresTest {
     private static final Duration HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(15);
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private EmbeddedServer server;
     private HttpClient client;
@@ -70,6 +69,7 @@ class MonitoringProfileControllerPostgresTest {
             statement.execute("TRUNCATE TABLE configuration.monitoring_profile_criteria, "
                     + "configuration.monitoring_profile_sources, configuration.monitoring_profiles, "
                     + "configuration.source_settings, configuration.sources CASCADE");
+            statement.execute("TRUNCATE TABLE operations.change_journal");
         }
     }
 
@@ -99,6 +99,18 @@ class MonitoringProfileControllerPostgresTest {
                 """.formatted(firstSource, secondSource));
         assertEquals(201, created.statusCode());
         UUID profileId = extractId(created.body());
+        String journalState = scalarString("""
+                SELECT after_state::text
+                FROM operations.change_journal
+                WHERE category = 'MONITORING_PROFILE_CONFIGURATION'
+                  AND target_id = '%s'
+                ORDER BY changed_at ASC
+                LIMIT 1
+                """.formatted(profileId));
+        assertTrue(journalState.contains("analysisKeywordCount"));
+        assertTrue(journalState.contains("criteriaKeys"));
+        assertFalse(journalState.contains("Kafka"));
+        assertFalse(journalState.contains("java,spring"));
         assertTrue(created.body().contains("java,spring"));
         assertTrue(created.body().contains("\"analysisSettings\":{\"keywords\":[\"java\",\"kafka\"],\"minimumMatches\":2}"));
         assertEquals(409, send("DELETE", "/api/v1/sources/" + firstSource, null).statusCode());
@@ -351,6 +363,16 @@ class MonitoringProfileControllerPostgresTest {
         return UUID.fromString(matcher.group(1));
     }
 
+    private static String scalarString(String sql) throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet rows = statement.executeQuery(sql)) {
+            rows.next();
+            return rows.getString(1);
+        }
+    }
+
     private static Map<String, Object> serverProperties() {
         return Map.ofEntries(
                 Map.entry("micronaut.server.port", -1),
@@ -360,6 +382,7 @@ class MonitoringProfileControllerPostgresTest {
                 Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
                 Map.entry("flyway.datasources.default.enabled", true),
                 Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/configuration"),
+                Map.entry("flyway.datasources.default.locations[1]", "classpath:db/migration/operations"),
                 Map.entry("signalharvester.analysis.keyword-rules.keywords", List.of("legacy-default", "fallback")),
                 Map.entry("signalharvester.analysis.keyword-rules.minimum-matches", 2));
     }
@@ -369,6 +392,7 @@ class MonitoringProfileControllerPostgresTest {
                         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA IF EXISTS configuration CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS operations CASCADE");
             statement.execute("DROP TABLE IF EXISTS flyway_schema_history");
         }
     }

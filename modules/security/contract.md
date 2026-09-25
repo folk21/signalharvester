@@ -56,7 +56,7 @@ There is intentionally no login-session or JWT-session table.
 
 ## Dependencies
 
-No synchronous dependency on another functional module is required.
+Security depends synchronously only on the published `io.signalharvester.operations.api..` change-journal boundary so ADMIN identity mutations can record sanitized operational changes. It must not depend on Operations implementation or persistence types.
 
 The module depends on Micronaut HTTP/security, Jdbi over Micronaut JDBC transaction infrastructure, Flyway, and PostgreSQL runtime support.
 

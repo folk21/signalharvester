@@ -18,6 +18,7 @@ import io.signalharvester.configuration.api.MonitoringProfileAnalysisSettings;
 import io.signalharvester.configuration.api.MonitoringProfileConfigurationProvider;
 import io.signalharvester.configuration.api.MonitoringProfileId;
 import io.signalharvester.configuration.api.SourceId;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -62,10 +63,7 @@ class ProfileSchedulePostgresTest {
     private static final Duration LEASE_DURATION = Duration.ofMinutes(2);
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext firstContext;
     private ApplicationContext secondContext;

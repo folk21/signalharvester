@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.runtime.server.EmbeddedServer;
 import io.signalharvester.testing.BrowserHttpSession;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
@@ -46,10 +47,7 @@ class SecurityAuthorizationIntegrationTest {
     private static final Pattern ID_PATTERN = Pattern.compile("\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private EmbeddedServer server;
     private final List<BrowserHttpSession> browserSessions = new ArrayList<>();
@@ -101,6 +99,7 @@ class SecurityAuthorizationIntegrationTest {
         assertEquals(403, viewer.send("GET", "/api/v1/admin/results/dead-letters/0/0", null, false).statusCode());
         assertEquals(403, viewer.send(
                 "GET", "/api/v1/admin/event-observation/dead-letters/0/0", null, false).statusCode());
+        assertEquals(403, viewer.send("GET", "/api/v1/admin/operations/changes", null, false).statusCode());
 
         HttpResponse<java.util.stream.Stream<String>> stream = viewer.sendLines("/api/v1/results/stream");
         assertEquals(200, stream.statusCode());
@@ -282,6 +281,7 @@ class SecurityAuthorizationIntegrationTest {
             statement.execute("DROP SCHEMA IF EXISTS results CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS event_observation CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS security CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS operations CASCADE");
             statement.execute("DROP TABLE IF EXISTS flyway_schema_history");
         }
     }

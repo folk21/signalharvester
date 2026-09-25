@@ -21,6 +21,58 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | Variable | Default | Purpose |
 |---|---:|---|
 | `SIGNALHARVESTER_HTTP_PORT` | `8080` | Backend HTTP server port. |
+| `SIGNALHARVESTER_BUILD_VERSION` | `dev` | Build/deployment identity persisted with operational change records and Health Snapshots for correlation. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT` | `1000` | Maximum persisted Health Snapshots retained by Operations; bounded to 1..100000. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_POLICY_VERSION` | `deterministic-statistical-v1` | Persisted identifier for the active health-scoring policy. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_SAMPLING_ENABLED` | `true` | Enables bounded periodic Health Snapshot capture. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_SAMPLING_INTERVAL` | `1m` | Minimum interval between persisted periodic snapshots across backend replicas. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_SAMPLING_INITIAL_DELAY` | `30s` | Delay before the first periodic snapshot attempt after startup. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_WINDOW` | `5m` | Analysis window used by allowlisted Prometheus rate/latency queries. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_BASE_URL` | _(empty)_ | Optional Prometheus base URL for cluster-wide health evidence; Kubernetes sets `http://prometheus:9090`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_QUERY_TIMEOUT` | `2s` | Per-query timeout for bounded Prometheus health evidence collection. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_BASELINE_MIN_SAMPLES` | `5` | Minimum persisted prior snapshots required for rolling median/MAD anomaly comparison. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_BASELINE_MAX_SAMPLES` | `20` | Maximum persisted prior snapshots used by the rolling statistical baseline. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_DEGRADED_ROBUST_Z_SCORE` | `3.5` | Robust-z threshold for a statistical `DEGRADED` anomaly. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_UNHEALTHY_ROBUST_Z_SCORE` | `6.0` | Robust-z threshold for a statistical `UNHEALTHY` anomaly. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_BACKEND_UNAVAILABLE_REPLICAS_DEGRADED` | `1` | Unavailable backend replicas that trigger `DEGRADED`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_BACKEND_UNAVAILABLE_REPLICAS_UNHEALTHY` | `2` | Unavailable backend replicas that trigger `UNHEALTHY`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_OUTBOX_PENDING_DEGRADED` | `250` | Pending Analysis outbox rows that trigger `DEGRADED`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_OUTBOX_PENDING_UNHEALTHY` | `1000` | Pending Analysis outbox rows that trigger `UNHEALTHY`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_OUTBOX_OLDEST_PENDING_DEGRADED` | `30s` | Oldest pending Analysis outbox age that triggers `DEGRADED`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_OUTBOX_OLDEST_PENDING_UNHEALTHY` | `2m` | Oldest pending Analysis outbox age that triggers `UNHEALTHY`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_KAFKA_LAG_DEGRADED` | `500` | Aggregate consumer lag that triggers `DEGRADED` in the initial policy. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_KAFKA_LAG_UNHEALTHY` | `5000` | Aggregate consumer lag that triggers `UNHEALTHY` in the initial policy. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_HTTP_ERROR_RATIO_DEGRADED` | `0.05` | Five-minute backend HTTP 5xx ratio that triggers `DEGRADED`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_HTTP_ERROR_RATIO_UNHEALTHY` | `0.20` | Five-minute backend HTTP 5xx ratio that triggers `UNHEALTHY`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_HTTP_LATENCY_DEGRADED` | `1s` | Average backend HTTP latency that triggers `DEGRADED`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_HTTP_LATENCY_UNHEALTHY` | `3s` | Average backend HTTP latency that triggers `UNHEALTHY`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_POSTGRES_LATENCY_DEGRADED` | `250ms` | Average PostgreSQL span latency that triggers `DEGRADED`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_POSTGRES_LATENCY_UNHEALTHY` | `1s` | Average PostgreSQL span latency that triggers `UNHEALTHY`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_FAILURE_RATIO_DEGRADED` | `0.10` | Shared Collection/Analysis/outbox failure-ratio threshold for `DEGRADED`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_FAILURE_RATIO_UNHEALTHY` | `0.50` | Shared Collection/Analysis/outbox failure-ratio threshold for `UNHEALTHY`. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_DEGRADED_PENALTY` | `15` | Health-score penalty for each strongest `DEGRADED` signal anomaly. |
+| `SIGNALHARVESTER_OPERATIONS_HEALTH_UNHEALTHY_PENALTY` | `35` | Health-score penalty for each strongest `UNHEALTHY` signal anomaly. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_PROVIDER` | `off` | Explicit provider adapter. Stage 3 supports `off` or `openai-compatible`; manual package export/import remains available while off. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_ENDPOINT` | _(empty)_ | Full HTTP(S) chat-completions endpoint for `openai-compatible`. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_API_KEY` | _(empty)_ | Optional bearer credential for the configured provider. Treat as a deployment secret; never store it in repository configuration. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MODEL` | _(empty)_ | Provider model identifier passed only during explicit invocation. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_REQUEST_TIMEOUT` | `30s` | Timeout for one explicit model HTTP request. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_REPORT_CHARS` | `50000` | Maximum Health Report characters included in one exported analysis package. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_RESPONSE_BYTES` | `32768` | Maximum provider response bytes accepted before structured parsing. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_ROUNDS` | `4` | Maximum model/tool interaction rounds in one explicit investigation. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TOOL_CALLS` | `8` | Maximum application-authorized read-only tool calls in one investigation; `0` disables tool exposure. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_INVESTIGATION_DURATION` | `45s` | Wall-clock bound covering model turns and tool queries. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TOOL_RESULT_CHARS` | `12000` | Maximum sanitized characters returned by one tool call. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TELEMETRY_LOOKBACK` | `30m` | Maximum Prometheus/Loki lookback available to read-only tools. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_LOG_ENTRIES` | `50` | Maximum Loki entries requested by one tool call. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TRACE_RESULTS` | `20` | Maximum Tempo search results requested by one tool call. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_LOKI_BASE_URL` | _(empty)_ | Loki base URL; empty disables the Loki tool. Kubernetes sets `http://loki:3100`. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_TEMPO_BASE_URL` | _(empty)_ | Tempo base URL; empty disables Tempo search/trace tools. Kubernetes sets `http://tempo:3200`. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_ASSESSMENT_RETENTION_COUNT` | `500` | Maximum persisted structured Incident Assessments. |
+
+The assisted-investigation provider defaults to `off`; enabling `openai-compatible` requires an explicit endpoint/model and, when needed, a secret-managed API key. Stage 4a still never invokes a provider automatically. Prometheus tool access reuses `SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_BASE_URL`; Loki/Tempo tools are exposed only when their base URLs are configured. Setting max tool calls to `0` keeps provider invocation single-shot.
+
+The initial health thresholds are versioned operational heuristics for anomaly triage, not SLOs or production capacity guarantees. Tune them only from measured evidence, and change `SIGNALHARVESTER_OPERATIONS_HEALTH_POLICY_VERSION` when the effective interpretation policy changes materially.
 | `SIGNALHARVESTER_METRICS_ENABLED` | `true` | Enables Micrometer application/runtime metrics. |
 | `SIGNALHARVESTER_PROMETHEUS_ENABLED` | `true` | Enables the Prometheus registry and `/prometheus` scrape endpoint. |
 | `SIGNALHARVESTER_OTEL_TRACES_EXPORTER` | `none` | OpenTelemetry trace exporter; use `otlp` when an OTLP collector is available. |

@@ -13,6 +13,7 @@ import io.signalharvester.collection.run.CollectionSourceStatus;
 import io.signalharvester.collection.run.CollectionRunHistoryRecorder;
 import io.signalharvester.collection.run.CollectionRunHistoryStore;
 import io.signalharvester.configuration.api.SourceId;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -57,10 +58,7 @@ class CollectionRunHistoryPostgresTest {
     private static final UUID RESTART_SOURCE_ID = uuid("00000000-0000-0000-0000-000000000602");
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
 

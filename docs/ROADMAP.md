@@ -45,7 +45,7 @@ Source-fetch worker interruption propagation is accepted after developer verific
 Analysis outbox expired-lease fencing is accepted after developer verification. Pre-publication renewal now requires both the exact token and a still-live persisted lease, so an expired former owner cannot resurrect ownership before Kafka send.
 Analysis outbox failure-state lease fencing is accepted after developer verification. Publication-failure retry metadata now requires a still-live exact-token lease, so an unsuccessful send that outlives ownership cannot postpone immediate reclaim. The remaining durable-ownership/crash-window review found no additional material correctness defect across post-ack publication markers, DLQ acknowledgement before framework offset commit, controlled replay/idempotency, and scheduled Collection completion; Review III is closed.
 
-The current bounded backend implementation stage is a verification-pending capacity telemetry expansion. The one-replica and same-workload one-versus-three live pipeline measurements completed successfully on 2026-09-24 and showed enough mixed downstream timing to justify Analysis outbox backlog/latency telemetry before broader stress testing. The preceding capacity baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
+The latest capacity-telemetry implementation remains verification-pending, while the operational-intelligence foundation, deterministic/statistical Health Engine, and Stage 3 manual/provider-neutral assisted investigation are accepted. Stage 4a read-only agentic investigation is implemented and verification-pending: explicit provider invocation can use bounded sanitized Health/Prometheus/Loki/Tempo/change/capacity tools under application-owned budgets. The next priority is a multi-replica-safe event/periodic trigger lease/cooldown boundary, followed by alert policy. The preceding capacity telemetry/baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
 
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -93,11 +93,28 @@ Accepted scaling work:
 
 ## Next backend stages
 
-1. Verify the new Analysis outbox capacity telemetry live: pending depth, oldest age, batch behavior, Kafka publication latency, and short outbox database-operation latency; retain the existing reliability semantics.
-2. Expand the deterministic capacity tooling into ramp/spike/soak modes plus bounded Results REST/SSE load so scheduler/SSE telemetry is added only when those paths are actually exercised.
-3. Select throughput optimizations only from repeated measurements and observed bottlenecks; keep KEDA/autoscaling, backlog-drain changes, and ML-based anomaly analysis separate until the evidence justifies them.
+1. Operations foundation and deterministic/statistical Health Engine are accepted.
+2. Stage 3 manual/provider-neutral assisted investigation is accepted.
+3. Stage 4a bounded read-only Prometheus/Loki/Tempo/change-history/capacity tools and explicit agentic provider turns are implemented and verification-pending; the canonical gate remains offline/deterministic.
+4. After Stage 4a acceptance, add a multi-replica-safe event/periodic trigger lease/cooldown policy, then application-owned alert policy. Continue ramp/spike/soak and Results REST/SSE load as both capacity work and operational-intelligence evaluation data; select throughput optimizations or custom ML/neural models only from repeated evidence.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
+
+## Operational intelligence priority
+
+This work is intentionally pulled forward because it improves day-to-day controllability of every later performance, reliability, and deployment stage.
+
+The target path is:
+
+1. telemetry + durable change journal;
+2. persisted Health Snapshot/Report;
+3. deterministic/statistical anomaly detection and change correlation;
+4. manual LLM report analysis;
+5. optional local/external LLM analyst with bounded read-only tools;
+6. alert policy based on deterministic health plus optional structured model assessment;
+7. custom ML/neural experiments only after labeled incident history demonstrates a need.
+
+Repository-owned mutation tooling should emit change records/markers for behavior-affecting runtime changes. This is an application-level audit/correlation mechanism, not a Terraform-style infrastructure control plane.
 
 ## Deferred until justified
 
@@ -119,7 +136,7 @@ Other deferred architecture/product work:
 - independently deployed backend microservices;
 - gRPC service boundaries;
 - Schema Registry;
-- LLM/embedding analysis as a required core dependency;
+- LLM/embedding analysis as a required core product-analysis dependency; operational LLM investigation remains optional under `OBSERVABILITY.ASSISTED_INVESTIGATION`;
 - automatic/bulk DLQ replay and replay UI/workflows;
 - KEDA-driven autoscaling;
 - richer scheduling, fuzzy/relevance-ranked search, and other browsing refinements that are not yet required by an active product slice.

@@ -17,6 +17,10 @@ Default tests must not depend on public websites, external SaaS, production cred
 
 Use deterministic fake HTTP sources and controllable time/ID sources where behavior depends on them.
 
+Do not use `Thread.sleep(...)` for test synchronization or eventual-consistency waits. Use Awaitility for bounded polling of observable state; use latches/barriers/phasers or controllable clocks for deterministic thread coordination. A fixed sleep is not evidence that asynchronous work completed. The root `verifyNoThreadSleepInTests` task scans Java unit/integration-test sources and must remain wired into `check`.
+
+When one broker container is shared but application consumers are recreated per test method, isolate Kafka state per method with unique consumer groups and topics unless the scenario intentionally tests rebalance/resume semantics. Cross-test committed offsets, assignments, or unconsumed records are test contamination, not reusable fixture state.
+
 ## Real infrastructure
 
 Use Testcontainers for PostgreSQL and Kafka when persistence/serialization/transaction/consumer behavior matters. Do not mock away the integration behavior a test is intended to validate.

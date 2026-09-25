@@ -43,7 +43,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies Configuration, Analysis, Collection, Results, Event Observation, and Security migrations at startup.
+Flyway applies Configuration, Analysis, Collection, Results, Event Observation, Security, and Operations migrations at startup.
 
 The backend exposes:
 
@@ -198,6 +198,47 @@ Extraction behavior is:
 Analysis consumes the raw events, normalizes and deduplicates them, runs deterministic keyword analysis, and atomically stages `ItemAnalyzed` or `ItemRejected` bytes in the Analysis outbox.
 
 The outbox dispatcher publishes committed records to Kafka. Results consumes terminal events, persists an idempotent Results-owned projection, and exposes analyzed results through REST and resumable SSE. `GET /api/v1/results` also supports optional `search` and opaque `cursor` parameters. The response body remains the existing Result summary array; when more rows exist, read the `X-Next-Cursor` response header and pass it back as `cursor` for the next page. The cursor is tied to the filters/search expression that produced it, while `limit` may change between pages.
+
+### Inspect operational changes and Health Reports
+
+ADMIN operators can inspect the bounded operational change journal and capture the current deterministic/statistical Health Snapshot:
+
+```bash
+curl -s -b build/tmp/auth.cookies http://localhost:8080/api/v1/admin/operations/changes
+
+curl -i -X POST -b build/tmp/auth.cookies \
+  -H "X-CSRF-TOKEN: $csrf_token" \
+  http://localhost:8080/api/v1/admin/operations/health/snapshots
+
+curl -s -b build/tmp/auth.cookies http://localhost:8080/api/v1/admin/operations/health/reports/latest
+```
+
+The accepted `deterministic-statistical-v1` snapshot uses configurable hard rules plus rolling median/MAD comparison against prior snapshots. In Kubernetes it consumes bounded allowlisted Prometheus signals; missing required telemetry is reported explicitly and may yield `UNKNOWN`. The latest Markdown report includes structured anomalies, previous-snapshot deltas, and referenced operational changes.
+
+Repository-owned tooling can record sanitized `DEPLOYMENT_TUNING` or `TEST_SCENARIO` markers through `/api/v1/admin/operations/changes/markers`. Source/Profile/user mutations and successful controlled DLQ replay record their own journal evidence; direct database edits and arbitrary external `kubectl` changes are outside the automatic journal guarantee.
+
+### Manual and explicit assisted investigation
+
+After at least one Health Snapshot exists, export a bounded sanitized package for manual local/external LLM analysis:
+
+```bash
+curl -s -b build/tmp/auth.cookies \
+  http://localhost:8080/api/v1/admin/operations/health/analysis-packages/latest
+```
+
+The package contains the Health Report, an evidence-reference allowlist, and an explicit instruction that telemetry is untrusted evidence rather than model instructions. It contains no raw unlimited logs/traces and cannot change deterministic health state.
+
+A structured assessment produced manually can be posted back to `/api/v1/admin/operations/health/assessments/manual`; every evidence reference must come from the exported package. Recent validated assessments are available through `GET /api/v1/admin/operations/health/assessments`.
+
+Provider invocation is optional and remains explicit in Stage 4a. Configure `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_PROVIDER=openai-compatible`, a full chat-completions endpoint, model identifier, and any bearer key through secret-managed environment configuration. Then an ADMIN may call:
+
+```bash
+curl -i -X POST -b build/tmp/auth.cookies \
+  -H "X-CSRF-TOKEN: $csrf_token" \
+  http://localhost:8080/api/v1/admin/operations/health/assessments/analyze-latest
+```
+
+One request produces at most one validated assessment. In Stage 4a the configured OpenAI-compatible provider may perform a bounded multi-turn read-only investigation before producing that assessment. Available tools are application-defined (Health context, allowlisted Prometheus query IDs, fixed Loki backend patterns, Tempo search/trace retrieval, sanitized change history, and capacity markers), not arbitrary queries or commands. Tool results are redacted, size-bounded, and marked as untrusted evidence. There is still no scheduled/event-driven model invocation, alert authority, or remediation action.
 
 ## Inspect application observability
 

@@ -33,7 +33,7 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 2. optional `git diff --check` when running inside a Git worktree;
 3. `./tools/source-import/run_tests.sh` and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
 4. `./infra/kubernetes/run_tests.sh` for deterministic Kubernetes/deployment asset checks without a live cluster;
-5. `./gradlew clean check --no-watch-fs`;
+5. `./gradlew clean check --no-watch-fs`, including the repository-wide `verifyNoThreadSleepInTests` source guard;
 6. `./gradlew integrationTest --no-watch-fs --no-parallel`;
 7. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
 
@@ -88,6 +88,8 @@ Focused commands follow the same source-set split:
 ./gradlew :modules:analysis:integrationTest
 ./gradlew :modules:results:test
 ./gradlew :modules:results:integrationTest
+./gradlew :modules:operations:test
+./gradlew :modules:operations:integrationTest
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
 ./gradlew :testing:integration-tests:integrationTest
@@ -108,6 +110,8 @@ Container-backed integration ownership is:
 - `modules:configuration` — PostgreSQL persistence/server boundary;
 - `modules:collection` — Kafka producer/consumer transport boundary;
 - `modules:analysis` — PostgreSQL durable deduplication;
+- `modules:operations` — deterministic/statistical Health Engine and analysis-package unit coverage plus PostgreSQL change-journal, Health Snapshot/report/Incident Assessment persistence, evidence-reference validation, deterministic fake-provider assisted investigation, bounded read-only tool budgets, rolling-baseline history, and change/health correlation;
+  External/local real-model acceptance is opt-in and must remain outside the canonical offline gate. Repository tests use a deterministic fake `IncidentAnalyst`, a loopback HTTP server for the OpenAI-compatible tool-turn protocol, and application-owned fake tool sessions; they never require model credentials or public network access.
 - `modules:results` — PostgreSQL + Kafka terminal-event consumption and idempotent projection persistence;
 - `testing:integration-tests` — PostgreSQL + Kafka cross-module Collection Run and Collection-to-Analysis flows.
 
@@ -116,6 +120,16 @@ These tests require a supported Docker-compatible runtime.
 The full `integrationTest` suite intentionally disables Gradle project parallelism.
 
 Several modules start PostgreSQL and Kafka Testcontainers. Running those project tasks concurrently can overload developer Docker runtimes and cause container-readiness timeouts.
+
+PostgreSQL integration fixtures must use `PostgresContainerSupport.create()` from `testing:test-support` instead of constructing `PostgreSQLContainer` directly. The repository helper uses mapped-port readiness only as the transport phase, then uses Awaitility to require an authenticated JDBC `SELECT 1` before `start()` returns. This avoids Testcontainers' fragile two-log-line heuristic without assuming that an open TCP socket alone means the database is ready for Flyway or test setup. The bounded startup budget is two minutes.
+
+Kafka integration fixtures must likewise use `KafkaContainerSupport.create()`. The helper overrides Testcontainers' image-specific log-message readiness with mapped-listener readiness and a two-minute budget. Kafka-backed tests then establish protocol-level readiness through their normal bounded Admin/topic setup before starting application consumers or producers. This avoids coupling repository tests to Kafka image log wording while still failing when the broker cannot serve the protocol.
+
+Asynchronous Kafka integration assertions must wait for a causal completion signal from the record they just published. Prefer a durable projection keyed by that record or, when idempotency/retention means the row count may not change, the owning consumer group's committed offset. Do not use fixed sleeps or wait on an aggregate value that was already true before publication.
+
+When a Kafka integration class creates and closes application consumers for every test method while sharing one broker container, each method must also own an isolated Kafka namespace. Use a unique consumer group plus unique source/DLQ topics per test method, and wait for the expected source-topic assignments before publishing test records. Reusing one group/topics across repeated consumer lifecycles is forbidden unless the test explicitly validates rebalance or resume behavior, because committed offsets and records from earlier methods otherwise leak into later scenarios.
+
+Java tests must not use direct `Thread.sleep(...)` as a synchronization mechanism. Awaitility is the repository-standard library for bounded polling of eventual conditions. When the test owns both threads, prefer deterministic primitives such as `CountDownLatch`, barriers, phasers, or controllable clocks instead of polling. The existing `io.signalharvester.testing.Await` compatibility helper delegates to Awaitility. Root `check` runs `verifyNoThreadSleepInTests`, which scans both `src/test/java` and `src/integrationTest/java` and fails if direct `Thread.sleep(...)` usage is reintroduced.
 
 The normal `clean check` phase may still use its normal parallelism behavior.
 

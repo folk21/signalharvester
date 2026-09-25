@@ -16,6 +16,7 @@ import io.signalharvester.configuration.application.SourceConfigurationCommand;
 import io.signalharvester.configuration.application.SourceConfigurationOperations;
 import io.signalharvester.configuration.application.SourceNotFoundException;
 import io.signalharvester.configuration.persistence.SourcePersistenceException;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -41,10 +42,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class ConfigurationPostgresIntegrationTest {
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
 

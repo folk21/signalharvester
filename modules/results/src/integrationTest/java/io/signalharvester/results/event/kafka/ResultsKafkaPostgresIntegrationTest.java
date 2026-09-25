@@ -15,6 +15,7 @@ import io.signalharvester.results.application.DeadLetterRecovery;
 import io.signalharvester.results.application.DeadLetterRecoveryException;
 import io.signalharvester.testing.Await;
 import io.signalharvester.testing.KafkaContainerSupport;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -68,10 +69,7 @@ class ResultsKafkaPostgresIntegrationTest {
     private static final String SOURCE_EVENT_ID = "source-event-results-it";
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     @Container
     private static final KafkaContainer KAFKA = KafkaContainerSupport.create();

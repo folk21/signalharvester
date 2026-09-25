@@ -21,6 +21,7 @@ import io.signalharvester.events.common.v1.EventEnvelope;
 import io.signalharvester.events.failure.v1.DeadLetterEvent;
 import io.signalharvester.testing.Await;
 import io.signalharvester.testing.KafkaContainerSupport;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -28,16 +29,21 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.GroupIdNotFoundException;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -45,6 +51,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
@@ -58,11 +65,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers(disabledWithoutDocker = true)
 class EventObservationKafkaPostgresIntegrationTest {
 
-    private static final String RAW_TOPIC = "signalharvester.collection.raw-item-discovered.v1.observation-it";
-    private static final String ANALYZED_TOPIC = "signalharvester.analysis.item-analyzed.v1.observation-it";
-    private static final String REJECTED_TOPIC = "signalharvester.analysis.item-rejected.v1.observation-it";
-    private static final String GROUP = "signalharvester-event-observation-it";
-    private static final String DEAD_LETTER_TOPIC = "signalharvester.event-observation.dead-letter.v1.it";
+    private static final String RAW_TOPIC_PREFIX = "signalharvester.collection.raw-item-discovered.v1.observation-it-";
+    private static final String ANALYZED_TOPIC_PREFIX = "signalharvester.analysis.item-analyzed.v1.observation-it-";
+    private static final String REJECTED_TOPIC_PREFIX = "signalharvester.analysis.item-rejected.v1.observation-it-";
+    private static final String GROUP_PREFIX = "signalharvester-event-observation-it-";
+    private static final String DEAD_LETTER_TOPIC_PREFIX = "signalharvester.event-observation.dead-letter.v1.it-";
     private static final String NORMALIZED_ID = "c".repeat(64);
     private static final String FLOW_RUN_ID = "run-jdbi-flow";
     private static final String FLOW_RAW_ITEM_ID = "raw-jdbi-flow";
@@ -71,20 +78,32 @@ class EventObservationKafkaPostgresIntegrationTest {
     private static final String FLOW_ANALYZED_EVENT_ID = "analyzed-event-jdbi-flow";
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     @Container
     private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
 
     private ApplicationContext context;
+    private Admin admin;
     private KafkaProducer<String, byte[]> producer;
+    private String rawTopic;
+    private String analyzedTopic;
+    private String rejectedTopic;
+    private String group;
+    private String deadLetterTopic;
+    private boolean consumerReady;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp(TestInfo testInfo) throws Exception {
+        String namespace = kafkaNamespace(testInfo);
+        rawTopic = RAW_TOPIC_PREFIX + namespace;
+        analyzedTopic = ANALYZED_TOPIC_PREFIX + namespace;
+        rejectedTopic = REJECTED_TOPIC_PREFIX + namespace;
+        group = GROUP_PREFIX + namespace;
+        deadLetterTopic = DEAD_LETTER_TOPIC_PREFIX + namespace;
+        consumerReady = false;
         resetDatabase();
+        admin = Admin.create(Map.<String, Object>of("bootstrap.servers", KAFKA.getBootstrapServers()));
         createTopics();
         context = ApplicationContext.run(Map.ofEntries(
                 Map.entry("datasources.default.url", POSTGRES.getJdbcUrl()),
@@ -95,9 +114,9 @@ class EventObservationKafkaPostgresIntegrationTest {
                 Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/event_observation"),
                 Map.entry("kafka.enabled", true),
                 Map.entry("kafka.bootstrap.servers", KAFKA.getBootstrapServers()),
-                Map.entry("kafka.consumers." + GROUP + ".key.deserializer",
+                Map.entry("kafka.consumers." + group + ".key.deserializer",
                         "org.apache.kafka.common.serialization.StringDeserializer"),
-                Map.entry("kafka.consumers." + GROUP + ".value.deserializer",
+                Map.entry("kafka.consumers." + group + ".value.deserializer",
                         "org.apache.kafka.common.serialization.ByteArrayDeserializer"),
                 Map.entry("kafka.producers.event-observation-dead-letter.key.serializer",
                         "org.apache.kafka.common.serialization.StringSerializer"),
@@ -106,15 +125,15 @@ class EventObservationKafkaPostgresIntegrationTest {
                 Map.entry("kafka.producers.event-observation-dead-letter.acks", "all"),
                 Map.entry("kafka.producers.event-observation-dead-letter.enable.idempotence", true),
                 Map.entry("signalharvester.event-observation.enabled", true),
-                Map.entry("signalharvester.event-observation.consumer-group", GROUP),
+                Map.entry("signalharvester.event-observation.consumer-group", group),
                 Map.entry("signalharvester.event-observation.kafka-reliability.max-attempts", 3),
                 Map.entry("signalharvester.event-observation.kafka-reliability.retry-backoff", "0ms"),
-                Map.entry("signalharvester.event-observation.kafka-reliability.dead-letter-topic", DEAD_LETTER_TOPIC),
+                Map.entry("signalharvester.event-observation.kafka-reliability.dead-letter-topic", deadLetterTopic),
                 Map.entry("signalharvester.event-observation.retention.max-events", 2),
                 Map.entry("signalharvester.event-observation.retention.max-age", "24h"),
-                Map.entry("signalharvester.kafka.raw-item-discovered-topic", RAW_TOPIC),
-                Map.entry("signalharvester.kafka.item-analyzed-topic", ANALYZED_TOPIC),
-                Map.entry("signalharvester.kafka.item-rejected-topic", REJECTED_TOPIC)));
+                Map.entry("signalharvester.kafka.raw-item-discovered-topic", rawTopic),
+                Map.entry("signalharvester.kafka.item-analyzed-topic", analyzedTopic),
+                Map.entry("signalharvester.kafka.item-rejected-topic", rejectedTopic)));
         producer = new KafkaProducer<>(producerProperties());
     }
 
@@ -126,36 +145,41 @@ class EventObservationKafkaPostgresIntegrationTest {
         if (context != null) {
             context.close();
         }
+        if (admin != null) {
+            admin.close();
+        }
     }
 
     /** Record supported event families once by event id and retain only the configured newest history bound. */
     @Test
     void shouldPersistDecodedEventsIdempotentlyAndPruneToBound() throws Exception {
         RawItemDiscovered raw = rawEvent();
-        send(RAW_TOPIC, "raw-1", raw);
-        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 1L);
+        send(rawTopic, "raw-1", raw);
+        awaitPersistedEvent("raw-event");
+        assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
 
-        send(RAW_TOPIC, "raw-1", raw);
-        Thread.sleep(200);
-        assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events"));
+        RecordMetadata duplicateRaw = send(rawTopic, "raw-1", raw);
+        awaitConsumed(duplicateRaw);
+        assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
 
-        send(ANALYZED_TOPIC, NORMALIZED_ID, analyzedEvent());
-        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 2L);
+        send(analyzedTopic, NORMALIZED_ID, analyzedEvent());
+        awaitPersistedEvent("analyzed-event");
         assertEquals("MATCHED", sqlString("SELECT classification FROM event_observation.observed_events WHERE event_id='analyzed-event'"));
         assertEquals(90L, sqlLong("SELECT score FROM event_observation.observed_events WHERE event_id='analyzed-event'"));
 
-        send(REJECTED_TOPIC, NORMALIZED_ID, rejectedEvent());
-        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 2L);
+        send(rejectedTopic, NORMALIZED_ID, rejectedEvent());
+        awaitPersistedEvent("rejected-event");
 
+        assertEquals(2L, sqlLong("SELECT count(*) FROM event_observation.observed_events"));
         assertEquals(0L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
+        assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='analyzed-event'"));
         assertEquals("DUPLICATE", sqlString("SELECT reason_code FROM event_observation.observed_events WHERE event_id='rejected-event'"));
-        assertTrue(sqlLong("SELECT max(observation_id) FROM event_observation.observed_events") >= 3L);
 
         EventObservationQuery query = context.getBean(EventObservationQuery.class);
         var filtered = query.recent(new EventObservationCriteria(
                 Optional.empty(),
                 Optional.of("analysis"),
-                Optional.of(REJECTED_TOPIC),
+                Optional.of(rejectedTopic),
                 Optional.of("run-1"),
                 Optional.empty(),
                 Optional.of(NORMALIZED_ID),
@@ -168,16 +192,10 @@ class EventObservationKafkaPostgresIntegrationTest {
     /** Preserve live-cursor ordering and Processing Flow filters through the Jdbi query adapter. */
     @Test
     void shouldQueryLiveCursorAndProcessingFlowThroughJdbiPersistence() throws Exception {
-        send(RAW_TOPIC, FLOW_RAW_ITEM_ID, flowRawEvent());
-        awaitSqlValue(
-                "SELECT count(*) FROM event_observation.observed_events WHERE event_id='"
-                        + FLOW_RAW_EVENT_ID + "'",
-                1L);
-        send(ANALYZED_TOPIC, FLOW_NORMALIZED_ID, flowAnalyzedEvent());
-        awaitSqlValue(
-                "SELECT count(*) FROM event_observation.observed_events WHERE event_id='"
-                        + FLOW_ANALYZED_EVENT_ID + "'",
-                1L);
+        send(rawTopic, FLOW_RAW_ITEM_ID, flowRawEvent());
+        awaitPersistedEvent(FLOW_RAW_EVENT_ID);
+        send(analyzedTopic, FLOW_NORMALIZED_ID, flowAnalyzedEvent());
+        awaitPersistedEvent(FLOW_ANALYZED_EVENT_ID);
 
         EventObservationQuery query = context.getBean(EventObservationQuery.class);
         long watermark = query.currentCursor();
@@ -218,12 +236,12 @@ class EventObservationKafkaPostgresIntegrationTest {
     @Test
     void shouldReplayDeadLetterThroughEventObservationOnly() throws Exception {
         RawItemDiscovered source = rawEvent();
-        String deadLetterId = GROUP + ":" + RAW_TOPIC + ":0:73";
+        String deadLetterId = group + ":" + rawTopic + ":0:73";
         DeadLetterEvent deadLetter = DeadLetterEvent.newBuilder()
                 .setDeadLetterId(deadLetterId)
                 .setConsumer("event-observation")
-                .setConsumerGroup(GROUP)
-                .setSourceTopic(RAW_TOPIC)
+                .setConsumerGroup(group)
+                .setSourceTopic(rawTopic)
                 .setSourcePartition(0)
                 .setSourceOffset(73)
                 .setSourceKey("raw-1")
@@ -233,22 +251,22 @@ class EventObservationKafkaPostgresIntegrationTest {
                 .setAttempts(3)
                 .setRetryable(true)
                 .build();
-        var metadata = producer.send(new ProducerRecord<>(DEAD_LETTER_TOPIC, deadLetterId, deadLetter.toByteArray())).get();
+        var metadata = producer.send(new ProducerRecord<>(deadLetterTopic, deadLetterId, deadLetter.toByteArray())).get();
         producer.flush();
 
-        long sourceTopicEndOffsetBeforeReplay = topicEndOffset(RAW_TOPIC);
+        long sourceTopicEndOffsetBeforeReplay = topicEndOffset(rawTopic);
 
         DeadLetterRecovery recovery = context.getBean(DeadLetterRecovery.class);
         DeadLetterRecovery.Inspection inspection = recovery.inspect(metadata.partition(), metadata.offset());
         assertEquals(deadLetterId, inspection.deadLetterId());
-        assertEquals(RAW_TOPIC, inspection.sourceTopic());
+        assertEquals(rawTopic, inspection.sourceTopic());
 
         recovery.replay(metadata.partition(), metadata.offset(), deadLetterId);
-        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'", 1L);
-        assertEquals(RAW_TOPIC, sqlString("SELECT kafka_topic FROM event_observation.observed_events WHERE event_id='raw-event'"));
+        assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
+        assertEquals(rawTopic, sqlString("SELECT kafka_topic FROM event_observation.observed_events WHERE event_id='raw-event'"));
         assertEquals(0L, sqlLong("SELECT kafka_partition FROM event_observation.observed_events WHERE event_id='raw-event'"));
         assertEquals(73L, sqlLong("SELECT kafka_offset FROM event_observation.observed_events WHERE event_id='raw-event'"));
-        assertEquals(sourceTopicEndOffsetBeforeReplay, topicEndOffset(RAW_TOPIC));
+        assertEquals(sourceTopicEndOffsetBeforeReplay, topicEndOffset(rawTopic));
 
         recovery.replay(metadata.partition(), metadata.offset(), deadLetterId);
         assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='raw-event'"));
@@ -260,11 +278,11 @@ class EventObservationKafkaPostgresIntegrationTest {
         RawItemDiscovered source = rawEvent();
         String foreignTopic = "signalharvester.unknown.v1";
         long sourceOffset = 74L;
-        String deadLetterId = GROUP + ":" + foreignTopic + ":0:" + sourceOffset;
+        String deadLetterId = group + ":" + foreignTopic + ":0:" + sourceOffset;
         DeadLetterEvent deadLetter = DeadLetterEvent.newBuilder()
                 .setDeadLetterId(deadLetterId)
                 .setConsumer("event-observation")
-                .setConsumerGroup(GROUP)
+                .setConsumerGroup(group)
                 .setSourceTopic(foreignTopic)
                 .setSourcePartition(0)
                 .setSourceOffset(sourceOffset)
@@ -275,7 +293,7 @@ class EventObservationKafkaPostgresIntegrationTest {
                 .setAttempts(1)
                 .setRetryable(false)
                 .build();
-        var metadata = producer.send(new ProducerRecord<>(DEAD_LETTER_TOPIC, deadLetterId, deadLetter.toByteArray())).get();
+        var metadata = producer.send(new ProducerRecord<>(deadLetterTopic, deadLetterId, deadLetter.toByteArray())).get();
         producer.flush();
 
         DeadLetterRecoveryException failure = assertThrows(
@@ -299,9 +317,10 @@ class EventObservationKafkaPostgresIntegrationTest {
                      'test', 'v1', 'test-topic', 0, 3, 'k3', 'Test')
                 """);
 
-        send(RAW_TOPIC, "raw-1", rawEvent());
-        awaitSqlValue("SELECT count(*) FROM event_observation.observed_events", 2L);
+        send(rawTopic, "raw-1", rawEvent());
+        awaitPersistedEvent("raw-event");
 
+        assertEquals(2L, sqlLong("SELECT count(*) FROM event_observation.observed_events"));
         assertEquals(0L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='expired-newest'"));
         assertEquals(0L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='recent-1'"));
         assertEquals(1L, sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='recent-2'"));
@@ -416,9 +435,81 @@ class EventObservationKafkaPostgresIntegrationTest {
                 .build();
     }
 
-    private void send(String topic, String key, com.google.protobuf.MessageLite event) throws Exception {
-        producer.send(new ProducerRecord<>(topic, key, event.toByteArray())).get();
-        producer.flush();
+    private RecordMetadata send(String topic, String key, com.google.protobuf.MessageLite event) throws Exception {
+        ensureConsumerGroupReady();
+        return producer.send(new ProducerRecord<>(topic, key, event.toByteArray())).get();
+    }
+
+    private void ensureConsumerGroupReady() throws Exception {
+        if (consumerReady) {
+            return;
+        }
+        Await.until(
+                "event-observation consumer assignments ready: " + group,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                this::assignedSourcePartitionCount,
+                count -> count == 3L);
+        consumerReady = true;
+    }
+
+    private long assignedSourcePartitionCount() throws Exception {
+        try {
+            return admin.describeConsumerGroups(List.of(group))
+                    .all()
+                    .get(2, TimeUnit.SECONDS)
+                    .get(group)
+                    .members()
+                    .stream()
+                    .flatMap(member -> member.assignment().topicPartitions().stream())
+                    .filter(partition -> partition.topic().equals(rawTopic)
+                            || partition.topic().equals(analyzedTopic)
+                            || partition.topic().equals(rejectedTopic))
+                    .count();
+        } catch (TimeoutException timeout) {
+            return 0L;
+        } catch (ExecutionException failure) {
+            if (failure.getCause() instanceof GroupIdNotFoundException) {
+                return 0L;
+            }
+            throw failure;
+        }
+    }
+
+    private void awaitPersistedEvent(String eventId) throws Exception {
+        Await.until(
+                "persisted Event Observation event " + eventId,
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> sqlLong("SELECT count(*) FROM event_observation.observed_events WHERE event_id='" + eventId + "'"),
+                count -> count == 1L);
+    }
+
+    private void awaitConsumed(RecordMetadata record) throws Exception {
+        TopicPartition partition = new TopicPartition(record.topic(), record.partition());
+        Await.until(
+                "consumer group commit past " + partition + "@" + record.offset(),
+                Duration.ofSeconds(20),
+                Duration.ofMillis(100),
+                () -> committedOffset(partition),
+                committed -> committed >= record.offset() + 1);
+    }
+
+    private long committedOffset(TopicPartition partition) throws Exception {
+        try {
+            var offsets = admin.listConsumerGroupOffsets(group)
+                    .partitionsToOffsetAndMetadata()
+                    .get(2, TimeUnit.SECONDS);
+            var committed = offsets.get(partition);
+            return committed == null ? -1L : committed.offset();
+        } catch (TimeoutException timeout) {
+            return -1L;
+        } catch (ExecutionException failure) {
+            if (failure.getCause() instanceof GroupIdNotFoundException) {
+                return -1L;
+            }
+            throw failure;
+        }
     }
 
     private static long topicEndOffset(String topic) {
@@ -439,15 +530,6 @@ class EventObservationKafkaPostgresIntegrationTest {
         properties.put("value.serializer", ByteArraySerializer.class.getName());
         properties.put("acks", "all");
         return properties;
-    }
-
-    private static void awaitSqlValue(String sql, long expected) throws Exception {
-        Await.until(
-                "SQL value " + expected + " for " + sql,
-                Duration.ofSeconds(20),
-                Duration.ofMillis(100),
-                () -> sqlLong(sql),
-                actual -> actual == expected);
     }
 
     private static void executeUpdate(String sql) throws Exception {
@@ -479,15 +561,21 @@ class EventObservationKafkaPostgresIntegrationTest {
         return DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
     }
 
-    private static void createTopics() throws InterruptedException, ExecutionException {
-        try (Admin admin = Admin.create(Map.<String, Object>of("bootstrap.servers", KAFKA.getBootstrapServers()))) {
-            for (String topic : List.of(RAW_TOPIC, ANALYZED_TOPIC, REJECTED_TOPIC, DEAD_LETTER_TOPIC)) {
-                try {
-                    admin.createTopics(List.of(new NewTopic(topic, 1, (short) 1))).all().get();
-                } catch (ExecutionException failure) {
-                    if (!(failure.getCause() instanceof org.apache.kafka.common.errors.TopicExistsException)) {
-                        throw failure;
-                    }
+    private static String kafkaNamespace(TestInfo testInfo) {
+        return testInfo.getTestMethod()
+                .orElseThrow(() -> new IllegalStateException("test method is required for Kafka isolation"))
+                .getName()
+                .replaceAll("[^A-Za-z0-9_-]", "-")
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private void createTopics() throws InterruptedException, ExecutionException {
+        for (String topic : List.of(rawTopic, analyzedTopic, rejectedTopic, deadLetterTopic)) {
+            try {
+                admin.createTopics(List.of(new NewTopic(topic, 1, (short) 1))).all().get();
+            } catch (ExecutionException failure) {
+                if (!(failure.getCause() instanceof org.apache.kafka.common.errors.TopicExistsException)) {
+                    throw failure;
                 }
             }
         }

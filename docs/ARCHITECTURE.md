@@ -261,6 +261,18 @@ The default local environment remains an explicitly trusted compatibility mode.
 
 Shared or public deployments must enable the protected security profile and provide deployment-owned JWT/CSRF secrets.
 
+## Operations boundary
+
+The Operations module owns the durable cross-capability operational change journal and persisted Health Snapshot/report foundation. Its PostgreSQL tables are private to the module. Other modules record supported behavior-affecting changes only through the published `io.signalharvester.operations.api..` journal boundary and never query Operations tables directly.
+
+Configuration and Security record supported REST/UI mutations through that API. Analysis, Results, and Event Observation use the same narrow boundary to record successful controlled DLQ replay actions. Repository-owned tooling may emit typed deployment/scenario markers through the ADMIN Operations HTTP boundary.
+
+Applied Configuration/Security mutations record the corresponding sanitized journal entry within the application transaction where the mutation owns a PostgreSQL transaction. Recovery/tooling markers are auxiliary best-effort evidence and must not turn an already successful operator action into a business failure if journaling is unavailable. Secret values, credentials, source-setting values, and other sensitive material are excluded from journal state.
+
+The Operations module owns the persisted Health Snapshot/report model and accepted deterministic/statistical Health Engine. Health interpretation is versioned/configurable, uses bounded allowlisted telemetry evidence plus rolling persisted baselines, and keeps missing evidence explicit. Periodic sampling is auxiliary, multi-replica coordinated through PostgreSQL, and does not hold database transactions while querying Prometheus.
+
+Accepted assisted-investigation Stage 3 remains inside Operations: a bounded `health-analysis-v1` package wraps the sanitized Health Report with an explicit telemetry-is-untrusted instruction and stable evidence references; validated Incident Assessments are persisted separately and cannot modify the Health Snapshot status/score. Manual import is always available after package export. Verification-pending Stage 4a extends the provider-neutral `IncidentAnalyst` boundary with an application-owned tool session. The OpenAI-compatible JDK-HTTP adapter may request only allowlisted read-only tools for Health context, fixed Prometheus query IDs, bounded Loki patterns, Tempo search/trace retrieval, recent changes, and capacity markers. Tool/network I/O occurs outside database transactions; results are bounded/redacted and marked untrusted, tool calls/rounds/duration are capped, and tool-discovered evidence references are validated before persistence. Automatic event/periodic model triggering remains disabled until a multi-replica-safe trigger lease/dedup boundary is implemented.
+
 ## UI boundary
 
 The web UI lives in the separate `signalharvester-web` repository.

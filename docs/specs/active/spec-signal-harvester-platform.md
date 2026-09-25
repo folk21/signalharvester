@@ -4,7 +4,7 @@ title: SignalHarvester initial functional product specification
 description: Active umbrella specification for an observable event-driven platform that collects, analyzes, stores, and presents configurable external information streams.
 document_role: umbrella
 spec_status: active
-current_focus: subspecs/backend-capacity-telemetry-expansion.md
+current_focus: subspecs/backend-observability-intelligence.md
 ---
 # SignalHarvester initial functional product specification
 
@@ -26,7 +26,7 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, `backend-sse-inflight-poll-cancellation`, `backend-shared-polling-lifecycle-refactoring`, `backend-collection-run-interruption-recovery`, `backend-source-fetch-worker-interruption-propagation`, `backend-analysis-outbox-expired-lease-fencing`, and `backend-analysis-outbox-failure-lease-fencing` are accepted after their relevant repository tests and validations passed. Kafka consumer lifecycle Review I, background-worker/executor lifecycle Review II, and durable-ownership/crash-window Review III found no additional material correctness defects after their bounded fixes. `backend-analysis-all-relevant-default` remains verification-pending. The current bounded implementation focus is `backend-capacity-telemetry-expansion`, which adds outbox-focused capacity signals selected from the completed local one-versus-three replica measurement before broader stress testing or ML-based operational analysis. `backend-capacity-observability-baseline` remains separately verification-pending until its canonical repository gate is recorded.
+`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, `backend-sse-inflight-poll-cancellation`, `backend-shared-polling-lifecycle-refactoring`, `backend-collection-run-interruption-recovery`, `backend-source-fetch-worker-interruption-propagation`, `backend-analysis-outbox-expired-lease-fencing`, and `backend-analysis-outbox-failure-lease-fencing` are accepted after their relevant repository tests and validations passed. Kafka consumer lifecycle Review I, background-worker/executor lifecycle Review II, and durable-ownership/crash-window Review III found no additional material correctness defects after their bounded fixes. `backend-analysis-all-relevant-default` remains verification-pending. `backend-capacity-telemetry-expansion` is implemented and remains verification-pending while live/canonical acceptance is recorded. The current bounded implementation focus is `backend-observability-intelligence`; its persisted change journal and deterministic/statistical Health Engine stages are accepted, and the next bounded stage adds optional provider-neutral LLM-assisted investigation over bounded read-only telemetry tools. `backend-capacity-observability-baseline` remains separately verification-pending until its canonical repository gate is recorded.
 
 Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
 
@@ -46,6 +46,7 @@ Deliver an observable event-driven information collection and analysis platform 
 - make the movement of events through the system visually inspectable;
 - make important persistence and processing outcomes visible without exposing the frontend directly to Kafka or PostgreSQL protocols;
 - provide production-style technical observability through metrics, logs, distributed traces, and health information;
+- turn telemetry and recorded operational changes into persisted health reports, anomaly evidence, and optional assisted incident investigation;
 - run locally in Kubernetes as a realistic distributed-system learning environment.
 
 The project is intentionally both a useful application and a learning platform for Java concurrency, Kafka, PostgreSQL, Kubernetes, event-driven design, reliability patterns, observability, AI-assisted development, and Spec-Driven Development.
@@ -153,6 +154,9 @@ This table is a navigation index. The detailed requirement text below remains no
 | R30 | `SECURITY.EXTERNAL_SOURCE_ACCESS` | Secret and external-service safety |
 | R31 | `SECURITY.IDENTITY_ROLES`, `SECURITY.AUTHENTICATION`, `SECURITY.AUTHORIZATION` | Authenticated identities and RBAC |
 | R32 | `PRESENTATION.VIEWER_RESULTS`, `DIAGNOSTICS.ANALYSIS_INSPECTION`, `SECURITY.AUTHORIZATION` | Role-specific browser experience |
+| R33 | `OBSERVABILITY.HEALTH_INTELLIGENCE` | Persisted health reports and anomaly interpretation |
+| R34 | `OPERATIONS.CHANGE_JOURNAL` | Durable behavior-affecting change history and health correlation |
+| R35 | `OBSERVABILITY.ASSISTED_INVESTIGATION` | Optional bounded LLM-assisted operational investigation |
 
 ## Requirements
 
@@ -680,6 +684,35 @@ Backend authorization must ensure that a `VIEWER` cannot call protected admin or
 
 Detailed React routing, layout, presentation, and component behavior belong to the `signalharvester-web` specification tree.
 
+### R33 — operational health intelligence
+
+Feature: `OBSERVABILITY.HEALTH_INTELLIGENCE`.
+
+The platform must be able to transform its existing metrics, logs, traces, capacity evidence, and application state into a bounded persisted operational health representation.
+
+Health analysis must support structured snapshots, human-readable reports, component status, numeric comparison/scoring, anomaly evidence, and comparison with a recent baseline. The initial implementation must work without an external LLM or paid observability service.
+
+Automated anomaly detection should begin with deterministic rules and lightweight statistical methods. A custom neural network is optional future work and must be justified against measured evaluation data.
+
+### R34 — behavior-affecting change journal and correlation
+
+Feature: `OPERATIONS.CHANGE_JOURNAL`.
+
+Supported configuration, administrative, deployment/tuning, and operator changes that can materially affect system behavior or health must pass through a standard redacted journaling procedure where SignalHarvester owns the mutation workflow.
+
+The system must retain enough change metadata to reconstruct who/what changed, when it changed, what target was affected, the safe before/after difference or marker, outcome, and available correlation/deployment identity. Secrets must never be persisted in the change journal.
+
+Health analysis must be able to place recent changes and health transitions on one timeline and compare before/after windows. Temporal proximity may identify a candidate correlation but must not by itself be reported as proven causality.
+
+### R35 — optional assisted operational investigation
+
+Feature: `OBSERVABILITY.ASSISTED_INVESTIGATION`.
+
+A Health Report must be exportable for manual analysis by a local or external LLM. The platform may additionally invoke a configured LLM periodically or when a qualifying health/anomaly event occurs.
+
+Automated LLM investigation must use sanitized bounded evidence and an explicit read-only tool surface for telemetry/history lookup. Model output consumed by the application must be structured and validated.
+
+An LLM must not become the sole authority for health state, severity, alert emission, or operational mutation. Alerting and any future remediation remain application-owned policies over deterministic/statistical health state plus optional model assessment.
 
 ## Scenarios
 

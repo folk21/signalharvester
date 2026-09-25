@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded backend implementation focus is [`active/subspecs/backend-capacity-telemetry-expansion.md`](active/subspecs/backend-capacity-telemetry-expansion.md). It adds Analysis outbox capacity telemetry selected from the completed bounded replica comparison before broader stress testing.
+The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Stages 1 and 2 are accepted; Stage 3 is implemented and verification-pending with bounded sanitized analysis packages, structured Incident Assessments, manual import, and explicit provider-neutral LLM invocation. Read-only agentic telemetry tools remain the next slice.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,9 +154,11 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-capacity-telemetry-expansion.md`](active/subspecs/backend-capacity-telemetry-expansion.md) — Analysis outbox backlog/batch/publication/database telemetry selected from the measured local replica comparison; verification pending.
+- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — persisted health reports, change/health correlation, statistical anomaly detection, manual LLM export, and bounded optional agentic investigation.
 
 Verification-pending carryover:
+
+- [`active/subspecs/backend-capacity-telemetry-expansion.md`](active/subspecs/backend-capacity-telemetry-expansion.md) — Analysis outbox backlog/batch/publication/database telemetry selected from the measured local replica comparison; implementation complete, live/canonical acceptance still pending.
 
 - [`active/subspecs/backend-capacity-observability-baseline.md`](active/subspecs/backend-capacity-observability-baseline.md) — bounded deterministic Kubernetes pipeline capacity measurement; live one-replica and one-versus-three runs completed, canonical acceptance still pending.
 - [`active/subspecs/backend-analysis-all-relevant-default.md`](active/subspecs/backend-analysis-all-relevant-default.md) — explicit all-relevant Analysis settings for profiles without keyword filtering; implementation complete, canonical acceptance still pending.
