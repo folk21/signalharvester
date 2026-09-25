@@ -206,7 +206,7 @@ Tests must not depend on:
 - external SaaS;
 - nondeterministic timing when a controllable clock/source can be used.
 
-Direct `Thread.sleep(...)` is forbidden in test and integration-test sources as a synchronization mechanism. Use Awaitility for bounded polling of eventual externally observable conditions, and use deterministic coordination primitives such as `CountDownLatch`, barriers, phasers, or controllable clocks when the test owns both sides of the interaction. Never choose a larger fixed sleep to hide a timing race. Existing direct sleeps are migration debt and must not be copied into new tests.
+Direct `Thread.sleep(...)` is forbidden in test and integration-test sources as a synchronization mechanism. Use Awaitility for bounded polling of eventual externally observable conditions, and use deterministic coordination primitives such as `CountDownLatch`, barriers, phasers, or controllable clocks when the test owns both sides of the interaction. Never choose a larger fixed sleep to hide a timing race. The root `verifyNoThreadSleepInTests` verification task enforces this rule across Java unit and integration-test source sets.
 
 Kafka integration tests that restart application consumers between test methods must isolate consumer state per method. Prefer a unique consumer group and unique input topics for each test method; otherwise reset offsets/topics explicitly before starting the next consumer. A static broker may be shared for cost, but committed offsets, rebalances, and unconsumed records from one test must not become hidden input to another test.
 

@@ -89,6 +89,7 @@ class DemandDrivenPollingLoopTest {
         try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
             CountDownLatch started = new CountDownLatch(1);
             CountDownLatch interrupted = new CountDownLatch(1);
+            CountDownLatch releasePoll = new CountDownLatch(1);
             AtomicReference<Throwable> failure = new AtomicReference<>();
             DemandDrivenPollingLoop<String> loop = new DemandDrivenPollingLoop<>(
                     executor,
@@ -99,7 +100,7 @@ class DemandDrivenPollingLoopTest {
                     () -> {
                         started.countDown();
                         try {
-                            Thread.sleep(Duration.ofMinutes(1));
+                            releasePoll.await();
                             throw new AssertionError("Blocking poll should finish through interruption");
                         } catch (InterruptedException exception) {
                             interrupted.countDown();
@@ -112,14 +113,18 @@ class DemandDrivenPollingLoopTest {
                     },
                     failure::set);
 
-            loop.request(1);
-            assertTrue(started.await(2, TimeUnit.SECONDS));
+            try {
+                loop.request(1);
+                assertTrue(started.await(2, TimeUnit.SECONDS));
 
-            loop.cancel();
+                loop.cancel();
 
-            assertTrue(interrupted.await(2, TimeUnit.SECONDS));
-            assertNull(failure.get());
-            assertTrue(loop.isCancelled());
+                assertTrue(interrupted.await(2, TimeUnit.SECONDS));
+                assertNull(failure.get());
+                assertTrue(loop.isCancelled());
+            } finally {
+                releasePoll.countDown();
+            }
         }
     }
 }

@@ -33,7 +33,7 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 2. optional `git diff --check` when running inside a Git worktree;
 3. `./tools/source-import/run_tests.sh` and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
 4. `./infra/kubernetes/run_tests.sh` for deterministic Kubernetes/deployment asset checks without a live cluster;
-5. `./gradlew clean check --no-watch-fs`;
+5. `./gradlew clean check --no-watch-fs`, including the repository-wide `verifyNoThreadSleepInTests` source guard;
 6. `./gradlew integrationTest --no-watch-fs --no-parallel`;
 7. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
 
@@ -128,7 +128,7 @@ Asynchronous Kafka integration assertions must wait for a causal completion sign
 
 When a Kafka integration class creates and closes application consumers for every test method while sharing one broker container, each method must also own an isolated Kafka namespace. Use a unique consumer group plus unique source/DLQ topics per test method, and wait for the expected source-topic assignments before publishing test records. Reusing one group/topics across repeated consumer lifecycles is forbidden unless the test explicitly validates rebalance or resume behavior, because committed offsets and records from earlier methods otherwise leak into later scenarios.
 
-Java tests must not use direct `Thread.sleep(...)` as a synchronization mechanism. Awaitility is the repository-standard library for bounded polling of eventual conditions. When the test owns both threads, prefer deterministic primitives such as `CountDownLatch`, barriers, phasers, or controllable clocks instead of polling. The existing `io.signalharvester.testing.Await` compatibility helper delegates to Awaitility; remaining direct sleeps are scheduled for repository-wide removal in the next cleanup slice.
+Java tests must not use direct `Thread.sleep(...)` as a synchronization mechanism. Awaitility is the repository-standard library for bounded polling of eventual conditions. When the test owns both threads, prefer deterministic primitives such as `CountDownLatch`, barriers, phasers, or controllable clocks instead of polling. The existing `io.signalharvester.testing.Await` compatibility helper delegates to Awaitility. Root `check` runs `verifyNoThreadSleepInTests`, which scans both `src/test/java` and `src/integrationTest/java` and fails if direct `Thread.sleep(...)` usage is reintroduced.
 
 The normal `clean check` phase may still use its normal parallelism behavior.
 

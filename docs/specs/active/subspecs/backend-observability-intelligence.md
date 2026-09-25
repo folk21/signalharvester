@@ -10,13 +10,13 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Active. Stage 1 is accepted after the developer confirmed the canonical repository gate. Stage 2 is implemented and verification-pending: Operations now evaluates versioned deterministic/statistical Health Snapshots from bounded Prometheus/local evidence, persists structured anomalies, samples periodically across multiple replicas, and exposes numeric before/after health deltas. Manual/provider-neutral LLM analysis remains stage 3.
+Active. Stages 1 and 2 are accepted after the developer confirmed the canonical repository gate. Operations persists sanitized operational changes and Health Snapshots/Reports, evaluates versioned deterministic/statistical health from bounded Prometheus/local evidence, persists structured anomalies, samples periodically across multiple replicas, and exposes numeric before/after health deltas. Manual/provider-neutral LLM analysis remains stage 3.
 
 The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until their canonical acceptance is recorded. This specification does not weaken or replace those acceptance gates.
 
 ## Implementation progress
 
-Stage 1 is accepted. Stage 2 is implemented and verification-pending. The implemented scope now includes:
+Stages 1 and 2 are accepted. The implemented scope now includes:
 
 - Operations-owned `V16` persistence for sanitized change records and Health Snapshots;
 - journal integration for supported Source/Monitoring Profile mutations, Security administration, and bootstrap ADMIN creation;
