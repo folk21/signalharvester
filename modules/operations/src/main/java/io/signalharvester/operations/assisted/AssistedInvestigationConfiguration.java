@@ -95,6 +95,52 @@ public interface AssistedInvestigationConfiguration {
     @Bindable(defaultValue = "")
     String getTempoBaseUrl();
 
+
+    /** Automatic trigger mode. `off` keeps all provider invocation explicit. */
+    @Bindable(defaultValue = "off")
+    String getAutomaticMode();
+
+    /** Delay before the first automatic trigger polling pass. */
+    @NotNull
+    @Bindable(defaultValue = "45s")
+    Duration getAutomaticInitialDelay();
+
+    /** Polling cadence for planning/dispatching automatic investigation triggers. */
+    @NotNull
+    @Bindable(defaultValue = "30s")
+    Duration getAutomaticPollInterval();
+
+    /** Minimum spacing between repeated automatic investigations of comparable severity. */
+    @NotNull
+    @Bindable(defaultValue = "15m")
+    Duration getAutomaticCooldown();
+
+    /** Low-frequency reassessment interval while a degraded/unhealthy incident remains active. */
+    @NotNull
+    @Bindable(defaultValue = "30m")
+    Duration getPeriodicReassessmentInterval();
+
+    /** Lease duration for one claimed automatic provider investigation. */
+    @NotNull
+    @Bindable(defaultValue = "2m")
+    Duration getAutomaticLeaseDuration();
+
+    /** Heartbeat cadence used to renew one still-owned automatic investigation lease. */
+    @NotNull
+    @Bindable(defaultValue = "30s")
+    Duration getAutomaticLeaseHeartbeatInterval();
+
+    /** Delay before retrying a failed automatic provider invocation. */
+    @NotNull
+    @Bindable(defaultValue = "5m")
+    Duration getAutomaticRetryBackoff();
+
+    /** Maximum automatic provider attempts before the durable trigger is exhausted. */
+    @Min(1)
+    @Max(10)
+    @Bindable(defaultValue = "3")
+    int getAutomaticMaxAttempts();
+
     /** Maximum number of persisted assessments retained. */
     @Min(1)
     @Max(100_000)

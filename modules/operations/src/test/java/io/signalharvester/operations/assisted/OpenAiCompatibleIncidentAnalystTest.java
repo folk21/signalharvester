@@ -146,6 +146,15 @@ class OpenAiCompatibleIncidentAnalystTest {
         @Override public int getMaxTraceResults() { return 20; }
         @Override public String getLokiBaseUrl() { return ""; }
         @Override public String getTempoBaseUrl() { return ""; }
+        @Override public String getAutomaticMode() { return "off"; }
+        @Override public Duration getAutomaticInitialDelay() { return Duration.ofSeconds(45); }
+        @Override public Duration getAutomaticPollInterval() { return Duration.ofSeconds(30); }
+        @Override public Duration getAutomaticCooldown() { return Duration.ofMinutes(15); }
+        @Override public Duration getPeriodicReassessmentInterval() { return Duration.ofMinutes(30); }
+        @Override public Duration getAutomaticLeaseDuration() { return Duration.ofMinutes(2); }
+        @Override public Duration getAutomaticLeaseHeartbeatInterval() { return Duration.ofSeconds(30); }
+        @Override public Duration getAutomaticRetryBackoff() { return Duration.ofMinutes(5); }
+        @Override public int getAutomaticMaxAttempts() { return 3; }
         @Override public int getAssessmentRetentionCount() { return 500; }
     }
 }

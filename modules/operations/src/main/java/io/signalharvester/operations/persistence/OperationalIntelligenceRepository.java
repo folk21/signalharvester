@@ -1,6 +1,8 @@
 package io.signalharvester.operations.persistence;
 
 import io.signalharvester.operations.api.OperationalChangeRecord;
+import io.signalharvester.operations.assisted.AutomaticInvestigationTrigger;
+import io.signalharvester.operations.assisted.ClaimedAutomaticInvestigation;
 import io.signalharvester.operations.model.HealthSnapshot;
 import io.signalharvester.operations.model.IncidentAssessment;
 import java.time.Instant;
@@ -25,4 +27,18 @@ public interface OperationalIntelligenceRepository {
     void insertIncidentAssessment(IncidentAssessment assessment);
     List<IncidentAssessment> findRecentIncidentAssessments(int limit);
     void deleteIncidentAssessmentsBeyond(int keepCount);
+    boolean tryAcquireAutomaticInvestigationPlanningLock();
+    boolean insertAutomaticInvestigationTrigger(AutomaticInvestigationTrigger trigger);
+    Optional<AutomaticInvestigationTrigger> findLatestAutomaticInvestigationTrigger();
+    List<AutomaticInvestigationTrigger> findRecentAutomaticInvestigationTriggers(int limit);
+    Optional<ClaimedAutomaticInvestigation> claimAutomaticInvestigationTrigger(
+            Instant now, UUID leaseToken, Instant leaseExpiresAt);
+    boolean renewAutomaticInvestigationTriggerLease(
+            UUID triggerId, UUID leaseToken, Instant renewedAt, Instant leaseExpiresAt);
+    void completeAutomaticInvestigationTrigger(
+            UUID triggerId, UUID leaseToken, Instant completedAt, UUID assessmentId);
+    void retryAutomaticInvestigationTrigger(
+            UUID triggerId, UUID leaseToken, Instant failedAt, Instant nextAttemptAt, String lastError);
+    void exhaustAutomaticInvestigationTrigger(
+            UUID triggerId, UUID leaseToken, Instant failedAt, String lastError);
 }

@@ -230,7 +230,16 @@ The package contains the Health Report, an evidence-reference allowlist, and an 
 
 A structured assessment produced manually can be posted back to `/api/v1/admin/operations/health/assessments/manual`; every evidence reference must come from the exported package. Recent validated assessments are available through `GET /api/v1/admin/operations/health/assessments`.
 
-Provider invocation is optional and remains explicit in Stage 4a. Configure `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_PROVIDER=openai-compatible`, a full chat-completions endpoint, model identifier, and any bearer key through secret-managed environment configuration. Then an ADMIN may call:
+Automatic provider invocation is disabled by default. Set `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_MODE=event` to investigate qualifying worsening health transitions, or `event-and-periodic` to add low-frequency reassessment while a degraded/unhealthy incident remains active. Trigger identity, cooldown, leases, retry/backoff, and exhaustion are persisted so multiple backend replicas do not independently invoke the provider for the same snapshot. Inspect recent trigger state with:
+
+```bash
+curl -s -b build/tmp/auth.cookies \
+  http://localhost:8080/api/v1/admin/operations/health/automatic-investigations
+```
+
+Automatic provider/tool work is auxiliary and read-only. It does not alter deterministic health state or emit alerts. Durable leases prevent concurrent replicas from owning one trigger, but external model calls are not exactly-once across process crashes: if a process fails after the provider responds and before durable completion, a bounded retry may invoke the provider again. Setting the provider to `off` leaves persisted automatic work unclaimed rather than consuming retry attempts.
+
+Provider invocation is optional. Explicit Stage 4a invocation remains available even when Stage 4b automatic mode is enabled. Configure `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_PROVIDER=openai-compatible`, a full chat-completions endpoint, model identifier, and any bearer key through secret-managed environment configuration. Then an ADMIN may call:
 
 ```bash
 curl -i -X POST -b build/tmp/auth.cookies \
@@ -238,7 +247,7 @@ curl -i -X POST -b build/tmp/auth.cookies \
   http://localhost:8080/api/v1/admin/operations/health/assessments/analyze-latest
 ```
 
-One request produces at most one validated assessment. In Stage 4a the configured OpenAI-compatible provider may perform a bounded multi-turn read-only investigation before producing that assessment. Available tools are application-defined (Health context, allowlisted Prometheus query IDs, fixed Loki backend patterns, Tempo search/trace retrieval, sanitized change history, and capacity markers), not arbitrary queries or commands. Tool results are redacted, size-bounded, and marked as untrusted evidence. There is still no scheduled/event-driven model invocation, alert authority, or remediation action.
+One explicit request produces at most one validated assessment. The accepted Stage 4a OpenAI-compatible provider may perform a bounded multi-turn read-only investigation before producing that assessment. Available tools are application-defined (Health context, allowlisted Prometheus query IDs, fixed Loki backend patterns, Tempo search/trace retrieval, sanitized change history, and capacity markers), not arbitrary queries or commands. Tool results are redacted, size-bounded, and marked as untrusted evidence. Stage 4b may additionally invoke the same bounded provider flow through the optional durable automatic trigger policy described above; there is still no alert authority or remediation action.
 
 ## Inspect application observability
 

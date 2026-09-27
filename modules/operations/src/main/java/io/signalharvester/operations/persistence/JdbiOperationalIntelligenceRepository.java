@@ -9,6 +9,10 @@ import io.signalharvester.operations.api.OperationalChangeOutcome;
 import io.signalharvester.operations.api.OperationalChangeRecord;
 import io.signalharvester.operations.api.OperationalChangeSource;
 import io.signalharvester.operations.api.OperationalChangeTargetType;
+import io.signalharvester.operations.assisted.AutomaticInvestigationTrigger;
+import io.signalharvester.operations.assisted.AutomaticInvestigationTriggerState;
+import io.signalharvester.operations.assisted.AutomaticInvestigationTriggerType;
+import io.signalharvester.operations.assisted.ClaimedAutomaticInvestigation;
 import io.signalharvester.operations.model.HealthAnomaly;
 import io.signalharvester.operations.model.HealthSnapshot;
 import io.signalharvester.operations.model.HealthStatus;
@@ -46,6 +50,24 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
     private static final String INSERT_INCIDENT_ASSESSMENT = SqlResources.load(SQL_PATH, "insert-incident-assessment");
     private static final String FIND_RECENT_INCIDENT_ASSESSMENTS = SqlResources.load(SQL_PATH, "find-recent-incident-assessments");
     private static final String DELETE_OLD_INCIDENT_ASSESSMENTS = SqlResources.load(SQL_PATH, "delete-old-incident-assessments");
+    private static final String TRY_AUTOMATIC_INVESTIGATION_PLANNING_LOCK =
+            SqlResources.load(SQL_PATH, "try-automatic-investigation-planning-lock");
+    private static final String INSERT_AUTOMATIC_INVESTIGATION_TRIGGER =
+            SqlResources.load(SQL_PATH, "insert-automatic-investigation-trigger");
+    private static final String FIND_LATEST_AUTOMATIC_INVESTIGATION_TRIGGER =
+            SqlResources.load(SQL_PATH, "find-latest-automatic-investigation-trigger");
+    private static final String FIND_RECENT_AUTOMATIC_INVESTIGATION_TRIGGERS =
+            SqlResources.load(SQL_PATH, "find-recent-automatic-investigation-triggers");
+    private static final String CLAIM_AUTOMATIC_INVESTIGATION_TRIGGER =
+            SqlResources.load(SQL_PATH, "claim-automatic-investigation-trigger");
+    private static final String RENEW_AUTOMATIC_INVESTIGATION_TRIGGER =
+            SqlResources.load(SQL_PATH, "renew-automatic-investigation-trigger");
+    private static final String COMPLETE_AUTOMATIC_INVESTIGATION_TRIGGER =
+            SqlResources.load(SQL_PATH, "complete-automatic-investigation-trigger");
+    private static final String RETRY_AUTOMATIC_INVESTIGATION_TRIGGER =
+            SqlResources.load(SQL_PATH, "fail-automatic-investigation-trigger");
+    private static final String EXHAUST_AUTOMATIC_INVESTIGATION_TRIGGER =
+            SqlResources.load(SQL_PATH, "exhaust-automatic-investigation-trigger");
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {};
     private static final TypeReference<Map<String, Double>> DOUBLE_MAP = new TypeReference<>() {};
@@ -216,6 +238,127 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
                 .execute());
     }
 
+    @Override
+    public boolean tryAcquireAutomaticInvestigationPlanningLock() {
+        return execute("Failed to acquire automatic-investigation planning lock", handle ->
+                handle.createQuery(TRY_AUTOMATIC_INVESTIGATION_PLANNING_LOCK)
+                        .mapTo(Boolean.class)
+                        .one());
+    }
+
+    @Override
+    public boolean insertAutomaticInvestigationTrigger(AutomaticInvestigationTrigger trigger) {
+        return execute("Failed to insert automatic-investigation trigger", handle ->
+                handle.createUpdate(INSERT_AUTOMATIC_INVESTIGATION_TRIGGER)
+                        .bind("triggerId", trigger.id())
+                        .bind("snapshotId", trigger.snapshotId())
+                        .bind("triggerType", trigger.type().name())
+                        .bind("createdAt", Timestamp.from(trigger.createdAt()))
+                        .bind("nextAttemptAt", Timestamp.from(trigger.nextAttemptAt()))
+                        .execute() == 1);
+    }
+
+    @Override
+    public Optional<AutomaticInvestigationTrigger> findLatestAutomaticInvestigationTrigger() {
+        return execute("Failed to read latest automatic-investigation trigger", handle ->
+                handle.createQuery(FIND_LATEST_AUTOMATIC_INVESTIGATION_TRIGGER)
+                        .map((rows, context) -> mapAutomaticInvestigationTrigger(rows))
+                        .findFirst());
+    }
+
+    @Override
+    public List<AutomaticInvestigationTrigger> findRecentAutomaticInvestigationTriggers(int limit) {
+        return execute("Failed to list automatic-investigation triggers", handle ->
+                handle.createQuery(FIND_RECENT_AUTOMATIC_INVESTIGATION_TRIGGERS)
+                        .bind("limit", limit)
+                        .map((rows, context) -> mapAutomaticInvestigationTrigger(rows))
+                        .list());
+    }
+
+    @Override
+    public Optional<ClaimedAutomaticInvestigation> claimAutomaticInvestigationTrigger(
+            Instant now, UUID leaseToken, Instant leaseExpiresAt) {
+        return execute("Failed to claim automatic-investigation trigger", handle ->
+                handle.createQuery(CLAIM_AUTOMATIC_INVESTIGATION_TRIGGER)
+                        .bind("now", Timestamp.from(now))
+                        .bind("leaseToken", leaseToken)
+                        .bind("leaseExpiresAt", Timestamp.from(leaseExpiresAt))
+                        .map((rows, context) -> new ClaimedAutomaticInvestigation(
+                                rows.getObject("trigger_id", UUID.class),
+                                rows.getObject("snapshot_id", UUID.class),
+                                AutomaticInvestigationTriggerType.valueOf(rows.getString("trigger_type")),
+                                rows.getInt("attempt_count"),
+                                rows.getObject("lease_token", UUID.class),
+                                rows.getTimestamp("lease_expires_at").toInstant()))
+                        .findFirst());
+    }
+
+    @Override
+    public boolean renewAutomaticInvestigationTriggerLease(
+            UUID triggerId, UUID leaseToken, Instant renewedAt, Instant leaseExpiresAt) {
+        return execute("Failed to renew automatic-investigation trigger lease", handle ->
+                handle.createUpdate(RENEW_AUTOMATIC_INVESTIGATION_TRIGGER)
+                        .bind("triggerId", triggerId)
+                        .bind("leaseToken", leaseToken)
+                        .bind("renewedAt", Timestamp.from(renewedAt))
+                        .bind("leaseExpiresAt", Timestamp.from(leaseExpiresAt))
+                        .execute() == 1);
+    }
+
+    @Override
+    public void completeAutomaticInvestigationTrigger(
+            UUID triggerId, UUID leaseToken, Instant completedAt, UUID assessmentId) {
+        executeExactLeaseUpdate(
+                "complete automatic-investigation trigger",
+                handle -> handle.createUpdate(COMPLETE_AUTOMATIC_INVESTIGATION_TRIGGER)
+                        .bind("triggerId", triggerId)
+                        .bind("leaseToken", leaseToken)
+                        .bind("completedAt", Timestamp.from(completedAt))
+                        .bind("assessmentId", assessmentId)
+                        .execute());
+    }
+
+    @Override
+    public void retryAutomaticInvestigationTrigger(
+            UUID triggerId, UUID leaseToken, Instant failedAt, Instant nextAttemptAt, String lastError) {
+        executeExactLeaseUpdate(
+                "schedule automatic-investigation trigger retry",
+                handle -> handle.createUpdate(RETRY_AUTOMATIC_INVESTIGATION_TRIGGER)
+                        .bind("triggerId", triggerId)
+                        .bind("leaseToken", leaseToken)
+                        .bind("failedAt", Timestamp.from(failedAt))
+                        .bind("nextAttemptAt", Timestamp.from(nextAttemptAt))
+                        .bind("lastError", lastError)
+                        .execute());
+    }
+
+    @Override
+    public void exhaustAutomaticInvestigationTrigger(
+            UUID triggerId, UUID leaseToken, Instant failedAt, String lastError) {
+        executeExactLeaseUpdate(
+                "exhaust automatic-investigation trigger",
+                handle -> handle.createUpdate(EXHAUST_AUTOMATIC_INVESTIGATION_TRIGGER)
+                        .bind("triggerId", triggerId)
+                        .bind("leaseToken", leaseToken)
+                        .bind("failedAt", Timestamp.from(failedAt))
+                        .bind("lastError", lastError)
+                        .execute());
+    }
+
+    private AutomaticInvestigationTrigger mapAutomaticInvestigationTrigger(ResultSet rows) throws SQLException {
+        return new AutomaticInvestigationTrigger(
+                rows.getObject("trigger_id", UUID.class),
+                rows.getObject("snapshot_id", UUID.class),
+                AutomaticInvestigationTriggerType.valueOf(rows.getString("trigger_type")),
+                AutomaticInvestigationTriggerState.valueOf(rows.getString("state")),
+                rows.getTimestamp("created_at").toInstant(),
+                rows.getTimestamp("next_attempt_at").toInstant(),
+                rows.getInt("attempt_count"),
+                rows.getTimestamp("completed_at") == null ? null : rows.getTimestamp("completed_at").toInstant(),
+                rows.getObject("assessment_id", UUID.class),
+                rows.getString("last_error"));
+    }
+
     private OperationalChangeRecord mapChange(ResultSet rows) throws SQLException {
         return new OperationalChangeRecord(
                 rows.getObject("change_id", UUID.class),
@@ -287,6 +430,14 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
         }
     }
 
+    private void executeExactLeaseUpdate(String action, HandleIntFunction operation) {
+        int updated = execute("Failed to " + action, operation::apply);
+        if (updated != 1) {
+            throw new OperationalIntelligencePersistenceException(
+                    "Cannot " + action + " because the exact live lease is no longer owned");
+        }
+    }
+
     private <T> T execute(String message, HandleFunction<T> operation) {
         try {
             return jdbi.withHandle(handle -> {
@@ -317,6 +468,11 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
         if (!handle.isInTransaction()) {
             throw new IllegalStateException("Operations persistence requires an application-owned transaction");
         }
+    }
+
+    @FunctionalInterface
+    private interface HandleIntFunction {
+        int apply(Handle handle);
     }
 
     @FunctionalInterface

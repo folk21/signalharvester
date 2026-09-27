@@ -55,11 +55,11 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_PROVIDER` | `off` | Explicit provider adapter. Stage 3 supports `off` or `openai-compatible`; manual package export/import remains available while off. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_ENDPOINT` | _(empty)_ | Full HTTP(S) chat-completions endpoint for `openai-compatible`. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_API_KEY` | _(empty)_ | Optional bearer credential for the configured provider. Treat as a deployment secret; never store it in repository configuration. |
-| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MODEL` | _(empty)_ | Provider model identifier passed only during explicit invocation. |
-| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_REQUEST_TIMEOUT` | `30s` | Timeout for one explicit model HTTP request. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MODEL` | _(empty)_ | Provider model identifier passed during explicit or enabled automatic invocation. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_REQUEST_TIMEOUT` | `30s` | Timeout for one explicit or automatic model HTTP request. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_REPORT_CHARS` | `50000` | Maximum Health Report characters included in one exported analysis package. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_RESPONSE_BYTES` | `32768` | Maximum provider response bytes accepted before structured parsing. |
-| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_ROUNDS` | `4` | Maximum model/tool interaction rounds in one explicit investigation. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_ROUNDS` | `4` | Maximum model/tool interaction rounds in one investigation. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TOOL_CALLS` | `8` | Maximum application-authorized read-only tool calls in one investigation; `0` disables tool exposure. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_INVESTIGATION_DURATION` | `45s` | Wall-clock bound covering model turns and tool queries. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TOOL_RESULT_CHARS` | `12000` | Maximum sanitized characters returned by one tool call. |
@@ -68,9 +68,18 @@ The current backend runtime supports PostgreSQL, collection HTTP, Kafka publicat
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_MAX_TRACE_RESULTS` | `20` | Maximum Tempo search results requested by one tool call. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_LOKI_BASE_URL` | _(empty)_ | Loki base URL; empty disables the Loki tool. Kubernetes sets `http://loki:3100`. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_TEMPO_BASE_URL` | _(empty)_ | Tempo base URL; empty disables Tempo search/trace tools. Kubernetes sets `http://tempo:3200`. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_MODE` | `off` | Automatic provider trigger policy: `off`, `event`, or `event-and-periodic`. Explicit/manual invocation remains available independently. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_INITIAL_DELAY` | `45s` | Delay before the first automatic trigger planning/dispatch pass. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_POLL_INTERVAL` | `30s` | Delay between automatic trigger planning/dispatch passes. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_COOLDOWN` | `15m` | Minimum spacing between comparable automatic investigations; escalation to `UNHEALTHY` may bypass this cooldown. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_PERIODIC_REASSESSMENT_INTERVAL` | `30m` | Low-frequency reassessment interval for a persistent `DEGRADED`/`UNHEALTHY` incident in `event-and-periodic` mode. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_LEASE_DURATION` | `2m` | PostgreSQL exact-token lease duration for one automatic provider investigation. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_LEASE_HEARTBEAT_INTERVAL` | `30s` | Lease heartbeat interval; must be shorter than the automatic lease duration. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_RETRY_BACKOFF` | `5m` | Delay before retrying a failed automatic provider invocation. |
+| `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_AUTOMATIC_MAX_ATTEMPTS` | `3` | Maximum claimed automatic attempts before the durable trigger becomes `EXHAUSTED`. |
 | `SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_ASSESSMENT_RETENTION_COUNT` | `500` | Maximum persisted structured Incident Assessments. |
 
-The assisted-investigation provider defaults to `off`; enabling `openai-compatible` requires an explicit endpoint/model and, when needed, a secret-managed API key. Stage 4a still never invokes a provider automatically. Prometheus tool access reuses `SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_BASE_URL`; Loki/Tempo tools are exposed only when their base URLs are configured. Setting max tool calls to `0` keeps provider invocation single-shot.
+The assisted-investigation provider defaults to `off`; enabling `openai-compatible` requires an explicit endpoint/model and, when needed, a secret-managed API key. Automatic invocation is independently disabled by default with `AUTOMATIC_MODE=off`, and automatic workers remain idle if the provider itself is `off`. `event` triggers only on qualifying worsening health transitions; `event-and-periodic` additionally permits bounded reassessment of a persistent degraded/unhealthy incident. PostgreSQL owns durable trigger deduplication, lease/retry state, and cooldown history. Leases prevent concurrent replicas from owning the same trigger, but the system does not claim external exactly-once provider invocation: a process crash after a provider response but before durable completion can cause a bounded retry to call the provider again. Prometheus tool access reuses `SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_BASE_URL`; Loki/Tempo tools are exposed only when their base URLs are configured. Setting max tool calls to `0` keeps each provider invocation single-shot.
 
 The initial health thresholds are versioned operational heuristics for anomaly triage, not SLOs or production capacity guarantees. Tune them only from measured evidence, and change `SIGNALHARVESTER_OPERATIONS_HEALTH_POLICY_VERSION` when the effective interpretation policy changes materially.
 | `SIGNALHARVESTER_METRICS_ENABLED` | `true` | Enables Micrometer application/runtime metrics. |

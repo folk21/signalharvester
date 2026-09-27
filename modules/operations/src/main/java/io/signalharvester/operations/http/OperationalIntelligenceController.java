@@ -22,6 +22,7 @@ import io.signalharvester.operations.api.OperationalChangeSource;
 import io.signalharvester.operations.api.OperationalChangeTargetType;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
 import io.signalharvester.operations.assisted.AssistedInvestigationOperations;
+import io.signalharvester.operations.assisted.AutomaticInvestigationCoordinator;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -43,14 +44,17 @@ public class OperationalIntelligenceController {
 
     private final OperationalIntelligenceOperations operations;
     private final AssistedInvestigationOperations assistedInvestigation;
+    private final AutomaticInvestigationCoordinator automaticInvestigation;
     private final OperationalChangeJournal changeJournal;
 
     public OperationalIntelligenceController(
             OperationalIntelligenceOperations operations,
             AssistedInvestigationOperations assistedInvestigation,
+            AutomaticInvestigationCoordinator automaticInvestigation,
             OperationalChangeJournal changeJournal) {
         this.operations = operations;
         this.assistedInvestigation = assistedInvestigation;
+        this.automaticInvestigation = automaticInvestigation;
         this.changeJournal = changeJournal;
     }
 
@@ -129,6 +133,15 @@ public class OperationalIntelligenceController {
             @QueryValue(defaultValue = "20") @Min(1) @Max(200) int limit) {
         return assistedInvestigation.recentAssessments(limit).stream()
                 .map(IncidentAssessmentResponse::from)
+                .toList();
+    }
+
+    /** Returns recent durable automatic-investigation trigger state for operator inspection. */
+    @Get("/health/automatic-investigations")
+    public List<AutomaticInvestigationTriggerResponse> automaticInvestigations(
+            @QueryValue(defaultValue = "20") @Min(1) @Max(200) int limit) {
+        return automaticInvestigation.recentTriggers(limit).stream()
+                .map(AutomaticInvestigationTriggerResponse::from)
                 .toList();
     }
 

@@ -4,6 +4,7 @@ import io.micronaut.context.annotation.Value;
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.operations.api.OperationalChangeRecord;
 import io.signalharvester.operations.assisted.AssistedInvestigationConfiguration;
+import io.signalharvester.operations.assisted.AutomaticInvestigationPlanner;
 import io.signalharvester.operations.assisted.HealthAnalysisPackageFactory;
 import io.signalharvester.operations.model.HealthAnalysisPackage;
 import io.signalharvester.operations.model.HealthAnomaly;
@@ -31,6 +32,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
     private final HealthReportRenderer reportRenderer;
     private final HealthAnalysisPackageFactory analysisPackageFactory;
     private final AssistedInvestigationConfiguration assistedConfiguration;
+    private final AutomaticInvestigationPlanner automaticInvestigationPlanner;
     private final OperationalHealthSignalCollector signalCollector;
     private final HealthEngine healthEngine;
     private final HealthPolicyConfiguration healthConfiguration;
@@ -44,6 +46,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             HealthReportRenderer reportRenderer,
             HealthAnalysisPackageFactory analysisPackageFactory,
             AssistedInvestigationConfiguration assistedConfiguration,
+            AutomaticInvestigationPlanner automaticInvestigationPlanner,
             OperationalHealthSignalCollector signalCollector,
             HealthEngine healthEngine,
             HealthPolicyConfiguration healthConfiguration,
@@ -55,6 +58,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
                 reportRenderer,
                 analysisPackageFactory,
                 assistedConfiguration,
+                automaticInvestigationPlanner,
                 signalCollector,
                 healthEngine,
                 healthConfiguration,
@@ -69,6 +73,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             HealthReportRenderer reportRenderer,
             HealthAnalysisPackageFactory analysisPackageFactory,
             AssistedInvestigationConfiguration assistedConfiguration,
+            AutomaticInvestigationPlanner automaticInvestigationPlanner,
             OperationalHealthSignalCollector signalCollector,
             HealthEngine healthEngine,
             HealthPolicyConfiguration healthConfiguration,
@@ -80,6 +85,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
         this.reportRenderer = Objects.requireNonNull(reportRenderer, "reportRenderer");
         this.analysisPackageFactory = Objects.requireNonNull(analysisPackageFactory, "analysisPackageFactory");
         this.assistedConfiguration = Objects.requireNonNull(assistedConfiguration, "assistedConfiguration");
+        this.automaticInvestigationPlanner = Objects.requireNonNull(automaticInvestigationPlanner, "automaticInvestigationPlanner");
         this.signalCollector = Objects.requireNonNull(signalCollector, "signalCollector");
         this.healthEngine = Objects.requireNonNull(healthEngine, "healthEngine");
         this.healthConfiguration = Objects.requireNonNull(healthConfiguration, "healthConfiguration");
@@ -207,6 +213,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
                 evaluation.evidenceComplete(),
                 evaluation.unknownReasons());
         repository.insertSnapshot(snapshot);
+        automaticInvestigationPlanner.planInCurrentTransaction(snapshot, generatedAt);
         repository.deleteSnapshotsBeyond(snapshotRetentionCount);
         return snapshot;
     }

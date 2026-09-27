@@ -213,7 +213,7 @@ class HttpPipelineSmokeIntegrationTest {
         String resultsBody = awaitResultsFeed(profileId, normalizedItemId);
         assertTrue(resultsBody.contains("\"normalizedItemId\":\"" + normalizedItemId + "\""));
 
-        String eventHistory = awaitEventHistory(normalizedItemId);
+        String eventHistory = awaitEventHistory(firstRunId, normalizedItemId);
         assertTrue(eventHistory.contains("\"eventType\":\"collection.raw-item-discovered.v1\""));
         assertTrue(eventHistory.contains("\"eventType\":\"analysis.item-analyzed.v1\""));
         assertTrue(eventHistory.contains("\"topic\":\"" + ANALYZED_TOPIC + "\""));
@@ -295,18 +295,25 @@ class HttpPipelineSmokeIntegrationTest {
                 body -> body.contains(expectedRawItem) && body.contains(expectedCount));
     }
 
-    private String awaitEventHistory(String normalizedItemId) throws Exception {
+    private String awaitEventHistory(String collectionRunId, String normalizedItemId) throws Exception {
         String expectedItem = "\"normalizedItemId\":\"" + normalizedItemId + "\"";
+        String expectedRaw = "\"eventType\":\"collection.raw-item-discovered.v1\"";
+        String expectedAnalyzed = "\"eventType\":\"analysis.item-analyzed.v1\"";
+        String expectedAnalyzedTopic = "\"topic\":\"" + ANALYZED_TOPIC + "\"";
         return Await.until(
-                "event observation for normalized item " + normalizedItemId,
+                "raw and analyzed event observation for run=" + collectionRunId + ", item=" + normalizedItemId,
                 Duration.ofSeconds(20),
                 Duration.ofMillis(100),
                 () -> {
-                    HttpResponse<String> response = send("GET", "/api/v1/events?limit=20", null);
+                    HttpResponse<String> response = send(
+                            "GET", "/api/v1/events?limit=20&collectionRunId=" + collectionRunId, null);
                     assertEquals(200, response.statusCode());
                     return response.body();
                 },
-                body -> body.contains(expectedItem));
+                body -> body.contains(expectedItem)
+                        && body.contains(expectedRaw)
+                        && body.contains(expectedAnalyzed)
+                        && body.contains(expectedAnalyzedTopic));
     }
 
     private String awaitProcessingFlow(String collectionRunId, String itemId) throws Exception {

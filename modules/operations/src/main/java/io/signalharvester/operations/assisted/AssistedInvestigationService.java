@@ -74,28 +74,25 @@ public final class AssistedInvestigationService implements AssistedInvestigation
     @Override
     public IncidentAssessment analyzeLatest() {
         HealthAnalysisPackage analysisPackage = operations.latestAnalysisPackage();
-        IncidentAnalyst analyst = configuredAnalyst();
-        var toolSession = toolbox.openSession(analysisPackage.snapshotId());
-        IncidentInvestigationResult investigation;
-        try {
-            investigation = analyst.investigate(analysisPackage, toolSession);
-        } catch (InvestigationBudgetExceededException exception) {
-            throw new IncidentAnalystException("LLM investigation exceeded an application-owned budget", exception);
+        IncidentAssessment assessment = investigateProvider(analysisPackage, IncidentAssessmentSource.PROVIDER);
+        return persist(assessment);
+    }
+
+    /** Runs one automatic provider investigation for a fixed snapshot without opening a database transaction. */
+    IncidentAssessment investigateAutomatic(UUID snapshotId) {
+        Objects.requireNonNull(snapshotId, "snapshotId");
+        return investigateProvider(operations.analysisPackage(snapshotId), IncidentAssessmentSource.AUTOMATIC_PROVIDER);
+    }
+
+    /** Persists a prevalidated assessment inside the caller-owned transaction. */
+    void persistInCurrentTransaction(IncidentAssessment assessment) {
+        Objects.requireNonNull(assessment, "assessment");
+        if (repository.findSnapshot(assessment.snapshotId()).isEmpty()) {
+            throw new InvalidIncidentAssessmentException(
+                    "Health Snapshot does not exist: " + assessment.snapshotId());
         }
-        try {
-            validateEvidenceReferences(
-                    investigation.assessment(),
-                    analysisPackage,
-                    toolSession.discoveredEvidenceReferences());
-        } catch (InvalidIncidentAssessmentException exception) {
-            throw new IncidentAnalystException("LLM provider returned an assessment with invalid evidence references", exception);
-        }
-        return persist(
-                analysisPackage.snapshotId(),
-                IncidentAssessmentSource.PROVIDER,
-                analyst.providerId(),
-                analyst.modelId(),
-                investigation.assessment());
+        repository.insertIncidentAssessment(assessment);
+        repository.deleteIncidentAssessmentsBeyond(configuration.getAssessmentRetentionCount());
     }
 
     @Override
@@ -125,7 +122,50 @@ public final class AssistedInvestigationService implements AssistedInvestigation
             String provider,
             String model,
             IncidentAssessmentDraft draft) {
-        IncidentAssessment assessment = new IncidentAssessment(
+        return persist(buildAssessment(snapshotId, source, provider, model, draft));
+    }
+
+    private IncidentAssessment persist(IncidentAssessment assessment) {
+        return transactions.executeWrite(status -> {
+            persistInCurrentTransaction(assessment);
+            return assessment;
+        });
+    }
+
+    private IncidentAssessment investigateProvider(
+            HealthAnalysisPackage analysisPackage, IncidentAssessmentSource source) {
+        IncidentAnalyst analyst = configuredAnalyst();
+        var toolSession = toolbox.openSession(analysisPackage.snapshotId());
+        IncidentInvestigationResult investigation;
+        try {
+            investigation = analyst.investigate(analysisPackage, toolSession);
+        } catch (InvestigationBudgetExceededException exception) {
+            throw new IncidentAnalystException("LLM investigation exceeded an application-owned budget", exception);
+        }
+        try {
+            validateEvidenceReferences(
+                    investigation.assessment(),
+                    analysisPackage,
+                    toolSession.discoveredEvidenceReferences());
+        } catch (InvalidIncidentAssessmentException exception) {
+            throw new IncidentAnalystException(
+                    "LLM provider returned an assessment with invalid evidence references", exception);
+        }
+        return buildAssessment(
+                analysisPackage.snapshotId(),
+                source,
+                analyst.providerId(),
+                analyst.modelId(),
+                investigation.assessment());
+    }
+
+    private IncidentAssessment buildAssessment(
+            UUID snapshotId,
+            IncidentAssessmentSource source,
+            String provider,
+            String model,
+            IncidentAssessmentDraft draft) {
+        return new IncidentAssessment(
                 UUID.randomUUID(),
                 snapshotId,
                 clock.instant(),
@@ -140,14 +180,6 @@ public final class AssistedInvestigationService implements AssistedInvestigation
                 draft.evidenceReferences(),
                 draft.recommendedChecks(),
                 draft.humanAttentionSuggested());
-        return transactions.executeWrite(status -> {
-            if (repository.findSnapshot(snapshotId).isEmpty()) {
-                throw new InvalidIncidentAssessmentException("Health Snapshot does not exist: " + snapshotId);
-            }
-            repository.insertIncidentAssessment(assessment);
-            repository.deleteIncidentAssessmentsBeyond(configuration.getAssessmentRetentionCount());
-            return assessment;
-        });
     }
 
     private static void validateEvidenceReferences(

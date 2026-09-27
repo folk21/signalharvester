@@ -1028,7 +1028,7 @@ paths:
       tags: [Operational Intelligence]
       operationId: analyzeLatestHealthSnapshot
       summary: Explicitly invoke the configured provider for the latest Health Snapshot
-      description: The provider may perform a bounded read-only investigation through application-owned allowlisted tools. It never runs automatically in this stage, and provider output cannot override deterministic health status or score.
+      description: The provider may perform a bounded read-only investigation through application-owned allowlisted tools. Explicit invocation remains available even when automatic trigger policy is configured; provider output cannot override deterministic health status or score.
       responses:
         '201':
           description: Validated provider assessment persisted
@@ -1040,6 +1040,26 @@ paths:
         '404': {description: No Health Snapshot has been captured yet}
         '502': {description: Provider transport/protocol/structured-output failure}
         '503': {description: Provider-assisted investigation is disabled or misconfigured}
+  /api/v1/admin/operations/health/automatic-investigations:
+    get:
+      tags: [Operational Intelligence]
+      operationId: listAutomaticInvestigations
+      summary: List recent durable automatic assisted-investigation triggers
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 200, default: 20}
+      responses:
+        '200':
+          description: Recent automatic trigger lifecycle state
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/AutomaticInvestigationTrigger'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required}
   /api/v1/admin/operations/changes/{changeId}/health-correlation:
     parameters:
     - name: changeId
@@ -2101,6 +2121,26 @@ components:
           maxItems: 32
           items: {type: string, minLength: 1, maxLength: 1000}
         humanAttentionSuggested: {type: boolean}
+    AutomaticInvestigationTrigger:
+      type: object
+      required: [id, snapshotId, type, state, createdAt, nextAttemptAt, attemptCount]
+      properties:
+        id: {type: string, format: uuid}
+        snapshotId: {type: string, format: uuid}
+        type: {type: string, enum: [EVENT, PERIODIC]}
+        state: {type: string, enum: [PENDING, CLAIMED, SUCCEEDED, EXHAUSTED]}
+        createdAt: {type: string, format: date-time}
+        nextAttemptAt: {type: string, format: date-time}
+        attemptCount: {type: integer, minimum: 0}
+        completedAt:
+          type: [string, 'null']
+          format: date-time
+        assessmentId:
+          type: [string, 'null']
+          format: uuid
+        lastError:
+          type: [string, 'null']
+          description: Bounded diagnostic failure text; provider credentials and response bodies are never persisted here.
     IncidentAssessment:
       type: object
       required: [id, snapshotId, createdAt, source, provider, model, summary, suspectedSubsystems, confidence, observations, hypotheses, evidenceReferences, recommendedChecks, humanAttentionSuggested]
@@ -2108,7 +2148,7 @@ components:
         id: {type: string, format: uuid}
         snapshotId: {type: string, format: uuid}
         createdAt: {type: string, format: date-time}
-        source: {type: string, enum: [MANUAL, PROVIDER]}
+        source: {type: string, enum: [MANUAL, PROVIDER, AUTOMATIC_PROVIDER]}
         provider: {type: string}
         model: {type: string}
         summary: {type: string}

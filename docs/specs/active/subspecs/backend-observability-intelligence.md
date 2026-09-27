@@ -10,7 +10,7 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Active. Stages 1, 2, and 3 are accepted after the developer confirmed the canonical repository gates. Stage 4a bounded read-only agentic investigation is implemented and verification-pending: explicit provider invocation may use application-owned Health/Prometheus/Loki/Tempo/change/capacity tools with strict call/round/duration/result/lookback bounds and telemetry redaction. Automatic event/periodic triggering remains disabled until a multi-replica-safe lease/dedup boundary is implemented.
+Active. Stages 1, 2, 3, and 4a are accepted after the developer confirmed the canonical repository gates. Stage 4b automatic trigger policy is implemented and verification-pending: optional event/periodic provider invocation is coordinated through durable PostgreSQL trigger state, exact expiring leases with heartbeat renewal, cooldown/deduplication, and bounded retries while model/tool I/O remains outside database transactions. Alert integration remains disabled until the next stage.
 
 The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until their canonical acceptance is recorded. This specification does not weaken or replace those acceptance gates.
 
@@ -26,7 +26,7 @@ Stages 1 and 2 are accepted. The implemented scope now includes:
 - capacity baseline markers plus a persisted Health Snapshot reference in the generated report;
 - count-bounded Health Snapshot retention configured by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT`.
 
-Stage 2 replaces the placeholder interpretation with policy `deterministic-statistical-v1`: configurable hard thresholds, rolling median/MAD deviation, structured anomaly evidence, cluster-wide allowlisted Prometheus signals with local outbox fallback, and explicit uncertainty when required telemetry or rolling history is unavailable. Periodic sampling is multi-replica coordinated and telemetry I/O stays outside database transactions. Stage 3 adds `health-analysis-v1`, persisted `IncidentAssessment`, manual assessment import, deterministic fake-provider verification, and an explicit OpenAI-compatible HTTP adapter. Stage 4a adds snapshot-scoped read-only tool sessions, bounded OpenAI-compatible tool turns, telemetry sanitization, and capacity-result markers. The next bounded stage is multi-replica-safe event/periodic triggering, followed by alert policy.
+Stage 2 replaces the placeholder interpretation with policy `deterministic-statistical-v1`: configurable hard thresholds, rolling median/MAD deviation, structured anomaly evidence, cluster-wide allowlisted Prometheus signals with local outbox fallback, and explicit uncertainty when required telemetry or rolling history is unavailable. Periodic sampling is multi-replica coordinated and telemetry I/O stays outside database transactions. Stage 3 adds `health-analysis-v1`, persisted `IncidentAssessment`, manual assessment import, deterministic fake-provider verification, and an explicit OpenAI-compatible HTTP adapter. Accepted Stage 4a adds snapshot-scoped read-only tool sessions, bounded OpenAI-compatible tool turns, telemetry sanitization, and capacity-result markers. Stage 4b adds durable event/periodic trigger planning, exact-token lease claims/heartbeats, cooldown/deduplication, bounded retry/exhaustion, and atomic assessment-plus-trigger completion. The next bounded stage is alert policy and model evaluation.
 
 ## Feature scope
 
@@ -60,7 +60,7 @@ LLM analysis is an optional secondary reasoning layer. It may use either an exte
 
 The accepted observability baseline already provides Micrometer/Prometheus metrics, OpenTelemetry traces in Tempo, trace-correlated logs in Loki, Kubernetes/Redpanda telemetry, Grafana dashboards, resilience evidence, and deterministic capacity reports. The latest capacity work also exposes Analysis outbox backlog and dispatcher latency signals.
 
-Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot, versioned health-scoring/anomaly policy, and cross-capability change journal. Stage 3 has closed the manual/provider-neutral assessment gap. Stage 4a now provides bounded read-only telemetry/history tools and explicit agentic investigation. Remaining gaps are multi-replica-safe event/periodic trigger policy and alert integration.
+Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot, versioned health-scoring/anomaly policy, and cross-capability change journal. Stage 3 has closed the manual/provider-neutral assessment gap. Accepted Stage 4a provides bounded read-only telemetry/history tools and explicit agentic investigation. Stage 4b now provides the multi-replica-safe automatic event/periodic trigger policy; alert integration remains the next gap.
 
 Security administration already emits audit-safe logs, but log lines are not a sufficient general change journal for correlating configuration/runtime changes with later health behavior. Event Observation is also not the authoritative store for this purpose because it is a bounded diagnostic materialization of pipeline events.
 
@@ -181,7 +181,7 @@ The runtime policy must support at least:
 - event-driven invocation for qualifying anomaly/health transitions;
 - optional low-frequency periodic reassessment of an active incident.
 
-External provider credentials must use deployment secrets. A local model adapter must be possible without changing the health engine. Invocation must have explicit timeouts, rate/cost bounds, cooldown/deduplication, and a maximum investigation duration.
+External provider credentials must use deployment secrets. A local model adapter must be possible without changing the health engine. Invocation must have explicit timeouts, rate/cost bounds, cooldown/deduplication, and a maximum investigation duration. Multi-replica trigger leases must prevent concurrent ownership of one automatic investigation, but the design must not claim external exactly-once model invocation across process crashes; a bounded retry may repeat a provider call if the process fails after the provider response but before durable completion.
 
 No new LLM/agent framework dependency is mandated by this specification. Dependency selection must follow repository approval rules and prefer the smallest OSS/provider-neutral solution that preserves testability.
 
@@ -287,6 +287,7 @@ Each implementation stage must add focused deterministic tests before broader li
 - manual report export with no external provider requirement;
 - structured LLM assessment using a deterministic fake provider;
 - read-only tool-budget enforcement and prompt-injection/redaction tests;
+- durable automatic-trigger deduplication, exact-token lease renewal, bounded retry/exhaustion, and atomic assessment/trigger completion;
 - optional live provider/local-model acceptance kept separate from the canonical offline repository gate;
 - canonical `./run_checks.sh` before acceptance of repository-owned behavior.
 
@@ -302,6 +303,6 @@ Each implementation stage must add focused deterministic tests before broader li
 - [x] add provider-neutral structured `IncidentAssessment` and deterministic fake provider;
 - [x] add optional local/external LLM adapter behind explicit secrets/policy;
 - [x] add bounded read-only Prometheus/Loki/Tempo/change-history/capacity investigation tools;
-- [ ] add multi-replica-safe event/periodic trigger policy with cooldown/deduplication;
+- [x] add multi-replica-safe event/periodic trigger policy with cooldown/deduplication;
 - [ ] add alert decision policy that does not delegate authority to free-form LLM text;
 - [ ] run focused and canonical validation, then move accepted behavior into owning current-state documentation.

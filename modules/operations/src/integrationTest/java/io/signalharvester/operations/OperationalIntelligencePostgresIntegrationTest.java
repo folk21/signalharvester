@@ -1,5 +1,6 @@
 package io.signalharvester.operations;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -17,20 +18,30 @@ import io.signalharvester.operations.api.OperationalChangeRequest;
 import io.signalharvester.operations.api.OperationalChangeTargetType;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
 import io.signalharvester.operations.assisted.AssistedInvestigationOperations;
+import io.signalharvester.operations.assisted.ClaimedAutomaticInvestigation;
+import io.signalharvester.operations.assisted.AutomaticInvestigationCoordinator;
+import io.signalharvester.operations.assisted.AutomaticInvestigationTriggerState;
+import io.signalharvester.operations.assisted.AutomaticInvestigationTriggerType;
 import io.signalharvester.operations.assisted.tools.InvestigationBudgetExceededException;
 import io.signalharvester.operations.assisted.tools.InvestigationToolName;
 import io.signalharvester.operations.assisted.tools.InvestigationToolRequest;
 import io.signalharvester.operations.assisted.tools.InvestigationToolbox;
+import io.signalharvester.operations.model.HealthSnapshot;
 import io.signalharvester.operations.model.HealthStatus;
 import io.signalharvester.operations.model.IncidentAssessmentDraft;
 import io.signalharvester.operations.model.IncidentAssessmentSource;
+import io.signalharvester.operations.persistence.OperationalIntelligenceRepository;
 import io.signalharvester.testing.PostgresContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,6 +80,10 @@ class OperationalIntelligencePostgresIntegrationTest {
                 Map.entry("signalharvester.operations.health.sampling-enabled", false),
                 Map.entry("signalharvester.operations.assisted-investigation.provider", "fake"),
                 Map.entry("signalharvester.operations.assisted-investigation.max-tool-calls", 1),
+                Map.entry("signalharvester.operations.assisted-investigation.automatic-mode", "event"),
+                Map.entry("signalharvester.operations.assisted-investigation.automatic-initial-delay", "1h"),
+                Map.entry("signalharvester.operations.assisted-investigation.automatic-retry-backoff", "10ms"),
+                Map.entry("signalharvester.operations.assisted-investigation.automatic-max-attempts", 2),
                 Map.entry("signalharvester.operations.assisted-investigation.assessment-retention-count", 2)));
     }
 
@@ -230,6 +245,79 @@ class OperationalIntelligencePostgresIntegrationTest {
         assertEquals(0, assisted.recentAssessments(10).size());
     }
 
+    /** Deduplicate one worsening-health trigger, lease it, and atomically persist its automatic assessment. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldCoordinateAutomaticInvestigationDurablyAcrossReplicas() throws Exception {
+        AutomaticInvestigationCoordinator coordinator = context.getBean(AutomaticInvestigationCoordinator.class);
+        OperationalIntelligenceRepository repository = context.getBean(OperationalIntelligenceRepository.class);
+        TransactionOperations<Connection> transactions = (TransactionOperations<Connection>) context.getBean(
+                TransactionOperations.class, Qualifiers.byName("default"));
+        Instant degradedAt = Instant.now();
+        HealthSnapshot healthy = healthSnapshot(HealthStatus.HEALTHY, degradedAt.minusSeconds(60));
+        HealthSnapshot degraded = healthSnapshot(HealthStatus.DEGRADED, degradedAt);
+        transactions.executeWrite(status -> {
+            repository.insertSnapshot(healthy);
+            repository.insertSnapshot(degraded);
+            return null;
+        });
+
+        var trigger = coordinator.planLatestTrigger().orElseThrow();
+        assertEquals(AutomaticInvestigationTriggerType.EVENT, trigger.type());
+        assertTrue(coordinator.planLatestTrigger().isEmpty());
+
+        var claim = coordinator.claimNext().orElseThrow();
+        assertEquals(trigger.id(), claim.triggerId());
+        assertEquals(1, claim.attemptCount());
+        assertTrue(coordinator.renew(claim));
+
+        var assessment = coordinator.investigate(claim);
+        assertEquals(IncidentAssessmentSource.AUTOMATIC_PROVIDER, assessment.source());
+        coordinator.complete(claim, assessment);
+
+        var persistedTrigger = coordinator.recentTriggers(10).getFirst();
+        assertEquals(AutomaticInvestigationTriggerState.SUCCEEDED, persistedTrigger.state());
+        assertEquals(assessment.id(), persistedTrigger.assessmentId());
+        assertEquals(1L, scalarLong("SELECT count(*) FROM operations.incident_assessments"));
+        assertEquals(1L, scalarLong("SELECT count(*) FROM operations.automatic_investigation_triggers"));
+        assertTrue(coordinator.claimNext().isEmpty());
+    }
+
+    /** Retry a failed automatic investigation under the same trigger and exhaust it at the configured attempt bound. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldRetryAndExhaustAutomaticInvestigationWithoutDuplicateTrigger() throws Exception {
+        AutomaticInvestigationCoordinator coordinator = context.getBean(AutomaticInvestigationCoordinator.class);
+        OperationalIntelligenceRepository repository = context.getBean(OperationalIntelligenceRepository.class);
+        TransactionOperations<Connection> transactions = (TransactionOperations<Connection>) context.getBean(
+                TransactionOperations.class, Qualifiers.byName("default"));
+        Instant degradedAt = Instant.now();
+        transactions.executeWrite(status -> {
+            repository.insertSnapshot(healthSnapshot(HealthStatus.HEALTHY, degradedAt.minusSeconds(60)));
+            repository.insertSnapshot(healthSnapshot(HealthStatus.DEGRADED, degradedAt));
+            return null;
+        });
+
+        var trigger = coordinator.planLatestTrigger().orElseThrow();
+        var firstClaim = coordinator.claimNext().orElseThrow();
+        coordinator.fail(firstClaim, new IllegalStateException("provider unavailable"));
+
+        var pending = coordinator.recentTriggers(10).getFirst();
+        assertEquals(trigger.id(), pending.id());
+        assertEquals(AutomaticInvestigationTriggerState.PENDING, pending.state());
+        assertEquals(1, pending.attemptCount());
+        var secondClaim = awaitClaim(coordinator);
+        assertEquals(2, secondClaim.attemptCount());
+        coordinator.fail(secondClaim, new IllegalStateException("provider still unavailable"));
+
+        var exhausted = coordinator.recentTriggers(10).getFirst();
+        assertEquals(AutomaticInvestigationTriggerState.EXHAUSTED, exhausted.state());
+        assertEquals(2, exhausted.attemptCount());
+        assertNotNull(exhausted.completedAt());
+        assertTrue(coordinator.claimNext().isEmpty());
+        assertEquals(1L, scalarLong("SELECT count(*) FROM operations.automatic_investigation_triggers"));
+    }
+
     /** Keep snapshot history bounded by the configured count while preserving the newest evidence. */
     @Test
     void shouldEnforceSnapshotRetentionCount() throws Exception {
@@ -241,6 +329,35 @@ class OperationalIntelligencePostgresIntegrationTest {
 
         assertEquals(2L, scalarLong("SELECT count(*) FROM operations.health_snapshots"));
         assertEquals(latest.id(), operations.latestSnapshot().id());
+    }
+
+    private static HealthSnapshot healthSnapshot(HealthStatus status, Instant generatedAt) {
+        return new HealthSnapshot(
+                UUID.randomUUID(),
+                generatedAt,
+                generatedAt.minusSeconds(300),
+                generatedAt,
+                status,
+                status == HealthStatus.HEALTHY ? 100 : 70,
+                "deterministic-statistical-v1",
+                Map.of("operations", status.name()),
+                Map.of("analysis.outbox.pending", status == HealthStatus.HEALTHY ? 0.0 : 300.0),
+                List.of(),
+                List.of(),
+                List.of(),
+                "test-build",
+                true,
+                List.of());
+    }
+
+    private static ClaimedAutomaticInvestigation awaitClaim(AutomaticInvestigationCoordinator coordinator) {
+        AtomicReference<ClaimedAutomaticInvestigation> claimed = new AtomicReference<>();
+        await().atMost(Duration.ofSeconds(2)).until(() -> {
+            var candidate = coordinator.claimNext();
+            candidate.ifPresent(claimed::set);
+            return candidate.isPresent();
+        });
+        return claimed.get();
     }
 
     private static long scalarLong(String sql) throws Exception {
