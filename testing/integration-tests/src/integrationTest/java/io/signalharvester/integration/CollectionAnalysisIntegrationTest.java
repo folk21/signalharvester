@@ -20,6 +20,7 @@ import io.signalharvester.configuration.application.SourceConfigurationOperation
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
 import io.signalharvester.events.analysis.v1.ItemRejected;
 import io.signalharvester.testing.KafkaContainerSupport;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -73,10 +74,7 @@ class CollectionAnalysisIntegrationTest {
     private static final String NORMALIZED_CONTENT = "Java backend Kafka";
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     @Container
     private static final KafkaContainer KAFKA = KafkaContainerSupport.create();
@@ -296,6 +294,7 @@ class CollectionAnalysisIntegrationTest {
             statement.execute("DROP SCHEMA IF EXISTS results CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS event_observation CASCADE");
             statement.execute("DROP SCHEMA IF EXISTS security CASCADE");
+            statement.execute("DROP SCHEMA IF EXISTS operations CASCADE");
             statement.execute("DROP TABLE IF EXISTS public.flyway_schema_history");
         }
     }

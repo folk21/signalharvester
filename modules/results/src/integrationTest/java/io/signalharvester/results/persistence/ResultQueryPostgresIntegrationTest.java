@@ -17,6 +17,7 @@ import io.signalharvester.results.application.ResultQuery;
 import io.signalharvester.results.application.ResultQueryCriteria;
 import io.signalharvester.results.application.ResultSummary;
 import io.signalharvester.results.model.AnalyzedResult;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
@@ -50,10 +51,7 @@ class ResultQueryPostgresIntegrationTest {
     private static final String ITEM_C = "c".repeat(64);
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
 

@@ -1,5 +1,6 @@
 package io.signalharvester.configuration.http;
 
+import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
@@ -13,6 +14,7 @@ import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.validation.Validated;
 import io.signalharvester.configuration.api.SourceId;
 import io.signalharvester.configuration.application.SourceConfigurationOperations;
+import io.signalharvester.operations.api.OperationalChangeContext;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
@@ -40,8 +42,11 @@ public class SourceController {
 
     /** Creates and persists a configured source. */
     @Post
-    public HttpResponse<SourceResponse> createSource(@Body @Valid @NotNull SourceUpsertRequest request) {
-        SourceResponse response = SourceResponse.from(operations.create(request.toCommand()));
+    public HttpResponse<SourceResponse> createSource(
+            @Body @Valid @NotNull SourceUpsertRequest request,
+            HttpRequest<?> httpRequest) {
+        SourceResponse response = SourceResponse.from(
+                operations.create(request.toCommand(), changeContext(httpRequest)));
         return HttpResponse.created(response);
     }
 
@@ -55,14 +60,21 @@ public class SourceController {
     @Put("/{sourceId}")
     public SourceResponse updateSource(
             @PathVariable UUID sourceId,
-            @Body @Valid @NotNull SourceUpsertRequest request) {
-        return SourceResponse.from(operations.update(SourceId.of(sourceId), request.toCommand()));
+            @Body @Valid @NotNull SourceUpsertRequest request,
+            HttpRequest<?> httpRequest) {
+        return SourceResponse.from(operations.update(
+                SourceId.of(sourceId), request.toCommand(), changeContext(httpRequest)));
     }
 
     /** Deletes an existing configured source. */
     @Delete("/{sourceId}")
-    public HttpResponse<?> deleteSource(@PathVariable UUID sourceId) {
-        operations.delete(SourceId.of(sourceId));
+    public HttpResponse<?> deleteSource(@PathVariable UUID sourceId, HttpRequest<?> httpRequest) {
+        operations.delete(SourceId.of(sourceId), changeContext(httpRequest));
         return HttpResponse.noContent();
+    }
+
+    private static OperationalChangeContext changeContext(HttpRequest<?> request) {
+        String actor = request.getUserPrincipal().map(java.security.Principal::getName).orElse("trusted-local");
+        return OperationalChangeContext.rest(actor, request.getHeaders().get("X-Request-ID"));
     }
 }

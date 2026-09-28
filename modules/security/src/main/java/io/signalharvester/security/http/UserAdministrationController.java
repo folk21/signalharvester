@@ -1,6 +1,7 @@
 package io.signalharvester.security.http;
 
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
@@ -12,6 +13,7 @@ import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.security.authentication.Authentication;
 import io.micronaut.validation.Validated;
+import io.signalharvester.operations.api.OperationalChangeContext;
 import io.signalharvester.security.application.UserAccountOperations;
 import io.signalharvester.security.model.UserId;
 import jakarta.validation.Valid;
@@ -45,8 +47,10 @@ public class UserAdministrationController {
     @Post
     public HttpResponse<UserAccountResponse> create(
             @Body @Valid @NotNull UserCreateRequest request,
-            Authentication authentication) {
-        UserAccountResponse response = UserAccountResponse.from(operations.create(request.toCommand()));
+            Authentication authentication,
+            HttpRequest<?> httpRequest) {
+        UserAccountResponse response = UserAccountResponse.from(
+                operations.create(request.toCommand(), changeContext(authentication, httpRequest)));
         LOGGER.info("User created actorPrincipalId={} targetUserId={}", authentication.getName(), response.id());
         return HttpResponse.created(response);
     }
@@ -62,10 +66,15 @@ public class UserAdministrationController {
     public UserAccountResponse update(
             @PathVariable UUID userId,
             @Body @Valid @NotNull UserUpdateRequest request,
-            Authentication authentication) {
+            Authentication authentication,
+            HttpRequest<?> httpRequest) {
         UserAccountResponse response = UserAccountResponse.from(
-                operations.update(UserId.of(userId), request.toCommand()));
+                operations.update(UserId.of(userId), request.toCommand(), changeContext(authentication, httpRequest)));
         LOGGER.info("User updated actorPrincipalId={} targetUserId={}", authentication.getName(), userId);
         return response;
+    }
+
+    private static OperationalChangeContext changeContext(Authentication authentication, HttpRequest<?> request) {
+        return OperationalChangeContext.rest(authentication.getName(), request.getHeaders().get("X-Request-ID"));
     }
 }

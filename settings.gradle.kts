@@ -11,6 +11,7 @@ include(
     ":modules:results",
     ":modules:event-observation",
     ":modules:security",
+    ":modules:operations",
     ":testing:test-support",
     ":testing:integration-tests",
 )

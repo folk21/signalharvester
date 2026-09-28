@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.awaitility.Awaitility.await;
 
 import io.micronaut.core.propagation.PropagatedContext;
 import io.micronaut.core.propagation.PropagatedContextElement;
@@ -60,12 +61,12 @@ class SourceFetchCoordinatorTest {
             CompletableFuture<List<SourceFetchOutcome>> result = CompletableFuture.supplyAsync(
                     () -> collect(coordinator, sources));
 
-            assertTrue(client.awaitStarted(2));
+            client.awaitStarted(2);
             assertEquals(2, client.startedCount());
             assertEquals(2, client.maxActive());
 
             client.release("two");
-            assertTrue(client.awaitStarted(3));
+            client.awaitStarted(3);
             assertEquals(2, client.maxActive());
 
             client.release("three");
@@ -99,22 +100,28 @@ class SourceFetchCoordinatorTest {
                     (sourceIndex, outcome) -> {
                         if (sourceIndex == 1) {
                             handlerStarted.countDown();
-                            await(releaseHandler);
+                            awaitLatch(releaseHandler);
                         }
                     }));
 
-            assertTrue(client.awaitStarted(2));
-            client.release("two");
-            assertTrue(handlerStarted.await(2, TimeUnit.SECONDS));
+            try {
+                client.awaitStarted(2);
+                client.release("two");
+                assertTrue(handlerStarted.await(2, TimeUnit.SECONDS));
 
-            Thread.sleep(50);
-            assertEquals(2, client.startedCount(), "replacement fetch must wait for terminal handling");
+                assertEquals(2, client.startedCount(), "replacement fetch must wait for terminal handling");
 
-            releaseHandler.countDown();
-            assertTrue(client.awaitStarted(3));
-            client.release("one");
-            client.release("three");
-            result.get(2, TimeUnit.SECONDS);
+                releaseHandler.countDown();
+                client.awaitStarted(3);
+                client.release("one");
+                client.release("three");
+                result.get(2, TimeUnit.SECONDS);
+            } finally {
+                releaseHandler.countDown();
+                client.release("one");
+                client.release("two");
+                client.release("three");
+            }
         }
     }
 
@@ -153,6 +160,7 @@ class SourceFetchCoordinatorTest {
     @Test
     void shouldNotCancelInFlightPeerWhenAnotherSourceFails() throws Exception {
         CountDownLatch blockingStarted = new CountDownLatch(1);
+        CountDownLatch queuedStarted = new CountDownLatch(1);
         CountDownLatch releaseBlocking = new CountDownLatch(1);
         Set<String> started = ConcurrentHashMap.newKeySet();
 
@@ -177,6 +185,9 @@ class SourceFetchCoordinatorTest {
                 }
                 throw new SourceFetchException(source.id(), source.location(), "synthetic failure");
             }
+            if ("queued".equals(source.name())) {
+                queuedStarted.countDown();
+            }
             return content(source);
         };
 
@@ -186,18 +197,19 @@ class SourceFetchCoordinatorTest {
             CompletableFuture<List<SourceFetchOutcome>> result = CompletableFuture.supplyAsync(
                     () -> collect(coordinator, List.of(source("blocking"), source("failing"), source("queued"))));
 
-            assertTrue(blockingStarted.await(2, TimeUnit.SECONDS));
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
-            while (!started.contains("queued") && System.nanoTime() < deadline) {
-                Thread.sleep(5);
-            }
-            assertTrue(started.contains("queued"));
-            releaseBlocking.countDown();
+            try {
+                assertTrue(blockingStarted.await(2, TimeUnit.SECONDS));
+                assertTrue(queuedStarted.await(2, TimeUnit.SECONDS));
+                assertTrue(started.contains("queued"));
+                releaseBlocking.countDown();
 
-            List<SourceFetchOutcome> outcomes = result.get(2, TimeUnit.SECONDS);
-            assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.get(0));
-            assertInstanceOf(SourceFetchOutcome.Failure.class, outcomes.get(1));
-            assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.get(2));
+                List<SourceFetchOutcome> outcomes = result.get(2, TimeUnit.SECONDS);
+                assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.get(0));
+                assertInstanceOf(SourceFetchOutcome.Failure.class, outcomes.get(1));
+                assertInstanceOf(SourceFetchOutcome.Success.class, outcomes.get(2));
+            } finally {
+                releaseBlocking.countDown();
+            }
         }
     }
 
@@ -222,7 +234,7 @@ class SourceFetchCoordinatorTest {
                 }
             }
 
-            await(blockingStarted);
+            awaitLatch(blockingStarted);
             Thread.currentThread().interrupt();
             throw new IllegalStateException("synthetic worker interruption");
         };
@@ -295,7 +307,7 @@ class SourceFetchCoordinatorTest {
                     throw new IllegalStateException("synthetic peer cancellation", interrupted);
                 }
             } else if ("handled".equals(source.name())) {
-                await(blockingStarted);
+                awaitLatch(blockingStarted);
             }
             return content(source);
         };
@@ -405,7 +417,7 @@ class SourceFetchCoordinatorTest {
         return List.copyOf(ordered);
     }
 
-    private static void await(CountDownLatch latch) {
+    private static void awaitLatch(CountDownLatch latch) {
         try {
             latch.await();
         } catch (InterruptedException interrupted) {
@@ -514,12 +526,8 @@ class SourceFetchCoordinatorTest {
             }
         }
 
-        boolean awaitStarted(int expectedCount) throws InterruptedException {
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
-            while (started.get() < expectedCount && System.nanoTime() < deadline) {
-                Thread.sleep(5);
-            }
-            return started.get() >= expectedCount;
+        void awaitStarted(int expectedCount) {
+            await().atMost(2, TimeUnit.SECONDS).until(() -> started.get() >= expectedCount);
         }
 
         void release(String sourceName) {

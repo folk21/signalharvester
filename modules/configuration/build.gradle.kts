@@ -17,6 +17,7 @@ micronaut {
 
 dependencies {
     implementation(project(":common"))
+    implementation(project(":modules:operations"))
     annotationProcessor("io.micronaut:micronaut-inject-java")
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
     annotationProcessor("io.micronaut.validation:micronaut-validation-processor")
@@ -34,6 +35,7 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
 
+    testImplementation(project(":testing:test-support"))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.postgresql)

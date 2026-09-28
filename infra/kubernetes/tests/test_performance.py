@@ -108,6 +108,19 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn("sources > 20", source)
         self.assertIn('"build" / "reports" / "performance" / "capacity-baseline.json"', source)
 
+    def test_runner_records_operational_markers_and_health_snapshot(self):
+        source = (PERFORMANCE / "run_baseline.py").read_text()
+        self.assertIn('/api/v1/admin/operations/changes/markers', source)
+        self.assertIn('"DEPLOYMENT_TUNING"', source)
+        self.assertIn('"TEST_SCENARIO"', source)
+        self.assertIn('/api/v1/admin/operations/health/snapshots', source)
+        self.assertIn('report["healthSnapshot"]', source)
+        self.assertIn('"healthScore": health_snapshot.get("healthScore")', source)
+        self.assertIn('"anomalyCandidates": health_snapshot.get("anomalyCandidates", [])', source)
+        self.assertIn('"pipeline-capacity-baseline-result"', source)
+        self.assertIn('"maxPendingOutboxRows": str(summary.get("maxPendingOutboxRows"))', source)
+        self.assertIn('"healthSnapshotId": str(health_snapshot.get("id"))', source)
+
     def test_comparison_replica_parser_requires_ordered_unique_positive_counts(self):
         self.assertEqual([1, 3], comparison.parse_replica_counts("1,3"))
         with self.assertRaises(Exception):
@@ -180,9 +193,18 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn("ramp, spike, or soak scenarios", text)
         self.assertIn("ML-based anomaly detection", text)
 
-    def test_capacity_telemetry_is_current_focus_with_measurement_carryover(self):
+    def test_observability_intelligence_is_current_focus_with_capacity_carryover(self):
         umbrella = (ROOT / "docs" / "specs" / "active" / "spec-signal-harvester-platform.md").read_text()
         index = (ROOT / "docs" / "specs" / "README.md").read_text()
+        features = (ROOT / "docs" / "FEATURES.md").read_text()
+        intelligence_spec = (
+            ROOT
+            / "docs"
+            / "specs"
+            / "active"
+            / "subspecs"
+            / "backend-observability-intelligence.md"
+        ).read_text()
         telemetry_spec = (
             ROOT
             / "docs"
@@ -191,9 +213,14 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
             / "subspecs"
             / "backend-capacity-telemetry-expansion.md"
         ).read_text()
-        self.assertIn("current_focus: subspecs/backend-capacity-telemetry-expansion.md", umbrella)
+        self.assertIn("current_focus: subspecs/backend-observability-intelligence.md", umbrella)
+        self.assertIn("spec_status: active", intelligence_spec)
+        self.assertIn("OBSERVABILITY.HEALTH_INTELLIGENCE", features)
+        self.assertIn("OPERATIONS.CHANGE_JOURNAL", features)
+        self.assertIn("OBSERVABILITY.ASSISTED_INVESTIGATION", features)
         self.assertIn("spec_status: verification-pending", telemetry_spec)
         self.assertIn("Verification-pending carryover", index)
+        self.assertIn("backend-capacity-telemetry-expansion.md", index)
         self.assertIn("backend-capacity-observability-baseline.md", index)
         self.assertIn("backend-analysis-all-relevant-default.md", index)
 

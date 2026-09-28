@@ -2,8 +2,14 @@ import com.github.spotbugs.snom.Confidence
 import com.github.spotbugs.snom.Effort
 import com.github.spotbugs.snom.SpotBugsExtension
 import com.github.spotbugs.snom.SpotBugsTask
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.plugins.JavaPlugin
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 import org.gradle.testing.jacoco.plugins.JacocoPluginExtension
 import org.gradle.testing.jacoco.tasks.JacocoReport
@@ -26,6 +32,50 @@ allprojects {
 
 jacoco {
     toolVersion = libs.versions.jacoco.get()
+}
+
+abstract class VerifyNoThreadSleepInTests : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val javaTestSources: ConfigurableFileCollection
+
+    @TaskAction
+    fun verify() {
+        val directSleep = Regex("""\bThread\s*\.\s*sleep\s*\(""")
+        val violations = javaTestSources.files
+            .sortedBy { it.invariantSeparatorsPath }
+            .flatMap { source ->
+                source.readLines().mapIndexedNotNull { index, line ->
+                    if (directSleep.containsMatchIn(line)) {
+                        "${source.invariantSeparatorsPath}:${index + 1}: ${line.trim()}"
+                    } else {
+                        null
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                "Direct Thread.sleep(...) is forbidden in Java test sources. " +
+                    "Use Awaitility for eventual state or deterministic coordination primitives instead:\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+}
+
+val verifyNoThreadSleepInTests = tasks.register<VerifyNoThreadSleepInTests>("verifyNoThreadSleepInTests") {
+    description = "Fails when Java test sources use direct Thread.sleep synchronization."
+    group = "verification"
+    javaTestSources.from(fileTree(rootDir) {
+        include("**/src/test/java/**/*.java")
+        include("**/src/integrationTest/java/**/*.java")
+        exclude("**/build/**")
+    })
+}
+
+tasks.named("check") {
+    dependsOn(verifyNoThreadSleepInTests)
 }
 
 val jacocoAggregateReport = tasks.register<JacocoReport>("jacocoAggregateReport") {

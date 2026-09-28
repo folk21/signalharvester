@@ -11,6 +11,7 @@ spotbugs-gradle-plugin = "6.5.11"
 jsoup = "1.23.2"
 dependency-analysis-gradle-plugin = "3.19.1"
 jdbi = "3.49.6"
+awaitility = "4.3.0"
 
 [libraries]
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
@@ -22,6 +23,7 @@ protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "p
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 jdbi-stringtemplate4 = { module = "org.jdbi:jdbi3-stringtemplate4", version.ref = "jdbi" }
+awaitility = { module = "org.awaitility:awaitility", version.ref = "awaitility" }
 protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 
 [plugins]

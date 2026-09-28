@@ -11,6 +11,11 @@ import io.micronaut.runtime.server.EmbeddedServer;
 import io.signalharvester.analysis.application.DeadLetterRecovery;
 import io.signalharvester.analysis.application.DeadLetterRecoveryException;
 import io.signalharvester.analysis.event.kafka.KafkaAnalysisDeadLetterRecoveryService;
+import io.signalharvester.operations.api.OperationalChangeCategory;
+import io.signalharvester.operations.api.OperationalChangeJournal;
+import io.signalharvester.operations.api.OperationalChangeRecord;
+import io.signalharvester.operations.api.OperationalChangeRequest;
+import io.signalharvester.operations.application.OperationalChangeJournalService;
 import jakarta.inject.Singleton;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -64,6 +69,10 @@ class AnalysisDeadLetterRecoveryControllerTest {
                 "{\"expectedDeadLetterId\":\"" + DEAD_LETTER_ID + "\"}");
         assertEquals(200, replay.statusCode());
 
+        TestOperationalChangeJournal journal = server.getApplicationContext().getBean(TestOperationalChangeJournal.class);
+        assertEquals(OperationalChangeCategory.DEAD_LETTER_RECOVERY, journal.lastRequest().get().category());
+        assertEquals("analysis:0:7", journal.lastRequest().get().targetId());
+
         TestDeadLetterRecovery recovery = server.getApplicationContext().getBean(TestDeadLetterRecovery.class);
         assertEquals(DEAD_LETTER_ID, recovery.expectedId().get());
         assertTrue(recovery.lastThread().get().isVirtual());
@@ -114,6 +123,41 @@ class AnalysisDeadLetterRecoveryControllerTest {
                 3,
                 true,
                 128);
+    }
+
+    @Singleton
+    @Replaces(OperationalChangeJournalService.class)
+    @Requires(property = "spec.name", value = SPEC_NAME)
+    static final class TestOperationalChangeJournal implements OperationalChangeJournal {
+        private final AtomicReference<OperationalChangeRequest> lastRequest = new AtomicReference<>();
+
+        @Override
+        public OperationalChangeRecord record(OperationalChangeRequest request) {
+            lastRequest.set(request);
+            return new OperationalChangeRecord(
+                    java.util.UUID.randomUUID(),
+                    java.time.Instant.now(),
+                    request.category(),
+                    request.targetType(),
+                    request.targetId(),
+                    request.beforeState(),
+                    request.afterState(),
+                    request.outcome(),
+                    request.context().source(),
+                    request.context().actorId(),
+                    request.context().correlationId(),
+                    "",
+                    "test");
+        }
+
+        @Override
+        public OperationalChangeRecord recordInCurrentTransaction(OperationalChangeRequest request) {
+            return record(request);
+        }
+
+        AtomicReference<OperationalChangeRequest> lastRequest() {
+            return lastRequest;
+        }
     }
 
     @Singleton

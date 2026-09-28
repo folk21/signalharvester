@@ -63,7 +63,7 @@ Other modules must not query Analysis tables directly.
 
 ## Dependencies
 
-No synchronous dependency on another functional module is currently required.
+Analysis depends synchronously only on the published `io.signalharvester.operations.api..` change-journal boundary at the controlled DLQ recovery HTTP adapter so successful operator replay actions can be recorded. The processing path remains event-driven and must not depend on Operations implementation or persistence types.
 
 Collection-to-Analysis processing is asynchronous through Kafka contracts.
 

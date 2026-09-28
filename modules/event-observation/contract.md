@@ -52,7 +52,7 @@ PostgreSQL schema `event_observation` is owned by migrations under `modules/even
 
 ## Dependencies
 
-No synchronous dependency on another functional module is required.
+Event Observation depends synchronously only on the published `io.signalharvester.operations.api..` change-journal boundary at the controlled DLQ recovery HTTP adapter so successful operator replay actions can be recorded. Observation processing remains event-driven and must not depend on Operations implementation or persistence types.
 
 The module depends on the event-contract artifact, the stable `common` demand-driven polling lifecycle utility, Kafka, PostgreSQL/Flyway, Micronaut-managed Jdbi, and Micronaut HTTP/SSE/runtime infrastructure. Event Observation cursor/query/event-mapping semantics remain module-local.
 

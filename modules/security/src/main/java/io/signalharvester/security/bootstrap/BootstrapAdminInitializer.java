@@ -4,6 +4,8 @@ import io.micronaut.context.annotation.Requires;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.event.StartupEvent;
 import io.micronaut.runtime.event.annotation.EventListener;
+import io.signalharvester.operations.api.OperationalChangeContext;
+import io.signalharvester.operations.api.OperationalChangeSource;
 import io.signalharvester.security.application.CreateUserCommand;
 import io.signalharvester.security.application.UserAccountOperations;
 import io.signalharvester.security.application.UsernameAlreadyExistsException;
@@ -47,12 +49,15 @@ public final class BootstrapAdminInitializer {
             throw new IllegalStateException("Both security bootstrap username and password must be configured together");
         }
         try {
-            operations.create(new CreateUserCommand(
-                    username,
-                    password,
-                    IdentityType.HUMAN,
-                    true,
-                    Set.of(UserRole.USER, UserRole.VIEWER, UserRole.ADMIN)));
+            operations.create(
+                    new CreateUserCommand(
+                            username,
+                            password,
+                            IdentityType.HUMAN,
+                            true,
+                            Set.of(UserRole.USER, UserRole.VIEWER, UserRole.ADMIN)),
+                    new OperationalChangeContext(
+                            true, OperationalChangeSource.SYSTEM, "bootstrap-admin-initializer", "startup"));
             LOGGER.info("Bootstrapped initial administrator login={}", username);
         } catch (UsernameAlreadyExistsException exception) {
             if (!operations.anyEnabledAdminExists()) {

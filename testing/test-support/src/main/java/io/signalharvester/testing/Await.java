@@ -1,11 +1,14 @@
 package io.signalharvester.testing;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Objects;
-import java.util.function.Predicate;
+import static org.awaitility.Awaitility.await;
 
-/** Provides deterministic bounded polling for asynchronous tests. */
+import java.time.Duration;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
+import org.awaitility.core.ConditionTimeoutException;
+
+/** Provides deterministic bounded polling for asynchronous tests through Awaitility. */
 public final class Await {
 
     private Await() {
@@ -33,16 +36,22 @@ public final class Await {
             throw new IllegalArgumentException("interval must be positive");
         }
 
-        Instant deadline = Instant.now().plus(timeout);
-        T lastValue = probe.get();
-        while (!complete.test(lastValue)) {
-            if (!Instant.now().isBefore(deadline)) {
-                throw new AssertionError("Timed out waiting for " + description + "; last=" + lastValue);
-            }
-            Thread.sleep(interval);
-            lastValue = probe.get();
+        AtomicReference<T> lastValue = new AtomicReference<>();
+        try {
+            return await()
+                    .alias(description)
+                    .pollDelay(Duration.ZERO)
+                    .pollInterval(interval)
+                    .atMost(timeout)
+                    .until(() -> {
+                        T value = probe.get();
+                        lastValue.set(value);
+                        return value;
+                    }, complete);
+        } catch (ConditionTimeoutException timeoutFailure) {
+            throw new AssertionError(
+                    "Timed out waiting for " + description + "; last=" + lastValue.get(), timeoutFailure);
         }
-        return lastValue;
     }
 
     /** Supplies a polled value and may propagate checked failures from the underlying test operation. */

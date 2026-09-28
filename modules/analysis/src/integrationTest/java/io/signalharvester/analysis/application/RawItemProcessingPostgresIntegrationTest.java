@@ -26,6 +26,7 @@ import io.signalharvester.analysis.observability.AnalysisObservability;
 import io.signalharvester.analysis.normalization.ContentNormalizer;
 import io.signalharvester.analysis.persistence.DeduplicationClaimRepository;
 import io.signalharvester.events.analysis.v1.ItemAnalyzed;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -82,10 +83,7 @@ class RawItemProcessingPostgresIntegrationTest {
             "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01";
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
     private ContentNormalizer normalizer;

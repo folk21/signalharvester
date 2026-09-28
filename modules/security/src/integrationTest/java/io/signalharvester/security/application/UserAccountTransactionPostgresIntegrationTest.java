@@ -10,6 +10,7 @@ import io.micronaut.context.ApplicationContext;
 import io.signalharvester.security.model.IdentityType;
 import io.signalharvester.security.model.UserAccount;
 import io.signalharvester.security.model.UserRole;
+import io.signalharvester.testing.PostgresContainerSupport;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -33,10 +34,7 @@ class UserAccountTransactionPostgresIntegrationTest {
     private static final String ADMIN_PASSWORD = "transaction-admin-password-for-tests";
 
     @Container
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
-            .withDatabaseName("signalharvester")
-            .withUsername("signalharvester")
-            .withPassword("signalharvester");
+    private static final PostgreSQLContainer POSTGRES = PostgresContainerSupport.create();
 
     private ApplicationContext context;
 

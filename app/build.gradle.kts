@@ -30,6 +30,7 @@ dependencies {
     implementation(project(":modules:results"))
     implementation(project(":modules:event-observation"))
     implementation(project(":modules:security"))
+    implementation(project(":modules:operations"))
 
     implementation("io.micronaut:micronaut-runtime")
     implementation("io.micronaut:micronaut-management")

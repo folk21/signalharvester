@@ -62,7 +62,7 @@ Other modules must not query or mutate these tables directly.
 
 ## Dependencies
 
-No synchronous functional-module dependency is required.
+Results depends synchronously only on the published `io.signalharvester.operations.api..` change-journal boundary at the controlled DLQ recovery HTTP adapter so successful operator replay actions can be recorded. Projection processing remains event-driven and must not depend on Operations implementation or persistence types.
 
 Results depends on the stable `common` SQL-resource and demand-driven polling lifecycle utilities, shared infrastructure/framework libraries, and the versioned event-contract artifact. Results SQL, cursor semantics, event mapping, and row mapping remain module-local.
 

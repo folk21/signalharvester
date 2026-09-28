@@ -1,0 +1,1 @@
+SELECT pg_try_advisory_xact_lock(742194118230557401)

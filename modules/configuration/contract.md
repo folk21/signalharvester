@@ -64,7 +64,7 @@ Other modules must not query or mutate these tables directly.
 
 ## Dependencies
 
-No synchronous dependency on another functional module is required.
+Configuration depends synchronously only on the published `io.signalharvester.operations.api..` change-journal boundary so supported REST/UI mutations can record sanitized operational changes. It must not depend on Operations implementation or persistence types.
 
 Collection may depend on `io.signalharvester.configuration.api..` only.
 

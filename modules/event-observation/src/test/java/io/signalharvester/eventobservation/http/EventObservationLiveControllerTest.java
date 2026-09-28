@@ -3,6 +3,7 @@ package io.signalharvester.eventobservation.http;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.awaitility.Awaitility.await;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Replaces;
@@ -16,6 +17,7 @@ import io.signalharvester.eventobservation.model.ObservedEvent;
 import io.signalharvester.eventobservation.testing.ObservedEventFixture;
 import jakarta.inject.Singleton;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.http.HttpClient;
@@ -23,7 +25,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -133,25 +134,28 @@ class EventObservationLiveControllerTest {
         }
     }
 
-    private static List<String> readUntil(InputStream input, String target, Duration timeout) throws Exception {
+    private static List<String> readUntil(InputStream input, String target, Duration timeout) {
         BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
-        Instant deadline = Instant.now().plus(timeout);
         List<String> lines = new ArrayList<>();
-        while (Instant.now().isBefore(deadline)) {
-            if (!reader.ready()) {
-                Thread.sleep(10);
-                continue;
-            }
+        await()
+                .pollInterval(Duration.ofMillis(10))
+                .atMost(timeout)
+                .until(() -> readAvailableUntil(reader, lines, target));
+        return lines;
+    }
+
+    private static boolean readAvailableUntil(BufferedReader reader, List<String> lines, String target) throws IOException {
+        while (reader.ready()) {
             String line = reader.readLine();
             if (line == null) {
-                break;
+                return false;
             }
             lines.add(line);
             if (line.contains(target)) {
-                return lines;
+                return true;
             }
         }
-        throw new AssertionError("Timed out waiting for SSE content " + target + ": " + lines);
+        return false;
     }
 
     private static Map<String, Object> serverProperties() {
