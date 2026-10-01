@@ -44,6 +44,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,29 +75,7 @@ class OperationalIntelligencePostgresIntegrationTest {
     @BeforeEach
     void setUp() throws Exception {
         resetDatabase();
-        context = ApplicationContext.run(Map.ofEntries(
-                Map.entry("datasources.default.url", POSTGRES.getJdbcUrl()),
-                Map.entry("datasources.default.username", POSTGRES.getUsername()),
-                Map.entry("datasources.default.password", POSTGRES.getPassword()),
-                Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
-                Map.entry("flyway.datasources.default.enabled", true),
-                Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/operations"),
-                Map.entry("spec.name", "operations-assisted-investigation"),
-                Map.entry("signalharvester.build.version", "test-build"),
-                Map.entry("signalharvester.operations.health-snapshot-retention-count", 2),
-                Map.entry("signalharvester.operations.health.sampling-enabled", false),
-                Map.entry("signalharvester.operations.assisted-investigation.provider", "fake"),
-                Map.entry("signalharvester.operations.assisted-investigation.max-tool-calls", 1),
-                Map.entry("signalharvester.operations.assisted-investigation.automatic-mode", "event"),
-                Map.entry("signalharvester.operations.assisted-investigation.automatic-initial-delay", "1h"),
-                Map.entry("signalharvester.operations.assisted-investigation.automatic-retry-backoff", "10ms"),
-                Map.entry("signalharvester.operations.assisted-investigation.automatic-max-attempts", 2),
-                Map.entry("signalharvester.operations.alert-policy.enabled", true),
-                Map.entry("signalharvester.operations.alert-policy.degraded-min-consecutive-snapshots", 2),
-                Map.entry("signalharvester.operations.alert-policy.unhealthy-min-consecutive-snapshots", 1),
-                Map.entry("signalharvester.operations.alert-policy.healthy-min-consecutive-snapshots-to-resolve", 2),
-                Map.entry("signalharvester.operations.alert-policy.reopen-cooldown", "1h"),
-                Map.entry("signalharvester.operations.assisted-investigation.assessment-retention-count", 2)));
+        context = startContext();
     }
 
     @AfterEach
@@ -393,6 +376,61 @@ class OperationalIntelligencePostgresIntegrationTest {
         assertEquals(2L, scalarLong("SELECT count(*) FROM operations.human_attention_alerts"));
     }
 
+    /** Serialize concurrent human-attention alert decisions across backend replicas with the PostgreSQL advisory lock. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldSerializeHumanAttentionAlertDecisionAcrossBackendReplicas() throws Exception {
+        AlertDecisionService firstAlerts = context.getBean(AlertDecisionService.class);
+        OperationalIntelligenceRepository firstRepository = context.getBean(OperationalIntelligenceRepository.class);
+        TransactionOperations<Connection> firstTransactions = (TransactionOperations<Connection>) context.getBean(
+                TransactionOperations.class, Qualifiers.byName("default"));
+        HealthSnapshot unhealthy = healthSnapshot(HealthStatus.UNHEALTHY, Instant.now());
+        firstTransactions.executeWrite(status -> {
+            firstRepository.insertSnapshot(unhealthy);
+            return null;
+        });
+
+        try (ApplicationContext secondContext = startContext();
+                ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            AlertDecisionService secondAlerts = secondContext.getBean(AlertDecisionService.class);
+            TransactionOperations<Connection> secondTransactions = (TransactionOperations<Connection>) secondContext.getBean(
+                    TransactionOperations.class, Qualifiers.byName("default"));
+            CountDownLatch firstEvaluated = new CountDownLatch(1);
+            CountDownLatch releaseFirstTransaction = new CountDownLatch(1);
+
+            Future<?> firstDecision = executor.submit(() -> firstTransactions.executeWrite(status -> {
+                firstAlerts.evaluateSnapshotInCurrentTransaction(unhealthy);
+                firstEvaluated.countDown();
+                awaitLatch(releaseFirstTransaction, "first alert decision transaction release");
+                return null;
+            }));
+            assertTrue(firstEvaluated.await(2, TimeUnit.SECONDS));
+
+            Future<?> secondDecision = executor.submit(() -> secondTransactions.executeWrite(status -> {
+                secondAlerts.evaluateSnapshotInCurrentTransaction(unhealthy);
+                return null;
+            }));
+
+            try {
+                await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertTrue(scalarLong(
+                                "SELECT count(*) FROM pg_locks "
+                                        + "WHERE locktype = 'advisory' AND NOT granted")
+                        >= 1));
+            } finally {
+                releaseFirstTransaction.countDown();
+            }
+
+            firstDecision.get(2, TimeUnit.SECONDS);
+            secondDecision.get(2, TimeUnit.SECONDS);
+        }
+
+        var alerts = firstAlerts.recentAlerts(10);
+        assertEquals(1, alerts.size());
+        assertEquals(HumanAttentionAlertState.OPEN, alerts.getFirst().state());
+        assertEquals(HumanAttentionAlertSeverity.CRITICAL, alerts.getFirst().severity());
+        assertEquals(1L, scalarLong("SELECT count(*) FROM operations.human_attention_alerts"));
+    }
+
     /** Keep snapshot history bounded by the configured count while preserving the newest evidence. */
     @Test
     void shouldEnforceSnapshotRetentionCount() throws Exception {
@@ -404,6 +442,43 @@ class OperationalIntelligencePostgresIntegrationTest {
 
         assertEquals(2L, scalarLong("SELECT count(*) FROM operations.health_snapshots"));
         assertEquals(latest.id(), operations.latestSnapshot().id());
+    }
+
+    private static ApplicationContext startContext() {
+        return ApplicationContext.run(Map.ofEntries(
+                Map.entry("datasources.default.url", POSTGRES.getJdbcUrl()),
+                Map.entry("datasources.default.username", POSTGRES.getUsername()),
+                Map.entry("datasources.default.password", POSTGRES.getPassword()),
+                Map.entry("datasources.default.driver-class-name", "org.postgresql.Driver"),
+                Map.entry("flyway.datasources.default.enabled", true),
+                Map.entry("flyway.datasources.default.locations[0]", "classpath:db/migration/operations"),
+                Map.entry("spec.name", "operations-assisted-investigation"),
+                Map.entry("signalharvester.build.version", "test-build"),
+                Map.entry("signalharvester.operations.health-snapshot-retention-count", 2),
+                Map.entry("signalharvester.operations.health.sampling-enabled", false),
+                Map.entry("signalharvester.operations.assisted-investigation.provider", "fake"),
+                Map.entry("signalharvester.operations.assisted-investigation.max-tool-calls", 1),
+                Map.entry("signalharvester.operations.assisted-investigation.automatic-mode", "event"),
+                Map.entry("signalharvester.operations.assisted-investigation.automatic-initial-delay", "1h"),
+                Map.entry("signalharvester.operations.assisted-investigation.automatic-retry-backoff", "10ms"),
+                Map.entry("signalharvester.operations.assisted-investigation.automatic-max-attempts", 2),
+                Map.entry("signalharvester.operations.alert-policy.enabled", true),
+                Map.entry("signalharvester.operations.alert-policy.degraded-min-consecutive-snapshots", 2),
+                Map.entry("signalharvester.operations.alert-policy.unhealthy-min-consecutive-snapshots", 1),
+                Map.entry("signalharvester.operations.alert-policy.healthy-min-consecutive-snapshots-to-resolve", 2),
+                Map.entry("signalharvester.operations.alert-policy.reopen-cooldown", "1h"),
+                Map.entry("signalharvester.operations.assisted-investigation.assessment-retention-count", 2)));
+    }
+
+    private static void awaitLatch(CountDownLatch latch, String description) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new AssertionError("Timed out waiting for " + description);
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("Interrupted while waiting for " + description, exception);
+        }
     }
 
     private static void persistAndEvaluate(
