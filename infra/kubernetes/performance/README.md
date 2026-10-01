@@ -40,6 +40,8 @@ The default workload is bounded to 6 Sources x 200 items with one backend replic
 build/reports/performance/capacity-baseline.json
 ```
 
+The runner also writes `capacity-baseline-operational-evidence.json` beside that report by default. The evidence record uses `NORMAL_OPERATION` ground truth, captures Operations scenario markers and before/after Health Snapshots, stores the bounded summary as curated measurements, and references the capacity report by repository-relative path plus SHA-256 digest. When `--output` changes, the evidence filename follows that report automatically unless `--evidence-output` is supplied explicitly.
+
 For a controlled one-versus-three replica comparison with the same workload shape, run:
 
 ```bash
@@ -48,7 +50,7 @@ python3 infra/kubernetes/performance/run_comparison.py
 
 The comparison workflow runs the baseline sequentially for one and three backend replicas by default, preserves each raw baseline report under `build/reports/performance/replica-comparison/`, and writes `capacity-comparison.json` with neutral absolute differences and ratios relative to the first run. Use `--replicas 1,2,3` or a different `--output-dir` when a broader local comparison is useful.
 
-The raw-event topic currently has three partitions, so increasing backend replicas beyond available Kafka partitions does not imply additional Analysis parallelism. Run order can affect a single developer-machine observation, so the comparison report does not declare a winner or performance budget. Repeat controlled runs before treating a difference as stable.
+The raw-event topic currently has three partitions, so increasing backend replicas beyond available Kafka partitions does not imply additional Analysis parallelism. Run order can affect a single developer-machine observation, so the comparison report does not declare a winner or performance budget. Repeat controlled runs before treating a difference as stable. Because each baseline report gets a distinct derived evidence filename, comparison runs preserve one operational-evidence artifact per replica count instead of overwriting a shared file.
 
 ## Report semantics
 

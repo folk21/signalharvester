@@ -1,13 +1,3 @@
-
-## Unreleased — operational alert decision policy
-
-- accept Stage 4b durable automatic investigation triggers after the canonical repository gate passed;
-- add Operations-owned deterministic human-attention alert lifecycle with persisted WARNING/CRITICAL state;
-- add configurable consecutive DEGRADED/UNHEALTHY opening thresholds, sustained HEALTHY recovery, and DEGRADED reopen cooldown;
-- serialize multi-replica alert decisions with a short PostgreSQL transaction advisory lock and retain one active incident;
-- attach validated Incident Assessment metadata only as advisory context, never as alert authority;
-- expose bounded ADMIN alert history through `/api/v1/admin/operations/health/alerts`;
-- keep external notification delivery and remediation outside the alert decision boundary.
 ---
 type: Changelog
 title: SignalHarvester changelog
@@ -19,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-10-01 — Added verification-pending labeled operational scenario evidence shared by Kubernetes resilience and capacity tooling, preserving detector-neutral ground truth, Operations markers, explicit Health Snapshots, curated measurements, bounded selected logs, and capacity-report references for later offline evaluation.
+- 2026-10-01 — Accepted the Stage 6 deterministic human-attention alert policy after developer verification, including cross-replica PostgreSQL advisory-lock serialization and convergence on one active incident.
 - 2026-09-25 — Added verification-pending assisted-investigation Stage 4b with durable event/periodic trigger planning, PostgreSQL exact-token leases and heartbeat renewal, cooldown/deduplication, bounded retry/exhaustion, atomic automatic assessment completion, and operator trigger-history visibility while alert authority remains disabled.
 - 2026-09-25 — Accepted assisted-investigation Stage 4a after the developer confirmed the canonical repository gate.
 - 2026-09-25 — Added verification-pending assisted-investigation Stage 4a with application-owned bounded read-only Health/Prometheus/Loki/Tempo/change/capacity tools, OpenAI-compatible multi-turn tool calling, telemetry redaction, tool/evidence validation, and strict call/round/duration/result-size budgets while keeping automatic triggers disabled.

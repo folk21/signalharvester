@@ -8,6 +8,7 @@ import base64
 import concurrent.futures
 import contextlib
 import http.cookiejar
+import importlib.util
 import ipaddress
 import json
 import os
@@ -33,6 +34,16 @@ BACKEND_DEPLOYMENT = "signalharvester-backend"
 RAW_TOPIC = "signalharvester.collection.raw-item-discovered.v1"
 ANALYSIS_DLQ_TOPIC = "signalharvester.analysis.raw-item-dead-letter.v1"
 ANALYSIS_GROUP = "signalharvester-analysis-v1"
+DEFAULT_EVIDENCE_REPORT = (
+    ROOT / "build" / "reports" / "operational-intelligence" / "resilience-scenario-evidence.json"
+)
+EVIDENCE_MODULE = ROOT / "infra" / "kubernetes" / "evaluation" / "scenario_evidence.py"
+
+evidence_spec = importlib.util.spec_from_file_location("signalharvester_scenario_evidence", EVIDENCE_MODULE)
+scenario_evidence = importlib.util.module_from_spec(evidence_spec)
+assert evidence_spec.loader is not None
+sys.modules[evidence_spec.name] = scenario_evidence
+evidence_spec.loader.exec_module(scenario_evidence)
 
 
 class AcceptanceError(RuntimeError):
@@ -298,6 +309,62 @@ def require_string(value: dict[str, Any], key: str) -> str:
     return candidate
 
 
+def capture_health_snapshot(admin: ApiSession) -> dict[str, Any]:
+    """Captures one explicit persisted Health Snapshot through the Operations HTTP boundary."""
+
+    status, body = admin.request("POST", "/api/v1/admin/operations/health/snapshots")
+    if status != 201 or not isinstance(body, dict):
+        raise AcceptanceError(f"Health Snapshot capture returned HTTP {status}: {body!r}")
+    return body
+
+
+def record_scenario_marker(
+    admin: ApiSession,
+    scenario: Any,
+    phase: str,
+) -> dict[str, Any]:
+    """Persists one sanitized TEST_SCENARIO marker that can be correlated with Health Snapshots."""
+
+    return admin.post_json(
+        "/api/v1/admin/operations/changes/markers",
+        {
+            "category": "TEST_SCENARIO",
+            "targetType": "SCENARIO",
+            "targetId": scenario.scenario_run_id,
+            "details": {
+                "scenarioId": scenario.scenario_id,
+                "label": scenario.label,
+                "phase": phase,
+            },
+        },
+    )
+
+
+def record_scenario_start(admin: ApiSession, scenario: Any) -> None:
+    """Records the durable start marker and a pre-fault Health Snapshot."""
+
+    marker = record_scenario_marker(admin, scenario, "START")
+    scenario.add_change_marker("START", marker)
+    scenario.add_health_snapshot("BEFORE", capture_health_snapshot(admin))
+
+
+def record_scenario_end(admin: ApiSession, scenario: Any) -> None:
+    """Records a post-recovery Health Snapshot followed by the durable end marker."""
+
+    scenario.add_health_snapshot("AFTER", capture_health_snapshot(admin))
+    marker = record_scenario_marker(admin, scenario, "END")
+    scenario.add_change_marker("END", marker)
+
+
+def repository_relative(path: Path) -> str:
+    """Returns a stable repository-relative artifact path when possible."""
+
+    try:
+        return str(path.resolve().relative_to(ROOT.resolve()))
+    except ValueError:
+        return str(path.resolve())
+
+
 def run_preflight(runner: CommandRunner, timeout: str | None = None) -> None:
     print("==> Kubernetes deployment preflight")
     command = ["env", f"SIGNALHARVESTER_K8S_NAMESPACE={runner.namespace}"]
@@ -537,7 +604,7 @@ def backend_pod_ready(runner: CommandRunner, pod: str) -> bool:
     return any(condition.get("type") == "Ready" and condition.get("status") == "True" for condition in conditions)
 
 
-def restart_backend_container(runner: CommandRunner, viewer: ApiSession, timeout: float) -> None:
+def restart_backend_container(runner: CommandRunner, viewer: ApiSession, timeout: float) -> dict[str, int]:
     print("==> Stateless JWT and backend container restart")
     pod = first_ready_backend_pod(runner)
     before = backend_pod_restart_count(runner, pod)
@@ -565,6 +632,10 @@ def restart_backend_container(runner: CommandRunner, viewer: ApiSession, timeout
     status, _ = viewer.request("GET", "/api/v1/results?limit=1")
     if status != 200:
         raise AcceptanceError(f"existing VIEWER JWT failed after backend restart: HTTP {status}")
+    return {
+        "restartCountBefore": before,
+        "restartCountAfter": backend_pod_restart_count(runner, pod),
+    }
 
 
 def verify_authorization(viewer: ApiSession) -> None:
@@ -585,7 +656,8 @@ def verify_slow_source_availability(
     viewer: ApiSession,
     tracker: ResourceTracker,
     timeout: float,
-) -> None:
+    scenario: Any | None = None,
+) -> dict[str, int]:
     print("==> Slow source availability")
     source_id = tracker.source("/slow.xml", "slow")
     profile_id = tracker.profile(source_id, "slow")
@@ -598,8 +670,11 @@ def verify_slow_source_availability(
         viewer_status, _ = viewer.request("GET", "/api/v1/results?limit=1")
         if viewer_status != 200:
             raise AcceptanceError(f"VIEWER API became unavailable during slow source fetch: HTTP {viewer_status}")
+        if scenario is not None:
+            scenario.add_health_snapshot("FAULT", capture_health_snapshot(admin))
         future.result(timeout=timeout)
     wait_results(viewer, profile_id, source_id, 1, timeout)
+    return {"readinessHttpStatus": status, "viewerHttpStatus": viewer_status}
 
 
 def rpk_topic_record_count(runner: CommandRunner, topic: str) -> int:
@@ -670,7 +745,8 @@ def verify_retry_dlq_and_postgres_recovery(
     raw_record: tuple[str, str],
     timeout: float,
     rollout_timeout: str,
-) -> None:
+    scenario: Any | None = None,
+) -> dict[str, int]:
     print("==> PostgreSQL outage, bounded Analysis retry, DLQ, and recovery")
     before = rpk_topic_record_count(runner, ANALYSIS_DLQ_TOPIC)
     key, payload_hex = raw_record
@@ -709,6 +785,20 @@ def verify_retry_dlq_and_postgres_recovery(
                 backend_logs(runner),
             ) is not None,
         )
+        after = rpk_topic_record_count(runner, ANALYSIS_DLQ_TOPIC)
+        if scenario is not None:
+            scenario.add_measurement(
+                "analysisDlqRecordsBefore", before, phase="BEFORE", unit="records", source="rpk"
+            )
+            scenario.add_measurement(
+                "analysisDlqRecordsDuringFault", after, phase="FAULT", unit="records", source="rpk"
+            )
+            match = re.search(
+                r"Analysis Kafka record .* moved to dead letter after 3 attempt\(s\)",
+                backend_logs(runner),
+            )
+            if match is not None:
+                scenario.add_log("FAULT", "kubernetes-backend-logs", match.group(0))
     finally:
         runner.namespaced("scale", "statefulset/postgres", "--replicas=1", check=False)
         rollout_statefulset(runner, "postgres", rollout_timeout)
@@ -718,6 +808,8 @@ def verify_retry_dlq_and_postgres_recovery(
     profile_id = tracker.profile(source_id, "post-db-recovery")
     run_collection(admin, profile_id)
     wait_results(viewer, profile_id, source_id, 1, timeout)
+    final = rpk_topic_record_count(runner, ANALYSIS_DLQ_TOPIC)
+    return {"analysisDlqRecordsBefore": before, "analysisDlqRecordsAfter": final}
 
 
 def analysis_group_lag(runner: CommandRunner) -> int:
@@ -750,7 +842,8 @@ def verify_analysis_lag_recovery(
     viewer: ApiSession,
     tracker: ResourceTracker,
     timeout: float,
-) -> None:
+    scenario: Any | None = None,
+) -> dict[str, int]:
     print("==> Kafka lag generation and Analysis recovery")
     source_id = tracker.source("/lag.xml", "lag")
     profile_id = tracker.profile(source_id, "lag")
@@ -760,12 +853,18 @@ def verify_analysis_lag_recovery(
     if int(run.get("publishedCount", 0)) < 4:
         raise AcceptanceError(f"lag fixture did not publish four raw items: {run!r}")
     wait_until("positive Analysis consumer lag", timeout, 1.0, lambda: analysis_group_lag(runner) > 0)
+    fault_lag = analysis_group_lag(runner)
     if result_count(viewer, profile_id, source_id) != 0:
         raise AcceptanceError("Results appeared while Analysis consumer was disabled")
+    if scenario is not None:
+        scenario.add_measurement("analysisConsumerLag", fault_lag, phase="FAULT", unit="records", source="rpk")
+        scenario.add_health_snapshot("FAULT", capture_health_snapshot(admin))
 
     env_guard.set("SIGNALHARVESTER_ANALYSIS_ENABLED", None)
     wait_until("Analysis consumer lag to drain", timeout, 1.0, lambda: analysis_group_lag(runner) == 0)
     wait_results(viewer, profile_id, source_id, 4, timeout)
+    final_lag = analysis_group_lag(runner)
+    return {"faultLag": fault_lag, "finalLag": final_lag}
 
 
 def psql_scalar(runner: CommandRunner, sql: str) -> str:
@@ -797,7 +896,8 @@ def verify_outbox_recovery(
     viewer: ApiSession,
     tracker: ResourceTracker,
     timeout: float,
-) -> None:
+    scenario: Any | None = None,
+) -> dict[str, int]:
     print("==> Analysis outbox durability across rollout")
     baseline_pending = pending_outbox_count(runner)
     source_id = tracker.source("/outbox.xml", "outbox")
@@ -819,6 +919,12 @@ def verify_outbox_recovery(
     )
     if result_count(viewer, profile_id, source_id) != 0:
         raise AcceptanceError("Results appeared while Analysis outbox dispatcher was disabled")
+    fault_pending = pending_outbox_count(runner)
+    if scenario is not None:
+        scenario.add_measurement(
+            "pendingAnalysisOutboxRows", fault_pending, phase="FAULT", unit="rows", source="postgresql"
+        )
+        scenario.add_health_snapshot("FAULT", capture_health_snapshot(admin))
 
     env_guard.set("SIGNALHARVESTER_ANALYSIS_OUTBOX_ENABLED", None)
     wait_results(viewer, profile_id, source_id, 3, timeout)
@@ -828,6 +934,8 @@ def verify_outbox_recovery(
         1.0,
         lambda: pending_outbox_count(runner) <= baseline_pending,
     )
+    final_pending = pending_outbox_count(runner)
+    return {"baselinePending": baseline_pending, "faultPending": fault_pending, "finalPending": final_pending}
 
 
 def runs_for_profile(admin: ApiSession, profile_id: str) -> list[dict[str, Any]]:
@@ -880,7 +988,7 @@ def restart_redpanda_and_verify(
     tracker: ResourceTracker,
     timeout: float,
     rollout_timeout: str,
-) -> None:
+) -> dict[str, int]:
     print("==> Redpanda restart recovery")
     runner.namespaced("delete", "pod", "redpanda-0", "--wait=false")
     rollout_statefulset(runner, "redpanda", rollout_timeout)
@@ -888,6 +996,7 @@ def restart_redpanda_and_verify(
     profile_id = tracker.profile(source_id, "post-broker-restart")
     run_collection(admin, profile_id)
     wait_results(viewer, profile_id, source_id, 1, timeout)
+    return {"recoveredResults": result_count(viewer, profile_id, source_id)}
 
 
 def prometheus_query(port: int, query: str) -> list[dict[str, Any]]:
@@ -984,12 +1093,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--http-timeout", type=float, default=10.0)
     parser.add_argument("--scenario-timeout", type=float, default=120.0)
     parser.add_argument("--rollout-timeout", default="240s")
+    parser.add_argument("--evidence-output", type=Path, default=DEFAULT_EVIDENCE_REPORT)
     parser.add_argument("--skip-preflight", action="store_true")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    evidence_output = args.evidence_output if args.evidence_output.is_absolute() else ROOT / args.evidence_output
+    evidence_dataset = scenario_evidence.ScenarioEvidenceDataset(
+        "kubernetes-resilience-acceptance",
+        {
+            "namespace": args.namespace,
+            "explicitHealthSnapshotsPersisted": True,
+            "sharedHealthHistoryAcrossScenarios": True,
+        },
+    )
     runner = CommandRunner(args.namespace)
     env_guard: BackendEnvironmentGuard | None = None
     tracker: ResourceTracker | None = None
@@ -998,7 +1117,8 @@ def main(argv: list[str] | None = None) -> int:
         ensure_commands()
         if not args.skip_preflight:
             run_preflight(runner, args.rollout_timeout)
-        if backend_replicas(runner) < 2:
+        replica_count = backend_replicas(runner)
+        if replica_count < 2:
             raise AcceptanceError("resilience acceptance requires at least two backend replicas")
 
         print("==> Deploy deterministic in-cluster source fixture")
@@ -1037,55 +1157,150 @@ def main(argv: list[str] | None = None) -> int:
                 viewer = create_viewer(admin, tracker, base_url, args.http_timeout)
                 verify_authorization(viewer)
 
-                print("==> Baseline collection and consumer-group establishment")
-                baseline_source = tracker.source("/baseline.xml", "baseline")
-                baseline_profile = tracker.profile(baseline_source, "baseline")
-                run_collection(admin, baseline_profile)
-                wait_results(viewer, baseline_profile, baseline_source, 1, args.scenario_timeout)
-                wait_until(
-                    "Analysis consumer group",
-                    args.scenario_timeout,
-                    1.0,
-                    lambda: analysis_group_lag(runner) == 0,
-                )
-                raw_record = capture_latest_raw_record(runner)
+                with evidence_dataset.scenario(
+                    "resilience-normal-operation",
+                    "NORMAL_OPERATION",
+                    fault_injected=False,
+                ) as scenario:
+                    record_scenario_start(admin, scenario)
+                    print("==> Baseline collection and consumer-group establishment")
+                    baseline_source = tracker.source("/baseline.xml", "baseline")
+                    baseline_profile = tracker.profile(baseline_source, "baseline")
+                    run_collection(admin, baseline_profile)
+                    wait_results(viewer, baseline_profile, baseline_source, 1, args.scenario_timeout)
+                    wait_until(
+                        "Analysis consumer group",
+                        args.scenario_timeout,
+                        1.0,
+                        lambda: analysis_group_lag(runner) == 0,
+                    )
+                    scenario.add_measurement(
+                        "analysisConsumerLag", 0, phase="AFTER", unit="records", source="rpk"
+                    )
+                    record_scenario_end(admin, scenario)
+                    raw_record = capture_latest_raw_record(runner)
 
-                restart_backend_container(runner, viewer, args.scenario_timeout)
-                verify_slow_source_availability(admin, viewer, tracker, args.scenario_timeout)
-                verify_retry_dlq_and_postgres_recovery(
-                    runner,
-                    admin,
-                    viewer,
-                    tracker,
-                    raw_record,
-                    args.scenario_timeout,
-                    args.rollout_timeout,
-                )
-                verify_analysis_lag_recovery(
-                    runner,
-                    env_guard,
-                    admin,
-                    viewer,
-                    tracker,
-                    args.scenario_timeout,
-                )
-                verify_outbox_recovery(
-                    runner,
-                    env_guard,
-                    admin,
-                    viewer,
-                    tracker,
-                    args.scenario_timeout,
-                )
+                with evidence_dataset.scenario(
+                    "resilience-backend-pod-restart",
+                    "POD_RESTART",
+                    fault_injected=True,
+                    affected_subsystems=("BACKEND",),
+                ) as scenario:
+                    record_scenario_start(admin, scenario)
+                    restart_observations = restart_backend_container(runner, viewer, args.scenario_timeout)
+                    scenario.add_measurement(
+                        "backendPodRestartCountBefore",
+                        restart_observations["restartCountBefore"],
+                        phase="BEFORE",
+                        unit="restarts",
+                        source="kubernetes",
+                    )
+                    scenario.add_measurement(
+                        "backendPodRestartCountAfter",
+                        restart_observations["restartCountAfter"],
+                        phase="AFTER",
+                        unit="restarts",
+                        source="kubernetes",
+                    )
+                    record_scenario_end(admin, scenario)
+
+                with evidence_dataset.scenario(
+                    "resilience-slow-external-source",
+                    "SLOW_EXTERNAL_SOURCE",
+                    fault_injected=True,
+                    affected_subsystems=("COLLECTION", "EXTERNAL_SOURCE"),
+                ) as scenario:
+                    record_scenario_start(admin, scenario)
+                    slow_observations = verify_slow_source_availability(
+                        admin, viewer, tracker, args.scenario_timeout, scenario
+                    )
+                    scenario.add_measurement(
+                        "readinessHttpStatus",
+                        slow_observations["readinessHttpStatus"],
+                        phase="FAULT",
+                        source="http",
+                    )
+                    scenario.add_measurement(
+                        "viewerHttpStatus",
+                        slow_observations["viewerHttpStatus"],
+                        phase="FAULT",
+                        source="http",
+                    )
+                    record_scenario_end(admin, scenario)
+
+                with evidence_dataset.scenario(
+                    "resilience-postgresql-outage",
+                    "POSTGRESQL_OUTAGE",
+                    fault_injected=True,
+                    affected_subsystems=("POSTGRESQL", "ANALYSIS"),
+                ) as scenario:
+                    record_scenario_start(admin, scenario)
+                    verify_retry_dlq_and_postgres_recovery(
+                        runner,
+                        admin,
+                        viewer,
+                        tracker,
+                        raw_record,
+                        args.scenario_timeout,
+                        args.rollout_timeout,
+                        scenario,
+                    )
+                    scenario.add_limitation(
+                        "No Health Snapshot is persisted while PostgreSQL is intentionally unavailable; "
+                        "the durable start marker and post-recovery snapshot bound the outage window."
+                    )
+                    record_scenario_end(admin, scenario)
+
+                with evidence_dataset.scenario(
+                    "resilience-kafka-lag",
+                    "KAFKA_LAG",
+                    fault_injected=True,
+                    affected_subsystems=("KAFKA", "ANALYSIS"),
+                ) as scenario:
+                    record_scenario_start(admin, scenario)
+                    verify_analysis_lag_recovery(
+                        runner, env_guard, admin, viewer, tracker, args.scenario_timeout, scenario
+                    )
+                    record_scenario_end(admin, scenario)
+
+                with evidence_dataset.scenario(
+                    "resilience-analysis-outbox-backlog",
+                    "OUTBOX_BACKLOG",
+                    fault_injected=True,
+                    affected_subsystems=("ANALYSIS_OUTBOX", "RESULTS"),
+                ) as scenario:
+                    record_scenario_start(admin, scenario)
+                    verify_outbox_recovery(
+                        runner, env_guard, admin, viewer, tracker, args.scenario_timeout, scenario
+                    )
+                    record_scenario_end(admin, scenario)
+
                 verify_scheduler_lease(runner, admin, tracker, args.scenario_timeout)
-                restart_redpanda_and_verify(
-                    runner,
-                    admin,
-                    viewer,
-                    tracker,
-                    args.scenario_timeout,
-                    args.rollout_timeout,
-                )
+
+                with evidence_dataset.scenario(
+                    "resilience-kafka-broker-restart",
+                    "KAFKA_BROKER_RESTART",
+                    fault_injected=True,
+                    affected_subsystems=("KAFKA",),
+                ) as scenario:
+                    record_scenario_start(admin, scenario)
+                    broker_observations = restart_redpanda_and_verify(
+                        runner,
+                        admin,
+                        viewer,
+                        tracker,
+                        args.scenario_timeout,
+                        args.rollout_timeout,
+                    )
+                    scenario.add_measurement(
+                        "recoveredResults",
+                        broker_observations["recoveredResults"],
+                        phase="AFTER",
+                        unit="results",
+                        source="results-api",
+                    )
+                    record_scenario_end(admin, scenario)
+
                 verify_observability(
                     args.prometheus_port,
                     args.loki_port,
@@ -1097,9 +1312,23 @@ def main(argv: list[str] | None = None) -> int:
                     tracker.cleanup()
                     tracker = None
 
+        evidence_dataset.write(evidence_output)
+        print(f"    operational scenario evidence: {evidence_output}")
         print("All SignalHarvester Kubernetes resilience scenarios passed.")
         return 0
-    except (AcceptanceError, subprocess.TimeoutExpired, OSError, ValueError, json.JSONDecodeError) as failure:
+    except (
+        AcceptanceError,
+        subprocess.TimeoutExpired,
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        scenario_evidence.ScenarioEvidenceError,
+    ) as failure:
+        try:
+            evidence_dataset.write(evidence_output)
+            print(f"    partial operational scenario evidence: {evidence_output}", file=sys.stderr)
+        except OSError as write_failure:
+            print(f"WARNING: failed to write partial scenario evidence: {write_failure}", file=sys.stderr)
         print(f"ERROR: {failure}", file=sys.stderr)
         return 1
     finally:

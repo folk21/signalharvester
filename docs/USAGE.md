@@ -333,7 +333,7 @@ The harness deploys a temporary in-cluster RSS fixture and exercises:
 - authorization boundaries;
 - Prometheus, Loki, and Tempo evidence.
 
-It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for fault-injection boundaries and options.
+It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. Evaluation-relevant scenarios are also written to `build/reports/operational-intelligence/resilience-scenario-evidence.json`, with detector-neutral labels kept separate from captured Health evidence; failed labeled scenarios retain partial evidence. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for fault-injection boundaries and options.
 
 ### Demonstrate Kafka consumer horizontal scaling
 

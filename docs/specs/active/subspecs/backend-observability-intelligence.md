@@ -10,7 +10,7 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Active. Stages 1, 2, 3, 4a, and 4b are accepted after the developer confirmed the canonical repository gates. Stage 6 alert integration is implemented and verification-pending: deterministic Health Snapshot persistence now drives a durable human-attention alert lifecycle with configurable persistence/recovery thresholds, reopen cooldown, cluster-wide decision serialization, and optional validated Incident Assessment context that has no alert authority. Scenario-based model evaluation remains the next stage.
+Active. Stages 1, 2, 3, 4a, 4b, and the Stage 6 application-owned alert policy are accepted after developer verification. The scenario-evidence foundation is implemented and verification-pending: resilience and capacity runners now emit one versioned bounded artifact format with detector-neutral ground truth, Operations scenario markers, explicit Health Snapshots, curated measurements, bounded selected logs, and companion artifact references. Offline detector/alert metrics and assisted-investigation quality evaluation remain the next stages.
 
 The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until their canonical acceptance is recorded. This specification does not weaken or replace those acceptance gates.
 
@@ -23,10 +23,10 @@ Stages 1 and 2 are accepted. The implemented scope now includes:
 - best-effort markers for successful controlled Analysis/Results/Event Observation DLQ replay;
 - typed repository-tooling markers for deployment tuning and deterministic scenarios;
 - ADMIN change-history, snapshot capture/latest, Markdown report, and change-correlation endpoints;
-- capacity baseline markers plus a persisted Health Snapshot reference in the generated report;
+- shared versioned scenario-evidence artifacts from resilience/capacity tooling with detector-neutral labels, durable scenario markers, explicit Health Snapshots, curated measurements, and companion artifact references;
 - count-bounded Health Snapshot retention configured by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT`.
 
-Stage 2 replaces the placeholder interpretation with policy `deterministic-statistical-v1`: configurable hard thresholds, rolling median/MAD deviation, structured anomaly evidence, cluster-wide allowlisted Prometheus signals with local outbox fallback, and explicit uncertainty when required telemetry or rolling history is unavailable. Periodic sampling is multi-replica coordinated and telemetry I/O stays outside database transactions. Stage 3 adds `health-analysis-v1`, persisted `IncidentAssessment`, manual assessment import, deterministic fake-provider verification, and an explicit OpenAI-compatible HTTP adapter. Accepted Stage 4a adds snapshot-scoped read-only tool sessions, bounded OpenAI-compatible tool turns, telemetry sanitization, and capacity-result markers. Stage 4b adds durable event/periodic trigger planning, exact-token lease claims/heartbeats, cooldown/deduplication, bounded retry/exhaustion, and atomic assessment-plus-trigger completion. The next bounded stage is alert policy and model evaluation.
+Stage 2 replaces the placeholder interpretation with policy `deterministic-statistical-v1`: configurable hard thresholds, rolling median/MAD deviation, structured anomaly evidence, cluster-wide allowlisted Prometheus signals with local outbox fallback, and explicit uncertainty when required telemetry or rolling history is unavailable. Periodic sampling is multi-replica coordinated and telemetry I/O stays outside database transactions. Stage 3 adds `health-analysis-v1`, persisted `IncidentAssessment`, manual assessment import, deterministic fake-provider verification, and an explicit OpenAI-compatible HTTP adapter. Accepted Stage 4a adds snapshot-scoped read-only tool sessions, bounded OpenAI-compatible tool turns, telemetry sanitization, and capacity-result markers. Accepted Stage 4b adds durable event/periodic trigger planning, exact-token lease claims/heartbeats, cooldown/deduplication, bounded retry/exhaustion, and atomic assessment-plus-trigger completion. Accepted Stage 6 adds deterministic human-attention alert decisions. The current bounded stage turns controlled resilience/capacity runs into shared labeled evaluation evidence before offline scoring is introduced.
 
 ## Feature scope
 
@@ -60,7 +60,7 @@ LLM analysis is an optional secondary reasoning layer. It may use either an exte
 
 The accepted observability baseline already provides Micrometer/Prometheus metrics, OpenTelemetry traces in Tempo, trace-correlated logs in Loki, Kubernetes/Redpanda telemetry, Grafana dashboards, resilience evidence, and deterministic capacity reports. The latest capacity work also exposes Analysis outbox backlog and dispatcher latency signals.
 
-Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot, versioned health-scoring/anomaly policy, and cross-capability change journal. Stage 3 has closed the manual/provider-neutral assessment gap. Accepted Stage 4a provides bounded read-only telemetry/history tools and explicit agentic investigation. Stage 4b provides the multi-replica-safe automatic event/periodic trigger policy. Stage 6 now implements the application-owned alert decision boundary; the remaining gap is controlled scenario-based detector/LLM evaluation and any later external notification adapter.
+Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot, versioned health-scoring/anomaly policy, and cross-capability change journal. Stage 3 has closed the manual/provider-neutral assessment gap. Accepted Stage 4a provides bounded read-only telemetry/history tools and explicit agentic investigation. Accepted Stage 4b provides the multi-replica-safe automatic event/periodic trigger policy. Accepted Stage 6 provides the application-owned alert decision boundary. The first evaluation foundation now reuses controlled resilience/capacity runs as labeled bounded evidence; the remaining gap is offline detector/alert scoring, assisted-investigation quality evaluation, and any later external notification adapter.
 
 Security administration already emits audit-safe logs, but log lines are not a sufficient general change journal for correlating configuration/runtime changes with later health behavior. Event Observation is also not the authoritative store for this purpose because it is a bounded diagnostic materialization of pipeline events.
 
@@ -230,7 +230,7 @@ Features: `OBSERVABILITY.HEALTH_INTELLIGENCE`, `OBSERVABILITY.ASSISTED_INVESTIGA
 
 Existing and future resilience/capacity scenarios must double as an evaluation dataset source. Representative labels should include normal operation, PostgreSQL outage/latency, Kafka lag or broker restart, pod restart, slow external source, outbox backlog, and load spikes.
 
-Evaluation evidence should preserve the scenario label plus bounded metrics/logs/traces/change markers/Health Snapshots needed for replay or offline assessment.
+Evaluation evidence should preserve the scenario label plus bounded metrics/logs/traces/change markers/Health Snapshots needed for replay or offline assessment. The verification-pending foundation now provides one shared versioned artifact format and wires current resilience/capacity runners into it; later slices still need to compute detector/alert/LLM quality metrics from those artifacts.
 
 Detector/LLM evaluation should measure at least:
 
@@ -299,7 +299,7 @@ Each implementation stage must add focused deterministic tests before broader li
 - [x] add persisted versioned Health Snapshot and bounded Health Report generation;
 - [x] expose timeline/before-after correlation between changes and health;
 - [x] add lightweight deterministic/statistical detector boundary and baseline implementation;
-- [ ] reuse resilience/capacity scenarios as labeled operational-analysis evidence;
+- [x] reuse resilience/capacity scenarios as labeled operational-analysis evidence;
 - [x] add manual sanitized report export;
 - [x] add provider-neutral structured `IncidentAssessment` and deterministic fake provider;
 - [x] add optional local/external LLM adapter behind explicit secrets/policy;

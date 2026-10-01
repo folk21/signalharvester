@@ -45,7 +45,7 @@ The Kubernetes capacity baseline is an opt-in live measurement, not a routine co
 python3 infra/kubernetes/performance/run_baseline.py
 ```
 
-It requires an already verified local Kubernetes deployment and writes `build/reports/performance/capacity-baseline.json`. The report records observed timings/rates and must not be interpreted as a repository performance budget.
+It requires an already verified local Kubernetes deployment and writes `build/reports/performance/capacity-baseline.json`. The report records observed timings/rates and must not be interpreted as a repository performance budget. The runner also emits a sibling `*-operational-evidence.json` artifact using the shared scenario-evidence format, with `NORMAL_OPERATION` ground truth, Operations start/end markers, explicit Health Snapshots, curated summary measurements, and a SHA-256 reference to the capacity report.
 
 To compare the same bounded workload across explicit backend replica counts without introducing a pass/fail performance threshold, run:
 
@@ -485,6 +485,8 @@ It is intentionally separate from `./run_checks.sh` because it performs disrupti
 
 Deterministic parsing/asset checks for the harness are included in `./infra/kubernetes/run_tests.sh`.
 
+The live run also writes `build/reports/operational-intelligence/resilience-scenario-evidence.json`. The versioned artifact labels normal operation, backend pod restart, slow external source, PostgreSQL outage, Kafka lag, Analysis outbox backlog, and Kafka broker restart while keeping scenario ground truth separate from observed Health Snapshots. Partial evidence is retained when a labeled scenario fails.
+
 The live run covers:
 
 - stateless JWT behavior across a backend restart;
@@ -516,4 +518,4 @@ The runner:
 7. verifies durable Analysis/Results completeness, outbox completion, DLQ stability, and HTTP availability;
 8. restores the original replica count and temporary environment configuration.
 
-Parser/asset coverage stays in `./infra/kubernetes/run_tests.sh`. The live workflow remains outside `./run_checks.sh`. Developer acceptance completed on 2026-09-17 with three distinct Analysis members assigned to raw-event partitions `0`, `1`, and `2`, positive one-replica lag, and final lag `0`.
+Parser/asset coverage stays in `./infra/kubernetes/run_tests.sh`, including the scenario-evidence format/bounds and resilience/capacity runner wiring. The live workflow remains outside `./run_checks.sh`. Developer acceptance completed on 2026-09-17 with three distinct Analysis members assigned to raw-event partitions `0`, `1`, and `2`, positive one-replica lag, and final lag `0`.
