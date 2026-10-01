@@ -45,7 +45,7 @@ Source-fetch worker interruption propagation is accepted after developer verific
 Analysis outbox expired-lease fencing is accepted after developer verification. Pre-publication renewal now requires both the exact token and a still-live persisted lease, so an expired former owner cannot resurrect ownership before Kafka send.
 Analysis outbox failure-state lease fencing is accepted after developer verification. Publication-failure retry metadata now requires a still-live exact-token lease, so an unsuccessful send that outlives ownership cannot postpone immediate reclaim. The remaining durable-ownership/crash-window review found no additional material correctness defect across post-ack publication markers, DLQ acknowledgement before framework offset commit, controlled replay/idempotency, and scheduled Collection completion; Review III is closed.
 
-The latest capacity-telemetry implementation remains verification-pending, while the operational-intelligence foundation, deterministic/statistical Health Engine, Stage 3 manual/provider-neutral assisted investigation, Stage 4a read-only agentic investigation, Stage 4b automatic trigger policy, and Stage 6 application-owned alert policy are accepted after developer verification. The scenario-evidence foundation is implemented and verification-pending: existing resilience and capacity runs now produce labeled evidence artifacts for later offline detector/alert/LLM evaluation. The next priority is an offline evaluation runner and comparable metrics over those artifacts. The preceding capacity telemetry/baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
+The latest capacity-telemetry implementation remains verification-pending, while the operational-intelligence foundation, deterministic/statistical Health Engine, Stage 3 manual/provider-neutral assisted investigation, Stage 4a read-only agentic investigation, Stage 4b automatic trigger policy, Stage 6 application-owned alert policy, and the labeled scenario-evidence foundation are accepted after developer verification. Offline Health/alert evaluation is implemented and verification-pending: it scores detector observations against detector-neutral ground truth and projects the configured alert lifecycle over captured snapshots with explicit parameters recorded in the report. The next priority is assisted-investigation quality evaluation over the same artifacts. The preceding capacity telemetry/baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
 
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -96,7 +96,7 @@ Accepted scaling work:
 1. Operations foundation and deterministic/statistical Health Engine are accepted.
 2. Stage 3 manual/provider-neutral assisted investigation is accepted.
 3. Stage 4a bounded read-only Prometheus/Loki/Tempo/change-history/capacity tools and explicit agentic provider turns are accepted.
-4. Stage 4b multi-replica-safe event/periodic trigger lease/cooldown policy and Stage 6 application-owned alert policy are accepted. The labeled scenario-evidence foundation is implemented and verification-pending; next build offline detector/alert evaluation metrics over that shared evidence format, then assisted-investigation quality evaluation. Continue ramp/spike/soak and Results REST/SSE load as both capacity work and operational-intelligence evaluation data; select throughput optimizations or custom ML/neural models only from repeated evidence.
+4. Stage 4b multi-replica-safe event/periodic trigger lease/cooldown policy, Stage 6 application-owned alert policy, and the labeled scenario-evidence foundation are accepted. Offline detector/alert evaluation is implemented and verification-pending; next add assisted-investigation quality metrics over the same evidence format, then calibrate Health/alert thresholds only from repeated scenario results. Continue ramp/spike/soak and Results REST/SSE load as both capacity work and operational-intelligence evaluation data; select throughput optimizations or custom ML/neural models only from repeated evidence.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 
@@ -112,7 +112,9 @@ The target path is:
 4. manual LLM report analysis;
 5. optional local/external LLM analyst with bounded read-only tools;
 6. alert policy based on deterministic health plus optional structured model assessment;
-7. custom ML/neural experiments only after labeled incident history demonstrates a need.
+7. labeled scenario evidence and offline detector/alert/assisted-investigation evaluation;
+8. evidence-based threshold calibration;
+9. custom ML/neural experiments only after repeated evaluation demonstrates a concrete need.
 
 Repository-owned mutation tooling should emit change records/markers for behavior-affecting runtime changes. This is an application-level audit/correlation mechanism, not a Terraform-style infrastructure control plane.
 

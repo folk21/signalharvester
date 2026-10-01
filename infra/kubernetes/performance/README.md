@@ -41,6 +41,7 @@ build/reports/performance/capacity-baseline.json
 ```
 
 The runner also writes `capacity-baseline-operational-evidence.json` beside that report by default. The evidence record uses `NORMAL_OPERATION` ground truth, captures Operations scenario markers and before/after Health Snapshots, stores the bounded summary as curated measurements, and references the capacity report by repository-relative path plus SHA-256 digest. When `--output` changes, the evidence filename follows that report automatically unless `--evidence-output` is supplied explicitly.
+The evidence file can be evaluated together with resilience artifacts by `../evaluation/offline_evaluator.py`; capacity baselines contribute additional `NORMAL_OPERATION` observations to detector/alert false-positive metrics while the capacity report remains the source of workload measurements.
 
 For a controlled one-versus-three replica comparison with the same workload shape, run:
 

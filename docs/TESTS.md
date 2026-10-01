@@ -483,9 +483,18 @@ It is intentionally separate from `./run_checks.sh` because it performs disrupti
 - injects Kafka traffic;
 - uses test-only PostgreSQL state manipulation.
 
-Deterministic parsing/asset checks for the harness are included in `./infra/kubernetes/run_tests.sh`.
+Deterministic parsing/asset checks for the harness and offline operational evaluator are included in `./infra/kubernetes/run_tests.sh`. They verify evidence bounds, detector-neutral ground truth, explicit fault-window timing, detector metrics, affected-subsystem matching, alert persistence/escalation/recovery/cooldown projection, and exclusion of unobservable fault windows from miss-rate calculations.
 
-The live run also writes `build/reports/operational-intelligence/resilience-scenario-evidence.json`. The versioned artifact labels normal operation, backend pod restart, slow external source, PostgreSQL outage, Kafka lag, Analysis outbox backlog, and Kafka broker restart while keeping scenario ground truth separate from observed Health Snapshots. Partial evidence is retained when a labeled scenario fails.
+The live run also writes `build/reports/operational-intelligence/resilience-scenario-evidence.json`. The versioned artifact labels normal operation, backend pod restart, slow external source, PostgreSQL outage, Kafka lag, Analysis outbox backlog, and Kafka broker restart while keeping scenario ground truth separate from observed Health Snapshots. Fault scenarios add durable `FAULT_START`/`FAULT_END` markers where PostgreSQL is available. Partial evidence is retained when a labeled scenario fails.
+
+Evaluate one or more generated artifacts offline with:
+
+```bash
+python3 infra/kubernetes/evaluation/offline_evaluator.py \
+  build/reports/operational-intelligence/resilience-scenario-evidence.json
+```
+
+The default output is `build/reports/operational-intelligence/offline-evaluation.json`. The evaluator never calls the backend, Prometheus, Loki, Tempo, or an LLM; it consumes only bounded artifacts. Fault scenarios without a Health Snapshot inside their recorded fault window are reported as not evaluable rather than false negatives.
 
 The live run covers:
 

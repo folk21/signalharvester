@@ -34,7 +34,7 @@ The harness uses local ports 18081, 19091, 13101, and 13201 for backend, Prometh
 
 ## Scenario evidence
 
-The runner labels the evaluation-relevant parts of the acceptance sequence as `NORMAL_OPERATION`, `POD_RESTART`, `SLOW_EXTERNAL_SOURCE`, `POSTGRESQL_OUTAGE`, `KAFKA_LAG`, `OUTBOX_BACKLOG`, and `KAFKA_BROKER_RESTART`. Each record separates harness-owned ground truth from observed evidence and may contain durable Operations scenario markers, explicit Health Snapshots, curated scalar measurements, selected bounded logs, and limitations. A failed labeled scenario is retained as partial evidence before the runner exits non-zero.
+The runner labels the evaluation-relevant parts of the acceptance sequence as `NORMAL_OPERATION`, `POD_RESTART`, `SLOW_EXTERNAL_SOURCE`, `POSTGRESQL_OUTAGE`, `KAFKA_LAG`, `OUTBOX_BACKLOG`, and `KAFKA_BROKER_RESTART`. Each record separates harness-owned ground truth from observed evidence and may contain durable Operations scenario markers, explicit Health Snapshots, curated scalar measurements, selected bounded logs, and limitations. Fault scenarios record `FAULT_START` and `FAULT_END` Operations markers around the controlled fault window; scenarios such as a full PostgreSQL outage may still have no Health Snapshot inside that window because the authoritative snapshot store is intentionally unavailable. A failed labeled scenario is retained as partial evidence before the runner exits non-zero.
 
 The evidence artifact is evaluation input only. It does not become application state, does not change Health status/score, and does not authorize alerts or remediation. See [`../evaluation/README.md`](../evaluation/README.md) for the shared format.
 

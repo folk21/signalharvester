@@ -333,7 +333,20 @@ The harness deploys a temporary in-cluster RSS fixture and exercises:
 - authorization boundaries;
 - Prometheus, Loki, and Tempo evidence.
 
-It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. Evaluation-relevant scenarios are also written to `build/reports/operational-intelligence/resilience-scenario-evidence.json`, with detector-neutral labels kept separate from captured Health evidence; failed labeled scenarios retain partial evidence. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for fault-injection boundaries and options.
+It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. Evaluation-relevant scenarios are also written to `build/reports/operational-intelligence/resilience-scenario-evidence.json`, with detector-neutral labels kept separate from captured Health evidence; fault scenarios include explicit timing markers where durable marker persistence is available, and failed labeled scenarios retain partial evidence. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for fault-injection boundaries and options.
+
+### Evaluate Health and alert behavior offline
+
+Use the generated resilience evidence directly:
+
+```bash
+python3 infra/kubernetes/evaluation/offline_evaluator.py \
+  build/reports/operational-intelligence/resilience-scenario-evidence.json
+```
+
+The evaluator writes `build/reports/operational-intelligence/offline-evaluation.json` by default. It reports detector success/false positives, time to detection, affected-subsystem coverage, recovery state, and an isolated alert-policy projection over the captured snapshots. Alert projection defaults match the repository's current `human-attention-v1` defaults, and every applied parameter is persisted in the report. Override them explicitly when evaluating a different configuration, for example `--degraded-min-consecutive`, `--healthy-min-consecutive-to-resolve`, or `--reopen-cooldown-seconds`.
+
+The projection is intentionally offline: it does not create or modify application alerts and must not be described as persisted runtime alert output. A fault without a Health Snapshot inside the controlled fault window is left out of detection/attention rates rather than treated as a miss.
 
 ### Demonstrate Kafka consumer horizontal scaling
 

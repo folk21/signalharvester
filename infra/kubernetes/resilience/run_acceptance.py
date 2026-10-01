@@ -348,6 +348,15 @@ def record_scenario_start(admin: ApiSession, scenario: Any) -> None:
     scenario.add_health_snapshot("BEFORE", capture_health_snapshot(admin))
 
 
+def record_scenario_fault_boundary(admin: ApiSession, scenario: Any, phase: str) -> None:
+    """Records one durable fault-window boundary used by offline detection timing."""
+
+    if phase not in {"FAULT_START", "FAULT_END"}:
+        raise AcceptanceError(f"unsupported scenario fault boundary phase: {phase}")
+    marker = record_scenario_marker(admin, scenario, phase)
+    scenario.add_change_marker(phase, marker)
+
+
 def record_scenario_end(admin: ApiSession, scenario: Any) -> None:
     """Records a post-recovery Health Snapshot followed by the durable end marker."""
 
@@ -1187,7 +1196,9 @@ def main(argv: list[str] | None = None) -> int:
                     affected_subsystems=("BACKEND",),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_START")
                     restart_observations = restart_backend_container(runner, viewer, args.scenario_timeout)
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_END")
                     scenario.add_measurement(
                         "backendPodRestartCountBefore",
                         restart_observations["restartCountBefore"],
@@ -1211,9 +1222,11 @@ def main(argv: list[str] | None = None) -> int:
                     affected_subsystems=("COLLECTION", "EXTERNAL_SOURCE"),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_START")
                     slow_observations = verify_slow_source_availability(
                         admin, viewer, tracker, args.scenario_timeout, scenario
                     )
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_END")
                     scenario.add_measurement(
                         "readinessHttpStatus",
                         slow_observations["readinessHttpStatus"],
@@ -1235,6 +1248,7 @@ def main(argv: list[str] | None = None) -> int:
                     affected_subsystems=("POSTGRESQL", "ANALYSIS"),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_START")
                     verify_retry_dlq_and_postgres_recovery(
                         runner,
                         admin,
@@ -1245,6 +1259,7 @@ def main(argv: list[str] | None = None) -> int:
                         args.rollout_timeout,
                         scenario,
                     )
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_END")
                     scenario.add_limitation(
                         "No Health Snapshot is persisted while PostgreSQL is intentionally unavailable; "
                         "the durable start marker and post-recovery snapshot bound the outage window."
@@ -1258,9 +1273,11 @@ def main(argv: list[str] | None = None) -> int:
                     affected_subsystems=("KAFKA", "ANALYSIS"),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_START")
                     verify_analysis_lag_recovery(
                         runner, env_guard, admin, viewer, tracker, args.scenario_timeout, scenario
                     )
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_END")
                     record_scenario_end(admin, scenario)
 
                 with evidence_dataset.scenario(
@@ -1270,9 +1287,11 @@ def main(argv: list[str] | None = None) -> int:
                     affected_subsystems=("ANALYSIS_OUTBOX", "RESULTS"),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_START")
                     verify_outbox_recovery(
                         runner, env_guard, admin, viewer, tracker, args.scenario_timeout, scenario
                     )
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_END")
                     record_scenario_end(admin, scenario)
 
                 verify_scheduler_lease(runner, admin, tracker, args.scenario_timeout)
@@ -1284,6 +1303,7 @@ def main(argv: list[str] | None = None) -> int:
                     affected_subsystems=("KAFKA",),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_START")
                     broker_observations = restart_redpanda_and_verify(
                         runner,
                         admin,
@@ -1292,6 +1312,7 @@ def main(argv: list[str] | None = None) -> int:
                         args.scenario_timeout,
                         args.rollout_timeout,
                     )
+                    record_scenario_fault_boundary(admin, scenario, "FAULT_END")
                     scenario.add_measurement(
                         "recoveredResults",
                         broker_observations["recoveredResults"],
