@@ -88,8 +88,6 @@ Focused commands follow the same source-set split:
 ./gradlew :modules:analysis:integrationTest
 ./gradlew :modules:results:test
 ./gradlew :modules:results:integrationTest
-./gradlew :modules:operations:test
-./gradlew :modules:operations:integrationTest
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
 ./gradlew :testing:integration-tests:integrationTest
@@ -110,7 +108,7 @@ Container-backed integration ownership is:
 - `modules:configuration` — PostgreSQL persistence/server boundary;
 - `modules:collection` — Kafka producer/consumer transport boundary;
 - `modules:analysis` — PostgreSQL durable deduplication;
-- `modules:operations` — deterministic/statistical Health Engine and analysis-package unit coverage plus PostgreSQL change-journal, Health Snapshot/report/Incident Assessment persistence, evidence-reference validation, deterministic fake-provider assisted investigation, bounded read-only tool budgets, rolling-baseline history, change/health correlation, and durable automatic-trigger planning/lease/retry semantics;
+- `modules:operations` — deterministic/statistical Health Engine and analysis-package unit coverage plus PostgreSQL change-journal, Health Snapshot/report/Incident Assessment persistence, evidence-reference validation, deterministic fake-provider assisted investigation, bounded read-only tool budgets, rolling-baseline history, change/health correlation, and durable automatic-trigger planning/lease/retry semantics plus deterministic human-attention alert open/escalate/resolve/cooldown semantics;
   Automatic-trigger integration coverage verifies one trigger per snapshot, exact-token lease renewal, atomic automatic-assessment completion, and bounded retry/exhaustion while the scheduled worker is delayed out of deterministic test execution. External/local real-model acceptance is opt-in and must remain outside the canonical offline gate. Repository tests use a deterministic fake `IncidentAnalyst`, a loopback HTTP server for the OpenAI-compatible tool-turn protocol, and application-owned fake tool sessions; they never require model credentials or public network access.
 - `modules:results` — PostgreSQL + Kafka terminal-event consumption and idempotent projection persistence;
 - `testing:integration-tests` — PostgreSQL + Kafka cross-module Collection Run and Collection-to-Analysis flows.

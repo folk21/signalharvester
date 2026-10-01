@@ -1,3 +1,13 @@
+
+## Unreleased — operational alert decision policy
+
+- accept Stage 4b durable automatic investigation triggers after the canonical repository gate passed;
+- add Operations-owned deterministic human-attention alert lifecycle with persisted WARNING/CRITICAL state;
+- add configurable consecutive DEGRADED/UNHEALTHY opening thresholds, sustained HEALTHY recovery, and DEGRADED reopen cooldown;
+- serialize multi-replica alert decisions with a short PostgreSQL transaction advisory lock and retain one active incident;
+- attach validated Incident Assessment metadata only as advisory context, never as alert authority;
+- expose bounded ADMIN alert history through `/api/v1/admin/operations/health/alerts`;
+- keep external notification delivery and remediation outside the alert decision boundary.
 ---
 type: Changelog
 title: SignalHarvester changelog

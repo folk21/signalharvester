@@ -416,3 +416,18 @@ The backend Kubernetes ConfigMap activates:
 The local stack sets `SIGNALHARVESTER_AUTH_COOKIE_SECURE=false` because it intentionally uses HTTP port forwarding.
 
 Shared/public Internet exposure must terminate TLS and enable Secure cookies. Do not copy the local HTTP exception into production.
+
+
+### Human-attention alert policy
+
+The Operations alert decision policy is disabled by default. When enabled it records durable human-attention incidents from deterministic Health Snapshot history; it does not deliver external notifications or authorize remediation.
+
+- `SIGNALHARVESTER_OPERATIONS_ALERT_POLICY_ENABLED` — enable durable alert decisions (`false` by default);
+- `SIGNALHARVESTER_OPERATIONS_ALERT_POLICY_VERSION` — persisted policy identity (`human-attention-v1`);
+- `SIGNALHARVESTER_OPERATIONS_ALERT_POLICY_DEGRADED_MIN_CONSECUTIVE_SNAPSHOTS` — DEGRADED persistence required to open WARNING (`3`);
+- `SIGNALHARVESTER_OPERATIONS_ALERT_POLICY_UNHEALTHY_MIN_CONSECUTIVE_SNAPSHOTS` — UNHEALTHY persistence required to open/escalate CRITICAL (`1`);
+- `SIGNALHARVESTER_OPERATIONS_ALERT_POLICY_HEALTHY_MIN_CONSECUTIVE_SNAPSHOTS_TO_RESOLVE` — HEALTHY persistence required to resolve (`2`);
+- `SIGNALHARVESTER_OPERATIONS_ALERT_POLICY_REOPEN_COOLDOWN` — cooldown before a resolved incident may reopen as DEGRADED (`15m`); UNHEALTHY bypasses it;
+- `SIGNALHARVESTER_OPERATIONS_ALERT_POLICY_RETENTION_COUNT` — number of resolved alerts retained in addition to any open incident (`500`).
+
+Structured Incident Assessments may be attached to an open alert as advisory context. Their `humanAttentionSuggested` field never changes deterministic alert eligibility, severity, or lifecycle.

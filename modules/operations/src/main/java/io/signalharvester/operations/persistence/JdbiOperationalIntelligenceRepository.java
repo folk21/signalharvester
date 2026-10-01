@@ -13,6 +13,10 @@ import io.signalharvester.operations.assisted.AutomaticInvestigationTrigger;
 import io.signalharvester.operations.assisted.AutomaticInvestigationTriggerState;
 import io.signalharvester.operations.assisted.AutomaticInvestigationTriggerType;
 import io.signalharvester.operations.assisted.ClaimedAutomaticInvestigation;
+import io.signalharvester.operations.alert.HumanAttentionAlert;
+import io.signalharvester.operations.alert.HumanAttentionAlertReason;
+import io.signalharvester.operations.alert.HumanAttentionAlertSeverity;
+import io.signalharvester.operations.alert.HumanAttentionAlertState;
 import io.signalharvester.operations.model.HealthAnomaly;
 import io.signalharvester.operations.model.HealthSnapshot;
 import io.signalharvester.operations.model.HealthStatus;
@@ -47,6 +51,24 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
     private static final String TRY_HEALTH_SAMPLING_LOCK = SqlResources.load(SQL_PATH, "try-health-sampling-lock");
     private static final String FIND_SNAPSHOT_BEFORE = SqlResources.load(SQL_PATH, "find-snapshot-before");
     private static final String FIND_SNAPSHOT_AFTER = SqlResources.load(SQL_PATH, "find-snapshot-after");
+    private static final String ACQUIRE_HUMAN_ATTENTION_ALERT_DECISION_LOCK =
+            SqlResources.load(SQL_PATH, "acquire-human-attention-alert-decision-lock");
+    private static final String INSERT_HUMAN_ATTENTION_ALERT =
+            SqlResources.load(SQL_PATH, "insert-human-attention-alert");
+    private static final String FIND_OPEN_HUMAN_ATTENTION_ALERT =
+            SqlResources.load(SQL_PATH, "find-open-human-attention-alert");
+    private static final String FIND_LATEST_RESOLVED_HUMAN_ATTENTION_ALERT =
+            SqlResources.load(SQL_PATH, "find-latest-resolved-human-attention-alert");
+    private static final String FIND_RECENT_HUMAN_ATTENTION_ALERTS =
+            SqlResources.load(SQL_PATH, "find-recent-human-attention-alerts");
+    private static final String UPDATE_HUMAN_ATTENTION_ALERT_OBSERVATION =
+            SqlResources.load(SQL_PATH, "update-human-attention-alert-observation");
+    private static final String RESOLVE_HUMAN_ATTENTION_ALERT =
+            SqlResources.load(SQL_PATH, "resolve-human-attention-alert");
+    private static final String ATTACH_ASSESSMENT_TO_HUMAN_ATTENTION_ALERT =
+            SqlResources.load(SQL_PATH, "attach-assessment-to-human-attention-alert");
+    private static final String DELETE_OLD_HUMAN_ATTENTION_ALERTS =
+            SqlResources.load(SQL_PATH, "delete-old-human-attention-alerts");
     private static final String INSERT_INCIDENT_ASSESSMENT = SqlResources.load(SQL_PATH, "insert-incident-assessment");
     private static final String FIND_RECENT_INCIDENT_ASSESSMENTS = SqlResources.load(SQL_PATH, "find-recent-incident-assessments");
     private static final String DELETE_OLD_INCIDENT_ASSESSMENTS = SqlResources.load(SQL_PATH, "delete-old-incident-assessments");
@@ -204,6 +226,104 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
 
 
     @Override
+    public void acquireHumanAttentionAlertDecisionLock() {
+        executeVoid("Failed to acquire human-attention alert decision lock", handle ->
+                handle.createQuery(ACQUIRE_HUMAN_ATTENTION_ALERT_DECISION_LOCK)
+                        .map((rows, context) -> {
+                            rows.getObject(1);
+                            return Boolean.TRUE;
+                        })
+                        .one());
+    }
+
+    @Override
+    public void insertHumanAttentionAlert(HumanAttentionAlert alert) {
+        executeVoid("Failed to insert human-attention alert", handle -> handle.createUpdate(INSERT_HUMAN_ATTENTION_ALERT)
+                .bind("alertId", alert.id())
+                .bind("state", alert.state().name())
+                .bind("severity", alert.severity().name())
+                .bind("reason", alert.reason().name())
+                .bind("policyVersion", alert.policyVersion())
+                .bind("openedAt", Timestamp.from(alert.openedAt()))
+                .bind("lastObservedAt", Timestamp.from(alert.lastObservedAt()))
+                .bind("resolvedAt", alert.resolvedAt() == null ? null : Timestamp.from(alert.resolvedAt()))
+                .bind("firstSnapshotId", alert.firstSnapshotId())
+                .bind("latestSnapshotId", alert.latestSnapshotId())
+                .bind("latestHealthStatus", alert.latestHealthStatus().name())
+                .bind("latestHealthScore", alert.latestHealthScore())
+                .bind("latestAssessmentId", alert.latestAssessmentId())
+                .bind("modelAttentionSuggested", alert.modelAttentionSuggested())
+                .execute());
+    }
+
+    @Override
+    public Optional<HumanAttentionAlert> findOpenHumanAttentionAlert() {
+        return execute("Failed to read open human-attention alert", handle -> handle.createQuery(FIND_OPEN_HUMAN_ATTENTION_ALERT)
+                .map((rows, context) -> mapHumanAttentionAlert(rows))
+                .findFirst());
+    }
+
+    @Override
+    public Optional<HumanAttentionAlert> findLatestResolvedHumanAttentionAlert() {
+        return execute("Failed to read latest resolved human-attention alert", handle -> handle.createQuery(FIND_LATEST_RESOLVED_HUMAN_ATTENTION_ALERT)
+                .map((rows, context) -> mapHumanAttentionAlert(rows))
+                .findFirst());
+    }
+
+    @Override
+    public List<HumanAttentionAlert> findRecentHumanAttentionAlerts(int limit) {
+        return execute("Failed to list human-attention alerts", handle -> handle.createQuery(FIND_RECENT_HUMAN_ATTENTION_ALERTS)
+                .bind("limit", limit)
+                .map((rows, context) -> mapHumanAttentionAlert(rows))
+                .list());
+    }
+
+    @Override
+    public void updateHumanAttentionAlertObservation(
+            UUID alertId, HumanAttentionAlertSeverity severity, HumanAttentionAlertReason reason,
+            Instant observedAt, UUID snapshotId, HealthStatus healthStatus, int healthScore) {
+        executeExactAlertUpdate("update human-attention alert observation", handle -> handle.createUpdate(UPDATE_HUMAN_ATTENTION_ALERT_OBSERVATION)
+                .bind("alertId", alertId)
+                .bind("severity", severity.name())
+                .bind("reason", reason.name())
+                .bind("observedAt", Timestamp.from(observedAt))
+                .bind("snapshotId", snapshotId)
+                .bind("healthStatus", healthStatus.name())
+                .bind("healthScore", healthScore)
+                .execute());
+    }
+
+    @Override
+    public void resolveHumanAttentionAlert(
+            UUID alertId, Instant resolvedAt, UUID snapshotId, HealthStatus healthStatus, int healthScore) {
+        executeExactAlertUpdate("resolve human-attention alert", handle -> handle.createUpdate(RESOLVE_HUMAN_ATTENTION_ALERT)
+                .bind("alertId", alertId)
+                .bind("resolvedAt", Timestamp.from(resolvedAt))
+                .bind("snapshotId", snapshotId)
+                .bind("healthStatus", healthStatus.name())
+                .bind("healthScore", healthScore)
+                .execute());
+    }
+
+    @Override
+    public boolean attachAssessmentToHumanAttentionAlert(
+            UUID alertId, UUID assessmentId, boolean modelAttentionSuggested) {
+        return execute("Failed to attach assessment to human-attention alert", handle ->
+                handle.createUpdate(ATTACH_ASSESSMENT_TO_HUMAN_ATTENTION_ALERT)
+                        .bind("alertId", alertId)
+                        .bind("assessmentId", assessmentId)
+                        .bind("modelAttentionSuggested", modelAttentionSuggested)
+                        .execute() == 1);
+    }
+
+    @Override
+    public void deleteResolvedHumanAttentionAlertsBeyond(int keepCount) {
+        executeVoid("Failed to enforce human-attention alert retention", handle -> handle.createUpdate(DELETE_OLD_HUMAN_ATTENTION_ALERTS)
+                .bind("keepCount", keepCount)
+                .execute());
+    }
+
+    @Override
     public void insertIncidentAssessment(IncidentAssessment assessment) {
         executeVoid("Failed to record incident assessment", handle -> handle.createUpdate(INSERT_INCIDENT_ASSESSMENT)
                 .bind("assessmentId", assessment.id())
@@ -345,6 +465,26 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
                         .execute());
     }
 
+    private HumanAttentionAlert mapHumanAttentionAlert(ResultSet rows) throws SQLException {
+        Timestamp resolvedAt = rows.getTimestamp("resolved_at");
+        Object modelAttentionSuggested = rows.getObject("model_attention_suggested");
+        return new HumanAttentionAlert(
+                rows.getObject("alert_id", UUID.class),
+                HumanAttentionAlertState.valueOf(rows.getString("state")),
+                HumanAttentionAlertSeverity.valueOf(rows.getString("severity")),
+                HumanAttentionAlertReason.valueOf(rows.getString("reason")),
+                rows.getString("policy_version"),
+                rows.getTimestamp("opened_at").toInstant(),
+                rows.getTimestamp("last_observed_at").toInstant(),
+                resolvedAt == null ? null : resolvedAt.toInstant(),
+                rows.getObject("first_snapshot_id", UUID.class),
+                rows.getObject("latest_snapshot_id", UUID.class),
+                HealthStatus.valueOf(rows.getString("latest_health_status")),
+                rows.getInt("latest_health_score"),
+                rows.getObject("latest_assessment_id", UUID.class),
+                modelAttentionSuggested == null ? null : rows.getBoolean("model_attention_suggested"));
+    }
+
     private AutomaticInvestigationTrigger mapAutomaticInvestigationTrigger(ResultSet rows) throws SQLException {
         return new AutomaticInvestigationTrigger(
                 rows.getObject("trigger_id", UUID.class),
@@ -427,6 +567,14 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
             return objectMapper.readValue(value, type);
         } catch (JsonProcessingException exception) {
             throw new OperationalIntelligencePersistenceException("Failed to deserialize operational JSON", exception);
+        }
+    }
+
+    private void executeExactAlertUpdate(String action, HandleIntFunction operation) {
+        int updated = execute("Failed to " + action, operation::apply);
+        if (updated != 1) {
+            throw new OperationalIntelligencePersistenceException(
+                    "Cannot " + action + " because the active alert state changed concurrently");
         }
     }
 

@@ -2,6 +2,7 @@ package io.signalharvester.operations.assisted;
 
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
+import io.signalharvester.operations.alert.AlertDecisionService;
 import io.signalharvester.operations.model.HealthAnalysisPackage;
 import io.signalharvester.operations.assisted.tools.InvestigationBudgetExceededException;
 import io.signalharvester.operations.assisted.tools.InvestigationToolbox;
@@ -28,6 +29,7 @@ public final class AssistedInvestigationService implements AssistedInvestigation
     private final List<IncidentAnalyst> analysts;
     private final AssistedInvestigationConfiguration configuration;
     private final InvestigationToolbox toolbox;
+    private final AlertDecisionService alertDecisionService;
     private final Clock clock;
 
     public AssistedInvestigationService(
@@ -36,8 +38,9 @@ public final class AssistedInvestigationService implements AssistedInvestigation
             @Named("default") TransactionOperations<Connection> transactions,
             List<IncidentAnalyst> analysts,
             AssistedInvestigationConfiguration configuration,
-            InvestigationToolbox toolbox) {
-        this(operations, repository, transactions, analysts, configuration, toolbox, Clock.systemUTC());
+            InvestigationToolbox toolbox,
+            AlertDecisionService alertDecisionService) {
+        this(operations, repository, transactions, analysts, configuration, toolbox, alertDecisionService, Clock.systemUTC());
     }
 
     AssistedInvestigationService(
@@ -47,6 +50,7 @@ public final class AssistedInvestigationService implements AssistedInvestigation
             List<IncidentAnalyst> analysts,
             AssistedInvestigationConfiguration configuration,
             InvestigationToolbox toolbox,
+            AlertDecisionService alertDecisionService,
             Clock clock) {
         this.operations = Objects.requireNonNull(operations, "operations");
         this.repository = Objects.requireNonNull(repository, "repository");
@@ -54,6 +58,7 @@ public final class AssistedInvestigationService implements AssistedInvestigation
         this.analysts = List.copyOf(Objects.requireNonNull(analysts, "analysts"));
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.toolbox = Objects.requireNonNull(toolbox, "toolbox");
+        this.alertDecisionService = Objects.requireNonNull(alertDecisionService, "alertDecisionService");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -92,6 +97,7 @@ public final class AssistedInvestigationService implements AssistedInvestigation
                     "Health Snapshot does not exist: " + assessment.snapshotId());
         }
         repository.insertIncidentAssessment(assessment);
+        alertDecisionService.attachAssessmentInCurrentTransaction(assessment);
         repository.deleteIncidentAssessmentsBeyond(configuration.getAssessmentRetentionCount());
     }
 

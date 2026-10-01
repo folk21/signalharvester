@@ -13,6 +13,7 @@ import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 import io.micronaut.validation.Validated;
+import io.signalharvester.operations.alert.AlertDecisionOperations;
 import io.signalharvester.operations.api.OperationalChangeCategory;
 import io.signalharvester.operations.api.OperationalChangeContext;
 import io.signalharvester.operations.api.OperationalChangeJournal;
@@ -45,16 +46,19 @@ public class OperationalIntelligenceController {
     private final OperationalIntelligenceOperations operations;
     private final AssistedInvestigationOperations assistedInvestigation;
     private final AutomaticInvestigationCoordinator automaticInvestigation;
+    private final AlertDecisionOperations alertDecisions;
     private final OperationalChangeJournal changeJournal;
 
     public OperationalIntelligenceController(
             OperationalIntelligenceOperations operations,
             AssistedInvestigationOperations assistedInvestigation,
             AutomaticInvestigationCoordinator automaticInvestigation,
+            AlertDecisionOperations alertDecisions,
             OperationalChangeJournal changeJournal) {
         this.operations = operations;
         this.assistedInvestigation = assistedInvestigation;
         this.automaticInvestigation = automaticInvestigation;
+        this.alertDecisions = alertDecisions;
         this.changeJournal = changeJournal;
     }
 
@@ -133,6 +137,15 @@ public class OperationalIntelligenceController {
             @QueryValue(defaultValue = "20") @Min(1) @Max(200) int limit) {
         return assistedInvestigation.recentAssessments(limit).stream()
                 .map(IncidentAssessmentResponse::from)
+                .toList();
+    }
+
+    /** Returns recent application-owned human-attention alert decisions. */
+    @Get("/health/alerts")
+    public List<HumanAttentionAlertResponse> alerts(
+            @QueryValue(defaultValue = "20") @Min(1) @Max(200) int limit) {
+        return alertDecisions.recentAlerts(limit).stream()
+                .map(HumanAttentionAlertResponse::from)
                 .toList();
     }
 

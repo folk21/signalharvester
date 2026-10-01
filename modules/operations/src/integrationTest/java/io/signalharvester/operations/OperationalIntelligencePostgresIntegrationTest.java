@@ -11,6 +11,9 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.inject.qualifiers.Qualifiers;
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.operations.api.OperationalChangeCategory;
+import io.signalharvester.operations.alert.AlertDecisionService;
+import io.signalharvester.operations.alert.HumanAttentionAlertSeverity;
+import io.signalharvester.operations.alert.HumanAttentionAlertState;
 import io.signalharvester.operations.api.OperationalChangeContext;
 import io.signalharvester.operations.api.OperationalChangeJournal;
 import io.signalharvester.operations.api.OperationalChangeOutcome;
@@ -84,6 +87,11 @@ class OperationalIntelligencePostgresIntegrationTest {
                 Map.entry("signalharvester.operations.assisted-investigation.automatic-initial-delay", "1h"),
                 Map.entry("signalharvester.operations.assisted-investigation.automatic-retry-backoff", "10ms"),
                 Map.entry("signalharvester.operations.assisted-investigation.automatic-max-attempts", 2),
+                Map.entry("signalharvester.operations.alert-policy.enabled", true),
+                Map.entry("signalharvester.operations.alert-policy.degraded-min-consecutive-snapshots", 2),
+                Map.entry("signalharvester.operations.alert-policy.unhealthy-min-consecutive-snapshots", 1),
+                Map.entry("signalharvester.operations.alert-policy.healthy-min-consecutive-snapshots-to-resolve", 2),
+                Map.entry("signalharvester.operations.alert-policy.reopen-cooldown", "1h"),
                 Map.entry("signalharvester.operations.assisted-investigation.assessment-retention-count", 2)));
     }
 
@@ -318,6 +326,73 @@ class OperationalIntelligencePostgresIntegrationTest {
         assertEquals(1L, scalarLong("SELECT count(*) FROM operations.automatic_investigation_triggers"));
     }
 
+    /** Keep alert authority deterministic while allowing structured assessments to attach advisory context. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldPersistDeterministicHumanAttentionAlertLifecycle() {
+        AlertDecisionService alerts = context.getBean(AlertDecisionService.class);
+        AssistedInvestigationOperations assisted = context.getBean(AssistedInvestigationOperations.class);
+        OperationalIntelligenceRepository repository = context.getBean(OperationalIntelligenceRepository.class);
+        TransactionOperations<Connection> transactions = (TransactionOperations<Connection>) context.getBean(
+                TransactionOperations.class, Qualifiers.byName("default"));
+        Instant startedAt = Instant.now().minusSeconds(600);
+
+        persistAndEvaluate(transactions, repository, alerts, healthSnapshot(HealthStatus.HEALTHY, startedAt));
+        var firstDegraded = healthSnapshot(HealthStatus.DEGRADED, startedAt.plusSeconds(60));
+        persistAndEvaluate(transactions, repository, alerts, firstDegraded);
+        assisted.submitManual(firstDegraded.id(), new IncidentAssessmentDraft(
+                "Model-only attention suggestion before deterministic persistence threshold.",
+                List.of("operations"),
+                0.95,
+                List.of("One degraded snapshot exists."),
+                List.of(),
+                List.of("health-snapshot:" + firstDegraded.id()),
+                List.of("Wait for deterministic alert policy evidence."),
+                true));
+        assertTrue(alerts.recentAlerts(10).isEmpty());
+
+        var secondDegraded = healthSnapshot(HealthStatus.DEGRADED, startedAt.plusSeconds(120));
+        persistAndEvaluate(transactions, repository, alerts, secondDegraded);
+        var warning = alerts.recentAlerts(10).getFirst();
+        assertEquals(HumanAttentionAlertState.OPEN, warning.state());
+        assertEquals(HumanAttentionAlertSeverity.WARNING, warning.severity());
+
+        var assessment = assisted.submitManual(secondDegraded.id(), new IncidentAssessmentDraft(
+                "Structured review suggests human attention.",
+                List.of("operations"),
+                0.9,
+                List.of("Deterministic health is degraded."),
+                List.of(),
+                List.of("health-snapshot:" + secondDegraded.id()),
+                List.of("Inspect the degraded signals."),
+                true));
+        var enriched = alerts.recentAlerts(10).getFirst();
+        assertEquals(assessment.id(), enriched.latestAssessmentId());
+        assertEquals(Boolean.TRUE, enriched.modelAttentionSuggested());
+        assertEquals(HumanAttentionAlertSeverity.WARNING, enriched.severity());
+
+        var unhealthy = healthSnapshot(HealthStatus.UNHEALTHY, startedAt.plusSeconds(180));
+        persistAndEvaluate(transactions, repository, alerts, unhealthy);
+        assertEquals(HumanAttentionAlertSeverity.CRITICAL, alerts.recentAlerts(10).getFirst().severity());
+
+        persistAndEvaluate(transactions, repository, alerts, healthSnapshot(HealthStatus.HEALTHY, startedAt.plusSeconds(240)));
+        persistAndEvaluate(transactions, repository, alerts, healthSnapshot(HealthStatus.HEALTHY, startedAt.plusSeconds(300)));
+        var resolved = alerts.recentAlerts(10).getFirst();
+        assertEquals(HumanAttentionAlertState.RESOLVED, resolved.state());
+        assertNotNull(resolved.resolvedAt());
+
+        persistAndEvaluate(transactions, repository, alerts, healthSnapshot(HealthStatus.DEGRADED, startedAt.plusSeconds(360)));
+        persistAndEvaluate(transactions, repository, alerts, healthSnapshot(HealthStatus.DEGRADED, startedAt.plusSeconds(420)));
+        assertEquals(1, alerts.recentAlerts(10).size());
+
+        persistAndEvaluate(transactions, repository, alerts, healthSnapshot(HealthStatus.UNHEALTHY, startedAt.plusSeconds(480)));
+        var reopened = alerts.recentAlerts(10);
+        assertEquals(2, reopened.size());
+        assertEquals(HumanAttentionAlertState.OPEN, reopened.getFirst().state());
+        assertEquals(HumanAttentionAlertSeverity.CRITICAL, reopened.getFirst().severity());
+        assertEquals(2L, scalarLong("SELECT count(*) FROM operations.human_attention_alerts"));
+    }
+
     /** Keep snapshot history bounded by the configured count while preserving the newest evidence. */
     @Test
     void shouldEnforceSnapshotRetentionCount() throws Exception {
@@ -329,6 +404,18 @@ class OperationalIntelligencePostgresIntegrationTest {
 
         assertEquals(2L, scalarLong("SELECT count(*) FROM operations.health_snapshots"));
         assertEquals(latest.id(), operations.latestSnapshot().id());
+    }
+
+    private static void persistAndEvaluate(
+            TransactionOperations<Connection> transactions,
+            OperationalIntelligenceRepository repository,
+            AlertDecisionService alerts,
+            HealthSnapshot snapshot) {
+        transactions.executeWrite(status -> {
+            repository.insertSnapshot(snapshot);
+            alerts.evaluateSnapshotInCurrentTransaction(snapshot);
+            return null;
+        });
     }
 
     private static HealthSnapshot healthSnapshot(HealthStatus status, Instant generatedAt) {

@@ -13,7 +13,7 @@ The project is intentionally domain-neutral. Typical monitoring scenarios includ
 - news and topic-oriented information;
 - financial, company, regulatory, and public-market data.
 
-The current bounded backend implementation focus is operational health intelligence. The foundation, deterministic/statistical Health Engine, Stage 3 manual/provider-neutral assisted investigation, and Stage 4a bounded read-only agentic investigation are accepted. Stage 4b is implemented and verification-pending: optional automatic event/periodic provider investigation now uses durable PostgreSQL trigger state, exact expiring leases with heartbeat renewal, cooldown/deduplication, bounded retries, and provider work outside database transactions. Alert policy remains the next slice. The capacity-telemetry, capacity-baseline, and explicit all-relevant Analysis slices remain separately verification-pending until their canonical acceptance is recorded.
+The current bounded backend implementation focus is operational health intelligence. The foundation, deterministic/statistical Health Engine, Stage 3 manual/provider-neutral assisted investigation, Stage 4a bounded read-only agentic investigation, and Stage 4b durable automatic trigger policy are accepted. Stage 6 alert integration is implemented and verification-pending: Operations now owns a durable deterministic human-attention alert lifecycle with persistence thresholds, recovery hysteresis, reopen cooldown, cluster-wide decision serialization, and optional structured assessment context that cannot control alert eligibility or severity. Scenario-based model evaluation remains the next slice. The capacity-telemetry, capacity-baseline, and explicit all-relevant Analysis slices remain separately verification-pending until their canonical acceptance is recorded.
 
 SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.
 
@@ -126,8 +126,7 @@ signalharvester/
 │   ├── analysis/
 │   ├── results/
 │   ├── event-observation/
-│   ├── security/
-│   └── operations/
+│   └── security/
 ├── testing/
 │   ├── test-support/
 │   └── integration-tests/

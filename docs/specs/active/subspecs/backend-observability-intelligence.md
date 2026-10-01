@@ -10,7 +10,7 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Active. Stages 1, 2, 3, and 4a are accepted after the developer confirmed the canonical repository gates. Stage 4b automatic trigger policy is implemented and verification-pending: optional event/periodic provider invocation is coordinated through durable PostgreSQL trigger state, exact expiring leases with heartbeat renewal, cooldown/deduplication, and bounded retries while model/tool I/O remains outside database transactions. Alert integration remains disabled until the next stage.
+Active. Stages 1, 2, 3, 4a, and 4b are accepted after the developer confirmed the canonical repository gates. Stage 6 alert integration is implemented and verification-pending: deterministic Health Snapshot persistence now drives a durable human-attention alert lifecycle with configurable persistence/recovery thresholds, reopen cooldown, cluster-wide decision serialization, and optional validated Incident Assessment context that has no alert authority. Scenario-based model evaluation remains the next stage.
 
 The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until their canonical acceptance is recorded. This specification does not weaken or replace those acceptance gates.
 
@@ -60,7 +60,7 @@ LLM analysis is an optional secondary reasoning layer. It may use either an exte
 
 The accepted observability baseline already provides Micrometer/Prometheus metrics, OpenTelemetry traces in Tempo, trace-correlated logs in Loki, Kubernetes/Redpanda telemetry, Grafana dashboards, resilience evidence, and deterministic capacity reports. The latest capacity work also exposes Analysis outbox backlog and dispatcher latency signals.
 
-Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot, versioned health-scoring/anomaly policy, and cross-capability change journal. Stage 3 has closed the manual/provider-neutral assessment gap. Accepted Stage 4a provides bounded read-only telemetry/history tools and explicit agentic investigation. Stage 4b now provides the multi-replica-safe automatic event/periodic trigger policy; alert integration remains the next gap.
+Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot, versioned health-scoring/anomaly policy, and cross-capability change journal. Stage 3 has closed the manual/provider-neutral assessment gap. Accepted Stage 4a provides bounded read-only telemetry/history tools and explicit agentic investigation. Stage 4b provides the multi-replica-safe automatic event/periodic trigger policy. Stage 6 now implements the application-owned alert decision boundary; the remaining gap is controlled scenario-based detector/LLM evaluation and any later external notification adapter.
 
 Security administration already emits audit-safe logs, but log lines are not a sufficient general change journal for correlating configuration/runtime changes with later health behavior. Event Observation is also not the authoritative store for this purpose because it is a bounded diagnostic materialization of pipeline events.
 
@@ -288,6 +288,7 @@ Each implementation stage must add focused deterministic tests before broader li
 - structured LLM assessment using a deterministic fake provider;
 - read-only tool-budget enforcement and prompt-injection/redaction tests;
 - durable automatic-trigger deduplication, exact-token lease renewal, bounded retry/exhaustion, and atomic assessment/trigger completion;
+- deterministic human-attention alert opening/escalation/recovery/cooldown with structured assessment evidence remaining advisory;
 - optional live provider/local-model acceptance kept separate from the canonical offline repository gate;
 - canonical `./run_checks.sh` before acceptance of repository-owned behavior.
 
@@ -304,5 +305,5 @@ Each implementation stage must add focused deterministic tests before broader li
 - [x] add optional local/external LLM adapter behind explicit secrets/policy;
 - [x] add bounded read-only Prometheus/Loki/Tempo/change-history/capacity investigation tools;
 - [x] add multi-replica-safe event/periodic trigger policy with cooldown/deduplication;
-- [ ] add alert decision policy that does not delegate authority to free-form LLM text;
+- [x] add alert decision policy that does not delegate authority to free-form LLM text;
 - [ ] run focused and canonical validation, then move accepted behavior into owning current-state documentation.

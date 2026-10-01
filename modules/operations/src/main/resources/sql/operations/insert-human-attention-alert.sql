@@ -1,0 +1,31 @@
+INSERT INTO operations.human_attention_alerts (
+    alert_id,
+    state,
+    severity,
+    reason,
+    policy_version,
+    opened_at,
+    last_observed_at,
+    resolved_at,
+    first_snapshot_id,
+    latest_snapshot_id,
+    latest_health_status,
+    latest_health_score,
+    latest_assessment_id,
+    model_attention_suggested
+) VALUES (
+    :alertId,
+    :state,
+    :severity,
+    :reason,
+    :policyVersion,
+    :openedAt,
+    :lastObservedAt,
+    :resolvedAt,
+    :firstSnapshotId,
+    :latestSnapshotId,
+    :latestHealthStatus,
+    :latestHealthScore,
+    :latestAssessmentId,
+    :modelAttentionSuggested
+)
