@@ -18,7 +18,7 @@ Before running resilience acceptance:
 3. apply `infra/kubernetes`;
 4. make sure `./infra/kubernetes/verify-local.sh` can pass.
 
-The harness runs the normal live deployment preflight itself unless `--skip-preflight` is supplied.
+The harness runs the normal live deployment preflight itself unless `--skip-preflight` is supplied. It also emits a versioned bounded operational scenario-evidence artifact for offline Health/alert/assisted-investigation evaluation.
 
 ## Run
 
@@ -30,7 +30,13 @@ python3 infra/kubernetes/resilience/run_acceptance.py
 
 The default namespace is `signalharvester`. Override it with `--namespace` or `SIGNALHARVESTER_K8S_NAMESPACE`.
 
-The harness uses local ports 18081, 19091, 13101, and 13201 for backend, Prometheus, Loki, and Tempo port-forwards. Override the corresponding command-line options when those ports are already in use.
+The harness uses local ports 18081, 19091, 13101, and 13201 for backend, Prometheus, Loki, and Tempo port-forwards. Override the corresponding command-line options when those ports are already in use. The default evaluation artifact is `build/reports/operational-intelligence/resilience-scenario-evidence.json`; override it with `--evidence-output`.
+
+## Scenario evidence
+
+The runner labels the evaluation-relevant parts of the acceptance sequence as `NORMAL_OPERATION`, `POD_RESTART`, `SLOW_EXTERNAL_SOURCE`, `POSTGRESQL_OUTAGE`, `KAFKA_LAG`, `OUTBOX_BACKLOG`, and `KAFKA_BROKER_RESTART`. Each record separates harness-owned ground truth from observed evidence and may contain durable Operations scenario markers, explicit Health Snapshots, curated scalar measurements, selected bounded logs, and limitations. Fault scenarios record `FAULT_START` and `FAULT_END` Operations markers around the controlled fault window; scenarios such as a full PostgreSQL outage may still have no Health Snapshot inside that window because the authoritative snapshot store is intentionally unavailable. A failed labeled scenario is retained as partial evidence before the runner exits non-zero.
+
+The evidence artifact is evaluation input only. It does not become application state, does not change Health status/score, and does not authorize alerts or remediation. See [`../evaluation/README.md`](../evaluation/README.md) for the shared format.
 
 ## Scenarios
 

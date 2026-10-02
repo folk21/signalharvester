@@ -1040,6 +1040,27 @@ paths:
         '404': {description: No Health Snapshot has been captured yet}
         '502': {description: Provider transport/protocol/structured-output failure}
         '503': {description: Provider-assisted investigation is disabled or misconfigured}
+  /api/v1/admin/operations/health/alerts:
+    get:
+      tags: [Operational Intelligence]
+      operationId: listHumanAttentionAlerts
+      summary: List recent application-owned human-attention alert decisions
+      description: Alerts are derived from deterministic Health Snapshot persistence and lifecycle policy. Structured model assessments may be attached as advisory context but cannot open, escalate, resolve, or otherwise authorize an alert.
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer, minimum: 1, maximum: 200, default: 20}
+      responses:
+        '200':
+          description: Recent durable human-attention alert lifecycle state
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/HumanAttentionAlert'}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required}
   /api/v1/admin/operations/health/automatic-investigations:
     get:
       tags: [Operational Intelligence]
@@ -2121,6 +2142,31 @@ components:
           maxItems: 32
           items: {type: string, minLength: 1, maxLength: 1000}
         humanAttentionSuggested: {type: boolean}
+    HumanAttentionAlert:
+      type: object
+      required: [id, state, severity, reason, policyVersion, openedAt, lastObservedAt, firstSnapshotId, latestSnapshotId, latestHealthStatus, latestHealthScore]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [OPEN, RESOLVED]}
+        severity: {type: string, enum: [WARNING, CRITICAL]}
+        reason: {type: string, enum: [SUSTAINED_DEGRADED, UNHEALTHY]}
+        policyVersion: {type: string}
+        openedAt: {type: string, format: date-time}
+        lastObservedAt: {type: string, format: date-time}
+        resolvedAt:
+          type: [string, 'null']
+          format: date-time
+        firstSnapshotId: {type: string, format: uuid}
+        latestSnapshotId: {type: string, format: uuid}
+        latestHealthStatus: {type: string, enum: [HEALTHY, DEGRADED, UNHEALTHY, UNKNOWN]}
+        latestHealthScore: {type: integer, minimum: 0, maximum: 100}
+        latestAssessmentId:
+          type: [string, 'null']
+          format: uuid
+          description: Optional validated structured assessment attached as advisory evidence only.
+        modelAttentionSuggested:
+          type: [boolean, 'null']
+          description: Advisory structured-model signal only; alert eligibility, severity, and lifecycle remain application-owned.
     AutomaticInvestigationTrigger:
       type: object
       required: [id, snapshotId, type, state, createdAt, nextAttemptAt, attemptCount]

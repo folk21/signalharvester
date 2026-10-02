@@ -3,6 +3,7 @@ package io.signalharvester.operations.application;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.transaction.TransactionOperations;
 import io.signalharvester.operations.api.OperationalChangeRecord;
+import io.signalharvester.operations.alert.AlertDecisionService;
 import io.signalharvester.operations.assisted.AssistedInvestigationConfiguration;
 import io.signalharvester.operations.assisted.AutomaticInvestigationPlanner;
 import io.signalharvester.operations.assisted.HealthAnalysisPackageFactory;
@@ -33,6 +34,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
     private final HealthAnalysisPackageFactory analysisPackageFactory;
     private final AssistedInvestigationConfiguration assistedConfiguration;
     private final AutomaticInvestigationPlanner automaticInvestigationPlanner;
+    private final AlertDecisionService alertDecisionService;
     private final OperationalHealthSignalCollector signalCollector;
     private final HealthEngine healthEngine;
     private final HealthPolicyConfiguration healthConfiguration;
@@ -47,6 +49,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             HealthAnalysisPackageFactory analysisPackageFactory,
             AssistedInvestigationConfiguration assistedConfiguration,
             AutomaticInvestigationPlanner automaticInvestigationPlanner,
+            AlertDecisionService alertDecisionService,
             OperationalHealthSignalCollector signalCollector,
             HealthEngine healthEngine,
             HealthPolicyConfiguration healthConfiguration,
@@ -59,6 +62,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
                 analysisPackageFactory,
                 assistedConfiguration,
                 automaticInvestigationPlanner,
+                alertDecisionService,
                 signalCollector,
                 healthEngine,
                 healthConfiguration,
@@ -74,6 +78,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
             HealthAnalysisPackageFactory analysisPackageFactory,
             AssistedInvestigationConfiguration assistedConfiguration,
             AutomaticInvestigationPlanner automaticInvestigationPlanner,
+            AlertDecisionService alertDecisionService,
             OperationalHealthSignalCollector signalCollector,
             HealthEngine healthEngine,
             HealthPolicyConfiguration healthConfiguration,
@@ -86,6 +91,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
         this.analysisPackageFactory = Objects.requireNonNull(analysisPackageFactory, "analysisPackageFactory");
         this.assistedConfiguration = Objects.requireNonNull(assistedConfiguration, "assistedConfiguration");
         this.automaticInvestigationPlanner = Objects.requireNonNull(automaticInvestigationPlanner, "automaticInvestigationPlanner");
+        this.alertDecisionService = Objects.requireNonNull(alertDecisionService, "alertDecisionService");
         this.signalCollector = Objects.requireNonNull(signalCollector, "signalCollector");
         this.healthEngine = Objects.requireNonNull(healthEngine, "healthEngine");
         this.healthConfiguration = Objects.requireNonNull(healthConfiguration, "healthConfiguration");
@@ -213,6 +219,7 @@ public final class OperationalIntelligenceService implements OperationalIntellig
                 evaluation.evidenceComplete(),
                 evaluation.unknownReasons());
         repository.insertSnapshot(snapshot);
+        alertDecisionService.evaluateSnapshotInCurrentTransaction(snapshot);
         automaticInvestigationPlanner.planInCurrentTransaction(snapshot, generatedAt);
         repository.deleteSnapshotsBeyond(snapshotRetentionCount);
         return snapshot;

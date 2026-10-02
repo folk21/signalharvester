@@ -45,7 +45,7 @@ The Kubernetes capacity baseline is an opt-in live measurement, not a routine co
 python3 infra/kubernetes/performance/run_baseline.py
 ```
 
-It requires an already verified local Kubernetes deployment and writes `build/reports/performance/capacity-baseline.json`. The report records observed timings/rates and must not be interpreted as a repository performance budget.
+It requires an already verified local Kubernetes deployment and writes `build/reports/performance/capacity-baseline.json`. The report records observed timings/rates and must not be interpreted as a repository performance budget. The runner also emits a sibling `*-operational-evidence.json` artifact using the shared scenario-evidence format, with `NORMAL_OPERATION` ground truth, Operations start/end markers, explicit Health Snapshots, curated summary measurements, and a SHA-256 reference to the capacity report.
 
 To compare the same bounded workload across explicit backend replica counts without introducing a pass/fail performance threshold, run:
 
@@ -88,8 +88,6 @@ Focused commands follow the same source-set split:
 ./gradlew :modules:analysis:integrationTest
 ./gradlew :modules:results:test
 ./gradlew :modules:results:integrationTest
-./gradlew :modules:operations:test
-./gradlew :modules:operations:integrationTest
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
 ./gradlew :testing:integration-tests:integrationTest
@@ -110,8 +108,8 @@ Container-backed integration ownership is:
 - `modules:configuration` — PostgreSQL persistence/server boundary;
 - `modules:collection` — Kafka producer/consumer transport boundary;
 - `modules:analysis` — PostgreSQL durable deduplication;
-- `modules:operations` — deterministic/statistical Health Engine and analysis-package unit coverage plus PostgreSQL change-journal, Health Snapshot/report/Incident Assessment persistence, evidence-reference validation, deterministic fake-provider assisted investigation, bounded read-only tool budgets, rolling-baseline history, change/health correlation, and durable automatic-trigger planning/lease/retry semantics;
-  Automatic-trigger integration coverage verifies one trigger per snapshot, exact-token lease renewal, atomic automatic-assessment completion, and bounded retry/exhaustion while the scheduled worker is delayed out of deterministic test execution. External/local real-model acceptance is opt-in and must remain outside the canonical offline gate. Repository tests use a deterministic fake `IncidentAnalyst`, a loopback HTTP server for the OpenAI-compatible tool-turn protocol, and application-owned fake tool sessions; they never require model credentials or public network access.
+- `modules:operations` — deterministic/statistical Health Engine and analysis-package unit coverage plus PostgreSQL change-journal, Health Snapshot/report/Incident Assessment persistence, evidence-reference validation, deterministic fake-provider assisted investigation, bounded read-only tool budgets, rolling-baseline history, change/health correlation, and durable automatic-trigger planning/lease/retry semantics plus deterministic human-attention alert open/escalate/resolve/cooldown semantics;
+  Automatic-trigger integration coverage verifies one trigger per snapshot, exact-token lease renewal, atomic automatic-assessment completion, and bounded retry/exhaustion while the scheduled worker is delayed out of deterministic test execution. Alert integration coverage uses two independent application contexts against the same PostgreSQL instance to verify advisory-lock serialization and convergence on one open incident under concurrent replica decisions. External/local real-model acceptance is opt-in and must remain outside the canonical offline gate. Repository tests use a deterministic fake `IncidentAnalyst`, a loopback HTTP server for the OpenAI-compatible tool-turn protocol, and application-owned fake tool sessions; they never require model credentials or public network access.
 - `modules:results` — PostgreSQL + Kafka terminal-event consumption and idempotent projection persistence;
 - `testing:integration-tests` — PostgreSQL + Kafka cross-module Collection Run and Collection-to-Analysis flows.
 
@@ -485,7 +483,18 @@ It is intentionally separate from `./run_checks.sh` because it performs disrupti
 - injects Kafka traffic;
 - uses test-only PostgreSQL state manipulation.
 
-Deterministic parsing/asset checks for the harness are included in `./infra/kubernetes/run_tests.sh`.
+Deterministic parsing/asset checks for the harness and offline operational evaluator are included in `./infra/kubernetes/run_tests.sh`. They verify evidence bounds, detector-neutral ground truth, explicit fault-window timing, detector metrics, affected-subsystem matching, alert persistence/escalation/recovery/cooldown projection, and exclusion of unobservable fault windows from miss-rate calculations.
+
+The live run also writes `build/reports/operational-intelligence/resilience-scenario-evidence.json`. The versioned artifact labels normal operation, backend pod restart, slow external source, PostgreSQL outage, Kafka lag, Analysis outbox backlog, and Kafka broker restart while keeping scenario ground truth separate from observed Health Snapshots. Fault scenarios add durable `FAULT_START`/`FAULT_END` markers where PostgreSQL is available. Partial evidence is retained when a labeled scenario fails.
+
+Evaluate one or more generated artifacts offline with:
+
+```bash
+python3 infra/kubernetes/evaluation/offline_evaluator.py \
+  build/reports/operational-intelligence/resilience-scenario-evidence.json
+```
+
+The default output is `build/reports/operational-intelligence/offline-evaluation.json`. The evaluator never calls the backend, Prometheus, Loki, Tempo, or an LLM; it consumes only bounded artifacts. Fault scenarios without a Health Snapshot inside their recorded fault window are reported as not evaluable rather than false negatives.
 
 The live run covers:
 
@@ -518,4 +527,4 @@ The runner:
 7. verifies durable Analysis/Results completeness, outbox completion, DLQ stability, and HTTP availability;
 8. restores the original replica count and temporary environment configuration.
 
-Parser/asset coverage stays in `./infra/kubernetes/run_tests.sh`. The live workflow remains outside `./run_checks.sh`. Developer acceptance completed on 2026-09-17 with three distinct Analysis members assigned to raw-event partitions `0`, `1`, and `2`, positive one-replica lag, and final lag `0`.
+Parser/asset coverage stays in `./infra/kubernetes/run_tests.sh`, including the scenario-evidence format/bounds and resilience/capacity runner wiring. The live workflow remains outside `./run_checks.sh`. Developer acceptance completed on 2026-09-17 with three distinct Analysis members assigned to raw-event partitions `0`, `1`, and `2`, positive one-replica lag, and final lag `0`.

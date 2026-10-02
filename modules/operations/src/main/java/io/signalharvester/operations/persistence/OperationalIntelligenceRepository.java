@@ -3,7 +3,11 @@ package io.signalharvester.operations.persistence;
 import io.signalharvester.operations.api.OperationalChangeRecord;
 import io.signalharvester.operations.assisted.AutomaticInvestigationTrigger;
 import io.signalharvester.operations.assisted.ClaimedAutomaticInvestigation;
+import io.signalharvester.operations.alert.HumanAttentionAlert;
+import io.signalharvester.operations.alert.HumanAttentionAlertReason;
+import io.signalharvester.operations.alert.HumanAttentionAlertSeverity;
 import io.signalharvester.operations.model.HealthSnapshot;
+import io.signalharvester.operations.model.HealthStatus;
 import io.signalharvester.operations.model.IncidentAssessment;
 import java.time.Instant;
 import java.util.List;
@@ -24,6 +28,19 @@ public interface OperationalIntelligenceRepository {
     boolean tryAcquireHealthSamplingLock();
     Optional<HealthSnapshot> findLatestSnapshotAtOrBefore(Instant instant);
     Optional<HealthSnapshot> findEarliestSnapshotAtOrAfter(Instant instant);
+    void acquireHumanAttentionAlertDecisionLock();
+    void insertHumanAttentionAlert(HumanAttentionAlert alert);
+    Optional<HumanAttentionAlert> findOpenHumanAttentionAlert();
+    Optional<HumanAttentionAlert> findLatestResolvedHumanAttentionAlert();
+    List<HumanAttentionAlert> findRecentHumanAttentionAlerts(int limit);
+    void updateHumanAttentionAlertObservation(
+            UUID alertId, HumanAttentionAlertSeverity severity, HumanAttentionAlertReason reason,
+            Instant observedAt, UUID snapshotId, HealthStatus healthStatus, int healthScore);
+    void resolveHumanAttentionAlert(
+            UUID alertId, Instant resolvedAt, UUID snapshotId,
+            HealthStatus healthStatus, int healthScore);
+    boolean attachAssessmentToHumanAttentionAlert(UUID alertId, UUID assessmentId, boolean modelAttentionSuggested);
+    void deleteResolvedHumanAttentionAlertsBeyond(int keepCount);
     void insertIncidentAssessment(IncidentAssessment assessment);
     List<IncidentAssessment> findRecentIncidentAssessments(int limit);
     void deleteIncidentAssessmentsBeyond(int keepCount);

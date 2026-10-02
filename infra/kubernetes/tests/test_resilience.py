@@ -42,6 +42,82 @@ class KubernetesResilienceAssetsTest(unittest.TestCase):
         self.assertIn("SIGNALHARVESTER_ANALYSIS_ENABLED", runner)
         self.assertIn("SIGNALHARVESTER_ANALYSIS_OUTBOX_ENABLED", runner)
 
+    def test_acceptance_runner_emits_labeled_operational_evidence(self):
+        runner = (RESILIENCE / "run_acceptance.py").read_text()
+        for label in (
+            "NORMAL_OPERATION",
+            "POD_RESTART",
+            "SLOW_EXTERNAL_SOURCE",
+            "POSTGRESQL_OUTAGE",
+            "KAFKA_LAG",
+            "OUTBOX_BACKLOG",
+            "KAFKA_BROKER_RESTART",
+        ):
+            self.assertIn(f'"{label}"', runner)
+        self.assertIn("record_scenario_start", runner)
+        self.assertIn("record_scenario_fault_boundary", runner)
+        self.assertIn('"FAULT_START"', runner)
+        self.assertIn('"FAULT_END"', runner)
+        self.assertIn("record_scenario_end", runner)
+        self.assertIn("resilience-scenario-evidence.json", runner)
+
+    def test_scenario_marker_uses_the_operations_test_scenario_contract(self):
+        class FakeAdmin:
+            def __init__(self):
+                self.path = None
+                self.payload = None
+
+            def post_json(self, path, payload, expected=201, timeout=None):
+                self.path = path
+                self.payload = payload
+                return {"id": "change-id"}
+
+        class FakeScenario:
+            scenario_run_id = "scenario-run-id"
+            scenario_id = "resilience-kafka-lag"
+            label = "KAFKA_LAG"
+
+        admin = FakeAdmin()
+        marker = acceptance.record_scenario_marker(admin, FakeScenario(), "START")
+
+        self.assertEqual({"id": "change-id"}, marker)
+        self.assertEqual("/api/v1/admin/operations/changes/markers", admin.path)
+        self.assertEqual("TEST_SCENARIO", admin.payload["category"])
+        self.assertEqual("SCENARIO", admin.payload["targetType"])
+        self.assertEqual("scenario-run-id", admin.payload["targetId"])
+        self.assertEqual("KAFKA_LAG", admin.payload["details"]["label"])
+        self.assertEqual("START", admin.payload["details"]["phase"])
+
+    def test_fault_boundary_marker_reuses_the_operations_test_scenario_contract(self):
+        class FakeAdmin:
+            def __init__(self):
+                self.payloads = []
+
+            def post_json(self, path, payload, expected=201, timeout=None):
+                self.payloads.append((path, payload))
+                return {"id": f"change-{payload['details']['phase']}"}
+
+        class FakeScenario:
+            scenario_run_id = "scenario-run-id"
+            scenario_id = "resilience-kafka-lag"
+            label = "KAFKA_LAG"
+
+            def __init__(self):
+                self.markers = []
+
+            def add_change_marker(self, phase, change):
+                self.markers.append((phase, change))
+
+        admin = FakeAdmin()
+        scenario = FakeScenario()
+        acceptance.record_scenario_fault_boundary(admin, scenario, "FAULT_START")
+        acceptance.record_scenario_fault_boundary(admin, scenario, "FAULT_END")
+
+        self.assertEqual(["FAULT_START", "FAULT_END"], [item[0] for item in scenario.markers])
+        self.assertEqual(["FAULT_START", "FAULT_END"], [payload["details"]["phase"] for _, payload in admin.payloads])
+        with self.assertRaises(acceptance.AcceptanceError):
+            acceptance.record_scenario_fault_boundary(admin, scenario, "INVALID")
+
     def test_api_session_supports_long_requests_without_json_delete_body(self):
         class FakeResponse:
             status = 204

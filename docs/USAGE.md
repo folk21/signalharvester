@@ -43,7 +43,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies Configuration, Analysis, Collection, Results, Event Observation, Security, and Operations migrations at startup.
+Flyway applies Configuration, Analysis, Collection, Results, Event Observation, and Security migrations at startup.
 
 The backend exposes:
 
@@ -247,7 +247,7 @@ curl -i -X POST -b build/tmp/auth.cookies \
   http://localhost:8080/api/v1/admin/operations/health/assessments/analyze-latest
 ```
 
-One explicit request produces at most one validated assessment. The accepted Stage 4a OpenAI-compatible provider may perform a bounded multi-turn read-only investigation before producing that assessment. Available tools are application-defined (Health context, allowlisted Prometheus query IDs, fixed Loki backend patterns, Tempo search/trace retrieval, sanitized change history, and capacity markers), not arbitrary queries or commands. Tool results are redacted, size-bounded, and marked as untrusted evidence. Stage 4b may additionally invoke the same bounded provider flow through the optional durable automatic trigger policy described above; there is still no alert authority or remediation action.
+One explicit request produces at most one validated assessment. The accepted Stage 4a OpenAI-compatible provider may perform a bounded multi-turn read-only investigation before producing that assessment. Available tools are application-defined (Health context, allowlisted Prometheus query IDs, fixed Loki backend patterns, Tempo search/trace retrieval, sanitized change history, and capacity markers), not arbitrary queries or commands. Tool results are redacted, size-bounded, and marked as untrusted evidence. Stage 4b may additionally invoke the same bounded provider flow through the optional durable automatic trigger policy described above. Stage 6 adds an optional durable human-attention alert policy driven only by deterministic Health Snapshot history; model `humanAttentionSuggested` is advisory metadata and cannot open, escalate, or resolve an alert. No remediation action is authorized by the alert policy.
 
 ## Inspect application observability
 
@@ -333,7 +333,20 @@ The harness deploys a temporary in-cluster RSS fixture and exercises:
 - authorization boundaries;
 - Prometheus, Loki, and Tempo evidence.
 
-It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for fault-injection boundaries and options.
+It restores temporary backend environment overrides and removes fixture/profile/source resources on exit. Evaluation-relevant scenarios are also written to `build/reports/operational-intelligence/resilience-scenario-evidence.json`, with detector-neutral labels kept separate from captured Health evidence; fault scenarios include explicit timing markers where durable marker persistence is available, and failed labeled scenarios retain partial evidence. See [`../infra/kubernetes/resilience/README.md`](../infra/kubernetes/resilience/README.md) for fault-injection boundaries and options.
+
+### Evaluate Health and alert behavior offline
+
+Use the generated resilience evidence directly:
+
+```bash
+python3 infra/kubernetes/evaluation/offline_evaluator.py \
+  build/reports/operational-intelligence/resilience-scenario-evidence.json
+```
+
+The evaluator writes `build/reports/operational-intelligence/offline-evaluation.json` by default. It reports detector success/false positives, time to detection, affected-subsystem coverage, recovery state, and an isolated alert-policy projection over the captured snapshots. Alert projection defaults match the repository's current `human-attention-v1` defaults, and every applied parameter is persisted in the report. Override them explicitly when evaluating a different configuration, for example `--degraded-min-consecutive`, `--healthy-min-consecutive-to-resolve`, or `--reopen-cooldown-seconds`.
+
+The projection is intentionally offline: it does not create or modify application alerts and must not be described as persisted runtime alert output. A fault without a Health Snapshot inside the controlled fault window is left out of detection/attention rates rather than treated as a miss.
 
 ### Demonstrate Kafka consumer horizontal scaling
 
