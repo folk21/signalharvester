@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence is accepted; the current verification-pending slice evaluates deterministic Health observations and parameterized alert-policy behavior offline before assisted-investigation quality scoring.
+The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence and offline Health/alert evaluation are accepted. The current verification-pending slice provides deterministic structured-assisted-investigation scoring; bounded runtime trial capture/export remains next before evidence-based threshold/model calibration.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — scenario-based operational-intelligence evaluation; the labeled evidence foundation is implemented and verification-pending, with offline detector/alert/LLM scoring next.
+- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — scenario-based operational-intelligence evaluation; detector/alert evaluation is accepted and the provider-neutral assisted-investigation evaluator foundation is verification-pending; bounded trial capture/export remains next before evidence-based calibration.
 
 Verification-pending carryover:
 

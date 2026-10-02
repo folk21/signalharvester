@@ -88,6 +88,8 @@ Focused commands follow the same source-set split:
 ./gradlew :modules:analysis:integrationTest
 ./gradlew :modules:results:test
 ./gradlew :modules:results:integrationTest
+./gradlew :modules:operations:test
+./gradlew :modules:operations:integrationTest
 ./gradlew :contracts:event-contracts:test
 ./gradlew :app:test
 ./gradlew :testing:integration-tests:integrationTest
@@ -495,6 +497,16 @@ python3 infra/kubernetes/evaluation/offline_evaluator.py \
 ```
 
 The default output is `build/reports/operational-intelligence/offline-evaluation.json`. The evaluator never calls the backend, Prometheus, Loki, Tempo, or an LLM; it consumes only bounded artifacts. Fault scenarios without a Health Snapshot inside their recorded fault window are reported as not evaluable rather than false negatives.
+
+Assisted-investigation quality evaluation is also deterministic and offline. Given a bounded version-1 investigation-evidence artifact that records structured `IncidentAssessment` output, its captured evidence allowlist, explicit tool/round/duration counters, and optional human/replay claim annotations, run:
+
+```bash
+python3 infra/kubernetes/evaluation/assisted_investigation_evaluator.py \
+  --scenario-evidence build/reports/operational-intelligence/resilience-scenario-evidence.json \
+  --investigation-evidence build/reports/operational-intelligence/assisted-investigation-evidence.json
+```
+
+The default output is `build/reports/operational-intelligence/assisted-investigation-evaluation.json`. Deterministic Kubernetes tests protect scenario/snapshot linkage, exact normalized subsystem coverage/precision, evidence-reference validity, execution-budget metrics, and explicit claim-annotation scoring. Missing claim annotations must remain not evaluated rather than being treated as zero unsupported claims. `maxToolCalls=0` is valid and represents the runtime single-shot provider mode. Real external/local provider acceptance remains opt-in and outside `./run_checks.sh`; the canonical gate validates the evaluator and deterministic fixtures without provider credentials.
 
 The live run covers:
 

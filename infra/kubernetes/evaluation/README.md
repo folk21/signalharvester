@@ -1,7 +1,7 @@
 ---
 type: Infrastructure Guide
 title: Operational scenario evaluation
-description: Versioned bounded evidence artifacts and deterministic offline Health/alert evaluation for Kubernetes resilience and capacity scenarios.
+description: Versioned bounded evidence artifacts and deterministic offline Health, alert, and assisted-investigation evaluation for Kubernetes scenarios.
 ---
 # Operational scenario evaluation
 
@@ -74,4 +74,82 @@ python3 infra/kubernetes/evaluation/offline_evaluator.py \
   build/reports/operational-intelligence/resilience-scenario-evidence.json
 ```
 
-The evaluator is intentionally descriptive. It does not modify Health state, create alerts, select a production threshold, or declare one policy/model configuration superior. Assisted-investigation quality scoring remains a separate follow-up that must consume the same bounded scenario evidence rather than inventing another expected-data format.
+The evaluator is intentionally descriptive. It does not modify Health state, create alerts, select a production threshold, or declare one policy configuration superior. Assisted-investigation quality evaluation below consumes the same bounded scenario identity instead of inventing a second source of ground truth.
+
+## Assisted-investigation quality evaluation
+
+`assisted_investigation_evaluator.py` evaluates structured investigation trials against the same scenario/snapshot ground truth without calling a model or changing runtime state. It intentionally uses a separate versioned input artifact because scenario ground truth and model-execution observations have different owners.
+
+Run it with one or more scenario-evidence artifacts plus one or more investigation-evidence artifacts:
+
+```bash
+python3 infra/kubernetes/evaluation/assisted_investigation_evaluator.py \
+  --scenario-evidence build/reports/operational-intelligence/resilience-scenario-evidence.json \
+  --investigation-evidence build/reports/operational-intelligence/assisted-investigation-evidence.json
+```
+
+The default output is:
+
+```text
+build/reports/operational-intelligence/assisted-investigation-evaluation.json
+```
+
+The version-1 assisted-investigation evidence artifact has this bounded shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "signalharvester-assisted-investigation-evidence",
+  "generatedAt": "...",
+  "source": {
+    "runner": "deterministic-replay-or-live-harness",
+    "provider": "provider-id",
+    "model": "model-id"
+  },
+  "budgets": {
+    "maxToolCalls": 8,
+    "maxRounds": 4,
+    "maxInvestigationDurationMs": 45000
+  },
+  "trials": [
+    {
+      "trialId": "...",
+      "scenarioRunId": "...",
+      "snapshotId": "...",
+      "status": "COMPLETED",
+      "execution": {
+        "toolCallCount": 3,
+        "roundCount": 2,
+        "durationMs": 1200
+      },
+      "allowedEvidenceReferences": ["health-snapshot:..."],
+      "discoveredEvidenceReferences": ["prometheus:..."],
+      "assessment": {"snapshotId": "...", "source": "PROVIDER", "provider": "provider-id", "model": "model-id", "summary": "...", "suspectedSubsystems": ["KAFKA"], "confidence": 0.8, "observations": ["..."], "hypotheses": ["..."], "evidenceReferences": ["health-snapshot:..."], "recommendedChecks": ["..."], "humanAttentionSuggested": true},
+      "claimAnnotations": [
+        {
+          "claim": "...",
+          "classification": "SUPPORTED",
+          "evidenceReferences": ["health-snapshot:..."]
+        }
+      ]
+    }
+  ]
+}
+```
+
+`status` is one of `COMPLETED`, `FAILED`, or `BUDGET_EXCEEDED`. Completed trials must contain the structured Incident Assessment and explicit execution counters. `maxToolCalls` may be `0`, matching the runtime single-shot provider mode; `maxRounds` and `maxInvestigationDurationMs` must remain positive. The evaluator verifies that every trial references a captured Health Snapshot from the named scenario and that provider/model identity matches the artifact source.
+
+The repository currently defines and validates this trial contract but does not yet export it from the Java assisted-investigation runtime. A following slice must add bounded capture/export of the final structured assessment together with tool-call, round, and duration counters. Until then, deterministic fixtures or an explicit external evaluation harness may produce the artifact; the evaluator itself never invents missing execution metadata.
+
+The report measures:
+
+- exact normalized affected-subsystem coverage and suspected-subsystem precision for fault scenarios;
+- unexpected subsystem claims during `NORMAL_OPERATION` scenarios;
+- evidence-reference presence and membership in the captured analysis-package/tool allowlist;
+- unsupported causal-claim rate only when explicit `SUPPORTED`/`UNSUPPORTED` annotations exist;
+- supported-claim citation coverage;
+- tool-call count, round count, investigation duration, and compliance with the budgets recorded in the input artifact;
+- advisory `humanAttentionSuggested` counts without treating them as alert decisions;
+- descriptive per-provider/model summaries over the same dataset, with no winner selection or ranking.
+
+The evaluator deliberately does **not** infer hallucinations by asking another LLM to grade free-form hypotheses. Real-provider claim quality therefore requires explicit human annotation or a deterministic replay fixture with known support labels. Missing claim annotations produce a not-evaluated/null rate rather than an artificial zero-hallucination result. Evidence-reference validity likewise proves only that a citation was allowed; semantic support for a causal claim comes from the explicit annotation.

@@ -13,11 +13,31 @@ The project is intentionally domain-neutral. Typical monitoring scenarios includ
 - news and topic-oriented information;
 - financial, company, regulatory, and public-market data.
 
-The current bounded backend implementation focus is operational health intelligence. The foundation, deterministic/statistical Health Engine, Stage 3 manual/provider-neutral assisted investigation, Stage 4a bounded read-only agentic investigation, Stage 4b durable automatic trigger policy, Stage 6 deterministic human-attention alert policy, and the labeled scenario-evidence foundation are accepted after developer verification. Offline Health/alert evaluation is implemented and verification-pending: the evaluator measures detector success, false positives, time to detection, affected-subsystem coverage, recovery, and an explicit parameterized alert-policy projection over the same bounded evidence without changing runtime decisions. Assisted-investigation quality evaluation remains the next slice. The capacity-telemetry, capacity-baseline, and explicit all-relevant Analysis slices remain separately verification-pending until their canonical acceptance is recorded.
+## Current focus
+
+The current bounded backend focus is **intelligent observability**, called operational health intelligence in the specifications. The goal is to turn telemetry and recorded operational changes into useful diagnostic evidence while keeping runtime authority in deterministic application policy.
+
+- **Accepted:** persisted operational history, the deterministic/statistical Health Engine, manual and bounded read-only assisted investigation, durable automatic investigation triggers, deterministic human-attention alert policy, labeled scenario evidence, and offline Health/alert evaluation.
+- **Implemented and verification-pending:** provider-neutral assisted-investigation quality evaluation over the same scenario ground truth.
+- **Next:** bounded capture/export of real investigation trials, followed by evidence-based calibration from repeated results.
+- **Separate carryover:** capacity telemetry/baseline and explicit all-relevant Analysis remain verification-pending until their own canonical acceptance is recorded.
 
 SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.
 
 The backend starts as a **modular monolith**: one Micronaut application assembled from cohesive Gradle modules. Modules own complete capabilities and communicate through explicit Java APIs or published event contracts. They can be split further when scaling, isolation, ownership, or deployment needs justify it.
+
+## Intelligent observability
+
+SignalHarvester treats observability as an input to a bounded diagnostic workflow, not as autonomous control.
+
+1. **Metrics, logs, traces, capacity evidence, and operational changes** provide bounded observations.
+2. The **Health Engine** applies deterministic thresholds and lightweight statistical baselines to persist a Health Snapshot with status, score, anomaly evidence, and uncertainty.
+3. **Change correlation** helps explain what changed before health moved.
+4. Optional **assisted investigation** can inspect only application-approved read-only evidence and returns a structured `IncidentAssessment`; model output remains advisory.
+5. The **human-attention alert policy** decides when an incident should be surfaced. The LLM cannot open, escalate, or resolve an alert by itself.
+6. Controlled resilience/capacity scenarios provide shared ground truth for offline evaluation of Health, alert-policy behavior, and assisted-investigation quality.
+
+This keeps the useful parts of AI-assisted diagnosis measurable and bounded while preserving deterministic operational authority. See [`modules/operations/contract.md`](modules/operations/contract.md) and the active [operational-intelligence specification](docs/specs/active/subspecs/backend-observability-intelligence.md) for the detailed rules.
 
 ## How data moves through the system
 
@@ -126,7 +146,8 @@ signalharvester/
 │   ├── analysis/
 │   ├── results/
 │   ├── event-observation/
-│   └── security/
+│   ├── security/
+│   └── operations/
 ├── testing/
 │   ├── test-support/
 │   └── integration-tests/
@@ -171,6 +192,10 @@ The backend covers the core pipeline from configuration and collection through a
 - ADMIN-only dead-letter inspection and controlled replay.
 - Operational Collection Run and Analysis inspection APIs.
 - Health/readiness endpoints, Prometheus metrics, OpenTelemetry tracing, and trace-correlated logs.
+- Persisted operational change history plus deterministic/statistical Health Snapshots, reports, and anomaly evidence.
+- Optional bounded read-only assisted investigation with structured Incident Assessments and durable automatic-trigger coordination.
+- Deterministic human-attention alerts whose lifecycle remains application-owned even when an assessment is attached.
+- Labeled resilience/capacity evidence with offline Health/alert evaluation and verification-pending assisted-investigation quality scoring.
 
 ### Security and deployment
 
