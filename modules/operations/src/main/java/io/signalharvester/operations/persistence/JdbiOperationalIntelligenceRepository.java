@@ -246,13 +246,16 @@ public final class JdbiOperationalIntelligenceRepository implements OperationalI
                 .bind("policyVersion", alert.policyVersion())
                 .bind("openedAt", Timestamp.from(alert.openedAt()))
                 .bind("lastObservedAt", Timestamp.from(alert.lastObservedAt()))
-                .bind("resolvedAt", alert.resolvedAt() == null ? null : Timestamp.from(alert.resolvedAt()))
+                .bindByType(
+                        "resolvedAt",
+                        alert.resolvedAt() == null ? null : Timestamp.from(alert.resolvedAt()),
+                        Timestamp.class)
                 .bind("firstSnapshotId", alert.firstSnapshotId())
                 .bind("latestSnapshotId", alert.latestSnapshotId())
                 .bind("latestHealthStatus", alert.latestHealthStatus().name())
                 .bind("latestHealthScore", alert.latestHealthScore())
-                .bind("latestAssessmentId", alert.latestAssessmentId())
-                .bind("modelAttentionSuggested", alert.modelAttentionSuggested())
+                .bindByType("latestAssessmentId", alert.latestAssessmentId(), UUID.class)
+                .bindByType("modelAttentionSuggested", alert.modelAttentionSuggested(), Boolean.class)
                 .execute());
     }
 

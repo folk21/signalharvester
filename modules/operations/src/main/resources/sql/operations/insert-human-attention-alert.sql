@@ -26,6 +26,6 @@ INSERT INTO operations.human_attention_alerts (
     :latestSnapshotId,
     :latestHealthStatus,
     :latestHealthScore,
-    :latestAssessmentId,
-    :modelAttentionSuggested
+    CAST(:latestAssessmentId AS UUID),
+    CAST(:modelAttentionSuggested AS BOOLEAN)
 )

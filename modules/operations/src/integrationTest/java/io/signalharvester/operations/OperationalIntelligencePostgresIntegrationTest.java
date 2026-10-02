@@ -312,7 +312,7 @@ class OperationalIntelligencePostgresIntegrationTest {
     /** Keep alert authority deterministic while allowing structured assessments to attach advisory context. */
     @Test
     @SuppressWarnings("unchecked")
-    void shouldPersistDeterministicHumanAttentionAlertLifecycle() {
+    void shouldPersistDeterministicHumanAttentionAlertLifecycle() throws Exception {
         AlertDecisionService alerts = context.getBean(AlertDecisionService.class);
         AssistedInvestigationOperations assisted = context.getBean(AssistedInvestigationOperations.class);
         OperationalIntelligenceRepository repository = context.getBean(OperationalIntelligenceRepository.class);
