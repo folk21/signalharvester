@@ -153,3 +153,33 @@ The report measures:
 - descriptive per-provider/model summaries over the same dataset, with no winner selection or ranking.
 
 The evaluator deliberately does **not** infer hallucinations by asking another LLM to grade free-form hypotheses. Real-provider claim quality therefore requires explicit human annotation or a deterministic replay fixture with known support labels. Missing claim annotations produce a not-evaluated/null rate rather than an artificial zero-hallucination result. Evidence-reference validity likewise proves only that a citation was allowed; semantic support for a causal claim comes from the explicit annotation.
+
+## Repeated-evidence calibration
+
+`calibration_report.py` combines repeated scenario evidence into one bounded descriptive calibration artifact. It does not change application configuration and does not select a preferred candidate.
+
+Example alert-policy sweep over two repeated scenario runs:
+
+```bash
+python3 infra/kubernetes/evaluation/calibration_report.py \
+  build/reports/operational-intelligence/resilience-scenario-evidence-run-1.json \
+  build/reports/operational-intelligence/resilience-scenario-evidence-run-2.json \
+  --degraded-min-consecutive 2,3,4 \
+  --unhealthy-min-consecutive 1 \
+  --healthy-min-consecutive-to-resolve 1,2,3 \
+  --reopen-cooldown-seconds 300,900
+```
+
+The default output is:
+
+```text
+build/reports/operational-intelligence/calibration-report.json
+```
+
+The report keeps three comparison domains separate:
+
+- **Observed Health:** repeated datasets are grouped by the persisted Health Snapshot `policyVersion`. Changing Health thresholds or rolling-baseline parameters therefore requires another versioned live run; the calibration tool does not replay raw telemetry into a synthetic Health Engine.
+- **Alert policy:** comma-separated candidate values form a bounded Cartesian grid (maximum 64 candidates). Each candidate is projected over the same captured Health Snapshots and remains separated by observed Health policy version.
+- **Assisted investigation:** optional `--investigation-evidence` artifacts are grouped by provider, model, and recorded `maxToolCalls`/`maxRounds`/duration budgets. Budget changes require newly captured trials; no counterfactual model execution is invented.
+
+The artifact uses `selectionMode=MANUAL_EVIDENCE_REVIEW`. It reports the evidence needed for an engineering calibration decision but intentionally contains no winner, score, or automatic production-configuration update.

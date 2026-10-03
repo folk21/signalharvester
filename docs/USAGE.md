@@ -374,6 +374,21 @@ The evaluator writes `build/reports/operational-intelligence/assisted-investigat
 
 Unsupported/hallucinated causal-claim rates require explicit `SUPPORTED`/`UNSUPPORTED` annotations from a human review or deterministic replay fixture. If annotations are absent, the rate remains unevaluated instead of using another LLM as an implicit judge. The exact investigation-evidence contract is documented in [`../infra/kubernetes/evaluation/README.md`](../infra/kubernetes/evaluation/README.md).
 
+### Build a repeated-evidence calibration report
+
+After collecting more than one labeled scenario run, compare observed Health behavior and bounded alert-policy candidates without changing runtime configuration:
+
+```bash
+python3 infra/kubernetes/evaluation/calibration_report.py \
+  build/reports/operational-intelligence/resilience-scenario-evidence-run-1.json \
+  build/reports/operational-intelligence/resilience-scenario-evidence-run-2.json \
+  --degraded-min-consecutive 2,3,4 \
+  --healthy-min-consecutive-to-resolve 1,2,3 \
+  --reopen-cooldown-seconds 300,900
+```
+
+Add one or more captured investigation artifacts with `--investigation-evidence ...` to compare descriptive provider/model/budget groups against the same scenario ground truth. The report is written to `build/reports/operational-intelligence/calibration-report.json` by default. It groups observed Health results by persisted `policyVersion`; a different Health threshold set therefore requires a new versioned live run. Alert candidates are offline projections only. Different assisted-investigation budgets likewise require newly captured trials. The tool deliberately does not rank candidates or write configuration back to the application.
+
 ### Demonstrate Kafka consumer horizontal scaling
 
 After the resilience workflow passes, demonstrate R26/S9 with:

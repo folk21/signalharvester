@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, offline Health/alert evaluation, and structured assisted-investigation quality scoring are accepted. The current verification-pending slice adds bounded scenario-linked runtime trial capture/export before evidence-based threshold/model calibration.
+The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, offline Health/alert evaluation, structured assisted-investigation quality scoring, and bounded scenario-linked runtime trial capture/export are accepted. The current verification-pending slice adds descriptive repeated-evidence calibration before any threshold/model change.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +154,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — scenario-based operational-intelligence evaluation; detector/alert and assisted-investigation quality evaluation are accepted, while bounded scenario-linked runtime trial capture/export is verification-pending before evidence-based calibration.
+- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — scenario-based operational-intelligence evaluation; detector/alert evaluation, assisted-investigation quality evaluation, and bounded runtime trial capture/export are accepted, while repeated-evidence calibration tooling is verification-pending.
 
 Verification-pending carryover:
 
