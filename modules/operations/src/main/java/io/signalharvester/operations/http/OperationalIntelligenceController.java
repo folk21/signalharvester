@@ -131,6 +131,14 @@ public class OperationalIntelligenceController {
         return HttpResponse.created(IncidentAssessmentResponse.from(assistedInvestigation.analyzeLatest()));
     }
 
+    /** Captures one scenario-linked provider run as evaluator-compatible bounded evidence. */
+    @Post("/health/assessments/evaluation-trials")
+    public HttpResponse<AssistedInvestigationEvidenceResponse> captureEvaluationTrial(
+            @Body @Valid @NotNull AssistedInvestigationTrialCaptureRequest request) {
+        return HttpResponse.created(AssistedInvestigationEvidenceResponse.from(
+                assistedInvestigation.captureEvaluationTrial(request.scenarioRunId(), request.snapshotId())));
+    }
+
     /** Returns recent persisted validated assessments. */
     @Get("/health/assessments")
     public List<IncidentAssessmentResponse> assessments(

@@ -139,7 +139,7 @@ The version-1 assisted-investigation evidence artifact has this bounded shape:
 
 `status` is one of `COMPLETED`, `FAILED`, or `BUDGET_EXCEEDED`. Completed trials must contain the structured Incident Assessment and explicit execution counters. `maxToolCalls` may be `0`, matching the runtime single-shot provider mode; `maxRounds` and `maxInvestigationDurationMs` must remain positive. The evaluator verifies that every trial references a captured Health Snapshot from the named scenario and that provider/model identity matches the artifact source.
 
-The repository currently defines and validates this trial contract but does not yet export it from the Java assisted-investigation runtime. A following slice must add bounded capture/export of the final structured assessment together with tool-call, round, and duration counters. Until then, deterministic fixtures or an explicit external evaluation harness may produce the artifact; the evaluator itself never invents missing execution metadata.
+The Java assisted-investigation runtime now exports this exact version-1 contract for completed explicit provider runs through `POST /api/v1/admin/operations/health/assessments/evaluation-trials`. The request supplies the `scenarioRunId` and persisted `snapshotId`; Operations verifies that the selected Health Snapshot references an applied `TEST_SCENARIO` marker with that run id before provider I/O starts. The response contains the persisted structured assessment, actual tool-call/round/duration counters, the package allowlist, tool-discovered references, and the application-owned budgets. Runtime export leaves `claimAnnotations` empty because semantic claim annotation remains an offline human/deterministic-replay responsibility.
 
 The report measures:
 

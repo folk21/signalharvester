@@ -350,7 +350,19 @@ The projection is intentionally offline: it does not create or modify applicatio
 
 ### Evaluate assisted investigations offline
 
-When a deterministic replay or explicitly configured provider-evaluation harness has produced a bounded `signalharvester-assisted-investigation-evidence` artifact, evaluate the structured assessments against the same scenario ground truth:
+For an actual deterministic/live provider run, first call the ADMIN runtime capture endpoint with the scenario run id and one persisted Health Snapshot id from that scenario. The endpoint validates the durable `TEST_SCENARIO` linkage, persists the validated assessment, and returns one bounded `signalharvester-assisted-investigation-evidence` artifact. Save that JSON, then evaluate the structured assessment against the same scenario ground truth:
+
+```http
+POST /api/v1/admin/operations/health/assessments/evaluation-trials
+Content-Type: application/json
+
+{
+  "scenarioRunId": "<scenario-run-id>",
+  "snapshotId": "<health-snapshot-uuid>"
+}
+```
+
+Use a snapshot id already present in the corresponding scenario-evidence artifact. The runtime export currently represents completed provider executions; provider failures continue to use the normal provider error boundary rather than being mislabeled as completed evaluation trials. `claimAnnotations` is emitted empty and may be added only by an offline human/deterministic replay annotation workflow.
 
 ```bash
 python3 infra/kubernetes/evaluation/assisted_investigation_evaluator.py \

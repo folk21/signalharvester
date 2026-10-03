@@ -1,6 +1,9 @@
 package io.signalharvester.operations.assisted;
 
 import io.micronaut.transaction.TransactionOperations;
+import io.signalharvester.operations.api.OperationalChangeCategory;
+import io.signalharvester.operations.api.OperationalChangeOutcome;
+import io.signalharvester.operations.api.OperationalChangeTargetType;
 import io.signalharvester.operations.application.OperationalIntelligenceOperations;
 import io.signalharvester.operations.alert.AlertDecisionService;
 import io.signalharvester.operations.model.HealthAnalysisPackage;
@@ -14,6 +17,7 @@ import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import java.sql.Connection;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -79,14 +83,41 @@ public final class AssistedInvestigationService implements AssistedInvestigation
     @Override
     public IncidentAssessment analyzeLatest() {
         HealthAnalysisPackage analysisPackage = operations.latestAnalysisPackage();
-        IncidentAssessment assessment = investigateProvider(analysisPackage, IncidentAssessmentSource.PROVIDER);
-        return persist(assessment);
+        ProviderInvestigation investigation = investigateProvider(analysisPackage, IncidentAssessmentSource.PROVIDER);
+        return persist(investigation.assessment());
+    }
+
+    @Override
+    public AssistedInvestigationTrial captureEvaluationTrial(String scenarioRunId, UUID snapshotId) {
+        String normalizedScenarioRunId = requireScenarioRunId(scenarioRunId);
+        Objects.requireNonNull(snapshotId, "snapshotId");
+        HealthAnalysisPackage analysisPackage = operations.analysisPackage(snapshotId);
+        validateScenarioLink(snapshotId, normalizedScenarioRunId);
+        ProviderInvestigation investigation = investigateProvider(analysisPackage, IncidentAssessmentSource.PROVIDER);
+        validateEvaluationReferenceBounds(
+                analysisPackage.allowedEvidenceReferences(), investigation.discoveredEvidenceReferences());
+        IncidentAssessment assessment = persist(investigation.assessment());
+        return new AssistedInvestigationTrial(
+                UUID.randomUUID(),
+                normalizedScenarioRunId,
+                snapshotId,
+                clock.instant(),
+                assessment,
+                investigation.toolCallCount(),
+                investigation.roundCount(),
+                investigation.durationMs(),
+                analysisPackage.allowedEvidenceReferences(),
+                investigation.discoveredEvidenceReferences(),
+                configuration.getMaxToolCalls(),
+                configuration.getMaxRounds(),
+                configuration.getMaxInvestigationDuration().toMillis());
     }
 
     /** Runs one automatic provider investigation for a fixed snapshot without opening a database transaction. */
     IncidentAssessment investigateAutomatic(UUID snapshotId) {
         Objects.requireNonNull(snapshotId, "snapshotId");
-        return investigateProvider(operations.analysisPackage(snapshotId), IncidentAssessmentSource.AUTOMATIC_PROVIDER);
+        return investigateProvider(operations.analysisPackage(snapshotId), IncidentAssessmentSource.AUTOMATIC_PROVIDER)
+                .assessment();
     }
 
     /** Persists a prevalidated assessment inside the caller-owned transaction. */
@@ -138,31 +169,94 @@ public final class AssistedInvestigationService implements AssistedInvestigation
         });
     }
 
-    private IncidentAssessment investigateProvider(
+    private ProviderInvestigation investigateProvider(
             HealthAnalysisPackage analysisPackage, IncidentAssessmentSource source) {
         IncidentAnalyst analyst = configuredAnalyst();
         var toolSession = toolbox.openSession(analysisPackage.snapshotId());
+        long startedNanos = System.nanoTime();
         IncidentInvestigationResult investigation;
         try {
             investigation = analyst.investigate(analysisPackage, toolSession);
         } catch (InvestigationBudgetExceededException exception) {
             throw new IncidentAnalystException("LLM investigation exceeded an application-owned budget", exception);
         }
+        long durationMs = Duration.ofNanos(Math.max(0L, System.nanoTime() - startedNanos)).toMillis();
+        List<String> discoveredEvidenceReferences = toolSession.discoveredEvidenceReferences();
         try {
             validateEvidenceReferences(
                     investigation.assessment(),
                     analysisPackage,
-                    toolSession.discoveredEvidenceReferences());
+                    discoveredEvidenceReferences);
         } catch (InvalidIncidentAssessmentException exception) {
             throw new IncidentAnalystException(
                     "LLM provider returned an assessment with invalid evidence references", exception);
         }
-        return buildAssessment(
+        IncidentAssessment assessment = buildAssessment(
                 analysisPackage.snapshotId(),
                 source,
                 analyst.providerId(),
                 analyst.modelId(),
                 investigation.assessment());
+        return new ProviderInvestigation(
+                assessment,
+                investigation.toolCallCount(),
+                investigation.roundCount(),
+                durationMs,
+                discoveredEvidenceReferences);
+    }
+
+    private void validateScenarioLink(UUID snapshotId, String scenarioRunId) {
+        boolean linked = transactions.executeRead(status -> repository.findSnapshot(snapshotId)
+                .stream()
+                .flatMap(snapshot -> snapshot.recentChangeIds().stream())
+                .map(repository::findChange)
+                .flatMap(java.util.Optional::stream)
+                .anyMatch(change -> change.category() == OperationalChangeCategory.TEST_SCENARIO
+                        && change.targetType() == OperationalChangeTargetType.SCENARIO
+                        && change.outcome() == OperationalChangeOutcome.APPLIED
+                        && change.targetId().equals(scenarioRunId)));
+        if (!linked) {
+            throw new InvalidIncidentAssessmentException(
+                    "Health Snapshot is not linked to TEST_SCENARIO run " + scenarioRunId);
+        }
+    }
+
+    private static void validateEvaluationReferenceBounds(
+            List<String> allowedEvidenceReferences, List<String> discoveredEvidenceReferences) {
+        if (allowedEvidenceReferences.size() > 64) {
+            throw new InvalidIncidentAssessmentException(
+                    "Evaluation artifact allowedEvidenceReferences exceeds 64 entries");
+        }
+        if (discoveredEvidenceReferences.size() > 64) {
+            throw new InvalidIncidentAssessmentException(
+                    "Evaluation artifact discoveredEvidenceReferences exceeds 64 entries");
+        }
+    }
+
+    private static String requireScenarioRunId(String value) {
+        Objects.requireNonNull(value, "scenarioRunId");
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("scenarioRunId must not be blank");
+        }
+        if (trimmed.length() > 256) {
+            throw new IllegalArgumentException("scenarioRunId must be at most 256 characters");
+        }
+        return trimmed;
+    }
+
+    private record ProviderInvestigation(
+            IncidentAssessment assessment,
+            int toolCallCount,
+            int roundCount,
+            long durationMs,
+            List<String> discoveredEvidenceReferences) {
+
+        private ProviderInvestigation {
+            Objects.requireNonNull(assessment, "assessment");
+            discoveredEvidenceReferences = List.copyOf(
+                    Objects.requireNonNull(discoveredEvidenceReferences, "discoveredEvidenceReferences"));
+        }
     }
 
     private IncidentAssessment buildAssessment(

@@ -17,9 +17,9 @@ The project is intentionally domain-neutral. Typical monitoring scenarios includ
 
 The current bounded backend focus is **intelligent observability**, called operational health intelligence in the specifications. The goal is to turn telemetry and recorded operational changes into useful diagnostic evidence while keeping runtime authority in deterministic application policy.
 
-- **Accepted:** persisted operational history, the deterministic/statistical Health Engine, manual and bounded read-only assisted investigation, durable automatic investigation triggers, deterministic human-attention alert policy, labeled scenario evidence, and offline Health/alert evaluation.
-- **Implemented and verification-pending:** provider-neutral assisted-investigation quality evaluation over the same scenario ground truth.
-- **Next:** bounded capture/export of real investigation trials, followed by evidence-based calibration from repeated results.
+- **Accepted:** persisted operational history, the deterministic/statistical Health Engine, manual and bounded read-only assisted investigation, durable automatic investigation triggers, deterministic human-attention alert policy, labeled scenario evidence, offline Health/alert evaluation, and provider-neutral assisted-investigation quality evaluation.
+- **Implemented and verification-pending:** bounded scenario-linked capture/export of real provider investigation trials with actual tool/round/duration counters and evidence references.
+- **Next:** evidence-based calibration from repeated Health/alert/assisted-investigation results.
 - **Separate carryover:** capacity telemetry/baseline and explicit all-relevant Analysis remain verification-pending until their own canonical acceptance is recorded.
 
 SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.
@@ -195,7 +195,7 @@ The backend covers the core pipeline from configuration and collection through a
 - Persisted operational change history plus deterministic/statistical Health Snapshots, reports, and anomaly evidence.
 - Optional bounded read-only assisted investigation with structured Incident Assessments and durable automatic-trigger coordination.
 - Deterministic human-attention alerts whose lifecycle remains application-owned even when an assessment is attached.
-- Labeled resilience/capacity evidence with offline Health/alert evaluation and verification-pending assisted-investigation quality scoring.
+- Labeled resilience/capacity evidence with offline Health/alert/assisted-investigation evaluation and bounded runtime trial export for real provider executions.
 
 ### Security and deployment
 

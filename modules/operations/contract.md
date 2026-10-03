@@ -26,7 +26,7 @@ Own the durable operational timeline used to correlate behavior-affecting change
 - build bounded sanitized LLM analysis packages;
 - validate and persist structured Incident Assessments from manual or explicitly invoked providers;
 - own the provider-neutral `IncidentAnalyst` boundary and optional OpenAI-compatible adapter;
-- own the allowlisted read-only investigation-tool boundary, telemetry sanitization, and per-investigation budgets;
+- own the allowlisted read-only investigation-tool boundary, telemetry sanitization, per-investigation budgets, and bounded scenario-linked evaluation-trial export;
 - own durable automatic investigation trigger planning, exact-token leases/heartbeats, cooldown/deduplication, bounded retry/exhaustion, and trigger-history inspection;
 - own durable application-controlled human-attention alert decisions, lifecycle/history, persistence/recovery thresholds, cooldown, and advisory assessment attachment.
 
@@ -48,7 +48,7 @@ Published data types define stable change category/source/target/outcome vocabul
 
 Authoritative schema: `contracts/api-contracts/src/main/resources/openapi/signalharvester-v1.yaml`.
 
-Operations owns ADMIN routes under `/api/v1/admin/operations` for bounded change-history reads, explicit Health Snapshot capture, latest snapshot/report/package export, structured assessment import/listing, explicit provider invocation, automatic-trigger history, human-attention alert history, and nearest before/after snapshot correlation around one change.
+Operations owns ADMIN routes under `/api/v1/admin/operations` for bounded change-history reads, explicit Health Snapshot capture, latest snapshot/report/package export, structured assessment import/listing, explicit provider invocation, scenario-linked assisted-investigation trial export, automatic-trigger history, human-attention alert history, and nearest before/after snapshot correlation around one change.
 
 ### Events
 
@@ -99,6 +99,7 @@ Other modules must not import Operations application, persistence, model, or HTT
 - investigation tools are application-defined and read-only; no arbitrary PromQL/LogQL/SQL/shell/Kubernetes/filesystem/unrestricted-HTTP capability is exposed;
 - tool results are bounded, sanitized, marked as untrusted evidence, and any tool-discovered evidence reference must be validated before persistence;
 - model rounds, tool calls, wall-clock investigation duration, telemetry lookback, log rows, trace results, and tool-result characters are bounded by configuration;
+- runtime evaluation-trial export requires an explicit persisted Health Snapshot and a matching applied `TEST_SCENARIO` marker referenced by that snapshot; it exports only bounded assessment/evidence/counter metadata and never grants model output Health or alert authority;
 - human-attention alert eligibility, severity, opening, escalation, recovery, and reopen cooldown are application-owned deterministic policy; structured model output is advisory context only;
 - alert decisions are serialized by a short PostgreSQL transaction advisory lock so concurrent replicas cannot open competing incidents;
 - Health Snapshot retention cannot erase the self-contained deterministic status/score/reason recorded on an alert, while assessment references are nullable and advisory.

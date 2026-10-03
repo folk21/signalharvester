@@ -1040,6 +1040,29 @@ paths:
         '404': {description: No Health Snapshot has been captured yet}
         '502': {description: Provider transport/protocol/structured-output failure}
         '503': {description: Provider-assisted investigation is disabled or misconfigured}
+  /api/v1/admin/operations/health/assessments/evaluation-trials:
+    post:
+      tags: [Operational Intelligence]
+      operationId: captureAssistedInvestigationEvaluationTrial
+      summary: Capture one scenario-linked provider investigation as offline evaluation evidence
+      description: Runs the configured provider against the selected persisted Health Snapshot, validates that the snapshot references the supplied TEST_SCENARIO run, persists the validated Incident Assessment, and returns one versioned evaluator-compatible trial artifact with actual tool/round/duration counters. The model remains advisory and no alert authority is delegated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssistedInvestigationTrialCaptureRequest'}
+      responses:
+        '201':
+          description: Completed provider trial captured and exported
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistedInvestigationEvidence'}
+        '400': {description: Snapshot is not linked to the supplied TEST_SCENARIO run}
+        '401': {description: Authentication required}
+        '403': {description: ADMIN role required or CSRF validation failed}
+        '404': {description: Referenced Health Snapshot not found}
+        '502': {description: Provider transport/protocol/structured-output failure}
+        '503': {description: Provider-assisted investigation is disabled or misconfigured}
   /api/v1/admin/operations/health/alerts:
     get:
       tags: [Operational Intelligence]
@@ -2142,6 +2165,76 @@ components:
           maxItems: 32
           items: {type: string, minLength: 1, maxLength: 1000}
         humanAttentionSuggested: {type: boolean}
+    AssistedInvestigationTrialCaptureRequest:
+      type: object
+      required: [scenarioRunId, snapshotId]
+      properties:
+        scenarioRunId: {type: string, minLength: 1, maxLength: 256}
+        snapshotId: {type: string, format: uuid}
+    AssistedInvestigationEvidence:
+      type: object
+      required: [schemaVersion, artifactType, generatedAt, source, budgets, trials]
+      properties:
+        schemaVersion: {type: integer, enum: [1]}
+        artifactType: {type: string, enum: [signalharvester-assisted-investigation-evidence]}
+        generatedAt: {type: string, format: date-time}
+        source:
+          $ref: '#/components/schemas/AssistedInvestigationEvidenceSource'
+        budgets:
+          $ref: '#/components/schemas/AssistedInvestigationBudgets'
+        trials:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items: {$ref: '#/components/schemas/AssistedInvestigationTrial'}
+    AssistedInvestigationEvidenceSource:
+      type: object
+      required: [runner, provider, model]
+      properties:
+        runner: {type: string, enum: [signalharvester-runtime]}
+        provider: {type: string}
+        model: {type: string}
+    AssistedInvestigationBudgets:
+      type: object
+      required: [maxToolCalls, maxRounds, maxInvestigationDurationMs]
+      properties:
+        maxToolCalls: {type: integer, minimum: 0}
+        maxRounds: {type: integer, minimum: 1}
+        maxInvestigationDurationMs: {type: integer, format: int64, minimum: 1}
+    AssistedInvestigationTrial:
+      type: object
+      required: [trialId, scenarioRunId, snapshotId, status, execution, allowedEvidenceReferences, discoveredEvidenceReferences, assessment, claimAnnotations]
+      properties:
+        trialId: {type: string, format: uuid}
+        scenarioRunId: {type: string}
+        snapshotId: {type: string, format: uuid}
+        status: {type: string, enum: [COMPLETED]}
+        execution:
+          $ref: '#/components/schemas/AssistedInvestigationExecution'
+        allowedEvidenceReferences:
+          type: array
+          maxItems: 64
+          items: {type: string}
+        discoveredEvidenceReferences:
+          type: array
+          maxItems: 64
+          items: {type: string}
+        assessment:
+          $ref: '#/components/schemas/IncidentAssessment'
+        claimAnnotations:
+          type: array
+          maxItems: 64
+          description: Runtime export leaves this empty; human or deterministic replay annotation is an offline evaluation concern.
+          items:
+            type: object
+            additionalProperties: true
+    AssistedInvestigationExecution:
+      type: object
+      required: [toolCallCount, roundCount, durationMs]
+      properties:
+        toolCallCount: {type: integer, minimum: 0}
+        roundCount: {type: integer, minimum: 1}
+        durationMs: {type: integer, format: int64, minimum: 0}
     HumanAttentionAlert:
       type: object
       required: [id, state, severity, reason, policyVersion, openedAt, lastObservedAt, firstSnapshotId, latestSnapshotId, latestHealthStatus, latestHealthScore]
