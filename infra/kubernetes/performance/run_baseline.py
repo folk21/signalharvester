@@ -31,6 +31,7 @@ ApiSession = resilience.ApiSession
 BackendEnvironmentGuard = resilience.BackendEnvironmentGuard
 CommandRunner = resilience.CommandRunner
 ResourceTracker = resilience.ResourceTracker
+scenario_evidence = resilience.scenario_evidence
 
 BACKEND_DEPLOYMENT = resilience.BACKEND_DEPLOYMENT
 ANALYSIS_GROUP = "signalharvester-analysis-v1"
@@ -376,6 +377,12 @@ def write_report(path: Path, report: dict[str, Any]) -> None:
     path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def default_evidence_output(report_path: Path) -> Path:
+    """Places scenario evidence next to its capacity report without sharing one global filename."""
+
+    return report_path.with_name(report_path.stem + "-operational-evidence.json")
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--namespace", default=os.environ.get("SIGNALHARVESTER_K8S_NAMESPACE", "signalharvester"))
@@ -388,6 +395,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--scenario-timeout", type=float, default=240.0)
     parser.add_argument("--rollout-timeout", default="240s")
     parser.add_argument("--output", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument("--evidence-output", type=Path)
     parser.add_argument("--skip-preflight", action="store_true")
     args = parser.parse_args(argv)
     if args.sources < 1 or args.sources > 20:
@@ -406,6 +414,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     output_path = args.output if args.output.is_absolute() else ROOT / args.output
+    evidence_output = args.evidence_output
+    if evidence_output is None:
+        evidence_output = default_evidence_output(output_path)
+    elif not evidence_output.is_absolute():
+        evidence_output = ROOT / evidence_output
+    evidence_dataset = scenario_evidence.ScenarioEvidenceDataset(
+        "kubernetes-capacity-baseline",
+        {
+            "namespace": args.namespace,
+            "backendReplicas": args.replicas,
+            "explicitHealthSnapshotsPersisted": True,
+            "sharedHealthHistoryAcrossScenarios": False,
+        },
+    )
     runner = CommandRunner(args.namespace)
     env_guard: BackendEnvironmentGuard | None = None
     replica_guard: BackendReplicaGuard | None = None
@@ -493,101 +515,141 @@ def main(argv: list[str] | None = None) -> int:
                     f"analysis={analysis_before}, results={results_before}, pending_outbox={pending_before}"
                 )
 
-            print(
-                f"==> Measure pipeline baseline "
-                f"({args.sources} sources x {args.items_per_source} items = {expected}, replicas={args.replicas})"
-            )
-            started_at = datetime.now(timezone.utc).isoformat()
-            started = time.monotonic()
-            run = resilience.run_collection(admin, profile_id, timeout=args.scenario_timeout)
-            collection_seconds = time.monotonic() - started
-            published = int(run.get("publishedCount", 0))
-            if published != expected:
-                raise AcceptanceError(
-                    f"capacity fixture published {published} items, expected {expected}: {run!r}"
+            with evidence_dataset.scenario(
+                "capacity-pipeline-baseline",
+                "NORMAL_OPERATION",
+                fault_injected=False,
+            ) as scenario:
+                resilience.record_scenario_start(admin, scenario)
+                print(
+                    f"==> Measure pipeline baseline "
+                    f"({args.sources} sources x {args.items_per_source} items = {expected}, replicas={args.replicas})"
                 )
+                started_at = datetime.now(timezone.utc).isoformat()
+                started = time.monotonic()
+                run = resilience.run_collection(admin, profile_id, timeout=args.scenario_timeout)
+                collection_seconds = time.monotonic() - started
+                published = int(run.get("publishedCount", 0))
+                if published != expected:
+                    raise AcceptanceError(
+                        f"capacity fixture published {published} items, expected {expected}: {run!r}"
+                    )
 
-            samples = wait_for_completion(
-                runner,
-                profile_id,
-                expected,
-                baseline_outbox,
-                started,
-                args.scenario_timeout,
-                args.sample_interval,
-            )
-            dlq_after = resilience.rpk_topic_record_count(runner, ANALYSIS_DLQ_TOPIC)
-            if dlq_after != dlq_before:
-                raise AcceptanceError(f"Analysis DLQ advanced during healthy capacity baseline: {dlq_before} -> {dlq_after}")
+                samples = wait_for_completion(
+                    runner,
+                    profile_id,
+                    expected,
+                    baseline_outbox,
+                    started,
+                    args.scenario_timeout,
+                    args.sample_interval,
+                )
+                dlq_after = resilience.rpk_topic_record_count(runner, ANALYSIS_DLQ_TOPIC)
+                if dlq_after != dlq_before:
+                    raise AcceptanceError(f"Analysis DLQ advanced during healthy capacity baseline: {dlq_before} -> {dlq_after}")
 
-            deployment = json.loads(
-                runner.namespaced("get", "deployment", BACKEND_DEPLOYMENT, "-o", "json").stdout
-            )
-            container = deployment["spec"]["template"]["spec"]["containers"][0]
-            report = {
-                "schemaVersion": 1,
-                "scenario": "pipeline-capacity-baseline",
-                "startedAt": started_at,
-                "environment": {
-                    "namespace": args.namespace,
-                    "backendReplicas": args.replicas,
-                    "backendImage": container.get("image"),
-                    "schedulerDisabledForMeasurement": True,
-                    "consumerMembersBefore": {group: status.members for group, status in groups_before.items()},
-                    "consumerStatesBefore": {group: status.state for group, status in groups_before.items()},
-                },
-                "workload": {
-                    "sources": args.sources,
-                    "itemsPerSource": args.items_per_source,
-                    "expectedItems": expected,
-                },
-                "baseline": {
-                    "consumerLag": {group: status.lag for group, status in groups_before.items()},
-                    "pendingOutbox": baseline_outbox,
-                    "analysisDlqRecords": dlq_before,
-                },
-                "summary": build_summary(expected, collection_seconds, samples),
-                "samples": [asdict(sample) for sample in samples],
-            }
-            health_snapshot = capture_health_snapshot(admin)
-            report["healthSnapshot"] = {
-                "id": health_snapshot.get("id"),
-                "overallStatus": health_snapshot.get("overallStatus"),
-                "healthScore": health_snapshot.get("healthScore"),
-                "policyVersion": health_snapshot.get("policyVersion"),
-                "evidenceComplete": health_snapshot.get("evidenceComplete"),
-                "anomalyCandidates": health_snapshot.get("anomalyCandidates", []),
-            }
-            summary = report["summary"]
-            record_operational_marker(
-                admin,
-                "TEST_SCENARIO",
-                "SCENARIO",
-                "pipeline-capacity-baseline-result",
-                {
-                    "backendReplicas": str(args.replicas),
-                    "expectedItems": str(expected),
-                    "pipelineCompletionSeconds": str(summary.get("pipelineCompletionSeconds")),
-                    "endToEndRateItemsPerSecond": str(summary.get("endToEndRateItemsPerSecond")),
-                    "maxAnalysisLag": str(summary.get("maxAnalysisLag")),
-                    "maxResultsLag": str(summary.get("maxResultsLag")),
-                    "maxEventObservationLag": str(summary.get("maxEventObservationLag")),
-                    "maxPendingOutboxRows": str(summary.get("maxPendingOutboxRows")),
-                    "healthSnapshotId": str(health_snapshot.get("id")),
-                    "healthStatus": str(health_snapshot.get("overallStatus")),
-                    "healthScore": str(health_snapshot.get("healthScore")),
-                },
-            )
-            write_report(output_path, report)
-            print(f"    report: {output_path}")
-            print(json.dumps(report["summary"], indent=2, sort_keys=True))
+                deployment = json.loads(
+                    runner.namespaced("get", "deployment", BACKEND_DEPLOYMENT, "-o", "json").stdout
+                )
+                container = deployment["spec"]["template"]["spec"]["containers"][0]
+                report = {
+                    "schemaVersion": 1,
+                    "scenario": "pipeline-capacity-baseline",
+                    "startedAt": started_at,
+                    "environment": {
+                        "namespace": args.namespace,
+                        "backendReplicas": args.replicas,
+                        "backendImage": container.get("image"),
+                        "schedulerDisabledForMeasurement": True,
+                        "consumerMembersBefore": {group: status.members for group, status in groups_before.items()},
+                        "consumerStatesBefore": {group: status.state for group, status in groups_before.items()},
+                    },
+                    "workload": {
+                        "sources": args.sources,
+                        "itemsPerSource": args.items_per_source,
+                        "expectedItems": expected,
+                    },
+                    "baseline": {
+                        "consumerLag": {group: status.lag for group, status in groups_before.items()},
+                        "pendingOutbox": baseline_outbox,
+                        "analysisDlqRecords": dlq_before,
+                    },
+                    "summary": build_summary(expected, collection_seconds, samples),
+                    "samples": [asdict(sample) for sample in samples],
+                }
+                health_snapshot = capture_health_snapshot(admin)
+                report["healthSnapshot"] = {
+                    "id": health_snapshot.get("id"),
+                    "overallStatus": health_snapshot.get("overallStatus"),
+                    "healthScore": health_snapshot.get("healthScore"),
+                    "policyVersion": health_snapshot.get("policyVersion"),
+                    "evidenceComplete": health_snapshot.get("evidenceComplete"),
+                    "anomalyCandidates": health_snapshot.get("anomalyCandidates", []),
+                }
+                scenario.add_health_snapshot("AFTER", health_snapshot)
+                summary = report["summary"]
+                record_operational_marker(
+                    admin,
+                    "TEST_SCENARIO",
+                    "SCENARIO",
+                    "pipeline-capacity-baseline-result",
+                    {
+                        "backendReplicas": str(args.replicas),
+                        "expectedItems": str(expected),
+                        "pipelineCompletionSeconds": str(summary.get("pipelineCompletionSeconds")),
+                        "endToEndRateItemsPerSecond": str(summary.get("endToEndRateItemsPerSecond")),
+                        "maxAnalysisLag": str(summary.get("maxAnalysisLag")),
+                        "maxResultsLag": str(summary.get("maxResultsLag")),
+                        "maxEventObservationLag": str(summary.get("maxEventObservationLag")),
+                        "maxPendingOutboxRows": str(summary.get("maxPendingOutboxRows")),
+                        "healthSnapshotId": str(health_snapshot.get("id")),
+                        "healthStatus": str(health_snapshot.get("overallStatus")),
+                        "healthScore": str(health_snapshot.get("healthScore")),
+                    },
+                )
+                write_report(output_path, report)
+                scenario.add_artifact(
+                    "CAPACITY_REPORT",
+                    resilience.repository_relative(output_path),
+                    sha256=scenario_evidence.sha256_file(output_path),
+                )
+                for name, value in report["summary"].items():
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        scenario.add_measurement(
+                            name,
+                            value,
+                            phase="AFTER",
+                            source="capacity-report",
+                        )
+                end_marker = resilience.record_scenario_marker(admin, scenario, "END")
+                scenario.add_change_marker("END", end_marker)
+                print(f"    report: {output_path}")
+                print(json.dumps(report["summary"], indent=2, sort_keys=True))
+
+            evidence_dataset.write(evidence_output)
+            print(f"    operational scenario evidence: {evidence_output}")
 
             tracker.cleanup()
             tracker = None
 
         print("Capacity baseline measurement completed.")
         return 0
-    except (AcceptanceError, subprocess.TimeoutExpired, OSError, ValueError, json.JSONDecodeError) as failure:
+    except (
+        AcceptanceError,
+        subprocess.TimeoutExpired,
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        scenario_evidence.ScenarioEvidenceError,
+    ) as failure:
+        try:
+            evidence_dataset.write(evidence_output)
+            print(f"    partial operational scenario evidence: {evidence_output}", file=sys.stderr)
+        except OSError as write_failure:
+            print(
+                f"WARNING: failed to write partial scenario evidence: {write_failure}",
+                file=sys.stderr,
+            )
         print(f"ERROR: {failure}", file=sys.stderr)
         return 1
     finally:

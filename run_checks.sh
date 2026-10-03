@@ -8,6 +8,7 @@ set -eu
 # - git diff --check (when executed inside a Git worktree)
 # - ./tools/source-import/run_tests.sh
 # - ./tools/live-backend/run_tests.sh
+# - operational-evaluation Python compile/focused unit checks
 # - ./infra/kubernetes/run_tests.sh
 # - ./gradlew clean check --no-watch-fs
 # - ./gradlew integrationTest --no-watch-fs --no-parallel (container-backed module tests + cross-module HTTP smoke)
@@ -89,6 +90,26 @@ run_step() {
   fi
 }
 
+run_operational_evaluation_compile() {
+  cache_dir=$(mktemp -d "${TMPDIR:-/tmp}/signalharvester-pycache.XXXXXX")
+  status=0
+  PYTHONPYCACHEPREFIX="$cache_dir" python3 -m py_compile \
+    infra/kubernetes/evaluation/scenario_evidence.py \
+    infra/kubernetes/evaluation/offline_evaluator.py \
+    infra/kubernetes/evaluation/assisted_investigation_evaluator.py \
+    infra/kubernetes/evaluation/calibration_report.py \
+    infra/kubernetes/tests/test_assisted_investigation_evaluator.py \
+    infra/kubernetes/tests/test_calibration_report.py || status=$?
+  rm -rf "$cache_dir"
+  return "$status"
+}
+
+run_operational_evaluation_unit_tests() {
+  PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
+    infra.kubernetes.tests.test_assisted_investigation_evaluator \
+    infra.kubernetes.tests.test_calibration_report
+}
+
 run_gradle() {
   if [ -x ./gradlew ]; then
     ./gradlew "$@"
@@ -156,6 +177,7 @@ validate_full_archive() {
 command -v docker >/dev/null 2>&1 || fail "docker is required for integration tests"
 command -v zip >/dev/null 2>&1 || fail "zip is required for FULL archive validation"
 command -v unzip >/dev/null 2>&1 || fail "unzip is required for FULL archive validation"
+command -v python3 >/dev/null 2>&1 || fail "python3 is required for operational evaluation checks"
 
 run_step "docker info" check_docker
 
@@ -165,6 +187,8 @@ fi
 
 run_step "./tools/source-import/run_tests.sh" ./tools/source-import/run_tests.sh
 run_step "./tools/live-backend/run_tests.sh" ./tools/live-backend/run_tests.sh
+run_step "operational evaluation Python compilation" run_operational_evaluation_compile
+run_step "focused operational evaluation unit tests" run_operational_evaluation_unit_tests
 run_step "./infra/kubernetes/run_tests.sh" ./infra/kubernetes/run_tests.sh
 run_step "./gradlew clean check --no-watch-fs" run_gradle clean check --no-watch-fs
 run_step "./gradlew integrationTest --no-watch-fs --no-parallel" run_gradle integrationTest --no-watch-fs --no-parallel

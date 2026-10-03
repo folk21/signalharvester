@@ -43,7 +43,7 @@ The current server port defaults to `8080` and can be overridden:
 SIGNALHARVESTER_HTTP_PORT=8081 ./gradlew :app:run
 ```
 
-Flyway applies Configuration, Analysis, Collection, Results, Event Observation, and Security migrations at startup.
+Flyway applies Configuration, Analysis, Collection, Results, Event Observation, Security, and Operations migrations at startup.
 
 The backend exposes:
 
@@ -347,6 +347,47 @@ python3 infra/kubernetes/evaluation/offline_evaluator.py \
 The evaluator writes `build/reports/operational-intelligence/offline-evaluation.json` by default. It reports detector success/false positives, time to detection, affected-subsystem coverage, recovery state, and an isolated alert-policy projection over the captured snapshots. Alert projection defaults match the repository's current `human-attention-v1` defaults, and every applied parameter is persisted in the report. Override them explicitly when evaluating a different configuration, for example `--degraded-min-consecutive`, `--healthy-min-consecutive-to-resolve`, or `--reopen-cooldown-seconds`.
 
 The projection is intentionally offline: it does not create or modify application alerts and must not be described as persisted runtime alert output. A fault without a Health Snapshot inside the controlled fault window is left out of detection/attention rates rather than treated as a miss.
+
+### Evaluate assisted investigations offline
+
+For an actual deterministic/live provider run, first call the ADMIN runtime capture endpoint with the scenario run id and one persisted Health Snapshot id from that scenario. The endpoint validates the durable `TEST_SCENARIO` linkage, persists the validated assessment, and returns one bounded `signalharvester-assisted-investigation-evidence` artifact. Save that JSON, then evaluate the structured assessment against the same scenario ground truth:
+
+```http
+POST /api/v1/admin/operations/health/assessments/evaluation-trials
+Content-Type: application/json
+
+{
+  "scenarioRunId": "<scenario-run-id>",
+  "snapshotId": "<health-snapshot-uuid>"
+}
+```
+
+Use a snapshot id already present in the corresponding scenario-evidence artifact. The runtime export currently represents completed provider executions; provider failures continue to use the normal provider error boundary rather than being mislabeled as completed evaluation trials. `claimAnnotations` is emitted empty and may be added only by an offline human/deterministic replay annotation workflow.
+
+```bash
+python3 infra/kubernetes/evaluation/assisted_investigation_evaluator.py \
+  --scenario-evidence build/reports/operational-intelligence/resilience-scenario-evidence.json \
+  --investigation-evidence build/reports/operational-intelligence/assisted-investigation-evidence.json
+```
+
+The evaluator writes `build/reports/operational-intelligence/assisted-investigation-evaluation.json` by default. It reports affected-subsystem coverage/precision, evidence-reference validity, explicitly annotated unsupported causal claims, supported-claim citation coverage, tool/round counts, duration, budget compliance, and descriptive provider/model summaries. It never invokes a provider itself and never modifies Health state or alerts. `humanAttentionSuggested` remains advisory output only.
+
+Unsupported/hallucinated causal-claim rates require explicit `SUPPORTED`/`UNSUPPORTED` annotations from a human review or deterministic replay fixture. If annotations are absent, the rate remains unevaluated instead of using another LLM as an implicit judge. The exact investigation-evidence contract is documented in [`../infra/kubernetes/evaluation/README.md`](../infra/kubernetes/evaluation/README.md).
+
+### Build a repeated-evidence calibration report
+
+After collecting more than one labeled scenario run, compare observed Health behavior and bounded alert-policy candidates without changing runtime configuration:
+
+```bash
+python3 infra/kubernetes/evaluation/calibration_report.py \
+  build/reports/operational-intelligence/resilience-scenario-evidence-run-1.json \
+  build/reports/operational-intelligence/resilience-scenario-evidence-run-2.json \
+  --degraded-min-consecutive 2,3,4 \
+  --healthy-min-consecutive-to-resolve 1,2,3 \
+  --reopen-cooldown-seconds 300,900
+```
+
+Add one or more captured investigation artifacts with `--investigation-evidence ...` to compare descriptive provider/model/budget groups against the same scenario ground truth. The report is written to `build/reports/operational-intelligence/calibration-report.json` by default. It groups observed Health results by persisted `policyVersion`; a different Health threshold set therefore requires a new versioned live run. Alert candidates are offline projections only. Different assisted-investigation budgets likewise require newly captured trials. The tool deliberately does not rank candidates or write configuration back to the application.
 
 ### Demonstrate Kafka consumer horizontal scaling
 

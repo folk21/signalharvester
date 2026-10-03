@@ -121,6 +121,20 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn('"maxPendingOutboxRows": str(summary.get("maxPendingOutboxRows"))', source)
         self.assertIn('"healthSnapshotId": str(health_snapshot.get("id"))', source)
 
+    def test_capacity_runner_emits_normal_operation_evidence_next_to_each_report(self):
+        report = Path("build/reports/performance/capacity-baseline.json")
+        self.assertEqual(
+            Path("build/reports/performance/capacity-baseline-operational-evidence.json"),
+            baseline.default_evidence_output(report),
+        )
+        source = (PERFORMANCE / "run_baseline.py").read_text()
+        self.assertIn('"NORMAL_OPERATION"', source)
+        self.assertIn('scenario.add_health_snapshot("AFTER", health_snapshot)', source)
+        self.assertIn('"CAPACITY_REPORT"', source)
+        self.assertIn("scenario_evidence.sha256_file(output_path)", source)
+        self.assertIn('resilience.record_scenario_marker(admin, scenario, "END")', source)
+        self.assertIn("evidence_dataset.write(evidence_output)", source)
+
     def test_comparison_replica_parser_requires_ordered_unique_positive_counts(self):
         self.assertEqual([1, 3], comparison.parse_replica_counts("1,3"))
         with self.assertRaises(Exception):

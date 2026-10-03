@@ -195,6 +195,45 @@ class OperationalIntelligencePostgresIntegrationTest {
     }
 
 
+    /** Capture one real provider execution as evaluator-compatible evidence tied to a durable scenario marker. */
+    @Test
+    void shouldCaptureScenarioLinkedAssistedInvestigationTrial() throws Exception {
+        String scenarioRunId = "scenario-run-assisted-evaluation";
+        OperationalChangeJournal journal = context.getBean(OperationalChangeJournal.class);
+        OperationalIntelligenceOperations operations = context.getBean(OperationalIntelligenceOperations.class);
+        AssistedInvestigationOperations assisted = context.getBean(AssistedInvestigationOperations.class);
+        journal.record(new OperationalChangeRequest(
+                OperationalChangeCategory.TEST_SCENARIO,
+                OperationalChangeTargetType.SCENARIO,
+                scenarioRunId,
+                Map.of(),
+                Map.of("scenarioId", "assisted-evaluation", "label", "NORMAL_OPERATION", "phase", "START"),
+                OperationalChangeOutcome.APPLIED,
+                OperationalChangeContext.tooling("test-harness", "scenario-assisted-evaluation")));
+        var snapshot = operations.captureHealthSnapshot();
+
+        assertThrows(
+                io.signalharvester.operations.assisted.InvalidIncidentAssessmentException.class,
+                () -> assisted.captureEvaluationTrial("different-scenario-run", snapshot.id()));
+
+        var trial = assisted.captureEvaluationTrial(scenarioRunId, snapshot.id());
+
+        assertEquals(scenarioRunId, trial.scenarioRunId());
+        assertEquals(snapshot.id(), trial.snapshotId());
+        assertEquals(IncidentAssessmentSource.PROVIDER, trial.assessment().source());
+        assertEquals("fake", trial.assessment().provider());
+        assertEquals("deterministic-test-model", trial.assessment().model());
+        assertEquals(1, trial.toolCallCount());
+        assertEquals(2, trial.roundCount());
+        assertTrue(trial.durationMs() >= 0);
+        assertEquals(1, trial.maxToolCalls());
+        assertEquals(4, trial.maxRounds());
+        assertEquals(45_000L, trial.maxInvestigationDurationMs());
+        assertTrue(trial.allowedEvidenceReferences().contains("health-snapshot:" + snapshot.id()));
+        assertTrue(trial.discoveredEvidenceReferences().contains("health-snapshot:" + snapshot.id()));
+        assertEquals(1L, scalarLong("SELECT count(*) FROM operations.incident_assessments"));
+    }
+
     /** Enforce the application-owned tool-call budget independently from provider behavior. */
     @Test
     void shouldRejectToolCallsBeyondConfiguredBudget() {
