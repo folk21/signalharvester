@@ -34,11 +34,30 @@ class KubernetesAssetsTest(unittest.TestCase):
         self.assertIn("SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_LOKI_BASE_URL=http://loki:3100", kustomization)
         self.assertIn("SIGNALHARVESTER_OPERATIONS_ASSISTED_INVESTIGATION_TEMPO_BASE_URL=http://tempo:3200", kustomization)
         self.assertIn("SIGNALHARVESTER_OPERATIONS_HEALTH_PROMETHEUS_BASE_URL=http://prometheus:9090", kustomization)
+        self.assertIn("SIGNALHARVESTER_DB_CONNECTION_TIMEOUT_MS=5000", kustomization)
+        self.assertIn("SIGNALHARVESTER_DB_CONNECT_TIMEOUT_SECONDS=3", kustomization)
+        self.assertIn("SIGNALHARVESTER_DB_SOCKET_TIMEOUT_SECONDS=10", kustomization)
         self.assertIn("signalharvester-runtime-secrets", deployment)
         self.assertIn("/health/liveness", deployment)
         self.assertIn("/health/readiness", deployment)
         self.assertIn("resources:", deployment)
         self.assertNotRegex(deployment, r"SIGNALHARVESTER_(JWT|CSRF)_SECRET\s*:")
+
+    def test_application_bounds_default_postgres_pool_and_driver_waits(self):
+        properties = (ROOT / "app" / "src" / "main" / "resources" / "application.properties").read_text()
+
+        self.assertIn(
+            "datasources.default.connection-timeout=${SIGNALHARVESTER_DB_CONNECTION_TIMEOUT_MS:10000}",
+            properties,
+        )
+        self.assertIn(
+            "datasources.default.data-source-properties.connectTimeout=${SIGNALHARVESTER_DB_CONNECT_TIMEOUT_SECONDS:5}",
+            properties,
+        )
+        self.assertIn(
+            "datasources.default.data-source-properties.socketTimeout=${SIGNALHARVESTER_DB_SOCKET_TIMEOUT_SECONDS:30}",
+            properties,
+        )
 
     def test_images_are_versioned_and_not_latest(self):
         manifests = "\n".join(path.read_text() for path in K8S.rglob("*.yaml"))
@@ -148,6 +167,18 @@ class KubernetesAssetsTest(unittest.TestCase):
         script = (K8S / "verify-local.sh").read_text()
         self.assertIn("signalharvester_analysis_outbox_pending", script)
         self.assertIn("signalharvester_analysis_outbox_oldest_pending_age_seconds", script)
+
+    def test_local_verification_waits_for_prometheus_target_convergence_with_diagnostics(self):
+        script = (K8S / "verify-local.sh").read_text()
+        self.assertIn("SIGNALHARVESTER_K8S_PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS", script)
+        self.assertIn('echo "==> Waiting for Prometheus scrape-target convergence"', script)
+        self.assertIn("wait_prometheus_query_equals", script)
+        self.assertIn('count(up{job="signalharvester-backend"} == 1)', script)
+        self.assertIn('min(up{job="redpanda"})', script)
+        self.assertIn('min(up{job="kube-state-metrics"})', script)
+        self.assertIn("Prometheus target readiness did not converge", script)
+        self.assertIn('echo "Observed: $observed"', script)
+        self.assertIn("Current Prometheus up-series", script)
 
     def test_frontend_boundary_remains_separate_from_backend_artifact(self):
         frontend = (K8S / "frontend" / "frontend.yaml").read_text()

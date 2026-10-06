@@ -98,8 +98,10 @@ run_operational_evaluation_compile() {
     infra/kubernetes/evaluation/offline_evaluator.py \
     infra/kubernetes/evaluation/assisted_investigation_evaluator.py \
     infra/kubernetes/evaluation/calibration_report.py \
+    infra/kubernetes/evaluation/run_calibration_campaign.py \
     infra/kubernetes/tests/test_assisted_investigation_evaluator.py \
-    infra/kubernetes/tests/test_calibration_report.py || status=$?
+    infra/kubernetes/tests/test_calibration_report.py \
+    infra/kubernetes/tests/test_calibration_campaign.py || status=$?
   rm -rf "$cache_dir"
   return "$status"
 }
@@ -107,7 +109,8 @@ run_operational_evaluation_compile() {
 run_operational_evaluation_unit_tests() {
   PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
     infra.kubernetes.tests.test_assisted_investigation_evaluator \
-    infra.kubernetes.tests.test_calibration_report
+    infra.kubernetes.tests.test_calibration_report \
+    infra.kubernetes.tests.test_calibration_campaign
 }
 
 run_gradle() {

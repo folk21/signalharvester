@@ -71,11 +71,13 @@ kubectl apply -k infra/kubernetes
 
 The backend runs with `MICRONAUT_ENVIRONMENTS=security`, so authentication/RBAC and the restrictive external-source destination policy are enabled. The local port-forward workflow intentionally sets the authentication cookie `Secure` flag to `false`; this local manifest is not a production Internet exposure configuration and does not define TLS/Ingress.
 
-Wait for the cluster and run the live verification. The verifier prints each workload before waiting and emits focused pod/workload/event diagnostics if readiness times out:
+Wait for the cluster and run the live verification. The verifier prints each workload before waiting and emits focused pod/workload/event diagnostics if readiness times out. After workload readiness, it also waits for Prometheus scrape-target convergence instead of assuming DNS service discovery and the next scrape have already observed freshly rolled backend pods. The Prometheus convergence window defaults to 90 seconds and can be overridden with `SIGNALHARVESTER_K8S_PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS` for slower local environments:
 
 ```bash
 ./infra/kubernetes/verify-local.sh
 ```
+
+If Prometheus convergence expires, the verifier reports the failed query, expected value, last observed value, and the current `up` vector rather than exiting silently.
 
 After that baseline passes, run the controlled resilience acceptance:
 

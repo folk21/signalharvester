@@ -102,6 +102,9 @@ The initial health thresholds are versioned operational heuristics for anomaly t
 | `SIGNALHARVESTER_DB_USERNAME` | `signalharvester` | Local-development PostgreSQL username. |
 | `SIGNALHARVESTER_DB_PASSWORD` | `signalharvester` | Local-development PostgreSQL password; override outside local development. |
 | `SIGNALHARVESTER_DB_MAX_POOL_SIZE` | `10` | Maximum Hikari connections for the default datasource. |
+| `SIGNALHARVESTER_DB_CONNECTION_TIMEOUT_MS` | `10000` | Maximum milliseconds a caller waits for a Hikari connection before the database operation fails. |
+| `SIGNALHARVESTER_DB_CONNECT_TIMEOUT_SECONDS` | `5` | PostgreSQL JDBC socket-connect timeout in seconds for opening a physical database connection. |
+| `SIGNALHARVESTER_DB_SOCKET_TIMEOUT_SECONDS` | `30` | PostgreSQL JDBC socket read timeout in seconds; bounds stalled database network operations. |
 | `SIGNALHARVESTER_KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka bootstrap servers used by Micronaut Kafka clients. |
 | `SIGNALHARVESTER_COLLECTION_RSS_MAX_ITEMS_PER_SOURCE` | `500` | Maximum RSS/Atom entries accepted from one fetched response; values above the bound fail extraction explicitly. |
 | `SIGNALHARVESTER_COLLECTION_EXTRACTION_MAX_ITEMS_PER_SOURCE` | `500` | Maximum candidate items accepted from one configuration-driven REST/JSON or HTML response. |

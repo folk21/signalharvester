@@ -389,6 +389,18 @@ python3 infra/kubernetes/evaluation/calibration_report.py \
 
 Add one or more captured investigation artifacts with `--investigation-evidence ...` to compare descriptive provider/model/budget groups against the same scenario ground truth. The report is written to `build/reports/operational-intelligence/calibration-report.json` by default. It groups observed Health results by persisted `policyVersion`; a different Health threshold set therefore requires a new versioned live run. Alert candidates are offline projections only. Different assisted-investigation budgets likewise require newly captured trials. The tool deliberately does not rank candidates or write configuration back to the application.
 
+### Run a repeated live calibration campaign
+
+For a bounded repeated live collection, run the existing resilience acceptance workflow two to eight times and build one calibration report from the resulting artifacts:
+
+```bash
+python3 infra/kubernetes/evaluation/run_calibration_campaign.py --repeats 3
+```
+
+Add `--include-capacity` when the campaign should also execute one capacity baseline after each resilience repetition. Use `--degraded-min-consecutive`, `--unhealthy-min-consecutive`, `--healthy-min-consecutive-to-resolve`, and `--reopen-cooldown-seconds` to define the same bounded alert-policy grid accepted by `calibration_report.py`.
+
+The default output is a unique directory below `build/reports/operational-intelligence/calibration-campaigns/`. It contains each scenario-evidence artifact, `calibration-report.json`, and `campaign-manifest.json` with digests and run status. The harness runs existing live workflows sequentially, fails fast on an unsuccessful repetition, preserves partial evidence when available, and refuses to overwrite a non-empty explicit output directory. It does not change Health, alert, or provider configuration. It also does not clear persisted Health history between repetitions, so rolling baselines evolve exactly as they do in the live deployment. A different Health policy still requires a separate deployed policy version and another campaign. Live assisted-investigation trials remain explicit/optional and are captured separately against the emitted scenario/snapshot identities.
+
 ### Demonstrate Kafka consumer horizontal scaling
 
 After the resilience workflow passes, demonstrate R26/S9 with:

@@ -183,3 +183,24 @@ The report keeps three comparison domains separate:
 - **Assisted investigation:** optional `--investigation-evidence` artifacts are grouped by provider, model, and recorded `maxToolCalls`/`maxRounds`/duration budgets. Budget changes require newly captured trials; no counterfactual model execution is invented.
 
 The artifact uses `selectionMode=MANUAL_EVIDENCE_REVIEW`. It reports the evidence needed for an engineering calibration decision but intentionally contains no winner, score, or automatic production-configuration update.
+
+## Repeated live calibration campaign
+
+`run_calibration_campaign.py` is a bounded live orchestration wrapper around the already accepted resilience/capacity evidence producers. It does not add another detector or another source of ground truth.
+
+Default usage runs three sequential resilience repetitions and then builds one calibration report:
+
+```bash
+python3 infra/kubernetes/evaluation/run_calibration_campaign.py --repeats 3
+```
+
+Use `--include-capacity` to add one `NORMAL_OPERATION` capacity baseline after each resilience repetition. Repeats are bounded to 2–8. The campaign accepts the same comma-separated alert-policy candidate values as `calibration_report.py`; those values affect only the offline alert projection.
+
+By default each invocation creates a unique directory below `build/reports/operational-intelligence/calibration-campaigns/` containing:
+
+- `resilience-run-NN.json` for every accepted resilience repetition;
+- optional `capacity-run-NN.json` plus the companion capacity report;
+- `calibration-report.json`;
+- `campaign-manifest.json` with campaign configuration, dataset identities, SHA-256 digests, run outcomes, and the final descriptive calibration-report reference.
+
+The harness runs workflows sequentially, fails fast on a failed live command, writes a failed manifest, and preserves valid partial scenario evidence when the underlying runner emitted it. If a resilience child run fails or returns inconsistent scenario evidence, the campaign invokes the resilience runner's bounded `--repair-baseline-only` path and records the result as `baselineRecovery` on that run. A failed recovery is surfaced in the campaign failure rather than hidden as a warning. An explicit `--output-dir` must be empty or absent so evidence is never silently overwritten. The harness never writes production Health/alert/model configuration. It also does not clear persisted Health history between repetitions, so rolling baselines evolve exactly as they do in the live deployment. Different Health policy versions require separately deployed campaigns, and live assisted-investigation trials remain an explicit optional capture step tied to the emitted scenario/snapshot identities.
