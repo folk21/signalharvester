@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, and descriptive repeated-evidence calibration are accepted. The current verification-pending slice adds bounded orchestration for repeated live resilience/capacity calibration campaigns before any threshold/model change.
+The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted. The current verification-pending Stage 6E4 slice adds dedicated live normal/transient/critical Health/alert calibration scenarios with explicit scoring expectations; the next decision point is a repeated campaign over those scenarios before any production policy change.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 

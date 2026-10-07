@@ -389,17 +389,27 @@ python3 infra/kubernetes/evaluation/calibration_report.py \
 
 Add one or more captured investigation artifacts with `--investigation-evidence ...` to compare descriptive provider/model/budget groups against the same scenario ground truth. The report is written to `build/reports/operational-intelligence/calibration-report.json` by default. It groups observed Health results by persisted `policyVersion`; a different Health threshold set therefore requires a new versioned live run. Alert candidates are offline projections only. Different assisted-investigation budgets likewise require newly captured trials. The tool deliberately does not rank candidates or write configuration back to the application.
 
+### Run dedicated Health/alert calibration scenarios
+
+After local Kubernetes verification, capture the explicit detector/alert cases directly with:
+
+```bash
+python3 infra/kubernetes/evaluation/run_health_alert_calibration.py
+```
+
+The runner keeps the deployed policy unchanged and produces a clean normal control, a 300-row transient Analysis-outbox backlog expected to be detected without human attention, and a 1,200-row critical backlog expected to be detected and require attention. Backlogs use the real Collection → Analysis → outbox path while dispatch is deliberately slowed, then the runner waits for Prometheus evidence convergence before fault capture and for full Results/outbox/Prometheus recovery afterward. The default artifact is `build/reports/operational-intelligence/health-alert-calibration-evidence.json`.
+
 ### Run a repeated live calibration campaign
 
-For a bounded repeated live collection, run the existing resilience acceptance workflow two to eight times and build one calibration report from the resulting artifacts:
+For a bounded repeated live collection, run resilience plus the dedicated Health/alert calibration phase two to eight times and build one calibration report from the resulting artifacts:
 
 ```bash
 python3 infra/kubernetes/evaluation/run_calibration_campaign.py --repeats 3
 ```
 
-Add `--include-capacity` when the campaign should also execute one capacity baseline after each resilience repetition. Use `--degraded-min-consecutive`, `--unhealthy-min-consecutive`, `--healthy-min-consecutive-to-resolve`, and `--reopen-cooldown-seconds` to define the same bounded alert-policy grid accepted by `calibration_report.py`.
+Add `--include-capacity` when the campaign should also execute one descriptive capacity baseline after each Health/alert calibration phase. Use `--degraded-min-consecutive`, `--unhealthy-min-consecutive`, `--healthy-min-consecutive-to-resolve`, and `--reopen-cooldown-seconds` to define the same bounded alert-policy grid accepted by `calibration_report.py`.
 
-The default output is a unique directory below `build/reports/operational-intelligence/calibration-campaigns/`. It contains each scenario-evidence artifact, `calibration-report.json`, and `campaign-manifest.json` with digests and run status. The harness runs existing live workflows sequentially, fails fast on an unsuccessful repetition, preserves partial evidence when available, and refuses to overwrite a non-empty explicit output directory. It does not change Health, alert, or provider configuration. It also does not clear persisted Health history between repetitions, so rolling baselines evolve exactly as they do in the live deployment. A different Health policy still requires a separate deployed policy version and another campaign. Live assisted-investigation trials remain explicit/optional and are captured separately against the emitted scenario/snapshot identities.
+The default output is a unique directory below `build/reports/operational-intelligence/calibration-campaigns/`. Each repetition produces `resilience-run-NN.json` and `health-alert-run-NN.json`, plus optional capacity evidence/report files. The directory also contains `calibration-report.json` and `campaign-manifest.json` with digests and run status. The harness runs live workflows sequentially, fails fast on an unsuccessful repetition, preserves partial evidence when available, and refuses to overwrite a non-empty explicit output directory. It does not change Health, alert, or provider configuration. It also does not clear persisted Health history between repetitions, so rolling baselines evolve exactly as they do in the live deployment. A different Health policy still requires a separate deployed policy version and another campaign. Live assisted-investigation trials remain explicit/optional and are captured separately against the emitted scenario/snapshot identities.
 
 ### Demonstrate Kafka consumer horizontal scaling
 

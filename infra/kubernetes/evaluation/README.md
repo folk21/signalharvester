@@ -185,23 +185,44 @@ The report keeps three comparison domains separate:
 
 The artifact uses `selectionMode=MANUAL_EVIDENCE_REVIEW`. It reports the evidence needed for an engineering calibration decision but intentionally contains no winner, score, or automatic production-configuration update. Detector/alert rates are meaningful only when the input scenarios carry explicit scoring expectations; legacy and descriptive-only scenarios remain available for inspection but do not influence those rates.
 
+## Dedicated live Health/alert calibration
+
+`run_health_alert_calibration.py` is the detector/alert-specific live evidence producer. Unlike general resilience acceptance, each initial scenario declares an explicit scoring expectation while keeping the deployed Health and alert policies unchanged.
+
+Run it against an already verified local Kubernetes deployment with:
+
+```bash
+python3 infra/kubernetes/evaluation/run_health_alert_calibration.py
+```
+
+The initial fixed cases are:
+
+- `NORMAL_OPERATION`: clean outbox baseline, expected `REMAIN_HEALTHY` and `NO_ATTENTION`;
+- `OUTBOX_BACKLOG_TRANSIENT`: 300 pending Analysis-outbox rows, expected `DETECT` and `NO_ATTENTION`;
+- `OUTBOX_BACKLOG_CRITICAL`: 1,200 pending Analysis-outbox rows, expected `DETECT` and `ATTENTION_REQUIRED`.
+
+The backlog cases use the real Collection → Analysis → transactional-outbox path. The runner slows the outbox dispatcher to a ten-minute poll interval instead of disabling the outbox subsystem, because the same subsystem owns the backlog metrics needed by Prometheus and Health evaluation. It waits for the exact PostgreSQL backlog and corresponding Prometheus gauge to converge before recording `FAULT_START` and capturing the fault Health Snapshot. The transient case is rejected if the oldest pending row reaches 120 seconds before capture. Recovery restores one-second outbox polling, waits for every generated item to reach Results, waits for PostgreSQL and Prometheus backlog evidence to return to baseline, then captures the post-recovery snapshot.
+
+The fixed 300/1,200 magnitudes are versioned dataset inputs, not automatically selected production thresholds. A future Health policy must be deployed and rerun against the same cases rather than being counterfactually projected from old telemetry.
+
 ## Repeated live calibration campaign
 
-`run_calibration_campaign.py` is a bounded live orchestration wrapper around the already accepted resilience/capacity evidence producers. It does not add another detector or another source of ground truth.
+`run_calibration_campaign.py` is a bounded live orchestration wrapper around the accepted resilience evidence producer, the dedicated Health/alert calibration runner, and the optional capacity baseline. It does not add another detector or another source of ground truth.
 
-Default usage runs three sequential resilience repetitions and then builds one calibration report:
+Default usage runs three sequential repetitions of resilience followed by dedicated Health/alert calibration, then builds one calibration report:
 
 ```bash
 python3 infra/kubernetes/evaluation/run_calibration_campaign.py --repeats 3
 ```
 
-Use `--include-capacity` to add one `NORMAL_OPERATION` capacity baseline after each resilience repetition. Repeats are bounded to 2–8. The campaign accepts the same comma-separated alert-policy candidate values as `calibration_report.py`; those values affect only the offline alert projection.
+Use `--include-capacity` to add one descriptive `NORMAL_OPERATION` capacity baseline after each Health/alert calibration phase. Repeats are bounded to 2–8. The campaign accepts the same comma-separated alert-policy candidate values as `calibration_report.py`; those values affect only the offline alert projection.
 
 By default each invocation creates a unique directory below `build/reports/operational-intelligence/calibration-campaigns/` containing:
 
 - `resilience-run-NN.json` for every accepted resilience repetition;
+- `health-alert-run-NN.json` for every dedicated calibration repetition;
 - optional `capacity-run-NN.json` plus the companion capacity report;
 - `calibration-report.json`;
 - `campaign-manifest.json` with campaign configuration, dataset identities, SHA-256 digests, run outcomes, and the final descriptive calibration-report reference.
 
-The harness runs workflows sequentially, fails fast on a failed live command, writes a failed manifest, and preserves valid partial scenario evidence when the underlying runner emitted it. If a resilience child run fails or returns inconsistent scenario evidence, the campaign invokes the resilience runner's bounded `--repair-baseline-only` path and records the result as `baselineRecovery` on that run. A failed recovery is surfaced in the campaign failure rather than hidden as a warning. An explicit `--output-dir` must be empty or absent so evidence is never silently overwritten. The harness never writes production Health/alert/model configuration. It also does not clear persisted Health history between repetitions, so rolling baselines evolve exactly as they do in the live deployment. The current resilience runner marks its clean baseline as `REMAIN_HEALTHY`/`NO_ATTENTION`; controlled fault/recovery scenarios remain `DESCRIPTIVE_ONLY` until a detector-specific calibration scenario defines an operationally meaningful expected outcome. The capacity baseline is also descriptive-only because it deliberately has no performance/Health budget. Different Health policy versions require separately deployed campaigns, and live assisted-investigation trials remain an explicit optional capture step tied to the emitted scenario/snapshot identities.
+The harness runs workflows sequentially, fails fast on a failed live command, writes a failed manifest, and preserves valid partial scenario evidence when the underlying runner emitted it. If a resilience child run fails or returns inconsistent scenario evidence, the campaign invokes the resilience runner's bounded `--repair-baseline-only` path and records the result as `baselineRecovery` on that run. A failed recovery is surfaced in the campaign failure rather than hidden as a warning. A failed dedicated Health/alert child preserves any valid partial evidence and fails the campaign without invoking the PostgreSQL resilience-baseline repair path. An explicit `--output-dir` must be empty or absent so evidence is never silently overwritten. The harness never writes production Health/alert/model configuration. It also does not clear persisted Health history between repetitions, so rolling baselines evolve exactly as they do in the live deployment. General resilience fault/recovery scenarios remain `DESCRIPTIVE_ONLY`; the dedicated calibration runner supplies the explicit scored cases. The capacity baseline is also descriptive-only because it deliberately has no performance/Health budget. Different Health policy versions require separately deployed campaigns, and live assisted-investigation trials remain an explicit optional capture step tied to the emitted scenario/snapshot identities.

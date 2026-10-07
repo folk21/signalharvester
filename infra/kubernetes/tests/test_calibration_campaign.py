@@ -77,7 +77,7 @@ class CalibrationCampaignTest(unittest.TestCase):
                 nonlocal dataset_index
                 commands.append(list(command))
                 program = Path(command[1]).name
-                if program == "run_acceptance.py":
+                if program in {"run_acceptance.py", "run_health_alert_calibration.py"}:
                     dataset_index += 1
                     evidence = Path(command[command.index("--evidence-output") + 1])
                     if not evidence.is_absolute():
@@ -106,10 +106,17 @@ class CalibrationCampaignTest(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
         self.assertEqual("PASSED", manifest["status"])
-        self.assertEqual(3, len(manifest["scenarioEvidence"]))
-        self.assertEqual(3, len(manifest["runs"]))
-        self.assertEqual(4, len(commands))
-        self.assertTrue(all(Path(command[1]).name == "run_acceptance.py" for command in commands[:3]))
+        self.assertEqual(6, len(manifest["scenarioEvidence"]))
+        self.assertEqual(6, len(manifest["runs"]))
+        self.assertEqual(7, len(commands))
+        self.assertEqual(
+            ["RESILIENCE", "HEALTH_ALERT_CALIBRATION"] * 3,
+            [item["kind"] for item in manifest["runs"]],
+        )
+        self.assertEqual(
+            ["run_acceptance.py", "run_health_alert_calibration.py"] * 3,
+            [Path(command[1]).name for command in commands[:-1]],
+        )
         self.assertEqual("calibration_report.py", Path(commands[-1][1]).name)
         self.assertEqual("MANUAL_EVIDENCE_REVIEW", manifest["calibrationReport"]["selectionMode"])
 
@@ -126,7 +133,7 @@ class CalibrationCampaignTest(unittest.TestCase):
                 nonlocal dataset_index
                 commands.append(list(command))
                 program = Path(command[1]).name
-                if program in {"run_acceptance.py", "run_baseline.py"}:
+                if program in {"run_acceptance.py", "run_health_alert_calibration.py", "run_baseline.py"}:
                     dataset_index += 1
                     evidence = Path(command[command.index("--evidence-output") + 1])
                     if not evidence.is_absolute():
@@ -159,9 +166,62 @@ class CalibrationCampaignTest(unittest.TestCase):
                 manifest_path = campaign.run_campaign(args, campaign_id="campaign-capacity", execute=execute)
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-        self.assertEqual(["RESILIENCE", "CAPACITY", "RESILIENCE", "CAPACITY"], [item["kind"] for item in manifest["runs"]])
-        self.assertEqual(4, len(manifest["scenarioEvidence"]))
-        self.assertEqual(5, len(commands))
+        self.assertEqual(
+            [
+                "RESILIENCE",
+                "HEALTH_ALERT_CALIBRATION",
+                "CAPACITY",
+                "RESILIENCE",
+                "HEALTH_ALERT_CALIBRATION",
+                "CAPACITY",
+            ],
+            [item["kind"] for item in manifest["runs"]],
+        )
+        self.assertEqual(6, len(manifest["scenarioEvidence"]))
+        self.assertEqual(7, len(commands))
+
+    def test_failed_health_alert_calibration_preserves_partial_evidence_without_postgres_repair(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory) / "campaign"
+            args = campaign.parse_args(["--repeats", "2", "--output-dir", str(output_dir)])
+            commands = []
+            dataset_index = 0
+
+            def execute(command):
+                nonlocal dataset_index
+                commands.append(list(command))
+                program = Path(command[1]).name
+                if program == "run_acceptance.py":
+                    dataset_index += 1
+                    evidence = Path(command[command.index("--evidence-output") + 1])
+                    if not evidence.is_absolute():
+                        evidence = campaign.ROOT / evidence
+                    evidence.parent.mkdir(parents=True, exist_ok=True)
+                    evidence.write_text(
+                        json.dumps(scenario_artifact(f"dataset-{dataset_index}")), encoding="utf-8"
+                    )
+                    return 0
+                if program == "run_health_alert_calibration.py":
+                    evidence = Path(command[command.index("--evidence-output") + 1])
+                    if not evidence.is_absolute():
+                        evidence = campaign.ROOT / evidence
+                    evidence.write_text(
+                        json.dumps(scenario_artifact("health-alert-partial", outcome="FAILED")),
+                        encoding="utf-8",
+                    )
+                    return 7
+                raise AssertionError(command)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(campaign.CampaignError):
+                    campaign.run_campaign(args, campaign_id="campaign-health-alert-failed", execute=execute)
+            manifest = json.loads((output_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual("FAILED", manifest["status"])
+        self.assertIn("Health/alert calibration run 1 failed with exit code 7", manifest["failure"])
+        self.assertEqual(["RESILIENCE", "HEALTH_ALERT_CALIBRATION"], [item["kind"] for item in manifest["runs"]])
+        self.assertEqual(2, len(commands))
+        self.assertNotIn("baselineRecovery", manifest["runs"][1])
 
     def test_failed_live_run_keeps_failed_manifest_and_does_not_calibrate(self):
         with tempfile.TemporaryDirectory() as directory:

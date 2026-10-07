@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[3]
 EVALUATION = ROOT / "infra" / "kubernetes" / "evaluation"
 RESILIENCE_RUNNER = ROOT / "infra" / "kubernetes" / "resilience" / "run_acceptance.py"
+HEALTH_ALERT_CALIBRATION_RUNNER = EVALUATION / "run_health_alert_calibration.py"
 CAPACITY_RUNNER = ROOT / "infra" / "kubernetes" / "performance" / "run_baseline.py"
 CALIBRATION_RUNNER = EVALUATION / "calibration_report.py"
 DEFAULT_OUTPUT_PARENT = ROOT / "build" / "reports" / "operational-intelligence" / "calibration-campaigns"
@@ -145,6 +146,20 @@ def _resilience_repair_command(args: argparse.Namespace) -> list[str]:
     ]
 
 
+def _health_alert_calibration_command(args: argparse.Namespace, evidence_path: Path) -> list[str]:
+    command = [
+        sys.executable,
+        str(HEALTH_ALERT_CALIBRATION_RUNNER),
+        "--namespace",
+        args.namespace,
+        "--evidence-output",
+        _path_argument(evidence_path),
+    ]
+    if args.skip_preflight:
+        command.append("--skip-preflight")
+    return command
+
+
 def _capacity_command(
     args: argparse.Namespace,
     report_path: Path,
@@ -231,7 +246,7 @@ def _campaign_manifest(
         "calibrationReport": dict(calibration) if calibration is not None else None,
         "failure": failure,
         "notes": [
-            "The campaign executes existing live resilience/capacity runners sequentially; it does not mutate Health or alert calibration values.",
+            "The campaign executes live resilience, dedicated Health/alert calibration, and optional capacity runners sequentially; it does not mutate Health or alert calibration values.",
             "A failed or inconsistent resilience child triggers the bounded PostgreSQL acceptance-baseline repair path; its outcome is recorded on that run as baselineRecovery.",
             "The campaign does not clear persisted Health history between repetitions; rolling baselines therefore evolve exactly as they do in the live deployment.",
             "Each scenario-evidence artifact keeps its persisted Health policyVersion; comparing another Health policy requires another deployed version and another campaign.",
@@ -338,6 +353,36 @@ def run_campaign(
             run_record["evidence"] = metadata
             evidence_metadata.append(metadata)
             scenario_paths.append(resilience_evidence)
+            persist("RUNNING")
+
+            health_alert_evidence = output_dir / f"health-alert-run-{index:02d}.json"
+            command = _health_alert_calibration_command(args, health_alert_evidence)
+            print(f"==> Health/alert calibration run {index}/{args.repeats}")
+            result = execute(command)
+            health_alert_record: dict[str, Any] = {
+                "kind": "HEALTH_ALERT_CALIBRATION",
+                "repeat": index,
+                "status": "PASSED" if result == 0 else "FAILED",
+                "evidencePath": _path_argument(health_alert_evidence),
+            }
+            runs.append(health_alert_record)
+            if result != 0:
+                if health_alert_evidence.exists():
+                    try:
+                        metadata = _scenario_metadata(health_alert_evidence)
+                        evidence_metadata.append(metadata)
+                        health_alert_record["evidence"] = metadata
+                    except CampaignError:
+                        pass
+                raise CampaignError(f"Health/alert calibration run {index} failed with exit code {result}")
+            metadata = _scenario_metadata(health_alert_evidence)
+            if not metadata["allScenariosPassed"]:
+                raise CampaignError(
+                    f"Health/alert calibration run {index} returned success with non-passed evidence"
+                )
+            health_alert_record["evidence"] = metadata
+            evidence_metadata.append(metadata)
+            scenario_paths.append(health_alert_evidence)
             persist("RUNNING")
 
             if args.include_capacity:

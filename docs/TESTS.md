@@ -32,7 +32,7 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 1. `docker info` preflight for container-backed verification;
 2. optional `git diff --check` when running inside a Git worktree;
 3. `./tools/source-import/run_tests.sh` and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
-4. explicit operational-evaluation Python compilation plus focused assisted-investigation/calibration/campaign unit tests, using an external temporary bytecode cache so repository cleanliness is unchanged;
+4. explicit operational-evaluation Python compilation plus focused assisted-investigation/calibration/dedicated-Health-alert/campaign unit tests, using an external temporary bytecode cache so repository cleanliness is unchanged;
 5. `./infra/kubernetes/run_tests.sh` for the complete deterministic Kubernetes/deployment/evaluation asset suite without a live cluster;
 6. `./gradlew clean check --no-watch-fs`, including the repository-wide `verifyNoThreadSleepInTests` source guard;
 7. `./gradlew integrationTest --no-watch-fs --no-parallel`;
@@ -46,13 +46,16 @@ Operational-intelligence evaluation tooling can be checked directly while develo
 python3 -m py_compile \
   infra/kubernetes/evaluation/assisted_investigation_evaluator.py \
   infra/kubernetes/evaluation/calibration_report.py \
+  infra/kubernetes/evaluation/run_health_alert_calibration.py \
   infra/kubernetes/evaluation/run_calibration_campaign.py \
   infra/kubernetes/tests/test_assisted_investigation_evaluator.py \
   infra/kubernetes/tests/test_calibration_report.py \
+  infra/kubernetes/tests/test_health_alert_calibration.py \
   infra/kubernetes/tests/test_calibration_campaign.py
 python3 -m unittest \
   infra.kubernetes.tests.test_assisted_investigation_evaluator \
   infra.kubernetes.tests.test_calibration_report \
+  infra.kubernetes.tests.test_health_alert_calibration \
   infra.kubernetes.tests.test_calibration_campaign
 ./infra/kubernetes/run_tests.sh
 ```
