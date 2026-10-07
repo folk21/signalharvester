@@ -15,6 +15,7 @@ Each scenario record contains:
 
 - a stable scenario id and label;
 - whether the harness intentionally injected a fault and which subsystems it affected;
+- evaluation expectations kept outside ground truth: Health `DETECT`, `REMAIN_HEALTHY`, or `DESCRIPTIVE_ONLY`, and alert `ATTENTION_REQUIRED`, `NO_ATTENTION`, or `DESCRIPTIVE_ONLY`;
 - a bounded start/end window and terminal harness outcome;
 - durable Operations scenario markers, including `FAULT_START`/`FAULT_END` for controlled resilience faults;
 - explicitly captured Health Snapshots;
@@ -23,7 +24,7 @@ Each scenario record contains:
 - companion artifact references such as a capacity report, including a digest when available;
 - explicit limitations when some evidence cannot be collected safely or meaningfully.
 
-The evidence format is versioned by `schemaVersion`. It is an offline evaluation artifact, not a runtime database contract and not an alert-authority input.
+The evidence format is versioned by `schemaVersion`. `evaluationExpectations` is an additive version-1 field. Older version-1 artifacts that do not contain it remain readable, but the evaluator treats them as `DESCRIPTIVE_ONLY`; historical `faultInjected=true` records are never retroactively interpreted as a requirement to degrade Health or open an alert. It is an offline evaluation artifact, not a runtime database contract and not an alert-authority input.
 
 Default live outputs are written below `build/reports/operational-intelligence/` or next to the capacity report that produced them. Generated evidence must stay out of source control. Explicit Health Snapshot captures use the real Operations persistence path and therefore participate in rolling history; current live runners preserve scenario order and report this fact in source metadata.
 
@@ -46,14 +47,14 @@ build/reports/operational-intelligence/offline-evaluation.json
 
 Health evaluation reports:
 
-- fault-scenario detection success for scenarios that contain a Health Snapshot inside the controlled fault window;
-- false positives during normal-operation scenarios;
-- time from `FAULT_START` to the first `DEGRADED`/`UNHEALTHY` snapshot;
-- affected-subsystem ground-truth coverage and observed-subsystem precision;
-- post-fault recovery status;
-- explicit unknown/not-evaluable cases instead of invented misses when evidence is absent.
+- detection success and time-to-detection only for scenarios explicitly marked `DETECT`;
+- `DETECT` scenarios are excluded from detection-rate scoring when a captured pre-fault snapshot is already `DEGRADED`/`UNHEALTHY`, because the controlled fault did not start from a clean detector state;
+- false positives only for scenarios explicitly marked `REMAIN_HEALTHY`;
+- descriptive observed degradation for `DESCRIPTIVE_ONLY` scenarios without adding it to quality rates;
+- affected-subsystem ground-truth coverage only for ground-truth names with an explicit mapping to a Health component (`BACKEND` → `backend-runtime`, `KAFKA` → `eventing`, `ANALYSIS` → `analysis`, `POSTGRESQL` → `postgresql`, `ANALYSIS_OUTBOX` → `analysis-outbox`, `COLLECTION` → `collection`); unmapped names such as `RESULTS` or `EXTERNAL_SOURCE` are reported separately rather than counted as misses;
+- post-fault recovery status and explicit unknown/not-evaluable cases instead of invented misses when evidence is absent.
 
-Alert evaluation is an **offline policy projection**, not persisted runtime alert output. It applies explicit consecutive-DEGRADED, consecutive-UNHEALTHY, HEALTHY recovery, and reopen-cooldown parameters to the captured Health Snapshot sequence. The report records every applied parameter so two policy configurations can be compared over the same evidence later.
+Alert evaluation is an **offline policy projection**, not persisted runtime alert output. It applies explicit consecutive-DEGRADED, consecutive-UNHEALTHY, HEALTHY recovery, and reopen-cooldown parameters to the captured Health Snapshot sequence. Attention rate is scored only for `ATTENTION_REQUIRED`; alert false positives are scored only for `NO_ATTENTION`; `DESCRIPTIVE_ONLY` remains observable but non-scoring. The report records every applied parameter so two policy configurations can be compared over the same evidence later.
 
 The defaults mirror the current repository `human-attention-v1` defaults:
 
@@ -74,7 +75,7 @@ python3 infra/kubernetes/evaluation/offline_evaluator.py \
   build/reports/operational-intelligence/resilience-scenario-evidence.json
 ```
 
-The evaluator is intentionally descriptive. It does not modify Health state, create alerts, select a production threshold, or declare one policy configuration superior. Assisted-investigation quality evaluation below consumes the same bounded scenario identity instead of inventing a second source of ground truth.
+The evaluator is intentionally descriptive. It does not modify Health state, create alerts, select a production threshold, or declare one policy configuration superior. Evaluation report schema version 2 makes the expectation-aware scoring semantics explicit. Assisted-investigation quality evaluation below consumes the same bounded scenario identity instead of inventing a second source of ground truth.
 
 ## Assisted-investigation quality evaluation
 
@@ -182,7 +183,7 @@ The report keeps three comparison domains separate:
 - **Alert policy:** comma-separated candidate values form a bounded Cartesian grid (maximum 64 candidates). Each candidate is projected over the same captured Health Snapshots and remains separated by observed Health policy version.
 - **Assisted investigation:** optional `--investigation-evidence` artifacts are grouped by provider, model, and recorded `maxToolCalls`/`maxRounds`/duration budgets. Budget changes require newly captured trials; no counterfactual model execution is invented.
 
-The artifact uses `selectionMode=MANUAL_EVIDENCE_REVIEW`. It reports the evidence needed for an engineering calibration decision but intentionally contains no winner, score, or automatic production-configuration update.
+The artifact uses `selectionMode=MANUAL_EVIDENCE_REVIEW`. It reports the evidence needed for an engineering calibration decision but intentionally contains no winner, score, or automatic production-configuration update. Detector/alert rates are meaningful only when the input scenarios carry explicit scoring expectations; legacy and descriptive-only scenarios remain available for inspection but do not influence those rates.
 
 ## Repeated live calibration campaign
 
@@ -203,4 +204,4 @@ By default each invocation creates a unique directory below `build/reports/opera
 - `calibration-report.json`;
 - `campaign-manifest.json` with campaign configuration, dataset identities, SHA-256 digests, run outcomes, and the final descriptive calibration-report reference.
 
-The harness runs workflows sequentially, fails fast on a failed live command, writes a failed manifest, and preserves valid partial scenario evidence when the underlying runner emitted it. If a resilience child run fails or returns inconsistent scenario evidence, the campaign invokes the resilience runner's bounded `--repair-baseline-only` path and records the result as `baselineRecovery` on that run. A failed recovery is surfaced in the campaign failure rather than hidden as a warning. An explicit `--output-dir` must be empty or absent so evidence is never silently overwritten. The harness never writes production Health/alert/model configuration. It also does not clear persisted Health history between repetitions, so rolling baselines evolve exactly as they do in the live deployment. Different Health policy versions require separately deployed campaigns, and live assisted-investigation trials remain an explicit optional capture step tied to the emitted scenario/snapshot identities.
+The harness runs workflows sequentially, fails fast on a failed live command, writes a failed manifest, and preserves valid partial scenario evidence when the underlying runner emitted it. If a resilience child run fails or returns inconsistent scenario evidence, the campaign invokes the resilience runner's bounded `--repair-baseline-only` path and records the result as `baselineRecovery` on that run. A failed recovery is surfaced in the campaign failure rather than hidden as a warning. An explicit `--output-dir` must be empty or absent so evidence is never silently overwritten. The harness never writes production Health/alert/model configuration. It also does not clear persisted Health history between repetitions, so rolling baselines evolve exactly as they do in the live deployment. The current resilience runner marks its clean baseline as `REMAIN_HEALTHY`/`NO_ATTENTION`; controlled fault/recovery scenarios remain `DESCRIPTIVE_ONLY` until a detector-specific calibration scenario defines an operationally meaningful expected outcome. The capacity baseline is also descriptive-only because it deliberately has no performance/Health budget. Different Health policy versions require separately deployed campaigns, and live assisted-investigation trials remain an explicit optional capture step tied to the emitted scenario/snapshot identities.

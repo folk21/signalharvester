@@ -20,6 +20,23 @@ MAX_AFFECTED_SUBSYSTEMS = 16
 MAX_LIMITATIONS = 32
 MAX_STRING_CHARS = 2048
 
+HEALTH_EXPECTATION_DETECT = "DETECT"
+HEALTH_EXPECTATION_REMAIN_HEALTHY = "REMAIN_HEALTHY"
+HEALTH_EXPECTATION_DESCRIPTIVE_ONLY = "DESCRIPTIVE_ONLY"
+ALERT_EXPECTATION_ATTENTION_REQUIRED = "ATTENTION_REQUIRED"
+ALERT_EXPECTATION_NO_ATTENTION = "NO_ATTENTION"
+ALERT_EXPECTATION_DESCRIPTIVE_ONLY = "DESCRIPTIVE_ONLY"
+HEALTH_EXPECTATIONS = frozenset({
+    HEALTH_EXPECTATION_DETECT,
+    HEALTH_EXPECTATION_REMAIN_HEALTHY,
+    HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+})
+ALERT_EXPECTATIONS = frozenset({
+    ALERT_EXPECTATION_ATTENTION_REQUIRED,
+    ALERT_EXPECTATION_NO_ATTENTION,
+    ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
+})
+
 
 class ScenarioEvidenceError(ValueError):
     """Raised when evidence would violate the bounded scenario-artifact contract."""
@@ -50,6 +67,13 @@ def _require_text(value: str, name: str) -> str:
     return normalized
 
 
+def _require_choice(value: str, name: str, allowed: frozenset[str]) -> str:
+    normalized = _require_text(value, name).upper()
+    if normalized not in allowed:
+        raise ScenarioEvidenceError(f"{name} must be one of {sorted(allowed)}")
+    return normalized
+
+
 def _json_copy(value: Any, name: str) -> Any:
     try:
         encoded = json.dumps(value, sort_keys=True)
@@ -76,6 +100,8 @@ class ScenarioEvidence:
     label: str
     fault_injected: bool
     affected_subsystems: tuple[str, ...]
+    health_expectation: str = HEALTH_EXPECTATION_DESCRIPTIVE_ONLY
+    alert_expectation: str = ALERT_EXPECTATION_DESCRIPTIVE_ONLY
     scenario_run_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     started_at: str = field(default_factory=utc_now)
     ended_at: str | None = None
@@ -98,6 +124,12 @@ class ScenarioEvidence:
             )
         self.affected_subsystems = tuple(
             _require_text(value, "affected_subsystem") for value in self.affected_subsystems
+        )
+        self.health_expectation = _require_choice(
+            self.health_expectation, "health_expectation", HEALTH_EXPECTATIONS
+        )
+        self.alert_expectation = _require_choice(
+            self.alert_expectation, "alert_expectation", ALERT_EXPECTATIONS
         )
 
     def add_change_marker(self, phase: str, change: Mapping[str, Any]) -> None:
@@ -212,6 +244,10 @@ class ScenarioEvidence:
                 "faultInjected": self.fault_injected,
                 "affectedSubsystems": list(self.affected_subsystems),
             },
+            "evaluationExpectations": {
+                "health": self.health_expectation,
+                "alert": self.alert_expectation,
+            },
             "window": {
                 "startedAt": self.started_at,
                 "endedAt": self.ended_at,
@@ -247,6 +283,8 @@ class ScenarioEvidenceDataset:
         *,
         fault_injected: bool,
         affected_subsystems: tuple[str, ...] = (),
+        health_expectation: str = HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+        alert_expectation: str = ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
     ) -> Iterator[ScenarioEvidence]:
         """Records a terminal PASSED/FAILED outcome while preserving partial evidence on failure."""
 
@@ -257,6 +295,8 @@ class ScenarioEvidenceDataset:
             label=label,
             fault_injected=fault_injected,
             affected_subsystems=affected_subsystems,
+            health_expectation=health_expectation,
+            alert_expectation=alert_expectation,
         )
         self.scenarios.append(scenario)
         try:

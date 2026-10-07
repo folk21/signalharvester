@@ -519,6 +519,8 @@ def main(argv: list[str] | None = None) -> int:
                 "capacity-pipeline-baseline",
                 "NORMAL_OPERATION",
                 fault_injected=False,
+                health_expectation=scenario_evidence.HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+                alert_expectation=scenario_evidence.ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
             ) as scenario:
                 resilience.record_scenario_start(admin, scenario)
                 print(

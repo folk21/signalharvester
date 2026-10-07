@@ -1617,6 +1617,8 @@ def main(argv: list[str] | None = None) -> int:
                     "resilience-normal-operation",
                     "NORMAL_OPERATION",
                     fault_injected=False,
+                    health_expectation=scenario_evidence.HEALTH_EXPECTATION_REMAIN_HEALTHY,
+                    alert_expectation=scenario_evidence.ALERT_EXPECTATION_NO_ATTENTION,
                 ) as scenario:
                     record_scenario_start(admin, scenario)
                     print("==> Baseline collection and consumer-group establishment")
@@ -1640,6 +1642,8 @@ def main(argv: list[str] | None = None) -> int:
                     "resilience-backend-pod-restart",
                     "POD_RESTART",
                     fault_injected=True,
+                    health_expectation=scenario_evidence.HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+                    alert_expectation=scenario_evidence.ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
                     affected_subsystems=("BACKEND",),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
@@ -1680,6 +1684,8 @@ def main(argv: list[str] | None = None) -> int:
                     "resilience-slow-external-source",
                     "SLOW_EXTERNAL_SOURCE",
                     fault_injected=True,
+                    health_expectation=scenario_evidence.HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+                    alert_expectation=scenario_evidence.ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
                     affected_subsystems=("COLLECTION", "EXTERNAL_SOURCE"),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
@@ -1706,6 +1712,8 @@ def main(argv: list[str] | None = None) -> int:
                     "resilience-postgresql-outage",
                     "POSTGRESQL_OUTAGE",
                     fault_injected=True,
+                    health_expectation=scenario_evidence.HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+                    alert_expectation=scenario_evidence.ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
                     affected_subsystems=("POSTGRESQL", "ANALYSIS"),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
@@ -1731,6 +1739,8 @@ def main(argv: list[str] | None = None) -> int:
                     "resilience-kafka-lag",
                     "KAFKA_LAG",
                     fault_injected=True,
+                    health_expectation=scenario_evidence.HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+                    alert_expectation=scenario_evidence.ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
                     affected_subsystems=("KAFKA", "ANALYSIS"),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
@@ -1745,6 +1755,8 @@ def main(argv: list[str] | None = None) -> int:
                     "resilience-analysis-outbox-backlog",
                     "OUTBOX_BACKLOG",
                     fault_injected=True,
+                    health_expectation=scenario_evidence.HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+                    alert_expectation=scenario_evidence.ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
                     affected_subsystems=("ANALYSIS_OUTBOX", "RESULTS"),
                 ) as scenario:
                     record_scenario_start(admin, scenario)
@@ -1761,6 +1773,8 @@ def main(argv: list[str] | None = None) -> int:
                     "resilience-kafka-broker-restart",
                     "KAFKA_BROKER_RESTART",
                     fault_injected=True,
+                    health_expectation=scenario_evidence.HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+                    alert_expectation=scenario_evidence.ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
                     affected_subsystems=("KAFKA",),
                 ) as scenario:
                     record_scenario_start(admin, scenario)

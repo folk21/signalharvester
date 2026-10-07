@@ -235,6 +235,7 @@ def _campaign_manifest(
             "A failed or inconsistent resilience child triggers the bounded PostgreSQL acceptance-baseline repair path; its outcome is recorded on that run as baselineRecovery.",
             "The campaign does not clear persisted Health history between repetitions; rolling baselines therefore evolve exactly as they do in the live deployment.",
             "Each scenario-evidence artifact keeps its persisted Health policyVersion; comparing another Health policy requires another deployed version and another campaign.",
+            "Health/alert quality rates are scored only for explicit scenario evaluationExpectations; faultInjected alone remains descriptive ground truth.",
             "The generated calibration report remains descriptive with selectionMode=MANUAL_EVIDENCE_REVIEW and never selects or writes production configuration.",
             "External/live assisted-investigation trials remain explicit and optional; capture them separately against emitted scenarioRunId/snapshotId identities before comparing provider/model budgets.",
         ],

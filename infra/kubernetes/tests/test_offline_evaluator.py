@@ -31,8 +31,19 @@ def snapshot(phase, snapshot_id, generated_at, status, components=None):
     }
 
 
-def scenario(*, fault, snapshots, markers=None, affected=(), outcome="PASSED", scenario_id="scenario"):
-    return {
+def scenario(
+    *,
+    fault,
+    snapshots,
+    markers=None,
+    affected=(),
+    outcome="PASSED",
+    scenario_id="scenario",
+    health_expectation="DESCRIPTIVE_ONLY",
+    alert_expectation="DESCRIPTIVE_ONLY",
+    include_expectations=True,
+):
+    value = {
         "scenarioId": scenario_id,
         "scenarioRunId": f"run-{scenario_id}",
         "label": "FAULT" if fault else "NORMAL_OPERATION",
@@ -53,6 +64,12 @@ def scenario(*, fault, snapshots, markers=None, affected=(), outcome="PASSED", s
         },
         "limitations": [],
     }
+    if include_expectations:
+        value["evaluationExpectations"] = {
+            "health": health_expectation,
+            "alert": alert_expectation,
+        }
+    return value
 
 
 class OfflineOperationalEvaluatorTest(unittest.TestCase):
@@ -60,6 +77,7 @@ class OfflineOperationalEvaluatorTest(unittest.TestCase):
         value = scenario(
             fault=True,
             affected=("KAFKA", "ANALYSIS"),
+            health_expectation="DETECT",
             markers=(
                 marker("FAULT_START", "2026-10-01T10:00:10+00:00"),
                 marker("FAULT_END", "2026-10-01T10:00:30+00:00"),
@@ -71,7 +89,7 @@ class OfflineOperationalEvaluatorTest(unittest.TestCase):
                     "fault",
                     "2026-10-01T10:00:14+00:00",
                     "DEGRADED",
-                    {"kafka": "DEGRADED", "analysis": "HEALTHY"},
+                    {"eventing": "DEGRADED", "analysis": "HEALTHY"},
                 ),
                 snapshot("AFTER", "after", "2026-10-01T10:00:35+00:00", "HEALTHY"),
             ),
@@ -88,10 +106,39 @@ class OfflineOperationalEvaluatorTest(unittest.TestCase):
         self.assertEqual(0.5, result["affectedSubsystemCoverage"])
         self.assertTrue(result["recoveredHealthy"])
 
+    def test_fault_with_preexisting_degradation_is_excluded_from_detection_rate(self):
+        value = scenario(
+            fault=True,
+            affected=("KAFKA",),
+            health_expectation="DETECT",
+            markers=(
+                marker("FAULT_START", "2026-10-01T10:00:10+00:00"),
+                marker("FAULT_END", "2026-10-01T10:00:30+00:00"),
+            ),
+            snapshots=(
+                snapshot(
+                    "BEFORE", "already-degraded", "2026-10-01T10:00:05+00:00", "DEGRADED",
+                    {"eventing": "DEGRADED"},
+                ),
+                snapshot(
+                    "FAULT", "fault", "2026-10-01T10:00:14+00:00", "DEGRADED",
+                    {"eventing": "DEGRADED"},
+                ),
+            ),
+        )
+
+        result = evaluator.evaluate_health_scenario(value)
+
+        self.assertFalse(result["evaluable"])
+        self.assertFalse(result["scored"])
+        self.assertIsNone(result["detectionSuccess"])
+        self.assertEqual(["already-degraded"], result["preFaultDetectingSnapshotIds"])
+
     def test_fault_without_snapshot_inside_fault_window_is_not_counted_as_miss(self):
         value = scenario(
             fault=True,
             affected=("POSTGRESQL",),
+            health_expectation="DETECT",
             markers=(
                 marker("FAULT_START", "2026-10-01T10:00:10+00:00"),
                 marker("FAULT_END", "2026-10-01T10:00:30+00:00"),
@@ -111,6 +158,8 @@ class OfflineOperationalEvaluatorTest(unittest.TestCase):
     def test_normal_operation_reports_detector_and_alert_false_positives(self):
         value = scenario(
             fault=False,
+            health_expectation="REMAIN_HEALTHY",
+            alert_expectation="NO_ATTENTION",
             snapshots=(
                 snapshot("BEFORE", "one", "2026-10-01T10:00:05+00:00", "HEALTHY"),
                 snapshot("AFTER", "two", "2026-10-01T10:00:15+00:00", "DEGRADED"),
@@ -131,6 +180,7 @@ class OfflineOperationalEvaluatorTest(unittest.TestCase):
         value = scenario(
             fault=True,
             affected=("KAFKA",),
+            alert_expectation="ATTENTION_REQUIRED",
             markers=(
                 marker("FAULT_START", "2026-10-01T10:00:10+00:00"),
                 marker("FAULT_END", "2026-10-01T10:00:25+00:00"),
@@ -164,6 +214,7 @@ class OfflineOperationalEvaluatorTest(unittest.TestCase):
         )
         value = scenario(
             fault=True,
+            alert_expectation="ATTENTION_REQUIRED",
             markers=(
                 marker("FAULT_START", "2026-10-01T10:00:00+00:00"),
                 marker("FAULT_END", "2026-10-01T10:00:20+00:00"),
@@ -186,11 +237,13 @@ class OfflineOperationalEvaluatorTest(unittest.TestCase):
             fault=True,
             scenario_id="good",
             affected=("KAFKA",),
+            health_expectation="DETECT",
+            alert_expectation="ATTENTION_REQUIRED",
             markers=(
                 marker("FAULT_START", "2026-10-01T10:00:10+00:00"),
                 marker("FAULT_END", "2026-10-01T10:00:20+00:00"),
             ),
-            snapshots=(snapshot("FAULT", "fault", "2026-10-01T10:00:11+00:00", "UNHEALTHY", {"kafka": "UNHEALTHY"}),),
+            snapshots=(snapshot("FAULT", "fault", "2026-10-01T10:00:11+00:00", "UNHEALTHY", {"eventing": "UNHEALTHY"}),),
         )
         failed = scenario(fault=True, scenario_id="failed", snapshots=(), outcome="FAILED")
         dataset = {
@@ -207,13 +260,63 @@ class OfflineOperationalEvaluatorTest(unittest.TestCase):
             path.write_text(json.dumps(dataset), encoding="utf-8")
             report = evaluator.build_evaluation([path], evaluator.AlertProjectionPolicy())
 
-        self.assertEqual(1, report["schemaVersion"])
+        self.assertEqual(2, report["schemaVersion"])
         self.assertEqual("signalharvester-operational-intelligence-evaluation", report["artifactType"])
         self.assertEqual(64, len(report["inputs"][0]["sha256"]))
         self.assertEqual(2, report["summary"]["scenarios"]["total"])
         self.assertEqual(1, report["summary"]["scenarios"]["excludedNonPassed"])
         self.assertEqual(1.0, report["summary"]["health"]["detectionRate"])
         self.assertEqual(1.0, report["summary"]["alertProjection"]["attentionRate"])
+
+    def test_legacy_evidence_without_expectations_is_descriptive_only(self):
+        legacy = scenario(
+            fault=True,
+            snapshots=(snapshot("FAULT", "fault", "2026-10-01T10:00:11+00:00", "UNHEALTHY"),),
+            include_expectations=False,
+        )
+        dataset = {
+            "schemaVersion": 1,
+            "artifactType": "signalharvester-operational-scenario-evidence",
+            "datasetRunId": "dataset-legacy",
+            "generatedAt": "2026-10-01T10:02:00+00:00",
+            "source": {"runner": "unit-test", "environment": {}},
+            "scenarios": [legacy],
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.json"
+            path.write_text(json.dumps(dataset), encoding="utf-8")
+            report = evaluator.build_evaluation([path], evaluator.AlertProjectionPolicy())
+
+        self.assertEqual(1, report["summary"]["scenarios"]["legacyExpectationDefaults"])
+        self.assertEqual(1, report["summary"]["health"]["descriptiveOnlyScenarios"])
+        self.assertIsNone(report["summary"]["health"]["detectionRate"])
+        self.assertIsNone(report["summary"]["alertProjection"]["attentionRate"])
+        self.assertFalse(report["scenarios"][0]["health"]["scored"])
+
+    def test_subsystem_coverage_maps_ground_truth_to_health_component_vocabulary(self):
+        value = scenario(
+            fault=True,
+            affected=("KAFKA", "RESULTS"),
+            health_expectation="DETECT",
+            markers=(
+                marker("FAULT_START", "2026-10-01T10:00:10+00:00"),
+                marker("FAULT_END", "2026-10-01T10:00:20+00:00"),
+            ),
+            snapshots=(
+                snapshot(
+                    "FAULT", "fault", "2026-10-01T10:00:11+00:00", "DEGRADED",
+                    {"eventing": "DEGRADED"},
+                ),
+            ),
+        )
+
+        result = evaluator.evaluate_health_scenario(value)
+
+        self.assertEqual(["KAFKA"], result["scorableGroundTruthAffectedSubsystems"])
+        self.assertEqual(["RESULTS"], result["unmappedGroundTruthAffectedSubsystems"])
+        self.assertEqual(["KAFKA"], result["matchedAffectedSubsystems"])
+        self.assertEqual(1.0, result["affectedSubsystemCoverage"])
 
     def test_rejects_unsupported_evidence_schema(self):
         dataset = {

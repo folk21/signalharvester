@@ -33,6 +33,7 @@ def scenario_artifact(dataset_run_id, *, outcome="PASSED"):
                 "scenarioRunId": f"scenario-{dataset_run_id}",
                 "label": "NORMAL_OPERATION",
                 "groundTruth": {"faultInjected": False, "affectedSubsystems": []},
+                "evaluationExpectations": {"health": "REMAIN_HEALTHY", "alert": "NO_ATTENTION"},
                 "window": {
                     "startedAt": "2026-10-03T00:00:00+00:00",
                     "endedAt": "2026-10-03T00:01:00+00:00",

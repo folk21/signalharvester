@@ -45,7 +45,7 @@ Source-fetch worker interruption propagation is accepted after developer verific
 Analysis outbox expired-lease fencing is accepted after developer verification. Pre-publication renewal now requires both the exact token and a still-live persisted lease, so an expired former owner cannot resurrect ownership before Kafka send.
 Analysis outbox failure-state lease fencing is accepted after developer verification. Publication-failure retry metadata now requires a still-live exact-token lease, so an unsuccessful send that outlives ownership cannot postpone immediate reclaim. The remaining durable-ownership/crash-window review found no additional material correctness defect across post-ack publication markers, DLQ acknowledgement before framework offset commit, controlled replay/idempotency, and scheduled Collection completion; Review III is closed.
 
-The latest capacity-telemetry implementation remains verification-pending, while the operational-intelligence foundation, deterministic/statistical Health Engine, Stage 3 manual/provider-neutral assisted investigation, Stage 4a read-only agentic investigation, Stage 4b automatic trigger policy, Stage 6 application-owned alert policy, the labeled scenario-evidence foundation, offline Health/alert evaluation, provider-neutral assisted-investigation quality evaluation, and bounded scenario-linked runtime trial capture/export are accepted after developer verification. Evidence-based calibration tooling is accepted after developer verification: it groups repeated observed Health results by persisted policy version, projects bounded alert-policy candidate grids over the same snapshots, and groups assisted-investigation trials by provider/model/runtime budgets without mutating runtime configuration or selecting a winner. A bounded repeated live calibration-campaign harness is now implemented and verification-pending; the next priority is executing those campaigns and recording explicit parameter decisions from the resulting evidence. The preceding capacity telemetry/baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
+The latest capacity-telemetry implementation remains verification-pending, while the operational-intelligence foundation, deterministic/statistical Health Engine, Stage 3 manual/provider-neutral assisted investigation, Stage 4a read-only agentic investigation, Stage 4b automatic trigger policy, Stage 6 application-owned alert policy, the labeled scenario-evidence foundation, offline Health/alert evaluation, provider-neutral assisted-investigation quality evaluation, bounded scenario-linked runtime trial capture/export, evidence-based calibration tooling, and the bounded repeated live calibration campaign are accepted after developer verification. A complete three-repeat resilience-plus-capacity campaign passed and produced the first explicit calibration decision: do not change Health or alert parameters from that evidence alone. The current verification-pending slice makes evaluation expectations explicit so injected resilience conditions cannot be mistaken for required Health degradation or human attention. The next priority is dedicated calibration scenarios with operationally meaningful fault magnitudes and explicit expected outcomes, followed by a repeated versioned-policy comparison. The preceding capacity telemetry/baseline and earlier all-relevant Analysis follow-up remain separately verification-pending until canonical acceptance is recorded.
 
 Stable feature IDs are defined in [`FEATURES.md`](FEATURES.md).
 
@@ -96,7 +96,7 @@ Accepted scaling work:
 1. Operations foundation and deterministic/statistical Health Engine are accepted.
 2. Stage 3 manual/provider-neutral assisted investigation is accepted.
 3. Stage 4a bounded read-only Prometheus/Loki/Tempo/change-history/capacity tools and explicit agentic provider turns are accepted.
-4. Stage 4b multi-replica-safe event/periodic trigger lease/cooldown policy, Stage 6 application-owned alert policy, the labeled scenario-evidence foundation, offline detector/alert evaluation, assisted-investigation quality evaluation, and bounded scenario-linked runtime trial capture/export are accepted. Evidence-based calibration tooling is accepted, and the repeated live calibration-campaign harness is implemented and verification-pending. Use repeated scenario results before changing Health/alert/model parameters. Continue ramp/spike/soak and Results REST/SSE load as both capacity work and operational-intelligence evaluation data; select throughput optimizations or custom ML/neural models only from repeated evidence.
+4. Stage 4b multi-replica-safe event/periodic trigger lease/cooldown policy, Stage 6 application-owned alert policy, labeled scenario evidence, offline detector/alert evaluation, assisted-investigation quality evaluation, bounded runtime trial capture/export, evidence-based calibration tooling, and the repeated live calibration campaign are accepted. Expectation-aware scoring is verification-pending; then add dedicated detector/alert calibration scenarios and compare versioned policies before changing production parameters. Continue ramp/spike/soak and Results REST/SSE load as capacity evidence, but do not treat load evidence as detector ground truth unless an explicit operational expectation exists.
 
 Companion-frontend roadmap state is owned by `signalharvester-web` and is not duplicated here.
 
@@ -113,12 +113,20 @@ The target path is:
 5. optional local/external LLM analyst with bounded read-only tools;
 6. alert policy based on deterministic health plus optional structured model assessment;
 7. labeled scenario evidence and offline detector/alert/assisted-investigation evaluation;
-8. evidence-based threshold calibration;
+8. expectation-aware evidence-based threshold/policy calibration with explicit engineering decisions;
 9. custom ML/neural experiments only after repeated evaluation demonstrates a concrete need.
 
 Repository-owned mutation tooling should emit change records/markers for behavior-affecting runtime changes. This is an application-level audit/correlation mechanism, not a Terraform-style infrastructure control plane.
 
 ## Deferred until justified
+
+### Deferred operational-intelligence evidence and experimentation
+
+These are useful future directions, but they are deliberately outside the near-term calibration slice:
+
+- collect bounded sanitized/versioned evidence from ordinary long-running operation as **unlabeled field evidence**, not automatic ground truth; use it to discover interesting episodes, support manual/heuristic labeling, and design controlled reproductions;
+- add external notification adapters only after deterministic Health/alert quality is stable enough that notification noise is understood;
+- reuse the controlled repeated-evidence campaign pattern for runtime tuning only when a measured bottleneck or product requirement justifies it. Initial candidate dimensions may include JVM heap/GC settings, backend replica count, Kafka consumer concurrency, Analysis outbox batch/dispatcher settings, datasource pool sizing, and HTTP client pool sizing. Preserve workload/environment/configuration identity, repeat each candidate, compare latency/throughput/resource/recovery evidence descriptively, avoid an automatic optimizer initially, and do not mix unrelated knobs without an explicit experimental design.
 
 ### Operational-capacity backlog
 

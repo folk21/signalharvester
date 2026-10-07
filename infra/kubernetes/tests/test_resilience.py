@@ -68,6 +68,10 @@ class KubernetesResilienceAssetsTest(unittest.TestCase):
         self.assertIn('"FAULT_END"', runner)
         self.assertIn("record_scenario_end", runner)
         self.assertIn("resilience-scenario-evidence.json", runner)
+        self.assertIn("HEALTH_EXPECTATION_REMAIN_HEALTHY", runner)
+        self.assertIn("ALERT_EXPECTATION_NO_ATTENTION", runner)
+        self.assertIn("HEALTH_EXPECTATION_DESCRIPTIVE_ONLY", runner)
+        self.assertIn("ALERT_EXPECTATION_DESCRIPTIVE_ONLY", runner)
 
     def test_scenario_marker_uses_the_operations_test_scenario_contract(self):
         class FakeAdmin:
