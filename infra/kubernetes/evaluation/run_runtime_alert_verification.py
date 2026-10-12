@@ -29,9 +29,13 @@ BackendEnvironmentGuard = calibration.BackendEnvironmentGuard
 CommandRunner = calibration.CommandRunner
 ResourceTracker = calibration.ResourceTracker
 
+ARTIFACT_SCHEMA_VERSION = 2
 HEALTH_POLICY_VERSION = "deterministic-statistical-v1"
 ALERT_POLICY_VERSION = "human-attention-v1"
 ALERTS_PATH = "/api/v1/admin/operations/health/alerts?limit=200"
+BASELINE_REQUIRED_CONSECUTIVE_HEALTHY_SNAPSHOTS = 2
+BASELINE_STABILIZATION_TIMEOUT_SECONDS = 360.0
+BASELINE_STABILIZATION_INTERVAL_SECONDS = 15.0
 
 ALERT_RUNTIME_ENV = {
     "SIGNALHARVESTER_OPERATIONS_HEALTH_SAMPLING_ENABLED": "false",
@@ -59,14 +63,12 @@ def fetch_alerts(admin: ApiSession) -> list[dict[str, Any]]:
     return list(body)
 
 
-def require_snapshot(snapshot: dict[str, Any], expected_status: str, phase: str) -> dict[str, Any]:
-    """Validates one explicit Health Snapshot used as alert-decision input."""
+def validate_snapshot(snapshot: dict[str, Any], phase: str) -> dict[str, Any]:
+    """Validates persisted Health Snapshot identity and policy without prescribing its status."""
 
     actual_status = snapshot.get("overallStatus")
-    if actual_status != expected_status:
-        raise AcceptanceError(
-            f"{phase} Health Snapshot status was {actual_status!r}, expected {expected_status!r}: {snapshot!r}"
-        )
+    if not isinstance(actual_status, str) or not actual_status:
+        raise AcceptanceError(f"{phase} Health Snapshot is missing overallStatus: {snapshot!r}")
     policy_version = snapshot.get("policyVersion")
     if policy_version != HEALTH_POLICY_VERSION:
         raise AcceptanceError(
@@ -75,6 +77,18 @@ def require_snapshot(snapshot: dict[str, Any], expected_status: str, phase: str)
     snapshot_id = snapshot.get("id")
     if not isinstance(snapshot_id, str) or not snapshot_id:
         raise AcceptanceError(f"{phase} Health Snapshot is missing its persisted id: {snapshot!r}")
+    return snapshot
+
+
+def require_snapshot(snapshot: dict[str, Any], expected_status: str, phase: str) -> dict[str, Any]:
+    """Validates one explicit Health Snapshot used as scored alert-decision input."""
+
+    snapshot = validate_snapshot(snapshot, phase)
+    actual_status = snapshot["overallStatus"]
+    if actual_status != expected_status:
+        raise AcceptanceError(
+            f"{phase} Health Snapshot status was {actual_status!r}, expected {expected_status!r}: {snapshot!r}"
+        )
     return snapshot
 
 
@@ -99,6 +113,93 @@ def require_no_new_alerts(admin: ApiSession, baseline_ids: set[str], phase: str)
     if created:
         raise AcceptanceError(f"{phase} created unexpected human-attention alerts: {created!r}")
     return alerts
+
+
+def stabilize_baseline(
+    admin: ApiSession,
+    baseline_ids: set[str],
+    *,
+    timeout: float,
+    interval: float,
+    evidence: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Collects bounded post-rollout Health/alert evidence until the scenario baseline stabilizes."""
+
+    evidence.clear()
+    evidence.update({
+        "timeoutSeconds": timeout,
+        "pollIntervalSeconds": interval,
+        "requiredConsecutiveHealthySnapshots": BASELINE_REQUIRED_CONSECUTIVE_HEALTHY_SNAPSHOTS,
+        "attempts": [],
+        "stabilized": False,
+        "clean": False,
+        "unexpectedHealthSnapshotIds": [],
+        "createdAlertIds": [],
+        "unexpectedAttention": False,
+    })
+    consecutive_healthy = 0
+    last_snapshot: dict[str, Any] | None = None
+    last_alerts: list[dict[str, Any]] = []
+    unexpected_snapshot_ids: list[str] = []
+    created_alert_ids: set[str] = set()
+
+    def probe() -> bool:
+        nonlocal consecutive_healthy, last_snapshot, last_alerts
+        attempt_number = len(evidence["attempts"]) + 1
+        phase = f"BASELINE_STABILIZATION_{attempt_number:02d}"
+        snapshot = validate_snapshot(resilience.capture_health_snapshot(admin), phase)
+        alerts = fetch_alerts(admin)
+        created = new_alerts(alerts, baseline_ids)
+        status = snapshot["overallStatus"]
+        if status == "HEALTHY":
+            consecutive_healthy += 1
+        else:
+            consecutive_healthy = 0
+            unexpected_snapshot_ids.append(snapshot["id"])
+        created_alert_ids.update(alert["id"] for alert in created)
+        open_created = [alert for alert in created if alert.get("state") == "OPEN"]
+        evidence["attempts"].append({
+            "phase": phase,
+            "snapshot": snapshot,
+            "alerts": created,
+            "consecutiveHealthySnapshots": consecutive_healthy,
+        })
+        evidence["unexpectedHealthSnapshotIds"] = list(unexpected_snapshot_ids)
+        evidence["createdAlertIds"] = sorted(created_alert_ids)
+        evidence["unexpectedAttention"] = bool(created_alert_ids)
+        last_snapshot = snapshot
+        last_alerts = alerts
+        stabilized = (
+            consecutive_healthy >= BASELINE_REQUIRED_CONSECUTIVE_HEALTHY_SNAPSHOTS
+            and not open_created
+        )
+        evidence["stabilized"] = stabilized
+        return stabilized
+
+    resilience.wait_until(
+        "runtime alert baseline stabilization",
+        timeout,
+        interval,
+        probe,
+    )
+    if last_snapshot is None:
+        raise AcceptanceError("runtime alert baseline stabilization produced no Health Snapshot evidence")
+
+    findings: list[dict[str, Any]] = []
+    if unexpected_snapshot_ids:
+        findings.append({
+            "type": "BASELINE_HEALTH_DEGRADATION",
+            "snapshotIds": list(unexpected_snapshot_ids),
+            "message": "post-rollout baseline produced non-HEALTHY Health Snapshots before stabilization",
+        })
+    if created_alert_ids:
+        findings.append({
+            "type": "BASELINE_HUMAN_ATTENTION",
+            "alertIds": sorted(created_alert_ids),
+            "message": "post-rollout baseline created persisted human-attention alert state before stabilization",
+        })
+    evidence["clean"] = not findings
+    return last_snapshot, last_alerts, findings
 
 
 def require_lifecycle_alert(
@@ -210,6 +311,28 @@ def recover_backlog(
     return require_snapshot(resilience.capture_health_snapshot(admin), "HEALTHY", phase)
 
 
+def finalize_successful_scenarios(report: dict[str, Any]) -> int:
+    """Marks lifecycle scenarios complete while preserving acceptance-blocking baseline findings."""
+
+    report["scenarioOutcome"] = "PASSED"
+    if report["qualityFindings"]:
+        finding_types = ", ".join(finding["type"] for finding in report["qualityFindings"])
+        report["outcome"] = "FAILED"
+        report["failure"] = {
+            "type": "BaselineQualityFinding",
+            "message": (
+                "runtime alert lifecycle scenarios passed, but post-rollout baseline stabilization "
+                f"recorded acceptance-blocking quality findings: {finding_types}"
+            ),
+        }
+        result = 1
+    else:
+        report["outcome"] = "PASSED"
+        result = 0
+    report["completedAt"] = utc_now()
+    return result
+
+
 def write_report(path: Path, report: dict[str, Any]) -> None:
     """Writes the bounded runtime alert verification artifact with stable formatting."""
 
@@ -224,12 +347,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--prometheus-port", type=int, default=19092)
     parser.add_argument("--http-timeout", type=float, default=10.0)
     parser.add_argument("--scenario-timeout", type=float, default=240.0)
+    parser.add_argument(
+        "--baseline-stabilization-timeout",
+        type=float,
+        default=BASELINE_STABILIZATION_TIMEOUT_SECONDS,
+    )
+    parser.add_argument(
+        "--baseline-stabilization-interval",
+        type=float,
+        default=BASELINE_STABILIZATION_INTERVAL_SECONDS,
+    )
     parser.add_argument("--rollout-timeout", default="240s")
     parser.add_argument("--output", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--skip-preflight", action="store_true")
     args = parser.parse_args(argv)
     if args.scenario_timeout <= 0:
         parser.error("--scenario-timeout must be positive")
+    if args.baseline_stabilization_timeout <= 0:
+        parser.error("--baseline-stabilization-timeout must be positive")
+    if args.baseline_stabilization_interval <= 0:
+        parser.error("--baseline-stabilization-interval must be positive")
     return args
 
 
@@ -237,11 +374,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     output = args.output if args.output.is_absolute() else ROOT / args.output
     report: dict[str, Any] = {
-        "schemaVersion": 1,
+        "schemaVersion": ARTIFACT_SCHEMA_VERSION,
         "artifactType": "signalharvester-runtime-alert-verification",
         "generatedAt": utc_now(),
         "outcome": "RUNNING",
+        "scenarioOutcome": "NOT_RUN",
         "failure": None,
+        "qualityFindings": [],
         "policy": {
             "healthPolicyVersion": HEALTH_POLICY_VERSION,
             "alertPolicyVersion": ALERT_POLICY_VERSION,
@@ -330,18 +469,46 @@ def main(argv: list[str] | None = None) -> int:
                 for alert in baseline_alerts
                 if isinstance(alert.get("id"), str) and alert.get("id")
             }
+            stabilization_evidence: dict[str, Any] = {}
             report["baseline"] = {
                 "pendingAnalysisOutboxRows": baseline_pending,
                 "existingAlertCount": len(baseline_alerts),
                 "existingAlertIds": sorted(baseline_ids),
+                "stabilization": stabilization_evidence,
             }
 
-            baseline_snapshot = require_snapshot(
-                resilience.capture_health_snapshot(admin), "HEALTHY", "BASELINE"
+            print("==> Stabilize post-rollout Health/alert baseline with bounded evidence capture")
+            baseline_snapshot, stabilized_alerts, baseline_findings = stabilize_baseline(
+                admin,
+                baseline_ids,
+                timeout=args.baseline_stabilization_timeout,
+                interval=args.baseline_stabilization_interval,
+                evidence=stabilization_evidence,
             )
-            require_no_new_alerts(admin, baseline_ids, "BASELINE")
-            add_observation(report, "BASELINE", baseline_snapshot, [])
+            require_snapshot(baseline_snapshot, "HEALTHY", "BASELINE")
+            report["qualityFindings"].extend(baseline_findings)
+            baseline_ids = {
+                alert["id"]
+                for alert in stabilized_alerts
+                if isinstance(alert.get("id"), str) and alert.get("id")
+            }
+            open_stabilized = [alert for alert in stabilized_alerts if alert.get("state") == "OPEN"]
+            if open_stabilized:
+                raise AcceptanceError(
+                    "runtime alert baseline stabilization completed with OPEN human-attention alert state: "
+                    f"{open_stabilized!r}"
+                )
+            report["baseline"]["scenarioAlertCount"] = len(stabilized_alerts)
+            report["baseline"]["scenarioAlertIds"] = sorted(baseline_ids)
+            add_observation(
+                report,
+                "BASELINE",
+                baseline_snapshot,
+                [],
+                baselineStabilizationClean=not baseline_findings,
+            )
 
+            report["scenarioOutcome"] = "RUNNING"
             print(f"==> Verify transient backlog does not persist attention ({calibration.TRANSIENT_OUTBOX_ROWS} rows)")
             transient_snapshot, transient_signal, transient_pending, transient_workloads = build_backlog_and_capture(
                 runner=runner,
@@ -453,15 +620,19 @@ def main(argv: list[str] | None = None) -> int:
             add_observation(report, "CRITICAL_RECOVERY_2", second_recovery, [resolved])
 
             report["verifiedAlertId"] = alert_id
-            report["outcome"] = "PASSED"
-            report["completedAt"] = utc_now()
+            exit_code = finalize_successful_scenarios(report)
 
         write_report(output, report)
         print(f"    runtime alert verification evidence: {output}")
-        print("Runtime persisted human-attention alert lifecycle passed.")
-        return 0
+        if exit_code == 0:
+            print("Runtime persisted human-attention alert lifecycle passed.")
+            return 0
+        print(f"ERROR: {report['failure']['message']}", file=sys.stderr)
+        return exit_code
     except (AcceptanceError, OSError, ValueError) as failure:
         report["outcome"] = "FAILED"
+        if report.get("scenarioOutcome") == "RUNNING":
+            report["scenarioOutcome"] = "FAILED"
         report["failure"] = {
             "type": failure.__class__.__name__,
             "message": str(failure).strip() or failure.__class__.__name__,

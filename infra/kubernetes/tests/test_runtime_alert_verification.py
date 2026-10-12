@@ -39,6 +39,7 @@ class Guard:
 
 class RuntimeAlertVerificationTest(unittest.TestCase):
     def test_runtime_environment_pins_current_alert_v1_and_disables_periodic_sampling(self):
+        self.assertEqual(2, verification.ARTIFACT_SCHEMA_VERSION)
         self.assertEqual("deterministic-statistical-v1", verification.HEALTH_POLICY_VERSION)
         self.assertEqual("human-attention-v1", verification.ALERT_POLICY_VERSION)
         self.assertEqual("false", verification.ALERT_RUNTIME_ENV["SIGNALHARVESTER_OPERATIONS_HEALTH_SAMPLING_ENABLED"])
@@ -75,6 +76,111 @@ class RuntimeAlertVerificationTest(unittest.TestCase):
             verification.require_snapshot(
                 {**snapshot, "policyVersion": "deterministic-statistical-v2"}, "DEGRADED", "FAULT"
             )
+
+    def test_baseline_stabilization_records_quality_findings_without_hiding_recovery(self):
+        evidence = {}
+        snapshots = [
+            {
+                "id": "unhealthy",
+                "overallStatus": "UNHEALTHY",
+                "policyVersion": verification.HEALTH_POLICY_VERSION,
+            },
+            {
+                "id": "healthy-1",
+                "overallStatus": "HEALTHY",
+                "policyVersion": verification.HEALTH_POLICY_VERSION,
+            },
+            {
+                "id": "healthy-2",
+                "overallStatus": "HEALTHY",
+                "policyVersion": verification.HEALTH_POLICY_VERSION,
+            },
+        ]
+        open_alert = {"id": "baseline-alert", "state": "OPEN"}
+        resolved_alert = {"id": "baseline-alert", "state": "RESOLVED"}
+
+        def poll_until(_description, _timeout, _interval, predicate):
+            for _ in range(3):
+                if predicate():
+                    return
+            raise AssertionError("baseline should have stabilized")
+
+        with (
+            mock.patch.object(verification.resilience, "wait_until", side_effect=poll_until),
+            mock.patch.object(
+                verification.resilience,
+                "capture_health_snapshot",
+                side_effect=snapshots,
+            ),
+            mock.patch.object(
+                verification,
+                "fetch_alerts",
+                side_effect=[[open_alert], [open_alert], [resolved_alert]],
+            ),
+        ):
+            snapshot, alerts, findings = verification.stabilize_baseline(
+                object(),
+                set(),
+                timeout=60.0,
+                interval=5.0,
+                evidence=evidence,
+            )
+
+        self.assertEqual("healthy-2", snapshot["id"])
+        self.assertEqual([resolved_alert], alerts)
+        self.assertTrue(evidence["stabilized"])
+        self.assertFalse(evidence["clean"])
+        self.assertEqual(["unhealthy"], evidence["unexpectedHealthSnapshotIds"])
+        self.assertEqual(["baseline-alert"], evidence["createdAlertIds"])
+        self.assertTrue(evidence["unexpectedAttention"])
+        self.assertEqual(3, len(evidence["attempts"]))
+        self.assertEqual(
+            ["BASELINE_HEALTH_DEGRADATION", "BASELINE_HUMAN_ATTENTION"],
+            [finding["type"] for finding in findings],
+        )
+
+    def test_clean_baseline_requires_two_consecutive_healthy_snapshots(self):
+        evidence = {}
+        snapshots = [
+            {
+                "id": "healthy-1",
+                "overallStatus": "HEALTHY",
+                "policyVersion": verification.HEALTH_POLICY_VERSION,
+            },
+            {
+                "id": "healthy-2",
+                "overallStatus": "HEALTHY",
+                "policyVersion": verification.HEALTH_POLICY_VERSION,
+            },
+        ]
+
+        def poll_until(_description, _timeout, _interval, predicate):
+            self.assertFalse(predicate())
+            self.assertTrue(predicate())
+
+        with (
+            mock.patch.object(verification.resilience, "wait_until", side_effect=poll_until),
+            mock.patch.object(
+                verification.resilience,
+                "capture_health_snapshot",
+                side_effect=snapshots,
+            ),
+            mock.patch.object(verification, "fetch_alerts", side_effect=[[], []]),
+        ):
+            snapshot, alerts, findings = verification.stabilize_baseline(
+                object(),
+                set(),
+                timeout=60.0,
+                interval=5.0,
+                evidence=evidence,
+            )
+
+        self.assertEqual("healthy-2", snapshot["id"])
+        self.assertEqual([], alerts)
+        self.assertEqual([], findings)
+        self.assertTrue(evidence["stabilized"])
+        self.assertTrue(evidence["clean"])
+        self.assertEqual(2, len(evidence["attempts"]))
 
     def test_no_attention_phase_rejects_any_new_persisted_alert(self):
         baseline_ids = {"existing"}
@@ -226,10 +332,33 @@ class RuntimeAlertVerificationTest(unittest.TestCase):
             guard.values,
         )
 
-    def test_parser_rejects_nonpositive_scenario_timeout(self):
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                verification.parse_args(["--scenario-timeout", "0"])
+    def test_successful_scenarios_still_fail_acceptance_when_baseline_has_quality_findings(self):
+        report = {
+            "scenarioOutcome": "RUNNING",
+            "outcome": "RUNNING",
+            "failure": None,
+            "qualityFindings": [{"type": "BASELINE_HUMAN_ATTENTION"}],
+        }
+
+        result = verification.finalize_successful_scenarios(report)
+
+        self.assertEqual(1, result)
+        self.assertEqual("PASSED", report["scenarioOutcome"])
+        self.assertEqual("FAILED", report["outcome"])
+        self.assertEqual("BaselineQualityFinding", report["failure"]["type"])
+        self.assertIn("BASELINE_HUMAN_ATTENTION", report["failure"]["message"])
+
+    def test_parser_rejects_nonpositive_timeouts_and_intervals(self):
+        invalid_arguments = [
+            ["--scenario-timeout", "0"],
+            ["--baseline-stabilization-timeout", "0"],
+            ["--baseline-stabilization-interval", "0"],
+        ]
+        for arguments in invalid_arguments:
+            with self.subTest(arguments=arguments):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        verification.parse_args(arguments)
 
 
 if __name__ == "__main__":
