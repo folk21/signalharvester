@@ -12,7 +12,9 @@ parent: ../spec-signal-harvester-platform.md
 
 Active contributor-tooling specification.
 
-Stage A1, the repository-local pipeline foundation under `tools/agent-pipeline/`, is accepted after canonical developer verification. P1 is now exercising that foundation on the real Stage 6E6 runtime persisted-alert verification slice. The implementation is verification-pending; P1 remains open until the developer-side run captures canonical check/review evidence and the workflow friction is reviewed.
+Stage A1, the repository-local pipeline foundation under `tools/agent-pipeline/`, is accepted after canonical developer verification. The real Stage 6E6 pilot produced enough workflow evidence to start A2.1, but Stage 6E6 itself remains verification-pending and is deliberately paused. The pause preserves the unresolved transient-recovery timing and cleanup findings instead of tuning product policy around the harness.
+
+Stage A2.1 is implemented and verification-pending. It adds isolated Git branch/worktree preparation plus one-shot Aider execution using a repository-owned command policy. Worker edits stay outside the developer worktree, worker auto-commits and model-suggested shell commands are disabled, and focused/canonical verification now executes against the isolated worker tree. Repair loops, automatic review invocation, Gitleaks, acceptance, merging, and specification archival remain later stages.
 
 This specification does not replace the current product implementation focus in `backend-observability-intelligence.md`. Product semantics remain owned by their product specification, implementation, contracts, tests, and current-state documentation.
 
@@ -75,8 +77,11 @@ Risk-based batching may reduce main-model checkpoints only after repeated pilot 
 ## Implementation stages
 
 - [x] **A1 — foundation:** bounded task/evidence state, required canonical check, structured independent review, conservative escalation, and mandatory main-model checkpoint.
-- [ ] **P1 — real-stage pilot (verification-pending):** Stage 6E6 is the first real bounded implementation slice. Capture A1 task/check/review evidence in the developer Git worktree and record friction, missing evidence, manual steps, and incorrect or redundant assumptions before expanding automation.
-- [ ] **A2 — worker execution:** add isolated Git worktree/branch preparation, direct Aider + DeepSeek invocation through an explicit adapter, and repository-owned Gitleaks execution/evidence.
+- [ ] **P1 — real-stage pilot (paused product run, evidence collected):** Stage 6E6 exposed real workflow friction across live environment readiness, deployment provenance, REST-boundary coverage, time-window-aware recovery expectations, and cleanup after partial failure. The product stage remains verification-pending, but these observations are sufficient to proceed with bounded pipeline automation. P1 closes only when its final process findings are reviewed and recorded; it does not imply Stage 6E6 acceptance.
+- [ ] **A2 — worker execution and routine verification automation:**
+  - [ ] **A2.1 — isolated one-shot worker (implemented, verification-pending):** create a branch/worktree from the immutable base commit, invoke Aider + the configured DeepSeek model through a repository-owned adapter, preserve worker evidence plus a source-state digest, reject unexpected worker commits or post-worker source drift, and run later checks against the worker tree.
+  - [ ] **A2.2 — repository-owned security/verification checks:** add Gitleaks configuration/execution/evidence and reduce manual focused/canonical verification orchestration without allowing workers to weaken checks.
+  - [ ] **A2.3 — review invocation and handoff:** invoke an independent fresh-context reviewer through an explicit adapter and prepare the first compact main-model handoff from worker/check/review evidence.
 - [ ] **A3 — repair and re-review:** add bounded deterministic repair loops plus fresh-context independent re-review, with explicit maximum rounds and escalation instead of unbounded self-repair.
 - [ ] **A4 — structured evidence and handoff:** ingest relevant scanner/static-analysis results structurally and produce a compact main-model handoff bundle containing base revision, task/spec identity, diff/evidence summaries, review findings, and unresolved questions.
 - [ ] **A5 — acceptance/lifecycle automation:** consume an external acceptance decision and automate only the mechanical documentation/specification synchronization and archival steps that the repository lifecycle permits.
@@ -105,7 +110,14 @@ The Stage 6E6 patch preparation already exposes two expected A1 boundaries that 
 - the first Stage 6E6 live attempts demonstrated why live-environment and quality evidence must remain separate from worker success: one run stopped correctly on NotReady Kubernetes nodes, while the next reached application evaluation and exposed a post-restart statistical baseline anomaly. A2/A4 should preserve these external run artifacts structurally instead of reducing them to a worker-reported PASS/FAIL.
 - the subsequent Stage 6E6 rerun exposed a real REST serialization defect only after a persisted human-attention alert existed: deterministic persistence/policy tests were green, but `/api/v1/admin/operations/health/alerts` returned HTTP 500 because `HumanAttentionAlertResponse` lacked Micronaut Serde metadata. P1 must treat this as evidence that worker-local checks and live boundary verification are complementary; A4 should preserve external acceptance failures and their fix/retest linkage explicitly.
 
-These observations do not count as P1 acceptance. P1 remains open until the Stage 6E6 developer-side run provides the configured repository evidence and the resulting friction is reviewed.
+Additional P1 observations from the later Stage 6E6 live runs:
+
+- deploying the Serde source fix did not initially prove that Kubernetes was executing the rebuilt artifact; deployment provenance must become explicit evidence instead of being inferred from source/test state;
+- after the corrected image reached Kubernetes, the alert-history endpoint serialized successfully and the pre-existing alert was resolved through the normal runtime policy, proving that the live boundary and persisted resolution path were reachable;
+- a clean two-snapshot baseline and the transient 300-row backlog behaved as expected, but immediate transient recovery remained `DEGRADED` because the five-minute HTTP latency window still carried a rolling-median/MAD anomaly after the outbox had drained; time-window-aware acceptance must be modeled explicitly instead of assuming instantaneous global Health recovery;
+- cleanup ran after the backend port-forward context had exited, so temporary profile/source deletes failed with connection refused after the partial scenario failure. Resource cleanup must remain inside a live control channel and must itself produce evidence.
+
+These observations do not count as Stage 6E6 acceptance. The developer intentionally paused that product verification and authorized A2.1 so subsequent development can use the agent pipeline rather than continue accumulating manual coordination. P1 remains an open process-evidence record until its final workflow review is recorded.
 
 ## Non-goals
 

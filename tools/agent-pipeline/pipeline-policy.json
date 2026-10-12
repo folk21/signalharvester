@@ -10,13 +10,18 @@
   "requiredChecks": [
     {
       "name": "canonical",
-      "command": ["./run_checks.sh"],
+      "command": [
+        "./run_checks.sh"
+      ],
       "description": "Canonical routine repository verification"
     }
   ],
   "independentReview": {
     "required": true,
-    "blockingSeverities": ["HIGH", "CRITICAL"]
+    "blockingSeverities": [
+      "HIGH",
+      "CRITICAL"
+    ]
   },
   "mainReview": {
     "requiredBeforeAcceptance": true
@@ -67,5 +72,35 @@
         "^tools/"
       ]
     }
-  ]
+  ],
+  "workerExecution": {
+    "required": true,
+    "tool": "aider",
+    "executable": "aider",
+    "defaultModel": "deepseek/deepseek-chat",
+    "branchPrefix": "agent/",
+    "arguments": [
+      "--model",
+      "{model}",
+      "--message-file",
+      "{task_file}",
+      "--input-history-file",
+      "{input_history_file}",
+      "--chat-history-file",
+      "{chat_history_file}",
+      "--yes-always",
+      "--no-auto-commits",
+      "--no-dirty-commits",
+      "--no-gitignore",
+      "--no-auto-lint",
+      "--no-auto-test",
+      "--no-suggest-shell-commands",
+      "--no-detect-urls",
+      "--no-analytics",
+      "--no-check-update",
+      "--no-gui",
+      "--no-pretty",
+      "--disable-playwright"
+    ]
+  }
 }

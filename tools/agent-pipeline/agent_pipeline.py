@@ -19,6 +19,7 @@ from typing import Any, Iterable
 
 SCHEMA_VERSION = 1
 STATE_PREPARED = "PREPARED"
+STATE_WORKER_REQUIRED = "WORKER_REQUIRED"
 STATE_VERIFYING = "VERIFYING"
 STATE_REVIEW_REQUIRED = "REVIEW_REQUIRED"
 STATE_BLOCKED = "BLOCKED"
@@ -111,6 +112,36 @@ def validate_policy(policy: dict[str, Any]) -> None:
             raise ValueError(f"Required check {name} must define a non-empty string command list")
         seen.add(name)
 
+    worker = policy.get("workerExecution")
+    if worker is not None:
+        if not isinstance(worker, dict):
+            raise ValueError("workerExecution must be an object")
+        if worker.get("tool") != "aider":
+            raise ValueError("workerExecution.tool must be 'aider' in A2.1")
+        executable = worker.get("executable")
+        if not isinstance(executable, str) or not executable.strip():
+            raise ValueError("workerExecution.executable must be a non-empty string")
+        default_model = worker.get("defaultModel")
+        if not isinstance(default_model, str) or not default_model.strip():
+            raise ValueError("workerExecution.defaultModel must be a non-empty string")
+        branch_prefix = worker.get("branchPrefix")
+        if not isinstance(branch_prefix, str) or not branch_prefix:
+            raise ValueError("workerExecution.branchPrefix must be a non-empty string")
+        arguments = worker.get("arguments")
+        if (
+            not isinstance(arguments, list)
+            or not arguments
+            or not all(isinstance(part, str) and part for part in arguments)
+        ):
+            raise ValueError("workerExecution.arguments must be a non-empty string list")
+        allowed_placeholders = {"{model}", "{task_file}", "{input_history_file}", "{chat_history_file}"}
+        for argument in arguments:
+            placeholders = set(re.findall(r"\{[^{}]+\}", argument))
+            if not placeholders.issubset(allowed_placeholders):
+                raise ValueError(f"Unsupported worker argument placeholder in: {argument}")
+            if "api-key" in argument.lower():
+                raise ValueError("Worker API keys must come from the environment, not repository policy arguments")
+
 
 def validate_repository(repo_root: Path, policy: dict[str, Any]) -> None:
     """Fail closed when required repository context is missing."""
@@ -158,7 +189,7 @@ def build_worker_task(
     check_lines = "\n".join(
         f"- {entry['name']}: {' '.join(entry['command'])}" for entry in policy.get("requiredChecks", [])
     )
-    return f"""# Development worker task\n\n## Identity\n\n- Stage: `{stage}`\n- Worker: `{worker}`\n- Model: `{model}`\n- Active specification: `{spec_path}`\n\n## Required repository reading\n\n{reading_lines}\n\nCurrent repository files override chat history, summaries, and prior plans. Read the relevant implementation, tests, contracts, and owning documentation before editing.\n\n## Worker contract\n\n- Make the smallest coherent change that satisfies the task.\n- Follow repository and nearest local `AGENTS.md` rules.\n- Do not weaken tests, validation, security, architecture, or published contracts to make checks pass.\n- Do not declare a stage accepted or archive an active specification. Acceptance remains outside the worker boundary in this foundation stage.\n- Record unresolved ambiguity or high-risk findings instead of guessing.\n- Keep code/configuration comments and software documentation in English.\n\n## Mandatory escalation categories\n\n{escalation_lines}\n\n## Task\n\n{task_text.strip()}\n\n## Required verification before handoff\n\n{check_lines}\n\nAn independent review result is required before the run can become ready for the main-model checkpoint.\n"""
+    return f"""# Development worker task\n\n## Identity\n\n- Stage: `{stage}`\n- Worker: `{worker}`\n- Model: `{model}`\n- Active specification: `{spec_path}`\n\n## Required repository reading\n\n{reading_lines}\n\nCurrent repository files override chat history, summaries, and prior plans. Read the relevant implementation, tests, contracts, and owning documentation before editing.\n\n## Worker contract\n\n- Make the smallest coherent change that satisfies the task.\n- Follow repository and nearest local `AGENTS.md` rules.\n- Do not weaken tests, validation, security, architecture, or published contracts to make checks pass.\n- Do not declare a stage accepted or archive an active specification. Acceptance remains outside the worker boundary in the current pipeline stage.\n- Record unresolved ambiguity or high-risk findings instead of guessing.\n- Keep code/configuration comments and software documentation in English.\n\n## Mandatory escalation categories\n\n{escalation_lines}\n\n## Task\n\n{task_text.strip()}\n\n## Required verification before handoff\n\n{check_lines}\n\nAn independent review result is required before the run can become ready for the main-model checkpoint.\n"""
 
 
 def create_run(
@@ -206,6 +237,7 @@ def create_run(
         },
         "taskSha256": None,
         "requiredChecks": [entry["name"] for entry in policy["requiredChecks"]],
+        "workerExecutionRequired": bool(policy.get("workerExecution", {}).get("required", False)),
         "mainReviewRequiredBeforeAcceptance": bool(policy.get("mainReview", {}).get("requiredBeforeAcceptance", True)),
         "history": [{"at": utc_now(), "state": STATE_PREPARED, "reason": "run initialized"}],
     }
@@ -385,13 +417,284 @@ def classify_risk(paths: Iterable[str], policy: dict[str, Any], evidence_availab
     }
 
 
+def run_git_mutation(repo_root: Path, *args: str) -> str:
+    """Run one explicit Git mutation and fail with bounded stderr on error."""
+    if shutil.which("git") is None:
+        raise ValueError("git is required for isolated worker execution")
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or f"exit code {completed.returncode}"
+        raise ValueError(f"git {' '.join(args)} failed: {detail}")
+    return completed.stdout.strip()
+
+
+def relative_or_absolute(path: Path, repo_root: Path) -> str:
+    """Prefer repository-relative paths in persisted evidence when possible."""
+    try:
+        return str(path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        return str(path.resolve())
+
+
+def resolve_manifest_path(repo_root: Path, value: str) -> Path:
+    """Resolve one path persisted in a run manifest."""
+    path = Path(value)
+    return path if path.is_absolute() else repo_root / path
+
+
+def safe_branch_component(value: str) -> str:
+    """Convert a run id to a conservative Git branch-name component."""
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "-", value).strip("-")
+    if not cleaned:
+        raise ValueError("Run id does not contain a usable Git branch component")
+    return cleaned
+
+
+def prepare_worker_workspace(
+    repo_root: Path,
+    worktrees_root: Path,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    """Create one isolated branch/worktree at the immutable run base revision."""
+    worker_policy = policy.get("workerExecution")
+    if not isinstance(worker_policy, dict) or not worker_policy.get("required", False):
+        raise ValueError("Pipeline policy does not require direct worker execution")
+    if manifest.get("workspace") is not None:
+        raise ValueError("Worker workspace is already prepared for this run")
+    repository = manifest.get("repository", {})
+    base_commit = repository.get("baseCommit")
+    if repository.get("gitAvailable") is not True or not isinstance(base_commit, str) or not base_commit:
+        raise ValueError("Direct worker execution requires a Git-backed run with an explicit base commit")
+    current = discover_repository_state(repo_root)
+    if current.get("clean") is not True:
+        raise ValueError("Base Git worktree must remain clean before preparing the worker workspace")
+    if current.get("baseCommit") != base_commit:
+        raise ValueError("Base Git HEAD changed since run initialization; start a new run")
+
+    branch = f"{worker_policy['branchPrefix']}{safe_branch_component(manifest['runId'])}"
+    if run_git(repo_root, "show-ref", "--verify", f"refs/heads/{branch}") is not None:
+        raise ValueError(f"Worker branch already exists: {branch}")
+    worktree_path = (worktrees_root / manifest["runId"]).resolve()
+    if worktree_path.exists():
+        raise ValueError(f"Worker worktree path already exists: {worktree_path}")
+    worktree_path.parent.mkdir(parents=True, exist_ok=True)
+    run_git_mutation(repo_root, "worktree", "add", "-b", branch, str(worktree_path), base_commit)
+
+    head = run_git(worktree_path, "rev-parse", "HEAD")
+    status = run_git(worktree_path, "status", "--porcelain")
+    if head != base_commit or status != "":
+        raise ValueError("Prepared worker worktree does not match the clean run base commit")
+    workspace = {
+        "kind": "git-worktree",
+        "path": relative_or_absolute(worktree_path, repo_root),
+        "branch": branch,
+        "baseCommit": base_commit,
+        "preparedAt": utc_now(),
+    }
+    manifest["workspace"] = workspace
+    append_history(manifest, STATE_WORKER_REQUIRED, "isolated worker worktree prepared")
+    write_json(run_dir / "manifest.json", manifest)
+    return workspace
+
+
+def execution_root(repo_root: Path, manifest: dict[str, Any]) -> Path:
+    """Return the isolated worktree when a run has one, otherwise the repository root."""
+    workspace = manifest.get("workspace")
+    if not isinstance(workspace, dict):
+        return repo_root
+    value = workspace.get("path")
+    if not isinstance(value, str) or not value:
+        raise ValueError("Worker workspace path is missing from the run manifest")
+    path = resolve_manifest_path(repo_root, value).resolve()
+    if not path.exists():
+        raise ValueError(f"Worker workspace is missing: {path}")
+    return path
+
+
+def build_aider_command(policy: dict[str, Any], manifest: dict[str, Any], run_dir: Path) -> list[str]:
+    """Build the repository-owned one-shot Aider command without embedding API keys."""
+    worker_policy = policy.get("workerExecution")
+    if not isinstance(worker_policy, dict):
+        raise ValueError("workerExecution policy is missing")
+    configured_tool = worker_policy.get("tool")
+    if manifest.get("worker", {}).get("tool") != configured_tool:
+        raise ValueError(f"Run worker tool must be {configured_tool}")
+    model = manifest.get("worker", {}).get("model")
+    if not isinstance(model, str) or not model or model == "unspecified":
+        raise ValueError("Direct worker execution requires an explicit model")
+    task_file = str((run_dir / "task.md").resolve())
+    replacements = {
+        "{model}": model,
+        "{task_file}": task_file,
+        "{input_history_file}": str((run_dir / "aider.input.history").resolve()),
+        "{chat_history_file}": str((run_dir / "aider.chat.history.md").resolve()),
+    }
+    arguments: list[str] = []
+    for raw in worker_policy["arguments"]:
+        value = raw
+        for placeholder, replacement in replacements.items():
+            value = value.replace(placeholder, replacement)
+        arguments.append(value)
+    read_files = ["README.md", "AGENTS.md", "docs/specs/README.md"]
+    spec_path = manifest.get("specPath")
+    if isinstance(spec_path, str) and spec_path != "none":
+        read_files.append(spec_path)
+    for read_file in read_files:
+        arguments.extend(["--read", read_file])
+    return [worker_policy["executable"], *arguments]
+
+
+def workspace_change_digest(worktree: Path, changed_files: Iterable[str]) -> str:
+    """Digest the worker-visible source diff, including untracked files, without persisting file contents."""
+    digest = hashlib.sha256()
+    for relative in sorted(set(changed_files)):
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        path = worktree / relative
+        if path.is_symlink():
+            digest.update(b"SYMLINK\0")
+            digest.update(os.readlink(path).encode("utf-8"))
+        elif path.is_file():
+            digest.update(b"FILE\0")
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        elif path.exists():
+            digest.update(b"OTHER\0")
+        else:
+            digest.update(b"DELETED\0")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def ensure_worker_workspace_matches_result(
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Reject source drift after the one-shot worker result was captured."""
+    result_path = run_dir / "worker.json"
+    if not result_path.is_file():
+        raise ValueError("Required worker execution evidence is missing")
+    result = read_json(result_path)
+    if result.get("status") != "PASS":
+        raise ValueError("Required worker execution did not pass")
+    worktree = execution_root(repo_root, manifest)
+    base_commit = manifest.get("repository", {}).get("baseCommit")
+    head_commit = run_git(worktree, "rev-parse", "HEAD")
+    if head_commit != result.get("headCommit") or head_commit != base_commit:
+        raise ValueError("Worker worktree HEAD changed after worker execution")
+    changed_files, available = discover_changed_files(worktree, base_commit)
+    if not available:
+        raise ValueError("Worker worktree change evidence is unavailable")
+    digest = workspace_change_digest(worktree, changed_files)
+    if changed_files != result.get("changedFiles") or digest != result.get("changeSha256"):
+        raise ValueError("Worker worktree source changed after worker execution; start a new run")
+    return result
+
+
+def execute_worker(
+    repo_root: Path,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    policy: dict[str, Any],
+) -> int:
+    """Run one bounded Aider attempt in the isolated worktree and persist result evidence."""
+    result_path = run_dir / "worker.json"
+    if result_path.exists():
+        raise ValueError("Worker execution is already recorded; A2.1 does not provide repair/retry loops")
+    worktree = execution_root(repo_root, manifest)
+    workspace = manifest.get("workspace")
+    if not isinstance(workspace, dict) or workspace.get("kind") != "git-worktree":
+        raise ValueError("Prepare an isolated worker workspace before running the worker")
+    base_commit = workspace.get("baseCommit")
+    if not isinstance(base_commit, str) or run_git(worktree, "rev-parse", "HEAD") != base_commit:
+        raise ValueError("Worker worktree HEAD no longer matches the run base commit")
+    if run_git(worktree, "status", "--porcelain") != "":
+        raise ValueError("Worker worktree must be clean before the one-shot Aider execution")
+
+    command = build_aider_command(policy, manifest, run_dir)
+    if shutil.which(command[0]) is None:
+        raise ValueError(f"Worker executable is not available on PATH: {command[0]}")
+    log_dir = run_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_path = log_dir / "worker-attempt-1.log"
+    started_at = utc_now()
+    started = time.monotonic()
+    return_code = 127
+    startup_error: str | None = None
+    with log_path.open("w", encoding="utf-8") as log_handle:
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=worktree,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,
+            )
+            assert process.stdout is not None
+            for line in process.stdout:
+                sys.stdout.write(line)
+                log_handle.write(line)
+            return_code = process.wait()
+        except OSError as exc:
+            startup_error = str(exc)
+            log_handle.write(f"ERROR: failed to start worker: {exc}\n")
+            print(f"ERROR: failed to start worker: {exc}", file=sys.stderr)
+    duration_ms = round((time.monotonic() - started) * 1000)
+    head_commit = run_git(worktree, "rev-parse", "HEAD")
+    changed_files, change_evidence = discover_changed_files(worktree, base_commit)
+    change_sha256 = workspace_change_digest(worktree, changed_files) if change_evidence else None
+    unexpected_commit = head_commit != base_commit
+    passed = return_code == 0 and not unexpected_commit and change_evidence
+    result = {
+        "schemaVersion": SCHEMA_VERSION,
+        "tool": manifest.get("worker", {}).get("tool"),
+        "model": manifest.get("worker", {}).get("model"),
+        "command": command,
+        "startedAt": started_at,
+        "finishedAt": utc_now(),
+        "durationMs": duration_ms,
+        "exitCode": return_code,
+        "status": "PASS" if passed else "FAIL",
+        "startupError": startup_error,
+        "workspace": workspace,
+        "headCommit": head_commit,
+        "unexpectedCommit": unexpected_commit,
+        "changedFiles": changed_files,
+        "changeEvidenceAvailable": change_evidence,
+        "changeSha256": change_sha256,
+        "log": str(log_path.relative_to(run_dir)),
+        "logSha256": sha256_file(log_path),
+    }
+    write_json(result_path, result)
+    return 0 if passed else 1
+
+
 def derive_state(
     policy: dict[str, Any],
     checks_data: dict[str, Any],
     review: dict[str, Any] | None,
+    worker_result: dict[str, Any] | None = None,
 ) -> tuple[str, list[str]]:
     """Derive the fail-closed run state only from persisted verification evidence."""
     reasons: list[str] = []
+    if policy.get("workerExecution", {}).get("required", False):
+        if worker_result is None:
+            reasons.append("required worker execution missing")
+            return STATE_WORKER_REQUIRED, reasons
+        if worker_result.get("status") != "PASS":
+            reasons.append("required worker execution failed")
+            return STATE_BLOCKED, reasons
+
     check_by_name: dict[str, dict[str, Any]] = {}
     for entry in checks_data.get("checks", []):
         if isinstance(entry, dict) and isinstance(entry.get("name"), str):
@@ -445,8 +748,14 @@ def update_status(repo_root: Path, run_dir: Path, manifest: dict[str, Any], poli
     checks_data = read_json(run_dir / "checks.json")
     review_path = run_dir / "review.json"
     review = read_json(review_path) if review_path.is_file() else None
-    state, reasons = derive_state(policy, checks_data, review)
-    changed_files, available = discover_changed_files(repo_root, manifest.get("repository", {}).get("baseCommit"))
+    worker_path = run_dir / "worker.json"
+    worker_result = read_json(worker_path) if worker_path.is_file() else None
+    if worker_result is not None and worker_result.get("status") == "PASS":
+        worker_result = ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+    state, reasons = derive_state(policy, checks_data, review, worker_result)
+    changed_files, available = discover_changed_files(
+        execution_root(repo_root, manifest), manifest.get("repository", {}).get("baseCommit")
+    )
     risk = classify_risk(changed_files, policy, available)
     manifest["riskAssessment"] = risk
     append_history(manifest, state, "; ".join(reasons))
@@ -468,6 +777,11 @@ def update_status(repo_root: Path, run_dir: Path, manifest: dict[str, Any], poli
         "stage": manifest["stage"],
         "state": state,
         "reasons": reasons,
+        "worker": {
+            "required": bool(policy.get("workerExecution", {}).get("required", False)),
+            "present": worker_result is not None,
+            "status": None if worker_result is None else worker_result.get("status"),
+        },
         "checks": latest_checks,
         "review": {
             "present": review is not None,
@@ -515,16 +829,27 @@ def build_parser() -> argparse.ArgumentParser:
         default="build/reports/agent-pipeline",
         help="Repository-relative or absolute run evidence directory",
     )
+    parser.add_argument(
+        "--worktrees-root",
+        default="build/agent-worktrees",
+        help="Repository-relative or absolute isolated worker worktree directory",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser("init", help="Initialize one bounded worker run")
     init_parser.add_argument("--stage", required=True)
     init_parser.add_argument("--spec", required=True, help="Active spec path or 'none' for contributor-tooling work")
     init_parser.add_argument("--task-file", required=True)
-    init_parser.add_argument("--worker", default="aider")
-    init_parser.add_argument("--model", default="unspecified")
+    init_parser.add_argument("--worker")
+    init_parser.add_argument("--model")
     init_parser.add_argument("--scope", action="append", default=[])
     init_parser.add_argument("--run-id")
+
+    prepare_parser = subparsers.add_parser("prepare-worker", help="Create the isolated Git branch/worktree")
+    prepare_parser.add_argument("--run-id", required=True)
+
+    worker_parser = subparsers.add_parser("run-worker", help="Run the configured one-shot Aider worker")
+    worker_parser.add_argument("--run-id", required=True)
 
     check_parser = subparsers.add_parser("run-check", help="Run one policy-defined required check")
     check_parser.add_argument("--run-id", required=True)
@@ -557,6 +882,7 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = Path(args.repo_root).resolve()
     policy_path = resolve_under_repo(repo_root, args.policy).resolve()
     runs_root = resolve_under_repo(repo_root, args.runs_root).resolve()
+    worktrees_root = resolve_under_repo(repo_root, args.worktrees_root).resolve()
     try:
         policy = read_json(policy_path)
         validate_policy(policy)
@@ -573,8 +899,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.stage,
                 args.spec,
                 task_text,
-                args.worker,
-                args.model,
+                args.worker or policy.get("workerExecution", {}).get("tool", "aider"),
+                args.model or policy.get("workerExecution", {}).get("defaultModel", "unspecified"),
                 args.scope,
                 args.run_id,
             )
@@ -584,11 +910,25 @@ def main(argv: list[str] | None = None) -> int:
         run_dir, manifest = load_run(runs_root, args.run_id)
         ensure_run_contract_matches(policy_path, run_dir, manifest)
 
+        if args.command == "prepare-worker":
+            workspace = prepare_worker_workspace(repo_root, worktrees_root, run_dir, manifest, policy)
+            print(json.dumps(workspace, indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "run-worker":
+            result = execute_worker(repo_root, run_dir, manifest, policy)
+            update_status(repo_root, run_dir, manifest, policy)
+            return result
+
         if args.command == "run-check":
             definitions = required_check_map(policy)
             if args.name not in definitions:
                 raise ValueError(f"Unknown required check: {args.name}")
-            result = execute_check(repo_root, run_dir, args.name, definitions[args.name]["command"], True)
+            if policy.get("workerExecution", {}).get("required", False):
+                ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+            result = execute_check(
+                execution_root(repo_root, manifest), run_dir, args.name, definitions[args.name]["command"], True
+            )
             update_status(repo_root, run_dir, manifest, policy)
             return result
 
@@ -596,7 +936,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.name in required_check_map(policy):
                 raise ValueError(f"Use run-check for policy-defined check: {args.name}")
             command = parse_command_tail(args.command_args)
-            result = execute_check(repo_root, run_dir, args.name, command, False)
+            if policy.get("workerExecution", {}).get("required", False):
+                ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+            result = execute_check(execution_root(repo_root, manifest), run_dir, args.name, command, False)
             update_status(repo_root, run_dir, manifest, policy)
             return result
 

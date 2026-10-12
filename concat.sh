@@ -30,6 +30,8 @@ fi
   -i __pycache__ -i '*/__pycache__/*' \
   -i .pytest_cache -i '*/.pytest_cache/*' \
   -i .venv -i '*/.venv/*' \
+  -i '.aider*' -i '*/.aider*/*' \
+  -i cache.db -i '*/cache.db' \
   -i venv -i '*/venv/*' \
   -i .cache -i '*/.cache/*' \
   -i build -i '*/build/*' \

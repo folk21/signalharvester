@@ -327,7 +327,7 @@ The development-agent pipeline foundation, source-manifest importer, and live-ba
 - `tools/source-import/tests`;
 - `tools/live-backend/tests`.
 
-All three self-test suites are part of the canonical `run_checks.sh` gate. The agent-pipeline tests exercise only deterministic local orchestration/evidence behavior; they do not invoke Aider or a model provider. The live verifier itself is opt-in and is never invoked automatically against a running backend.
+All three self-test suites are part of the canonical `run_checks.sh` gate. The agent-pipeline tests exercise deterministic local orchestration/evidence behavior with temporary Git repositories and a fake `aider` executable; they never invoke a real model provider or require network access. The live verifier itself is opt-in and is never invoked automatically against a running backend.
 
 Run them directly with:
 

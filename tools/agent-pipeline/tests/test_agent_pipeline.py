@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -78,6 +79,22 @@ class AgentPipelinePolicyTest(unittest.TestCase):
         self.assertEqual(agent_pipeline.STATE_NEEDS_MAIN_REVIEW, state)
         self.assertIn("escalation-category", reasons[0])
 
+    # Protects fail-closed ordering when direct worker execution is required.
+    def test_state_machine_requires_worker_before_verification(self) -> None:
+        self.policy["workerExecution"] = {"required": True}
+        checks = {"schemaVersion": 1, "checks": [{"name": "canonical", "status": "PASS"}]}
+        state, reasons = agent_pipeline.derive_state(self.policy, checks, {"verdict": "PASS", "findings": []})
+        self.assertEqual(agent_pipeline.STATE_WORKER_REQUIRED, state)
+        self.assertIn("worker execution missing", reasons[0])
+
+        worker = {"status": "FAIL"}
+        state, _ = agent_pipeline.derive_state(self.policy, checks, None, worker)
+        self.assertEqual(agent_pipeline.STATE_BLOCKED, state)
+
+        worker["status"] = "PASS"
+        state, _ = agent_pipeline.derive_state(self.policy, checks, {"verdict": "PASS", "findings": []}, worker)
+        self.assertEqual(agent_pipeline.STATE_READY_FOR_MAIN_REVIEW, state)
+
     # Protects conservative path-based risk escalation without claiming semantic completeness.
     def test_risk_classification_escalates_sensitive_paths(self) -> None:
         risk = agent_pipeline.classify_risk(
@@ -126,6 +143,7 @@ class AgentPipelineCliTest(unittest.TestCase):
     def create_repository(self, root: Path) -> tuple[Path, Path]:
         (root / "README.md").write_text("# Test\n", encoding="utf-8")
         (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+        (root / ".gitignore").write_text("build/\n", encoding="utf-8")
         (root / "docs/specs").mkdir(parents=True)
         (root / "docs/specs/README.md").write_text("# Specs\n", encoding="utf-8")
         (root / "docs/TESTS.md").write_text("# Tests\n", encoding="utf-8")
@@ -160,7 +178,9 @@ class AgentPipelineCliTest(unittest.TestCase):
         )
         return policy, task
 
-    def run_cli(self, root: Path, policy: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    def run_cli(
+        self, root: Path, policy: Path, *args: str, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 sys.executable,
@@ -171,12 +191,15 @@ class AgentPipelineCliTest(unittest.TestCase):
                 str(policy),
                 "--runs-root",
                 "build/reports/agent-pipeline",
+                "--worktrees-root",
+                "build/agent-worktrees",
                 *args,
             ],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
+            env=env,
         )
 
     # Protects initialization, command evidence, review ingestion, and ready-for-review status.
@@ -241,6 +264,112 @@ class AgentPipelineCliTest(unittest.TestCase):
             self.assertTrue(result["mainReviewRequiredBeforeAcceptance"])
             reviews = json.loads((run_dir / "reviews.json").read_text(encoding="utf-8"))
             self.assertEqual(1, len(reviews["reviews"]))
+
+
+    def init_git_repository(self, root: Path) -> str:
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(["git", "config", "user.email", "agent-test@example.invalid"], cwd=root, check=True)
+        subprocess.run(["git", "config", "user.name", "Agent Pipeline Test"], cwd=root, check=True)
+        subprocess.run(["git", "add", "."], cwd=root, check=True)
+        subprocess.run(["git", "commit", "-qm", "test base"], cwd=root, check=True)
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=root, text=True, stdout=subprocess.PIPE, check=True
+        ).stdout.strip()
+
+    # Protects isolated worktree preparation, one-shot Aider execution, and verification in the worker tree.
+    def test_cli_runs_fake_aider_in_isolated_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            root.mkdir()
+            policy, task = self.create_repository(root)
+            policy_data = json.loads(policy.read_text(encoding="utf-8"))
+            policy_data["workerExecution"] = {
+                "required": True,
+                "tool": "aider",
+                "executable": "aider",
+                "defaultModel": "deepseek/deepseek-chat",
+                "branchPrefix": "agent/",
+                "arguments": [
+                    "--model",
+                    "{model}",
+                    "--message-file",
+                    "{task_file}",
+                    "--yes-always",
+                    "--no-auto-commits",
+                    "--no-suggest-shell-commands",
+                ],
+            }
+            policy.write_text(json.dumps(policy_data), encoding="utf-8")
+            base_commit = self.init_git_repository(root)
+
+            fake_bin = Path(temp_dir) / "bin"
+            fake_bin.mkdir()
+            fake_aider = fake_bin / "aider"
+            fake_aider.write_text(
+                "#!/usr/bin/env python3\n"
+                "from pathlib import Path\n"
+                "Path('worker-output.txt').write_text('changed by fake aider\\n', encoding='utf-8')\n"
+                "print('fake aider completed')\n",
+                encoding="utf-8",
+            )
+            fake_aider.chmod(0o755)
+            env = dict(os.environ)
+            env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+
+            initialized = self.run_cli(
+                root,
+                policy,
+                "init",
+                "--stage",
+                "A2.1-TEST",
+                "--spec",
+                "docs/specs/active/example.md",
+                "--task-file",
+                str(task),
+                "--run-id",
+                "worker-test",
+                env=env,
+            )
+            self.assertEqual(0, initialized.returncode, initialized.stderr)
+            status = self.run_cli(root, policy, "status", "--run-id", "worker-test", env=env)
+            self.assertEqual("WORKER_REQUIRED", json.loads(status.stdout)["state"])
+
+            prepared = self.run_cli(root, policy, "prepare-worker", "--run-id", "worker-test", env=env)
+            self.assertEqual(0, prepared.returncode, prepared.stderr)
+            workspace = json.loads(prepared.stdout)
+            worktree = root / workspace["path"]
+            self.assertEqual(base_commit, subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=worktree, text=True, stdout=subprocess.PIPE, check=True
+            ).stdout.strip())
+            self.assertFalse((root / "worker-output.txt").exists())
+
+            worker = self.run_cli(root, policy, "run-worker", "--run-id", "worker-test", env=env)
+            self.assertEqual(0, worker.returncode, worker.stderr)
+            self.assertEqual("changed by fake aider\n", (worktree / "worker-output.txt").read_text(encoding="utf-8"))
+            worker_result = json.loads(
+                (root / "build/reports/agent-pipeline/worker-test/worker.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual("PASS", worker_result["status"])
+            self.assertEqual(["worker-output.txt"], worker_result["changedFiles"])
+            self.assertFalse(worker_result["unexpectedCommit"])
+            self.assertEqual(base_commit, worker_result["headCommit"])
+
+            second_worker = self.run_cli(root, policy, "run-worker", "--run-id", "worker-test", env=env)
+            self.assertEqual(2, second_worker.returncode)
+            self.assertIn("does not provide repair/retry loops", second_worker.stderr)
+
+            checked = self.run_cli(root, policy, "run-check", "--run-id", "worker-test", "--name", "canonical", env=env)
+            self.assertEqual(0, checked.returncode, checked.stderr)
+            status_after = self.run_cli(root, policy, "status", "--run-id", "worker-test", env=env)
+            self.assertEqual("REVIEW_REQUIRED", json.loads(status_after.stdout)["state"])
+            self.assertEqual("", subprocess.run(
+                ["git", "status", "--porcelain"], cwd=root, text=True, stdout=subprocess.PIPE, check=True
+            ).stdout.strip())
+
+            (worktree / "worker-output.txt").write_text("tampered after worker\n", encoding="utf-8")
+            drifted = self.run_cli(root, policy, "status", "--run-id", "worker-test", env=env)
+            self.assertEqual(2, drifted.returncode)
+            self.assertIn("source changed after worker execution", drifted.stderr)
 
 
 if __name__ == "__main__":
