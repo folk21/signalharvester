@@ -11,7 +11,7 @@ description: Repository-local orchestration foundation for bounded coding worker
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
 
-This first slice intentionally does **not** invoke Aider or a model process itself, auto-fix findings, accept a stage, move specifications to the archive, or add external scanner dependencies. Those capabilities should be added only after this evidence format and checkpoint flow are proven on real implementation work.
+Stage A1 is accepted after canonical developer verification. It intentionally does **not** invoke Aider or a model process itself, auto-fix findings, accept a stage, move specifications to the archive, or add external scanner dependencies. Those capabilities remain future work owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification and should be added only after this evidence format and checkpoint flow are proven on real implementation work.
 
 ## Current boundary
 
@@ -172,16 +172,8 @@ Run evidence is written under `build/reports/` and is intentionally excluded fro
 
 Do not copy generated run evidence into owning documentation. Accepted stable behavior belongs in the repository documents that already own that topic.
 
-## Planned follow-up after the pilot
+## Specification and next stages
 
-Only after this foundation is exercised on a real stage should later slices consider:
+The active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification owns intended evolution, stage sequencing, and final acceptance criteria. This guide owns current implemented commands and evidence semantics only.
 
-- direct Aider process invocation and isolated worktree/branch setup;
-- bounded automatic repair/re-review loops;
-- secret scanning such as Gitleaks through an explicit repository-owned quality policy;
-- structured SpotBugs/dependency-analysis ingestion instead of only command exit evidence;
-- automatic handoff-bundle generation for main-model review;
-- risk-based checkpoint batching for low-risk slices;
-- acceptance tokens and mechanical specification archival after external acceptance.
-
-These are intentionally not implemented by this patch.
+The next planned step is P1: use the accepted A1 foundation on Stage 6E6 runtime persisted-alert lifecycle verification and record real workflow friction before adding direct worker invocation.

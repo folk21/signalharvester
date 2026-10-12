@@ -342,7 +342,7 @@ Repository documentation is working context for both developers and coding agent
 
 ### Automated coding-worker boundary
 
-Repository-local worker orchestration may automate task preparation, verification evidence, and independent review, but it does not weaken any rule in this file. A coding worker must treat current repository files as source of truth, must not declare its own work accepted, and must not archive an active specification before the configured external acceptance checkpoint. The initial workflow and evidence contract are documented in `tools/agent-pipeline/README.md`.
+Repository-local worker orchestration may automate task preparation, verification evidence, and independent review, but it does not weaken any rule in this file. A coding worker must treat current repository files as source of truth, must not declare its own work accepted, and must not archive an active specification before the configured external acceptance checkpoint. Current workflow/evidence behavior is documented in `tools/agent-pipeline/README.md`; intended multi-stage evolution and acceptance criteria are owned by `docs/specs/active/subspecs/development-agent-pipeline.md`.
 
 ## Progressive Disclosure
 

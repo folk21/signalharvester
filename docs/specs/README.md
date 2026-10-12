@@ -56,6 +56,8 @@ Rules:
 
 The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted. The Stage 6E4 dedicated live normal/transient/critical Health/alert scenarios and the Stage 6E5 manual evidence review supporting no production policy change are accepted after canonical developer verification. Runtime persisted alert lifecycle and assisted-investigation quality are separate evaluation boundaries.
 
+The active contributor-tooling track is [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). It formalizes the multi-stage evolution and acceptance criteria for bounded coding-worker automation without changing the product `current_focus` or granting a worker product/architecture authority.
+
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
 ## When to create a sub-spec
@@ -167,6 +169,10 @@ Active supporting tracks:
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
+
+Active contributor-tooling track:
+
+- [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md) — bounded coding-worker automation, verification/review evidence, escalation, and externally authorized acceptance/lifecycle automation. This track has no product feature ID and does not replace the backend implementation focus.
 
 ## Recently completed sub-specifications
 

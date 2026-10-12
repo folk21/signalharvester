@@ -310,7 +310,7 @@ Each implementation stage must add focused deterministic tests before broader li
 - [x] record the first explicit calibration decision: retain the current Health/alert policies because the existing campaign does not define detector/attention expectations strongly enough to justify parameter changes;
 - [x] add explicit Health/alert evaluation expectations separate from injected-fault ground truth, with legacy artifacts defaulting to descriptive-only;
 - [x] add dedicated detector/alert calibration scenarios with operationally meaningful fault magnitudes and explicit scoring expectations;
-- [ ] run the dedicated scenarios through another repeated campaign and compare versioned policy candidates only if the captured evidence supports a change;
+- [x] run the dedicated scenarios through another repeated campaign and review whether versioned policy candidates are justified; Stage 6E5 evidence supported retaining both v1 policies unchanged, so no candidate comparison was introduced;
 - [x] add manual sanitized report export;
 - [x] add provider-neutral structured `IncidentAssessment` and deterministic fake provider;
 - [x] add optional local/external LLM adapter behind explicit secrets/policy;
