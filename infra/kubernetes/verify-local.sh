@@ -3,9 +3,21 @@ set -eu
 
 NAMESPACE=${SIGNALHARVESTER_K8S_NAMESPACE:-signalharvester}
 TIMEOUT=${SIGNALHARVESTER_K8S_VERIFY_TIMEOUT:-240s}
+PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS=${SIGNALHARVESTER_K8S_PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS:-90}
 
 command -v kubectl >/dev/null 2>&1 || { echo "ERROR: kubectl is required" >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "ERROR: curl is required" >&2; exit 1; }
+
+case "$PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS" in
+  ''|*[!0-9]*)
+    echo "ERROR: SIGNALHARVESTER_K8S_PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS must be a positive integer" >&2
+    exit 1
+    ;;
+esac
+if [ "$PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS" -le 0 ]; then
+  echo "ERROR: SIGNALHARVESTER_K8S_PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS must be greater than zero" >&2
+  exit 1
+fi
 
 check_cluster_nodes_ready() {
   node_status=$(kubectl get nodes -o custom-columns=NAME:.metadata.name,READY:'.status.conditions[?(@.type=="Ready")].status' --no-headers)
@@ -102,20 +114,70 @@ wait_http http://127.0.0.1:18080/health/readiness
 wait_http http://127.0.0.1:19090/-/ready
 wait_http http://127.0.0.1:13000/api/health
 
-BACKEND_METRICS=$(curl -fsS http://127.0.0.1:18080/prometheus)
-printf '%s\n' "$BACKEND_METRICS" | grep -q 'signalharvester_'
-printf '%s\n' "$BACKEND_METRICS" | grep -q 'signalharvester_analysis_outbox_pending'
-printf '%s\n' "$BACKEND_METRICS" | grep -q 'signalharvester_analysis_outbox_oldest_pending_age_seconds'
+if ! BACKEND_METRICS=$(curl -fsS --max-time 5 http://127.0.0.1:18080/prometheus); then
+  echo "ERROR: backend Prometheus metrics endpoint became unavailable after readiness" >&2
+  cat "$BACKEND_LOG" >&2 || true
+  exit 1
+fi
 
-query_equals() {
-  query=$1
-  expected=$2
-  curl -fsSG --data-urlencode "query=$query" http://127.0.0.1:19090/api/v1/query | grep -Fq "\"$expected\""
+require_backend_metric() {
+  metric=$1
+  if printf '%s\n' "$BACKEND_METRICS" | grep -q "$metric"; then
+    return 0
+  fi
+  echo "ERROR: backend Prometheus metrics are missing required metric: $metric" >&2
+  return 1
 }
 
-query_equals 'count(up{job="signalharvester-backend"} == 1)' 2
-query_equals 'min(up{job="redpanda"})' 1
-query_equals 'min(up{job="kube-state-metrics"})' 1
+require_backend_metric 'signalharvester_'
+require_backend_metric 'signalharvester_analysis_outbox_pending'
+require_backend_metric 'signalharvester_analysis_outbox_oldest_pending_age_seconds'
+
+prometheus_query_value() {
+  query=$1
+  response=$(curl -fsSG --max-time 5 --data-urlencode "query=$query" http://127.0.0.1:19090/api/v1/query 2>&1) || {
+    printf '<query failed: %s>\n' "$response"
+    return 0
+  }
+  value=$(printf '%s\n' "$response" | sed -n 's/.*"value":\[[^,]*,"\([^"]*\)"\].*/\1/p')
+  if [ -n "$value" ]; then
+    printf '%s\n' "$value"
+  else
+    printf '<no scalar result>\n'
+  fi
+}
+
+wait_prometheus_query_equals() {
+  description=$1
+  query=$2
+  expected=$3
+  deadline=$(( $(date +%s) + PROMETHEUS_CONVERGENCE_TIMEOUT_SECONDS ))
+  observed='<not queried>'
+
+  while :; do
+    observed=$(prometheus_query_value "$query")
+    if [ "$observed" = "$expected" ]; then
+      return 0
+    fi
+    now=$(date +%s)
+    [ "$now" -lt "$deadline" ] || break
+    sleep 1
+  done
+
+  echo "ERROR: Prometheus target readiness did not converge: $description" >&2
+  echo "Query: $query" >&2
+  echo "Expected: $expected" >&2
+  echo "Observed: $observed" >&2
+  echo "Current Prometheus up-series:" >&2
+  curl -fsSG --max-time 5 --data-urlencode 'query=up' http://127.0.0.1:19090/api/v1/query >&2 || true
+  printf '\n' >&2
+  return 1
+}
+
+echo "==> Waiting for Prometheus scrape-target convergence"
+wait_prometheus_query_equals "two healthy backend scrape targets" 'count(up{job="signalharvester-backend"} == 1)' 2
+wait_prometheus_query_equals "healthy Redpanda scrape target" 'min(up{job="redpanda"})' 1
+wait_prometheus_query_equals "healthy kube-state-metrics scrape target" 'min(up{job="kube-state-metrics"})' 1
 
 echo "Backend readiness, Prometheus scrape targets, and Grafana health are available."
 echo "For traces/logs, open Grafana at http://127.0.0.1:13000 and inspect the provisioned Tempo/Loki data sources after generating application traffic."

@@ -134,6 +134,8 @@ class KubernetesPerformanceAssetsTest(unittest.TestCase):
         self.assertIn("scenario_evidence.sha256_file(output_path)", source)
         self.assertIn('resilience.record_scenario_marker(admin, scenario, "END")', source)
         self.assertIn("evidence_dataset.write(evidence_output)", source)
+        self.assertIn("HEALTH_EXPECTATION_DESCRIPTIVE_ONLY", source)
+        self.assertIn("ALERT_EXPECTATION_DESCRIPTIVE_ONLY", source)
 
     def test_comparison_replica_parser_requires_ordered_unique_positive_counts(self):
         self.assertEqual([1, 3], comparison.parse_replica_counts("1,3"))

@@ -40,6 +40,10 @@ def scenario(*, scenario_id, fault, snapshots, affected=(), markers=(), label=No
         "scenarioRunId": f"run-{scenario_id}",
         "label": label or ("FAULT" if fault else "NORMAL_OPERATION"),
         "groundTruth": {"faultInjected": fault, "affectedSubsystems": list(affected)},
+        "evaluationExpectations": {
+            "health": "DETECT" if fault else "REMAIN_HEALTHY",
+            "alert": "ATTENTION_REQUIRED" if fault else "NO_ATTENTION",
+        },
         "window": {
             "startedAt": "2026-10-01T10:00:00+00:00",
             "endedAt": "2026-10-01T10:01:00+00:00",
@@ -83,7 +87,7 @@ def dataset(dataset_run_id, policy_version, *, suffix=""):
                         "2026-10-01T10:00:12+00:00",
                         "DEGRADED",
                         policy_version,
-                        {"kafka": "DEGRADED"},
+                        {"eventing": "DEGRADED"},
                     ),
                     snapshot("AFTER", f"after{suffix}", "2026-10-01T10:00:35+00:00", "HEALTHY", policy_version),
                 ),

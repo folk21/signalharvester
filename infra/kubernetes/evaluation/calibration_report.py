@@ -341,6 +341,7 @@ def build_calibration(
             "notes": [
                 "The report never mutates runtime Health, alert, or assisted-investigation configuration.",
                 "Observed Health summaries compare repeated datasets by persisted Health policyVersion; alternate Health thresholds require new scenario runs under another versioned policy.",
+                "Detector and alert quality rates use only explicit per-scenario evaluationExpectations; legacy or descriptive-only evidence remains visible but cannot influence calibration rates.",
                 "Alert candidates are offline projections over the captured Health Snapshots and are compared separately for each observed Health policyVersion.",
                 "Assisted-investigation candidates group real/replay trials by provider, model, and recorded runtime budgets; budget changes require new captured trials rather than counterfactual projection.",
                 "No candidate is ranked or selected automatically. Production calibration remains an explicit engineering decision backed by repeated scenario evidence.",

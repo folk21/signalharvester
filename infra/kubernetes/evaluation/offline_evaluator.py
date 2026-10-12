@@ -14,10 +14,34 @@ from typing import Any, Iterable, Mapping, Sequence
 
 EVIDENCE_SCHEMA_VERSION = 1
 EVIDENCE_ARTIFACT_TYPE = "signalharvester-operational-scenario-evidence"
-EVALUATION_SCHEMA_VERSION = 1
+EVALUATION_SCHEMA_VERSION = 2
 EVALUATION_ARTIFACT_TYPE = "signalharvester-operational-intelligence-evaluation"
 DETECTING_STATUSES = {"DEGRADED", "UNHEALTHY"}
 KNOWN_STATUSES = {"HEALTHY", "DEGRADED", "UNHEALTHY", "UNKNOWN"}
+HEALTH_EXPECTATION_DETECT = "DETECT"
+HEALTH_EXPECTATION_REMAIN_HEALTHY = "REMAIN_HEALTHY"
+HEALTH_EXPECTATION_DESCRIPTIVE_ONLY = "DESCRIPTIVE_ONLY"
+ALERT_EXPECTATION_ATTENTION_REQUIRED = "ATTENTION_REQUIRED"
+ALERT_EXPECTATION_NO_ATTENTION = "NO_ATTENTION"
+ALERT_EXPECTATION_DESCRIPTIVE_ONLY = "DESCRIPTIVE_ONLY"
+HEALTH_EXPECTATIONS = {
+    HEALTH_EXPECTATION_DETECT,
+    HEALTH_EXPECTATION_REMAIN_HEALTHY,
+    HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+}
+ALERT_EXPECTATIONS = {
+    ALERT_EXPECTATION_ATTENTION_REQUIRED,
+    ALERT_EXPECTATION_NO_ATTENTION,
+    ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
+}
+GROUND_TRUTH_TO_HEALTH_COMPONENT = {
+    "BACKEND": "backend-runtime",
+    "KAFKA": "eventing",
+    "ANALYSIS": "analysis",
+    "POSTGRESQL": "postgresql",
+    "ANALYSISOUTBOX": "analysis-outbox",
+    "COLLECTION": "collection",
+}
 MAX_INPUTS = 32
 MAX_SCENARIOS = 512
 MAX_INPUT_BYTES = 8_000_000
@@ -140,6 +164,56 @@ def _normalize_subsystem(value: str) -> str:
     return "".join(character for character in value.upper() if character.isalnum())
 
 
+def _scenario_expectations(scenario: Mapping[str, Any]) -> dict[str, str]:
+    raw = scenario.get("evaluationExpectations")
+    if raw is None:
+        return {
+            "health": HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+            "alert": ALERT_EXPECTATION_DESCRIPTIVE_ONLY,
+            "source": "LEGACY_DEFAULT",
+        }
+    expectations = _require_mapping(raw, "scenario.evaluationExpectations")
+    health = _require_text(expectations.get("health"), "scenario.evaluationExpectations.health").upper()
+    alert = _require_text(expectations.get("alert"), "scenario.evaluationExpectations.alert").upper()
+    if health not in HEALTH_EXPECTATIONS:
+        raise EvaluationError(f"unsupported Health evaluation expectation {health!r}")
+    if alert not in ALERT_EXPECTATIONS:
+        raise EvaluationError(f"unsupported alert evaluation expectation {alert!r}")
+    return {"health": health, "alert": alert, "source": "EXPLICIT"}
+
+
+def _affected_subsystem_comparison(
+    expected_subsystems: Sequence[str], observed_subsystems: Sequence[str]
+) -> dict[str, Any]:
+    expected_components: dict[str, tuple[str, str]] = {}
+    unmapped: list[str] = []
+    for subsystem in expected_subsystems:
+        component = GROUND_TRUTH_TO_HEALTH_COMPONENT.get(_normalize_subsystem(subsystem))
+        if component is None:
+            unmapped.append(subsystem)
+            continue
+        expected_components[_normalize_subsystem(component)] = (subsystem, component)
+
+    observed_by_normalized = {_normalize_subsystem(value): value for value in observed_subsystems}
+    matched_keys = sorted(set(expected_components) & set(observed_by_normalized))
+    missed_keys = sorted(set(expected_components) - set(observed_by_normalized))
+    unexpected_keys = sorted(set(observed_by_normalized) - set(expected_components))
+    return {
+        "groundTruthAffectedSubsystems": list(expected_subsystems),
+        "scorableGroundTruthAffectedSubsystems": [
+            expected_components[key][0] for key in sorted(expected_components)
+        ],
+        "unmappedGroundTruthAffectedSubsystems": sorted(unmapped),
+        "expectedHealthComponents": [expected_components[key][1] for key in sorted(expected_components)],
+        "observedAffectedSubsystems": list(observed_subsystems),
+        "matchedAffectedSubsystems": [expected_components[key][0] for key in matched_keys],
+        "missedAffectedSubsystems": [expected_components[key][0] for key in missed_keys],
+        "unexpectedAffectedSubsystems": [observed_by_normalized[key] for key in unexpected_keys],
+        "affectedSubsystemCoverage": _ratio(len(matched_keys), len(expected_components)),
+        "affectedSubsystemPrecision": _ratio(len(matched_keys), len(observed_by_normalized)),
+    }
+
+
 def _load_dataset(path: Path) -> Mapping[str, Any]:
     try:
         size = path.stat().st_size
@@ -235,7 +309,7 @@ def _observed_subsystems(snapshots: Sequence[dict[str, Any]]) -> list[str]:
 
 
 def evaluate_health_scenario(scenario: Mapping[str, Any]) -> dict[str, Any]:
-    """Evaluates detector observations against scenario ground truth without inventing expected severity."""
+    """Evaluates observed Health only when the scenario declares an explicit scoring expectation."""
 
     ground_truth = _require_mapping(scenario.get("groundTruth"), "scenario.groundTruth")
     fault_injected = bool(ground_truth.get("faultInjected"))
@@ -243,54 +317,85 @@ def evaluate_health_scenario(scenario: Mapping[str, Any]) -> dict[str, Any]:
         _require_text(value, "groundTruth.affectedSubsystems[]")
         for value in _require_list(ground_truth.get("affectedSubsystems", []), "groundTruth.affectedSubsystems")
     ]
+    expectation = _scenario_expectations(scenario)["health"]
     snapshots = _scenario_snapshots(scenario)
     after_snapshots = [item for item in snapshots if item["phase"] == "AFTER"]
     recovery_status = after_snapshots[-1]["status"] if after_snapshots else None
+    detecting_snapshots = [item for item in snapshots if item["status"] in DETECTING_STATUSES]
 
-    if not fault_injected:
-        false_positive_snapshots = [item for item in snapshots if item["status"] in DETECTING_STATUSES]
+    if expectation == HEALTH_EXPECTATION_REMAIN_HEALTHY:
         return {
+            "expectation": expectation,
             "evaluable": bool(snapshots),
-            "evaluationKind": "NORMAL_OPERATION_FALSE_POSITIVE",
+            "scored": bool(snapshots),
+            "evaluationKind": "REMAIN_HEALTHY_FALSE_POSITIVE",
             "snapshotCount": len(snapshots),
-            "falsePositive": bool(false_positive_snapshots),
-            "falsePositiveSnapshotIds": [item["snapshot"].get("id") for item in false_positive_snapshots],
+            "falsePositive": bool(detecting_snapshots) if snapshots else None,
+            "falsePositiveSnapshotIds": [item["snapshot"].get("id") for item in detecting_snapshots],
             "unknownObserved": any(item["status"] == "UNKNOWN" for item in snapshots),
             "recoveryStatus": recovery_status,
         }
 
-    fault_start, fault_end, timing_source = _fault_window(scenario)
-    fault_snapshots = [item for item in snapshots if fault_start <= item["generatedAt"] <= fault_end]
-    detected = [item for item in fault_snapshots if item["status"] in DETECTING_STATUSES]
-    first_detection = detected[0] if detected else None
-    observed_subsystems = _observed_subsystems(detected)
-    expected_by_normalized = {_normalize_subsystem(value): value for value in expected_subsystems}
-    observed_by_normalized = {_normalize_subsystem(value): value for value in observed_subsystems}
-    matched_keys = sorted(set(expected_by_normalized) & set(observed_by_normalized))
-    missed_keys = sorted(set(expected_by_normalized) - set(observed_by_normalized))
-    unexpected_keys = sorted(set(observed_by_normalized) - set(expected_by_normalized))
+    if expectation == HEALTH_EXPECTATION_DETECT:
+        if not fault_injected:
+            raise EvaluationError("Health expectation DETECT requires groundTruth.faultInjected=true")
+        fault_start, fault_end, timing_source = _fault_window(scenario)
+        pre_fault_detecting = [
+            item for item in snapshots
+            if item["generatedAt"] < fault_start and item["status"] in DETECTING_STATUSES
+        ]
+        fault_snapshots = [item for item in snapshots if fault_start <= item["generatedAt"] <= fault_end]
+        detected = [item for item in fault_snapshots if item["status"] in DETECTING_STATUSES]
+        first_detection = detected[0] if detected else None
+        observed_subsystems = _observed_subsystems(detected)
+        subsystem_comparison = _affected_subsystem_comparison(expected_subsystems, observed_subsystems)
+        scored = bool(fault_snapshots) and not pre_fault_detecting
+        return {
+            "expectation": expectation,
+            "evaluable": scored,
+            "scored": scored,
+            "evaluationKind": "FAULT_DETECTION",
+            "timingSource": timing_source,
+            "faultWindow": {"startedAt": fault_start.isoformat(), "endedAt": fault_end.isoformat()},
+            "faultSnapshotCount": len(fault_snapshots),
+            "preFaultDetectingSnapshotIds": [
+                item["snapshot"].get("id") for item in pre_fault_detecting
+            ],
+            "detectionSuccess": bool(first_detection) if scored else None,
+            "firstDetectionAt": first_detection["generatedAt"].isoformat() if scored and first_detection else None,
+            "timeToDetectionMs": (
+                _millis(first_detection["generatedAt"] - fault_start)
+                if scored and first_detection else None
+            ),
+            "firstDetectedStatus": first_detection["status"] if scored and first_detection else None,
+            **subsystem_comparison,
+            "unknownObservedDuringFault": any(item["status"] == "UNKNOWN" for item in fault_snapshots),
+            "recoveryStatus": recovery_status,
+            "recoveredHealthy": recovery_status == "HEALTHY" if recovery_status is not None else None,
+        }
 
-    return {
-        "evaluable": bool(fault_snapshots),
-        "evaluationKind": "FAULT_DETECTION",
-        "timingSource": timing_source,
-        "faultWindow": {"startedAt": fault_start.isoformat(), "endedAt": fault_end.isoformat()},
-        "faultSnapshotCount": len(fault_snapshots),
-        "detectionSuccess": bool(first_detection) if fault_snapshots else None,
-        "firstDetectionAt": first_detection["generatedAt"].isoformat() if first_detection else None,
-        "timeToDetectionMs": _millis(first_detection["generatedAt"] - fault_start) if first_detection else None,
-        "firstDetectedStatus": first_detection["status"] if first_detection else None,
-        "groundTruthAffectedSubsystems": expected_subsystems,
-        "observedAffectedSubsystems": observed_subsystems,
-        "matchedAffectedSubsystems": [expected_by_normalized[key] for key in matched_keys],
-        "missedAffectedSubsystems": [expected_by_normalized[key] for key in missed_keys],
-        "unexpectedAffectedSubsystems": [observed_by_normalized[key] for key in unexpected_keys],
-        "affectedSubsystemCoverage": _ratio(len(matched_keys), len(expected_by_normalized)),
-        "affectedSubsystemPrecision": _ratio(len(matched_keys), len(observed_by_normalized)),
-        "unknownObservedDuringFault": any(item["status"] == "UNKNOWN" for item in fault_snapshots),
+    result: dict[str, Any] = {
+        "expectation": HEALTH_EXPECTATION_DESCRIPTIVE_ONLY,
+        "evaluable": bool(snapshots),
+        "scored": False,
+        "evaluationKind": "DESCRIPTIVE_ONLY",
+        "snapshotCount": len(snapshots),
+        "detectingSnapshotIds": [item["snapshot"].get("id") for item in detecting_snapshots],
+        "unknownObserved": any(item["status"] == "UNKNOWN" for item in snapshots),
         "recoveryStatus": recovery_status,
-        "recoveredHealthy": recovery_status == "HEALTHY" if recovery_status is not None else None,
     }
+    if fault_injected:
+        fault_start, fault_end, timing_source = _fault_window(scenario)
+        fault_snapshots = [item for item in snapshots if fault_start <= item["generatedAt"] <= fault_end]
+        detected = [item for item in fault_snapshots if item["status"] in DETECTING_STATUSES]
+        result.update({
+            "timingSource": timing_source,
+            "faultWindow": {"startedAt": fault_start.isoformat(), "endedAt": fault_end.isoformat()},
+            "faultSnapshotCount": len(fault_snapshots),
+            "detectionObservedDuringFault": bool(detected) if fault_snapshots else None,
+            **_affected_subsystem_comparison(expected_subsystems, _observed_subsystems(detected)),
+        })
+    return result
 
 
 def _apply_alert_projection(
@@ -343,10 +448,11 @@ def _apply_alert_projection(
 def evaluate_alert_projection_scenario(
     scenario: Mapping[str, Any], policy: AlertProjectionPolicy
 ) -> dict[str, Any]:
-    """Projects the configured alert lifecycle over scenario snapshots without claiming runtime alert output."""
+    """Projects alert lifecycle and scores it only when the scenario declares an explicit expectation."""
 
     ground_truth = _require_mapping(scenario.get("groundTruth"), "scenario.groundTruth")
     fault_injected = bool(ground_truth.get("faultInjected"))
+    expectation = _scenario_expectations(scenario)["alert"]
     snapshots = _scenario_snapshots(scenario)
     state = AlertProjectionState()
     events: list[dict[str, Any]] = []
@@ -365,52 +471,78 @@ def evaluate_alert_projection_scenario(
     elif any(event.get("severity") == "WARNING" for event in events):
         max_severity = "WARNING"
 
-    if not fault_injected:
-        return {
-            "mode": "OFFLINE_POLICY_PROJECTION",
-            "evaluable": bool(snapshots),
-            "snapshotCount": len(snapshots),
-            "attentionTriggered": bool(open_events),
-            "falsePositive": bool(open_events),
-            "maxSeverity": max_severity,
-            "activeAtEnd": state.active_severity is not None,
-            "events": events,
-        }
-
-    fault_start, fault_end, timing_source = _fault_window(scenario)
-    snapshots_in_fault = [item for item in snapshots if fault_start <= item["generatedAt"] <= fault_end]
-    opens_during_fault = [
-        event
-        for event in open_events
-        if fault_start <= _parse_time(event["at"], "alert event at") <= fault_end
-    ]
-    opens_before_fault = [event for event in open_events if _parse_time(event["at"], "alert event at") < fault_start]
-    opens_after_fault = [event for event in open_events if _parse_time(event["at"], "alert event at") > fault_end]
-    first_during_fault = opens_during_fault[0] if opens_during_fault else None
-
-    return {
+    common = {
         "mode": "OFFLINE_POLICY_PROJECTION",
-        "evaluable": bool(snapshots_in_fault) and not opens_before_fault,
-        "timingSource": timing_source,
-        "faultWindow": {"startedAt": fault_start.isoformat(), "endedAt": fault_end.isoformat()},
-        "faultSnapshotCount": len(snapshots_in_fault),
-        "attentionTriggeredDuringFault": bool(first_during_fault) if snapshots_in_fault and not opens_before_fault else None,
-        "firstAttentionAt": first_during_fault["at"] if first_during_fault else None,
-        "timeToAttentionMs": (
-            _millis(_parse_time(first_during_fault["at"], "first attention") - fault_start)
-            if first_during_fault
-            else None
-        ),
-        "attentionBeforeFault": bool(opens_before_fault),
-        "lateAttentionAfterFault": bool(opens_after_fault),
+        "expectation": expectation,
+        "snapshotCount": len(snapshots),
         "maxSeverity": max_severity,
         "activeAtEnd": state.active_severity is not None,
-        "resolvedByFinalSnapshot": bool(open_events) and state.active_severity is None,
         "events": events,
     }
+    if expectation == ALERT_EXPECTATION_NO_ATTENTION:
+        return {
+            **common,
+            "evaluable": bool(snapshots),
+            "scored": bool(snapshots),
+            "attentionTriggered": bool(open_events),
+            "falsePositive": bool(open_events) if snapshots else None,
+        }
+
+    if expectation == ALERT_EXPECTATION_ATTENTION_REQUIRED:
+        if not fault_injected:
+            raise EvaluationError("alert expectation ATTENTION_REQUIRED requires groundTruth.faultInjected=true")
+        fault_start, fault_end, timing_source = _fault_window(scenario)
+        snapshots_in_fault = [item for item in snapshots if fault_start <= item["generatedAt"] <= fault_end]
+        opens_during_fault = [
+            event for event in open_events
+            if fault_start <= _parse_time(event["at"], "alert event at") <= fault_end
+        ]
+        opens_before_fault = [event for event in open_events if _parse_time(event["at"], "alert event at") < fault_start]
+        opens_after_fault = [event for event in open_events if _parse_time(event["at"], "alert event at") > fault_end]
+        first_during_fault = opens_during_fault[0] if opens_during_fault else None
+        scored = bool(snapshots_in_fault) and not opens_before_fault
+        return {
+            **common,
+            "evaluable": scored,
+            "scored": scored,
+            "timingSource": timing_source,
+            "faultWindow": {"startedAt": fault_start.isoformat(), "endedAt": fault_end.isoformat()},
+            "faultSnapshotCount": len(snapshots_in_fault),
+            "attentionTriggeredDuringFault": bool(first_during_fault) if scored else None,
+            "firstAttentionAt": first_during_fault["at"] if first_during_fault else None,
+            "timeToAttentionMs": (
+                _millis(_parse_time(first_during_fault["at"], "first attention") - fault_start)
+                if first_during_fault else None
+            ),
+            "attentionBeforeFault": bool(opens_before_fault),
+            "lateAttentionAfterFault": bool(opens_after_fault),
+            "resolvedByFinalSnapshot": bool(open_events) and state.active_severity is None,
+        }
+
+    result = {
+        **common,
+        "evaluable": bool(snapshots),
+        "scored": False,
+        "attentionTriggered": bool(open_events),
+    }
+    if fault_injected:
+        fault_start, fault_end, timing_source = _fault_window(scenario)
+        snapshots_in_fault = [item for item in snapshots if fault_start <= item["generatedAt"] <= fault_end]
+        opens_during_fault = [
+            event for event in open_events
+            if fault_start <= _parse_time(event["at"], "alert event at") <= fault_end
+        ]
+        result.update({
+            "timingSource": timing_source,
+            "faultWindow": {"startedAt": fault_start.isoformat(), "endedAt": fault_end.isoformat()},
+            "faultSnapshotCount": len(snapshots_in_fault),
+            "attentionObservedDuringFault": bool(opens_during_fault) if snapshots_in_fault else None,
+        })
+    return result
 
 
 def _scenario_identity(dataset: Mapping[str, Any], scenario: Mapping[str, Any]) -> dict[str, Any]:
+    expectations = _scenario_expectations(scenario)
     return {
         "datasetRunId": _require_text(dataset.get("datasetRunId"), "datasetRunId"),
         "scenarioId": _require_text(scenario.get("scenarioId"), "scenario.scenarioId"),
@@ -418,74 +550,88 @@ def _scenario_identity(dataset: Mapping[str, Any], scenario: Mapping[str, Any]) 
         "label": _require_text(scenario.get("label"), "scenario.label"),
         "outcome": _require_text(scenario.get("outcome"), "scenario.outcome"),
         "faultInjected": bool(_require_mapping(scenario.get("groundTruth"), "scenario.groundTruth").get("faultInjected")),
+        "evaluationExpectations": {"health": expectations["health"], "alert": expectations["alert"]},
+        "expectationSource": expectations["source"],
     }
 
 
 def _aggregate(results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     passed = [result for result in results if result["outcome"] == "PASSED"]
     excluded = len(results) - len(passed)
-    fault_health = [
-        result["health"]
-        for result in passed
-        if result["faultInjected"] and result["health"].get("evaluable")
+    health_detect = [
+        result["health"] for result in passed
+        if result["evaluationExpectations"]["health"] == HEALTH_EXPECTATION_DETECT
+        and result["health"].get("scored")
     ]
-    normal_health = [
-        result["health"]
-        for result in passed
-        if not result["faultInjected"] and result["health"].get("evaluable")
+    health_remain_healthy = [
+        result["health"] for result in passed
+        if result["evaluationExpectations"]["health"] == HEALTH_EXPECTATION_REMAIN_HEALTHY
+        and result["health"].get("scored")
     ]
-    fault_alerts = [
-        result["alertProjection"]
-        for result in passed
-        if result["faultInjected"] and result["alertProjection"].get("evaluable")
+    alert_required = [
+        result["alertProjection"] for result in passed
+        if result["evaluationExpectations"]["alert"] == ALERT_EXPECTATION_ATTENTION_REQUIRED
+        and result["alertProjection"].get("scored")
     ]
-    normal_alerts = [
-        result["alertProjection"]
-        for result in passed
-        if not result["faultInjected"] and result["alertProjection"].get("evaluable")
+    alert_no_attention = [
+        result["alertProjection"] for result in passed
+        if result["evaluationExpectations"]["alert"] == ALERT_EXPECTATION_NO_ATTENTION
+        and result["alertProjection"].get("scored")
     ]
-    subsystem_expected = sum(len(item.get("groundTruthAffectedSubsystems", [])) for item in fault_health)
-    subsystem_matched = sum(len(item.get("matchedAffectedSubsystems", [])) for item in fault_health)
+    health_descriptive = sum(
+        result["evaluationExpectations"]["health"] == HEALTH_EXPECTATION_DESCRIPTIVE_ONLY
+        for result in passed
+    )
+    alert_descriptive = sum(
+        result["evaluationExpectations"]["alert"] == ALERT_EXPECTATION_DESCRIPTIVE_ONLY
+        for result in passed
+    )
+    legacy_unspecified = sum(result.get("expectationSource") == "LEGACY_DEFAULT" for result in passed)
 
-    detected_count = sum(item.get("detectionSuccess") is True for item in fault_health)
-    health_false_positive_count = sum(item.get("falsePositive") is True for item in normal_health)
-    attention_count = sum(item.get("attentionTriggeredDuringFault") is True for item in fault_alerts)
-    alert_false_positive_count = sum(item.get("falsePositive") is True for item in normal_alerts)
+    subsystem_expected = sum(len(item.get("scorableGroundTruthAffectedSubsystems", [])) for item in health_detect)
+    subsystem_matched = sum(len(item.get("matchedAffectedSubsystems", [])) for item in health_detect)
+    subsystem_unmapped = sum(len(item.get("unmappedGroundTruthAffectedSubsystems", [])) for item in health_detect)
+    detected_count = sum(item.get("detectionSuccess") is True for item in health_detect)
+    health_false_positive_count = sum(item.get("falsePositive") is True for item in health_remain_healthy)
+    attention_count = sum(item.get("attentionTriggeredDuringFault") is True for item in alert_required)
+    alert_false_positive_count = sum(item.get("falsePositive") is True for item in alert_no_attention)
 
     return {
         "scenarios": {
             "total": len(results),
             "passed": len(passed),
             "excludedNonPassed": excluded,
+            "legacyExpectationDefaults": legacy_unspecified,
         },
         "health": {
-            "faultScenariosEvaluated": len(fault_health),
-            "faultScenariosDetected": detected_count,
-            "faultScenariosMissed": len(fault_health) - detected_count,
-            "detectionRate": _ratio(detected_count, len(fault_health)),
-            "normalScenariosEvaluated": len(normal_health),
+            "detectionExpectedScenariosEvaluated": len(health_detect),
+            "detectionExpectedScenariosDetected": detected_count,
+            "detectionExpectedScenariosMissed": len(health_detect) - detected_count,
+            "detectionRate": _ratio(detected_count, len(health_detect)),
+            "remainHealthyScenariosEvaluated": len(health_remain_healthy),
             "falsePositiveScenarios": health_false_positive_count,
-            "falsePositiveRate": _ratio(health_false_positive_count, len(normal_health)),
+            "falsePositiveRate": _ratio(health_false_positive_count, len(health_remain_healthy)),
+            "descriptiveOnlyScenarios": health_descriptive,
             "meanTimeToDetectionMs": _mean(
-                item["timeToDetectionMs"]
-                for item in fault_health
+                item["timeToDetectionMs"] for item in health_detect
                 if item.get("timeToDetectionMs") is not None
             ),
             "groundTruthSubsystemsEvaluated": subsystem_expected,
             "groundTruthSubsystemsMatched": subsystem_matched,
+            "groundTruthSubsystemsUnmapped": subsystem_unmapped,
             "affectedSubsystemCoverage": _ratio(subsystem_matched, subsystem_expected),
         },
         "alertProjection": {
             "mode": "OFFLINE_POLICY_PROJECTION",
-            "faultScenariosEvaluated": len(fault_alerts),
-            "faultScenariosWithAttention": attention_count,
-            "attentionRate": _ratio(attention_count, len(fault_alerts)),
-            "normalScenariosEvaluated": len(normal_alerts),
+            "attentionRequiredScenariosEvaluated": len(alert_required),
+            "attentionRequiredScenariosWithAttention": attention_count,
+            "attentionRate": _ratio(attention_count, len(alert_required)),
+            "noAttentionScenariosEvaluated": len(alert_no_attention),
             "falsePositiveScenarios": alert_false_positive_count,
-            "falsePositiveRate": _ratio(alert_false_positive_count, len(normal_alerts)),
+            "falsePositiveRate": _ratio(alert_false_positive_count, len(alert_no_attention)),
+            "descriptiveOnlyScenarios": alert_descriptive,
             "meanTimeToAttentionMs": _mean(
-                item["timeToAttentionMs"]
-                for item in fault_alerts
+                item["timeToAttentionMs"] for item in alert_required
                 if item.get("timeToAttentionMs") is not None
             ),
         },
@@ -553,9 +699,12 @@ def build_evaluation(paths: Sequence[Path], policy: AlertProjectionPolicy) -> di
             "alertMode": "OFFLINE_POLICY_PROJECTION",
             "alertPolicy": policy.to_dict(),
             "notes": [
-                "Ground truth identifies injected conditions and affected subsystems; it does not prescribe Health severity.",
+                "Ground truth identifies injected conditions and affected subsystems; it does not prescribe Health severity or human attention.",
+                "Only explicit evaluationExpectations score detector false-positive/detection rates or alert attention/false-positive rates.",
+                "Legacy version-1 evidence without evaluationExpectations defaults to DESCRIPTIVE_ONLY and cannot influence calibration rates.",
                 "Alert results are an offline projection over captured Health Snapshots, not persisted runtime alert decisions.",
-                "Fault scenarios without a Health Snapshot inside the bounded fault window are excluded from detector/alert rates rather than counted as misses.",
+                "Expected fault detection/attention without a Health Snapshot inside the bounded fault window is excluded rather than counted as a miss.",
+                "Affected-subsystem coverage scores only ground-truth subsystems with an explicit mapping to a Health component; unmapped subsystems are reported separately.",
             ],
         },
         "summary": _aggregate(results),

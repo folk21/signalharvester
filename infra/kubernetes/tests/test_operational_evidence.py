@@ -27,6 +27,8 @@ class OperationalScenarioEvidenceTest(unittest.TestCase):
             "POSTGRESQL_OUTAGE",
             fault_injected=True,
             affected_subsystems=("POSTGRESQL", "ANALYSIS"),
+            health_expectation=evidence.HEALTH_EXPECTATION_DETECT,
+            alert_expectation=evidence.ALERT_EXPECTATION_ATTENTION_REQUIRED,
         ) as scenario:
             scenario.add_change_marker("START", {"id": "change-1", "category": "TEST_SCENARIO"})
             scenario.add_health_snapshot(
@@ -45,9 +47,25 @@ class OperationalScenarioEvidenceTest(unittest.TestCase):
         self.assertEqual("POSTGRESQL_OUTAGE", record["label"])
         self.assertTrue(record["groundTruth"]["faultInjected"])
         self.assertEqual(["POSTGRESQL", "ANALYSIS"], record["groundTruth"]["affectedSubsystems"])
+        self.assertEqual(
+            {"health": "DETECT", "alert": "ATTENTION_REQUIRED"}, record["evaluationExpectations"]
+        )
         self.assertEqual("HEALTHY", record["evidence"]["healthSnapshots"][0]["snapshot"]["overallStatus"])
         self.assertNotIn("expectedStatus", record["groundTruth"])
+        self.assertNotIn("health", record["groundTruth"])
         self.assertEqual("PASSED", record["outcome"])
+
+    def test_default_expectations_are_descriptive_only(self):
+        scenario = evidence.ScenarioEvidence("normal", "NORMAL_OPERATION", False, ())
+
+        self.assertEqual(evidence.HEALTH_EXPECTATION_DESCRIPTIVE_ONLY, scenario.health_expectation)
+        self.assertEqual(evidence.ALERT_EXPECTATION_DESCRIPTIVE_ONLY, scenario.alert_expectation)
+
+    def test_rejects_unknown_evaluation_expectation(self):
+        with self.assertRaises(evidence.ScenarioEvidenceError):
+            evidence.ScenarioEvidence(
+                "normal", "NORMAL_OPERATION", False, (), health_expectation="AUTO_TUNE"
+            )
 
     def test_failed_scenario_retains_partial_evidence(self):
         dataset = evidence.ScenarioEvidenceDataset("unit-test-runner", {})
