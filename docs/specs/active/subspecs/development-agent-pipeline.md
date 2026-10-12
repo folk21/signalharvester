@@ -12,7 +12,7 @@ parent: ../spec-signal-harvester-platform.md
 
 Active contributor-tooling specification.
 
-Stage A1, the repository-local pipeline foundation under `tools/agent-pipeline/`, is accepted after canonical developer verification. The next step is P1: exercise that foundation on a real bounded implementation stage before adding direct model execution or broader autonomy.
+Stage A1, the repository-local pipeline foundation under `tools/agent-pipeline/`, is accepted after canonical developer verification. P1 is now exercising that foundation on the real Stage 6E6 runtime persisted-alert verification slice. The implementation is verification-pending; P1 remains open until the developer-side run captures canonical check/review evidence and the workflow friction is reviewed.
 
 This specification does not replace the current product implementation focus in `backend-observability-intelligence.md`. Product semantics remain owned by their product specification, implementation, contracts, tests, and current-state documentation.
 
@@ -75,7 +75,7 @@ Risk-based batching may reduce main-model checkpoints only after repeated pilot 
 ## Implementation stages
 
 - [x] **A1 — foundation:** bounded task/evidence state, required canonical check, structured independent review, conservative escalation, and mandatory main-model checkpoint.
-- [ ] **P1 — real-stage pilot:** use the accepted A1 foundation while implementing Stage 6E6 runtime persisted-alert lifecycle verification; record friction, missing evidence, manual steps, and incorrect or redundant assumptions before expanding automation.
+- [ ] **P1 — real-stage pilot (verification-pending):** Stage 6E6 is the first real bounded implementation slice. Capture A1 task/check/review evidence in the developer Git worktree and record friction, missing evidence, manual steps, and incorrect or redundant assumptions before expanding automation.
 - [ ] **A2 — worker execution:** add isolated Git worktree/branch preparation, direct Aider + DeepSeek invocation through an explicit adapter, and repository-owned Gitleaks execution/evidence.
 - [ ] **A3 — repair and re-review:** add bounded deterministic repair loops plus fresh-context independent re-review, with explicit maximum rounds and escalation instead of unbounded self-repair.
 - [ ] **A4 — structured evidence and handoff:** ingest relevant scanner/static-analysis results structurally and produce a compact main-model handoff bundle containing base revision, task/spec identity, diff/evidence summaries, review findings, and unresolved questions.
@@ -95,6 +95,15 @@ P1 should answer at least:
 - whether any pipeline rule encourages unnecessary work or obscures a repository-owned decision.
 
 Pilot findings are development-process evidence. They must not be converted into product requirements or acceptance claims without the owning product specification.
+
+### P1 interim observations
+
+The Stage 6E6 patch preparation already exposes two expected A1 boundaries that P1 must verify in the developer environment:
+
+- FULL source archives intentionally exclude `.git`, so an external archive-based patch producer cannot truthfully initialize an A1 run against the developer repository base revision. Authoritative A1 run evidence must be created in the real Git worktree until A2 owns isolated worktree preparation.
+- A1 records task/check/review evidence but does not invoke the worker or reviewer. Task delivery, fresh-context review invocation, and the final live Kubernetes command therefore remain manual pilot steps and are candidates for later automation only after P1 evidence is reviewed.
+
+These observations do not count as P1 acceptance. P1 remains open until the Stage 6E6 developer-side run provides the configured repository evidence and the resulting friction is reviewed.
 
 ## Non-goals
 

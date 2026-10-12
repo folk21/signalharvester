@@ -54,7 +54,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted. The Stage 6E4 dedicated live normal/transient/critical Health/alert scenarios and the Stage 6E5 manual evidence review supporting no production policy change are accepted after canonical developer verification. Runtime persisted alert lifecycle and assisted-investigation quality are separate evaluation boundaries.
+The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted. The Stage 6E4 dedicated live normal/transient/critical Health/alert scenarios and the Stage 6E5 manual evidence review supporting no production policy change are accepted after canonical developer verification. Stage 6E6 runtime persisted-alert verification is implemented and verification-pending; assisted-investigation quality remains a separate evaluation boundary.
 
 The active contributor-tooling track is [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). It formalizes the multi-stage evolution and acceptance criteria for bounded coding-worker automation without changing the product `current_focus` or granting a worker product/architecture authority.
 
@@ -156,7 +156,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — scenario-based operational-intelligence evaluation; detector/alert evaluation, assisted-investigation quality evaluation, bounded runtime trial capture/export, repeated-evidence calibration, and the dedicated repeated live Health/alert calibration evidence review are accepted.
+- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — scenario-based operational-intelligence evaluation; detector/alert evaluation, bounded runtime trial capture/export, repeated-evidence calibration, and the dedicated repeated live Health/alert calibration evidence review are accepted. Stage 6E6 persisted runtime-alert lifecycle verification is implemented and verification-pending.
 
 Verification-pending carryover:
 
