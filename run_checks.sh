@@ -6,6 +6,7 @@ set -eu
 # Main verification commands/check groups executed by this script:
 # - docker info
 # - git diff --check (when executed inside a Git worktree)
+# - ./tools/agent-pipeline/run_tests.sh
 # - ./tools/source-import/run_tests.sh
 # - ./tools/live-backend/run_tests.sh
 # - operational-evaluation Python compile/focused unit checks
@@ -191,6 +192,7 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   run_step "git diff --check" git diff --check
 fi
 
+run_step "./tools/agent-pipeline/run_tests.sh" ./tools/agent-pipeline/run_tests.sh
 run_step "./tools/source-import/run_tests.sh" ./tools/source-import/run_tests.sh
 run_step "./tools/live-backend/run_tests.sh" ./tools/live-backend/run_tests.sh
 run_step "operational evaluation Python compilation" run_operational_evaluation_compile

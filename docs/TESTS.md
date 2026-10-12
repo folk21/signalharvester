@@ -31,7 +31,7 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 
 1. `docker info` preflight for container-backed verification;
 2. optional `git diff --check` when running inside a Git worktree;
-3. `./tools/source-import/run_tests.sh` and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
+3. `./tools/agent-pipeline/run_tests.sh`, `./tools/source-import/run_tests.sh`, and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
 4. explicit operational-evaluation Python compilation plus focused assisted-investigation/calibration/dedicated-Health-alert/campaign unit tests, using an external temporary bytecode cache so repository cleanliness is unchanged;
 5. `./infra/kubernetes/run_tests.sh` for the complete deterministic Kubernetes/deployment/evaluation asset suite without a live cluster;
 6. `./gradlew clean check --no-watch-fs`, including the repository-wide `verifyNoThreadSleepInTests` source guard;
@@ -318,16 +318,18 @@ The opt-in live-backend verifier creates temporary persisted profiles when neede
 
 Python is used for independent black-box/data tooling. It is not the primary backend test framework.
 
-The source-manifest importer and live-backend verifier own fast standard-library regression tests under:
+The development-agent pipeline foundation, source-manifest importer, and live-backend verifier own fast standard-library regression tests under:
 
+- `tools/agent-pipeline/tests`;
 - `tools/source-import/tests`;
 - `tools/live-backend/tests`.
 
-Both self-test suites are part of the canonical `run_checks.sh` gate. The live verifier itself is opt-in and is never invoked automatically against a running backend.
+All three self-test suites are part of the canonical `run_checks.sh` gate. The agent-pipeline tests exercise only deterministic local orchestration/evidence behavior; they do not invoke Aider or a model provider. The live verifier itself is opt-in and is never invoked automatically against a running backend.
 
 Run them directly with:
 
 ```bash
+./tools/agent-pipeline/run_tests.sh
 ./tools/source-import/run_tests.sh
 ./tools/live-backend/run_tests.sh
 ```

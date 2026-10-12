@@ -241,6 +241,7 @@ Each topic should have one authoritative owner:
 | Backend usage/operations | `docs/USAGE.md` |
 | Test strategy and commands | `docs/TESTS.md` |
 | Coverage and code-quality tooling | `docs/QUALITY.md` |
+| Development-agent orchestration | `tools/agent-pipeline/README.md` |
 | Future work | `docs/ROADMAP.md` |
 | Stable feature vocabulary | `docs/FEATURES.md` |
 | Completed project changes | `CHANGELOG.md` |
@@ -339,6 +340,10 @@ Repository documentation is working context for both developers and coding agent
 7. Update only the owning documentation.
 8. Report what changed, what was validated, what remains unverified, and an appropriate commit message.
 
+### Automated coding-worker boundary
+
+Repository-local worker orchestration may automate task preparation, verification evidence, and independent review, but it does not weaken any rule in this file. A coding worker must treat current repository files as source of truth, must not declare its own work accepted, and must not archive an active specification before the configured external acceptance checkpoint. The initial workflow and evidence contract are documented in `tools/agent-pipeline/README.md`.
+
 ## Progressive Disclosure
 
 Read detailed guidance only when relevant:
@@ -348,6 +353,7 @@ Read detailed guidance only when relevant:
 - `docs/TESTS.md` — test layers and validation commands;
 - `docs/QUALITY.md` — coverage, static-analysis, dependency-analysis, and quality-gate policy;
 - `docs/specs/README.md` — specification workflow;
+- `tools/agent-pipeline/README.md` — bounded coding-worker orchestration and verification evidence;
 - `modules/AGENTS.md` — functional module rules;
 - `contracts/AGENTS.md` — contract rules;
 - `contracts/event-contracts/AGENTS.md` — Protobuf/Kafka evolution rules;

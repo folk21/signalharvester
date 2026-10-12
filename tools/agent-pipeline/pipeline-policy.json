@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "requiredRepositoryFiles": [
+    "README.md",
+    "AGENTS.md",
+    "docs/specs/README.md",
+    "docs/TESTS.md",
+    "docs/QUALITY.md"
+  ],
+  "requiredChecks": [
+    {
+      "name": "canonical",
+      "command": ["./run_checks.sh"],
+      "description": "Canonical routine repository verification"
+    }
+  ],
+  "independentReview": {
+    "required": true,
+    "blockingSeverities": ["HIGH", "CRITICAL"]
+  },
+  "mainReview": {
+    "requiredBeforeAcceptance": true
+  },
+  "escalationCategories": [
+    "ARCHITECTURE",
+    "CONTRACT",
+    "SECURITY",
+    "PERSISTENCE",
+    "CONCURRENCY",
+    "TRANSACTION",
+    "MIGRATION",
+    "NON_DETERMINISM",
+    "SPEC_AMBIGUITY"
+  ],
+  "riskRules": [
+    {
+      "level": "HIGH",
+      "patterns": [
+        "^contracts/",
+        "^modules/security/",
+        "/db/migration/",
+        "^modules/[^/]+/src/main/java/.*/api/"
+      ]
+    },
+    {
+      "level": "MODERATE",
+      "patterns": [
+        "^modules/",
+        "^app/",
+        "^common/",
+        "^infra/",
+        "^testing/",
+        "^build\\.gradle",
+        "^settings\\.gradle",
+        "^gradle/",
+        "^run_checks\\.sh$",
+        "^run_rare_checks\\.sh$",
+        "^AGENTS\\.md$"
+      ]
+    },
+    {
+      "level": "LOW",
+      "patterns": [
+        "^docs/",
+        "^README\\.md$",
+        "^CHANGELOG\\.md$",
+        "^tools/"
+      ]
+    }
+  ]
+}
