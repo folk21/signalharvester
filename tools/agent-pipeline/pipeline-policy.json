@@ -5,9 +5,18 @@
     "AGENTS.md",
     "docs/specs/README.md",
     "docs/TESTS.md",
-    "docs/QUALITY.md"
+    "docs/QUALITY.md",
+    "tools/agent-pipeline/gitleaks.toml"
   ],
   "requiredChecks": [
+    {
+      "name": "gitleaks",
+      "kind": "gitleaks",
+      "executable": "gitleaks",
+      "supportedVersion": "8.30.1",
+      "config": "tools/agent-pipeline/gitleaks.toml",
+      "description": "Scan worker worktree including uncommitted files for secrets"
+    },
     {
       "name": "canonical",
       "command": [

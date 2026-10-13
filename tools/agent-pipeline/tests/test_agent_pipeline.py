@@ -495,6 +495,123 @@ class AgentPipelineCliTest(unittest.TestCase):
             self.assertEqual(2, drifted.returncode)
             self.assertIn("source changed after worker execution", drifted.stderr)
 
+    # Protects fail-closed Gitleaks ordering and redacted evidence for uncommitted worker files.
+    def test_verify_scans_uncommitted_worker_files_before_canonical(self) -> None:
+        for secret_present in (False, True):
+            with self.subTest(secret_present=secret_present), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir) / "repo"
+                root.mkdir()
+                policy_path, task = self.create_repository(root)
+                scanner_config = root / "tools/agent-pipeline/gitleaks.toml"
+                scanner_config.parent.mkdir(parents=True)
+                scanner_config.write_text("[extend]\nuseDefault = true\n", encoding="utf-8")
+                policy = json.loads(policy_path.read_text(encoding="utf-8"))
+                policy["requiredChecks"].insert(0, {
+                    "name": "gitleaks", "kind": "gitleaks", "executable": "gitleaks",
+                    "supportedVersion": "8.30.1", "config": "tools/agent-pipeline/gitleaks.toml",
+                })
+                policy["workerExecution"] = {
+                    "required": True, "tool": "aider", "executable": "aider",
+                    "defaultModel": "deepseek/deepseek-chat", "supportedVersions": ["0.86.2"],
+                    "branchPrefix": "agent/", "arguments": ["--model", "{model}"],
+                }
+                policy_path.write_text(json.dumps(policy), encoding="utf-8")
+                base_commit = self.init_git_repository(root)
+                fake_bin = Path(temp_dir) / "bin"
+                fake_bin.mkdir()
+                fake_scanner = fake_bin / "gitleaks"
+                fake_scanner.write_text(
+                    "#!/usr/bin/env python3\n"
+                    "import json, sys\n"
+                    "from pathlib import Path\n"
+                    "if 'version' in sys.argv:\n"
+                    "    print('gitleaks version 8.30.1')\n"
+                    "    raise SystemExit(0)\n"
+                    "assert 'dir' in sys.argv and '.' in sys.argv\n"
+                    "assert '--ignore-gitleaks-allow' in sys.argv\n"
+                    "assert '--redact=100' in sys.argv\n"
+                    "assert '--config' in sys.argv\n"
+                    "assert Path(sys.argv[sys.argv.index('--config')+1]).is_file()\n"
+                    "findings = []\n"
+                    "if Path('data.txt').read_text() == 'SECRET-VALUE\\n':\n"
+                    "    findings = [{'RuleID':'generic-api-key','File':'data.txt','StartLine':1,"
+                    "'Secret':'SECRET-VALUE','Line':'SECRET-VALUE','Match':'SECRET-VALUE'}]\n"
+                    "report = Path(sys.argv[sys.argv.index('--report-path')+1])\n"
+                    "if findings: report.write_text(json.dumps(findings))\n"
+                    "print('SECRET-VALUE scanner output that must not be persisted')\n"
+                    "raise SystemExit(1 if findings else 0)\n",
+                    encoding="utf-8",
+                )
+                fake_scanner.chmod(0o755)
+                env = dict(os.environ)
+                env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH','')}"
+                initialized = self.run_cli(root, policy_path, "init", "--stage", "A2.2-TEST",
+                    "--spec", "docs/specs/active/example.md", "--task-file", str(task),
+                    "--run-id", "security-test", env=env)
+                self.assertEqual(0, initialized.returncode, initialized.stderr)
+                prepared = self.run_cli(root, policy_path, "prepare-worker", "--run-id", "security-test", env=env)
+                self.assertEqual(0, prepared.returncode, prepared.stderr)
+                worktree = root / json.loads(prepared.stdout)["path"]
+                (worktree / "data.txt").write_text("SECRET-VALUE\n" if secret_present else "safe\n")
+                run_dir = root / "build/reports/agent-pipeline/security-test"
+                files = ["data.txt"]
+                worker_result = {
+                    "status": "PASS", "headCommit": base_commit, "changedFiles": files,
+                    "changeSha256": agent_pipeline.workspace_change_digest(worktree, files),
+                }
+                agent_pipeline.write_json(run_dir / "worker.json", worker_result)
+                verified = self.run_cli(root, policy_path, "verify", "--run-id", "security-test", env=env)
+                self.assertEqual(1 if secret_present else 0, verified.returncode, verified.stderr)
+                evidence_text = (run_dir / "checks.json").read_text(encoding="utf-8")
+                self.assertNotIn("SECRET-VALUE", evidence_text)
+                self.assertNotIn("SECRET-VALUE", verified.stdout)
+                checks = json.loads(evidence_text)["checks"]
+                self.assertEqual(["gitleaks"] if secret_present else ["gitleaks", "canonical"],
+                                 [item["name"] for item in checks])
+                scan = checks[0]["scanner"]
+                self.assertEqual("worker-worktree-directory", scan["scope"])
+                self.assertEqual(1 if secret_present else 0, scan["findingCount"])
+                self.assertEqual("FAIL" if secret_present else "PASS", checks[0]["status"])
+                status = json.loads((run_dir / "status.json").read_text(encoding="utf-8"))
+                self.assertEqual("BLOCKED" if secret_present else "REVIEW_REQUIRED", status["state"])
+                if not secret_present:
+                    checks[0]["scanner"]["sourceSha256"] = "tampered"
+                    agent_pipeline.write_json(run_dir / "checks.json", {"schemaVersion": 1, "checks": checks})
+                    tampered = self.run_cli(root, policy_path, "status", "--run-id", "security-test", env=env)
+                    self.assertEqual(2, tampered.returncode)
+                    self.assertIn("Gitleaks PASS evidence", tampered.stderr)
+
+    # Protects scanner config, local ignore files, and fail-closed unavailable-version behavior.
+    def test_gitleaks_rejects_worker_supplied_ignore_or_changed_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            root.mkdir()
+            scanner_config = root / "tools/agent-pipeline/gitleaks.toml"
+            scanner_config.parent.mkdir(parents=True)
+            scanner_config.write_text("[extend]\nuseDefault = true\n", encoding="utf-8")
+            base_commit = self.init_git_repository(root)
+            run_dir = root / "build/run"
+            run_dir.mkdir(parents=True)
+            agent_pipeline.write_json(run_dir / "checks.json", {"checks": []})
+            manifest = {"repository": {"baseCommit": base_commit}}
+            definition = {
+                "name": "gitleaks", "kind": "gitleaks", "executable": "gitleaks-missing",
+                "supportedVersion": "8.30.1", "config": "tools/agent-pipeline/gitleaks.toml",
+            }
+            agent_pipeline.write_json(run_dir / "worker.json", {"changeSha256": "a" * 64})
+            self.assertEqual(1, agent_pipeline.execute_gitleaks_check(root, run_dir, manifest, definition))
+            checks = agent_pipeline.read_json(run_dir / "checks.json")["checks"]
+            self.assertIn("not available", checks[-1]["scanner"]["error"])
+            (root / ".gitleaksignore").write_text("ignore\n", encoding="utf-8")
+            self.assertEqual(1, agent_pipeline.execute_gitleaks_check(root, run_dir, manifest, definition))
+            checks = agent_pipeline.read_json(run_dir / "checks.json")["checks"]
+            self.assertIn(".gitleaksignore", checks[-1]["scanner"]["error"])
+            (root / ".gitleaksignore").unlink()
+            scanner_config.write_text("[extend]\nuseDefault = false\n", encoding="utf-8")
+            self.assertEqual(1, agent_pipeline.execute_gitleaks_check(root, run_dir, manifest, definition))
+            checks = agent_pipeline.read_json(run_dir / "checks.json")["checks"]
+            self.assertIn("Worker changed", checks[-1]["scanner"]["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -326,7 +326,7 @@ The development-agent pipeline foundation, source-manifest importer, and live-ba
 - `tools/source-import/tests`;
 - `tools/live-backend/tests`.
 
-All three self-test suites are part of the canonical `run_checks.sh` gate. The agent-pipeline tests exercise deterministic local orchestration/evidence behavior with temporary Git repositories and a fake `aider` executable; they never invoke a real model provider or require network access. The live verifier itself is opt-in and is never invoked automatically against a running backend.
+All three self-test suites are part of the canonical `run_checks.sh` gate. The agent-pipeline tests exercise deterministic local orchestration/evidence behavior with temporary Git repositories, a fake `aider` executable, and a fake Gitleaks CLI, including clean/leak/corrupt-evidence paths; they never invoke a real model provider or require network access. The live verifier itself is opt-in and is never invoked automatically against a running backend.
 
 Run them directly with:
 
@@ -335,6 +335,8 @@ Run them directly with:
 ./tools/source-import/run_tests.sh
 ./tools/live-backend/run_tests.sh
 ```
+
+The contributor-tooling A2.2 live security gate is separate from the default repository checks: once the one-shot Aider worker has completed, run `python3 tools/agent-pipeline/agent_pipeline.py verify --run-id <run-id>`. This requires an externally installed Gitleaks `8.30.1` on `PATH`, scans the isolated worktree before `./run_checks.sh`, and stores sanitized scanner/check evidence under `build/reports/agent-pipeline/<run-id>/checks.json`. It is not a historical repository scan and never implicitly runs or installs a model provider.
 
 These tooling tests use deterministic fakes/loopback HTTP only. They do not require Docker, a running backend, or public network access. Actual `tools/live-backend/verify_pipeline.py` execution is a separate manual/live environment check.
 

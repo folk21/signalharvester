@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from datetime import datetime, timezone
@@ -105,12 +106,38 @@ def validate_policy(policy: dict[str, Any]) -> None:
         if not isinstance(check, dict):
             raise ValueError("Each required check must be an object")
         name = check.get("name")
-        command = check.get("command")
         if not isinstance(name, str) or not name or name in seen:
             raise ValueError("Required check names must be unique non-empty strings")
-        if not isinstance(command, list) or not command or not all(isinstance(part, str) and part for part in command):
-            raise ValueError(f"Required check {name} must define a non-empty string command list")
+        kind = check.get("kind", "command")
+        if kind == "command":
+            command = check.get("command")
+            if not isinstance(command, list) or not command or not all(
+                isinstance(part, str) and part for part in command
+            ):
+                raise ValueError(f"Required check {name} must define a non-empty string command list")
+        elif kind == "gitleaks":
+            if name != "gitleaks":
+                raise ValueError("The Gitleaks required check must be named 'gitleaks'")
+            config = check.get("config")
+            if (
+                not isinstance(config, str)
+                or not config
+                or Path(config).is_absolute()
+                or ".." in Path(config).parts
+            ):
+                raise ValueError("Gitleaks config must be a repository-relative path")
+            if not isinstance(check.get("executable"), str) or not check["executable"]:
+                raise ValueError("Gitleaks executable must be configured")
+            if not isinstance(check.get("supportedVersion"), str) or not re.fullmatch(
+                r"\d+\.\d+\.\d+", check["supportedVersion"]
+            ):
+                raise ValueError("Gitleaks supportedVersion must be an exact x.y.z version")
+        else:
+            raise ValueError(f"Unsupported required check kind: {kind}")
         seen.add(name)
+    if any(entry.get("kind") == "gitleaks" for entry in required_checks):
+        if required_checks[0]["name"] != "gitleaks":
+            raise ValueError("Gitleaks must precede other required checks")
 
     worker = policy.get("workerExecution")
     if worker is not None:
@@ -340,7 +367,10 @@ def build_worker_task(
     reading_lines = "\n".join(f"- {item}" for item in required_reading)
     escalation_lines = "\n".join(f"- {item}" for item in policy.get("escalationCategories", []))
     check_lines = "\n".join(
-        f"- {entry['name']}: {' '.join(entry['command'])}" for entry in policy.get("requiredChecks", [])
+        f"- {entry['name']}: "
+        + (" ".join(entry["command"]) if entry.get("kind", "command") == "command"
+           else "repository-owned Gitleaks worktree scan")
+        for entry in policy.get("requiredChecks", [])
     )
     return f"""# Development worker task\n\n## Identity\n\n- Stage: `{stage}`\n- Worker: `{worker}`\n- Model: `{model}`\n- Active specification: `{spec_path}`\n\n## Required repository reading\n\n{reading_lines}\n\nCurrent repository files override chat history, summaries, and prior plans. Read the relevant implementation, tests, contracts, and owning documentation before editing.\n\n## Worker contract\n\n- Make the smallest coherent change that satisfies the task.\n- Follow repository and nearest local `AGENTS.md` rules.\n- Do not weaken tests, validation, security, architecture, or published contracts to make checks pass.\n- Do not declare a stage accepted or archive an active specification. Acceptance remains outside the worker boundary in the current pipeline stage.\n- Record unresolved ambiguity or high-risk findings instead of guessing.\n- Keep code/configuration comments and software documentation in English.\n\n## Mandatory escalation categories\n\n{escalation_lines}\n\n## Task\n\n{task_text.strip()}\n\n## Required verification before handoff\n\n{check_lines}\n\nAn independent review result is required before the run can become ready for the main-model checkpoint.\n"""
 
@@ -465,6 +495,172 @@ def execute_check(repo_root: Path, run_dir: Path, name: str, command: list[str],
     checks_data.setdefault("checks", []).append(result)
     write_json(checks_path, checks_data)
     return return_code
+
+
+def execute_gitleaks_check(
+    worktree: Path,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    definition: dict[str, Any],
+) -> int:
+    """Scan the worker filesystem, retaining only secret-free structured evidence."""
+    checks_path = run_dir / "checks.json"
+    checks = read_json(checks_path)
+    attempt = 1 + sum(entry.get("name") == "gitleaks" for entry in checks.get("checks", []))
+    started_at = utc_now()
+    started = time.monotonic()
+    config_relative = definition["config"]
+    config_path = worktree / config_relative
+    base_commit = manifest.get("repository", {}).get("baseCommit")
+    report_findings: list[dict[str, Any]] = []
+    version: str | None = None
+    config_digest: str | None = None
+    scanner_exit = 127
+    failure: str | None = None
+    report_present = False
+    executable = shutil.which(definition["executable"])
+    if not isinstance(base_commit, str) or not base_commit:
+        failure = "Gitleaks requires the immutable worker base commit"
+    elif not config_path.is_file():
+        failure = "Repository-owned Gitleaks config is missing"
+    elif (worktree / ".gitleaksignore").exists():
+        failure = "Worker-provided .gitleaksignore is not allowed to suppress scanner findings"
+    else:
+        original = subprocess.run(
+            ["git", "show", f"{base_commit}:{config_relative}"],
+            cwd=worktree, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
+        )
+        if original.returncode != 0 or original.stdout != config_path.read_bytes():
+            failure = "Worker changed the repository-owned Gitleaks config; start a new reviewed run"
+        else:
+            config_digest = sha256_file(config_path)
+    if failure is None and executable is None:
+        failure = "Configured Gitleaks executable is not available on PATH"
+    if failure is None:
+        try:
+            version_result = subprocess.run(
+                [executable, "version"], cwd=worktree, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15, check=False,
+            )
+            version = version_result.stdout.strip()
+            if version_result.returncode != 0 or parse_version_tuple(version) != parse_version_tuple(
+                definition["supportedVersion"]
+            ):
+                failure = "Installed Gitleaks version does not match repository policy"
+        except (OSError, subprocess.TimeoutExpired):
+            failure = "Gitleaks version preflight failed"
+    if failure is None:
+        try:
+            with tempfile.TemporaryDirectory(prefix="signalharvester-gitleaks-") as temp_dir:
+                report_path = Path(temp_dir) / "report.json"
+                completed = subprocess.run(
+                    [
+                        executable, "dir", ".", "--config", str(config_path.resolve()),
+                        "--report-format", "json", "--report-path", str(report_path),
+                        "--redact=100", "--no-banner", "--no-color",
+                        "--ignore-gitleaks-allow", "--gitleaks-ignore-path", temp_dir,
+                    ],
+                    cwd=worktree, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    timeout=120, check=False,
+                )
+                scanner_exit = completed.returncode
+                report_present = report_path.is_file()
+                if report_present:
+                    report_data = json.loads(report_path.read_text(encoding="utf-8"))
+                    if report_data is None:
+                        report_data = []
+                    if not isinstance(report_data, list):
+                        raise ValueError("Gitleaks report must contain a findings array")
+                    for finding in report_data:
+                        if not isinstance(finding, dict):
+                            raise ValueError("Gitleaks report contains an invalid finding")
+                        report_findings.append({
+                            "ruleId": finding.get("RuleID"),
+                            "file": finding.get("File"),
+                            "startLine": finding.get("StartLine"),
+                        })
+                if scanner_exit not in (0, 1):
+                    failure = "Gitleaks scan failed"
+                elif scanner_exit == 1 and not report_present:
+                    failure = "Gitleaks detected secrets but did not provide a JSON report"
+                elif scanner_exit == 1 or report_findings:
+                    failure = "Gitleaks detected potential secrets"
+        except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired):
+            failure = "Gitleaks execution or JSON report parsing failed"
+    worker_path = run_dir / "worker.json"
+    source_digest = read_json(worker_path).get("changeSha256") if worker_path.is_file() else None
+    result = {
+        "name": "gitleaks", "required": True, "kind": "gitleaks", "attempt": attempt,
+        "startedAt": started_at, "finishedAt": utc_now(),
+        "durationMs": round((time.monotonic() - started) * 1000),
+        "status": "PASS" if failure is None else "FAIL",
+        "exitCode": scanner_exit,
+        "scanner": {
+            "executable": definition["executable"],
+            "version": version,
+            "supportedVersion": definition["supportedVersion"],
+            "config": config_relative,
+            "configSha256": config_digest,
+            "sourceSha256": source_digest,
+            "scope": "worker-worktree-directory",
+            "reportPresent": report_present,
+            "findingCount": len(report_findings),
+            "findings": report_findings,
+            "error": failure,
+        },
+    }
+    checks.setdefault("checks", []).append(result)
+    write_json(checks_path, checks)
+    print(f"Gitleaks: {result['status']} ({len(report_findings)} findings); raw secrets were not recorded")
+    return 0 if failure is None else 1
+
+
+def run_required_check(
+    repo_root: Path,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    definition: dict[str, Any],
+    policy: dict[str, Any],
+) -> int:
+    """Run one policy-defined check in the immutable worker source state."""
+    if policy.get("workerExecution", {}).get("required", False):
+        ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+    worktree = execution_root(repo_root, manifest)
+    if policy.get("workerExecution", {}).get("required", False):
+        protected_paths = {"run_checks.sh", "tools/agent-pipeline/pipeline-policy.json"}
+        changed = set(read_json(run_dir / "worker.json").get("changedFiles", []))
+        if changed.intersection(protected_paths):
+            raise ValueError("Worker modified required verification policy or the canonical gate")
+    if definition.get("kind", "command") == "gitleaks":
+        return execute_gitleaks_check(worktree, run_dir, manifest, definition)
+    return execute_check(worktree, run_dir, definition["name"], definition["command"], True)
+
+
+def validate_security_check_evidence(
+    policy: dict[str, Any], checks_data: dict[str, Any], worker_result: dict[str, Any] | None,
+) -> None:
+    """Reject a claimed successful secret scan without tied structured evidence."""
+    latest = {entry.get("name"): entry for entry in checks_data.get("checks", []) if isinstance(entry, dict)}
+    for definition in policy["requiredChecks"]:
+        if definition.get("kind") != "gitleaks":
+            continue
+        entry = latest.get(definition["name"])
+        if entry is None or entry.get("status") != "PASS":
+            continue
+        scan = entry.get("scanner")
+        if not isinstance(scan, dict) or (
+            entry.get("kind") != "gitleaks"
+            or entry.get("exitCode") != 0
+            or scan.get("version") is None
+            or parse_version_tuple(scan["version"]) != parse_version_tuple(definition["supportedVersion"])
+            or scan.get("scope") != "worker-worktree-directory"
+            or not isinstance(scan.get("reportPresent"), bool)
+            or scan.get("findingCount") != 0
+            or scan.get("findings") != []
+            or not scan.get("configSha256")
+            or scan.get("sourceSha256") != (worker_result or {}).get("changeSha256")
+        ):
+            raise ValueError("Required Gitleaks PASS evidence is missing or inconsistent")
 
 
 def validate_review(review: dict[str, Any]) -> dict[str, Any]:
@@ -919,6 +1115,7 @@ def update_status(repo_root: Path, run_dir: Path, manifest: dict[str, Any], poli
     worker_result = read_json(worker_path) if worker_path.is_file() else None
     if worker_result is not None and worker_result.get("status") == "PASS":
         worker_result = ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+    validate_security_check_evidence(policy, checks_data, worker_result)
     state, reasons = derive_state(policy, checks_data, review, worker_result)
     changed_files, available = discover_changed_files(
         execution_root(repo_root, manifest), manifest.get("repository", {}).get("baseCommit")
@@ -1018,6 +1215,9 @@ def build_parser() -> argparse.ArgumentParser:
     worker_parser = subparsers.add_parser("run-worker", help="Run the configured one-shot Aider worker")
     worker_parser.add_argument("--run-id", required=True)
 
+    verify_parser = subparsers.add_parser("verify", help="Run all required checks in policy order")
+    verify_parser.add_argument("--run-id", required=True)
+
     check_parser = subparsers.add_parser("run-check", help="Run one policy-defined required check")
     check_parser.add_argument("--run-id", required=True)
     check_parser.add_argument("--name", required=True)
@@ -1091,13 +1291,17 @@ def main(argv: list[str] | None = None) -> int:
             definitions = required_check_map(policy)
             if args.name not in definitions:
                 raise ValueError(f"Unknown required check: {args.name}")
-            if policy.get("workerExecution", {}).get("required", False):
-                ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
-            result = execute_check(
-                execution_root(repo_root, manifest), run_dir, args.name, definitions[args.name]["command"], True
-            )
+            result = run_required_check(repo_root, run_dir, manifest, definitions[args.name], policy)
             update_status(repo_root, run_dir, manifest, policy)
             return result
+
+        if args.command == "verify":
+            for definition in policy["requiredChecks"]:
+                result = run_required_check(repo_root, run_dir, manifest, definition, policy)
+                update_status(repo_root, run_dir, manifest, policy)
+                if result != 0:
+                    return result
+            return 0
 
         if args.command == "run-command":
             if args.name in required_check_map(policy):

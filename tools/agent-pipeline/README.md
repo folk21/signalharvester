@@ -11,7 +11,7 @@ description: Repository-local orchestration for isolated coding-worker execution
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
 
-Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. It deliberately does **not** add repair loops, automatic independent-review invocation, automatic acceptance, specification archival, merging, or secret-scanner integration. Those remain later stages owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
+Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. Stage A2.2 adds verification-pending repository-owned Gitleaks scanning and ordered required-check orchestration. Repair loops, automatic independent-review invocation, automatic acceptance, specification archival, and merging remain later stages owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
 
 ## Current boundary
 
@@ -25,6 +25,9 @@ The pipeline owns:
 - pre-model Aider CLI/version compatibility, Git-identity, and runtime-configuration preflight evidence;
 - worker stdout/stderr, exit status, changed-file list, source-change digest, HEAD identity, and log digest evidence;
 - prevention of worker auto-commits in the A2.1 adapter;
+- directory-scoped Gitleaks scanning of the complete worker worktree, including uncommitted and untracked changes, before canonical verification;
+- redacted scanner evidence without persisting raw secret matches or scanner output;
+- sequential policy-required verification through one `verify` command;
 - execution of focused and canonical verification inside the isolated worker worktree;
 - immutable task/policy digests that detect mid-run worker-contract drift;
 - structured independent-review ingestion;
@@ -59,13 +62,16 @@ Explicit review escalation or an open escalation-category finding -> NEEDS_MAIN_
 - the required one-shot worker adapter;
 - the default worker model;
 - safe Aider command-line arguments;
-- the canonical required check (`./run_checks.sh`);
+- the pinned Gitleaks executable/version and repository-owned `gitleaks.toml` configuration;
+- ordered required checks (Gitleaks first, then `./run_checks.sh`);
 - blocking review severities;
 - categories that require escalation;
 - conservative path-based risk hints;
 - the requirement for a main-model checkpoint before acceptance.
 
 The A2.1 adapter currently uses Aider `0.86.2` with `deepseek/deepseek-chat` by default. Provider credentials stay outside repository policy and command evidence; export provider-native variables such as `DEEPSEEK_API_KEY` in the launching environment. Pipeline execution strips `AIDER_*` variables, disables python-dotenv loading, and supplies an empty run-local `--config`, so home/repository `.aider.conf.yml` and `.env` files cannot silently change the worker contract. Ambient home/repository `.aider.model.settings.yml` or `.aider.model.metadata.json` files are rejected because Aider merges those independently of `--config`. Unsupported Aider versions or configured CLI switches fail before model access. Git `user.name` and `user.email` must already resolve so Aider cannot fill missing identity by mutating the shared repository Git configuration. The adapter disables Aider auto-commits, automatic lint/test execution, model-suggested shell commands, release-note/update prompts, URL prompts, analytics, and `.gitignore` mutation. Aider input/chat history is redirected into the run evidence directory instead of the worker tree. Pipeline verification remains responsible for command execution and evidence.
+
+Stage A2.2 requires Gitleaks `8.30.1` to be installed on `PATH` before executing pipeline verification; installation is external and never performed by the worker. The pinned `tools/agent-pipeline/gitleaks.toml` extends Gitleaks default detection rules and excludes generated build/IDE/Git internals. The directory scan targets the whole worker filesystem rather than Git history alone, so it covers Aider's uncommitted edits and new files. It rejects worker-created `.gitleaksignore`, disables inline `gitleaks:allow` suppressions, and refuses changes to the scanner config, `pipeline-policy.json`, or `run_checks.sh` inside a worker run. Scanner version/config/source identity, exit status, finding count, rule/file/line metadata, and redacted failure reason are recorded in `checks.json`. Raw secret values, report JSON, and scanner stdout/stderr are not retained; the temporary report is deleted. Some Gitleaks releases do not create an empty report when no findings exist; zero exit status remains authoritative for a successful clean scan. Missing binary, incompatible version, malformed finding report, detected secrets, or an unsuccessful scan blocks progression. This scanner does not replace independent review or separate historical Git secret scanning.
 
 Path-based risk is only an escalation hint. It must never be interpreted as proof that a change is safe. When Git/base-commit evidence is unavailable, risk is reported as `UNKNOWN`.
 
@@ -102,7 +108,7 @@ build/reports/agent-pipeline/<run-id>/
     manifest.json
     task.md
     worker.json                 # after worker execution
-    checks.json
+    checks.json                 # Gitleaks summary and check attempts
     reviews.json
     review.json                 # after independent review
     status.json
@@ -167,15 +173,30 @@ The command output is streamed to the terminal and stored under `logs/`. Every r
 
 A failed focused command blocks the run until the same named check is rerun successfully. This check-retry behavior is deterministic verification, not model repair.
 
-## Run the canonical gate
+## Run required verification
+
+After the one-shot worker passes, run all policy-defined required checks in order:
 
 ```bash
+python3 tools/agent-pipeline/agent_pipeline.py verify \
+  --run-id <run-id>
+```
+
+This runs `gitleaks` first, then the canonical `./run_checks.sh` inside the isolated worker worktree. A failed step stops the sequence, records a failed attempt, and blocks progression. The command never installs tools or invokes the model. Optional task-specific focused checks continue to use `run-command` and should be run before `verify` when the task requires them.
+
+For a single required check or an explicit retry:
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py run-check \
+  --run-id <run-id> \
+  --name gitleaks
+
 python3 tools/agent-pipeline/agent_pipeline.py run-check \
   --run-id <run-id> \
   --name canonical
 ```
 
-The policy-defined `canonical` command is exactly `./run_checks.sh`, and it executes in the isolated worker worktree. The pipeline refuses verification before the required worker execution has passed.
+The latest attempt for each required check determines state. A `PASS` claim without matching Gitleaks scanner/source evidence is rejected. The pipeline refuses verification before required worker execution has passed.
 
 ## Record independent review
 
@@ -226,7 +247,7 @@ The command updates `manifest.json`, writes `status.json`, and reports worker/ch
 
 ## Evidence retention
 
-Run evidence and worker worktrees are under ignored `build/` paths and are intentionally excluded from FULL source archives. Preserve or share a run directory separately when a main-model review needs raw logs and structured evidence.
+Run evidence and worker worktrees are under ignored `build/` paths; do not include them in normal repository context snapshots. Preserve or share a run directory separately when a main-model review needs raw logs and structured evidence.
 
 Do not copy generated run evidence into owning documentation. Accepted stable behavior belongs in the repository documents that already own that topic.
 
@@ -234,5 +255,5 @@ Do not copy generated run evidence into owning documentation. Accepted stable be
 
 The active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification owns intended evolution, stage sequencing, and final acceptance criteria. This guide owns current implemented commands and evidence semantics only.
 
-After A2.1 developer verification, the next bounded automation slice is A2.2: repository-owned Gitleaks execution/evidence and tighter automated verification orchestration. A2.3 then focuses on independent-review invocation/handoff. Bounded model repair/re-review remains A3.
+A2.1 and A2.2 remain developer-verification-pending. The next bounded automation slice is A2.3: independent-review invocation and a compact main-model handoff. Bounded model repair/re-review remains A3.
 

@@ -9,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-10-13 — Added verification-pending Development Agent Pipeline A2.2 with repository-pinned Gitleaks directory scanning of isolated worker changes, sanitized security evidence, scanner/verification-policy protection, and ordered `verify` orchestration before independent review.
+
 - 2026-10-12 — Hardened verification-pending Development Agent Pipeline A2.1 by pinning the supported Aider CLI version, validating configured switches before model access, isolating ambient Aider/dotenv configuration, requiring preconfigured Git identity, and persisting preflight evidence.
 - 2026-10-12 — Added verification-pending Development Agent Pipeline A2.1 with immutable-base Git worktree isolation, one-shot repository-owned Aider + DeepSeek execution, worker log/diff/HEAD evidence, unexpected-commit blocking, and verification redirected to the worker tree; Stage 6E6 is deliberately paused at its time-window-aware recovery and cleanup-ordering findings.
 - 2026-10-12 — Fixed the verification-pending Stage 6E6 human-attention alert-history REST boundary by making `HumanAttentionAlertResponse` Micronaut-Serde serializable and adding regression coverage for list JSON serialization after the live runner exposed a real HTTP 500.
