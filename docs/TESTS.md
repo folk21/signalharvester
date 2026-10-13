@@ -571,3 +571,5 @@ The runner:
 8. restores the original replica count and temporary environment configuration.
 
 Parser/asset coverage stays in `./infra/kubernetes/run_tests.sh`, including the scenario-evidence format/bounds and resilience/capacity runner wiring. The live workflow remains outside `./run_checks.sh`. Developer acceptance completed on 2026-09-17 with three distinct Analysis members assigned to raw-event partitions `0`, `1`, and `2`, positive one-replica lag, and final lag `0`.
+
+Development-agent A2.3 reviewer verification: run `python3 -m unittest discover -s tools/agent-pipeline/tests` locally; the automatic `run-review` provider request and main checkpoint remain opt-in and require external provider credentials.

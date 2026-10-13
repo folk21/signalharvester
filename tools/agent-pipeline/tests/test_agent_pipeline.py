@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "agent_pipeline.py"
 SPEC = importlib.util.spec_from_file_location("signalharvester_agent_pipeline", MODULE_PATH)
@@ -616,3 +617,45 @@ class AgentPipelineCliTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+
+class AutomaticReviewTest(unittest.TestCase):
+    """Protects independent reviewer policy bounds and fail-closed evidence."""
+
+    def test_reviewer_adapter_rejects_unreviewed_endpoint_and_unbounded_context(self):
+        policy = {
+            "schemaVersion": 1,
+            "requiredChecks": [{"name": "canonical", "command": ["true"]}],
+            "independentReview": {"adapter": {
+                "endpoint": "http://localhost:80/api", "model": "reviewer",
+                "apiKeyEnvironment": "REVIEW_API_KEY", "timeoutSeconds": 120,
+                "maxDiffBytes": 100000,
+            }},
+        }
+        with self.assertRaisesRegex(ValueError, "endpoint"):
+            agent_pipeline.validate_policy(policy)
+        policy["independentReview"]["adapter"]["endpoint"] = "https://api.deepseek.com/chat/completions"
+        policy["independentReview"]["adapter"]["maxDiffBytes"] = 1000000
+        with self.assertRaisesRegex(ValueError, "maxDiffBytes"):
+            agent_pipeline.validate_policy(policy)
+
+    def test_review_payload_requires_schema_and_structured_findings(self):
+        review = {"schemaVersion": 1, "reviewer": "fresh-context", "verdict": "PASS", "findings": []}
+        self.assertEqual("PASS", agent_pipeline.validate_review(review)["verdict"])
+        review["findings"] = [{"id": "F1", "severity": "INVALID", "category": "SECURITY",
+                               "summary": "Invalid finding", "status": "OPEN"}]
+        with self.assertRaisesRegex(ValueError, "severity"):
+            agent_pipeline.validate_review(review)
+
+    def test_reviewer_requires_verified_worker_before_external_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            (run_dir / "checks.json").write_text(json.dumps({"checks": []}))
+            manifest = {"runId": "check", "repository": {"baseCommit": "abc"}}
+            policy = {"independentReview": {"adapter": {"model": "deepseek-chat"}}}
+            with mock.patch.object(agent_pipeline, "ensure_worker_workspace_matches_result",
+                                   return_value={"status": "FAIL"}):
+                with self.assertRaisesRegex(ValueError, "Successful worker"):
+                    agent_pipeline.run_independent_review(run_dir, run_dir, manifest, policy)
+            self.assertFalse((run_dir / "review.json").exists())
+            self.assertFalse((run_dir / "review-attempt.json").exists())

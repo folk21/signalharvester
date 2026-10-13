@@ -30,7 +30,14 @@
     "blockingSeverities": [
       "HIGH",
       "CRITICAL"
-    ]
+    ],
+    "adapter": {
+      "endpoint": "https://api.deepseek.com/chat/completions",
+      "model": "deepseek-chat",
+      "apiKeyEnvironment": "DEEPSEEK_API_KEY",
+      "timeoutSeconds": 120,
+      "maxDiffBytes": 100000
+    }
   },
   "mainReview": {
     "requiredBeforeAcceptance": true

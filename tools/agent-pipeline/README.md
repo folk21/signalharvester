@@ -11,7 +11,7 @@ description: Repository-local orchestration for isolated coding-worker execution
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
 
-Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. Stage A2.2 adds verification-pending repository-owned Gitleaks scanning and ordered required-check orchestration. Repair loops, automatic independent-review invocation, automatic acceptance, specification archival, and merging remain later stages owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
+Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. Stage A2.2 adds repository-owned Gitleaks scanning and ordered required-check orchestration. Stage A2.3 introduces a verification-pending fresh-context reviewer adapter and compact external-checkpoint handoff. Repair loops, automatic acceptance, specification archival, and merging remain later stages owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
 
 ## Current boundary
 
@@ -257,3 +257,16 @@ The active [`development-agent-pipeline`](../../docs/specs/active/subspecs/devel
 
 A2.1 and A2.2 remain developer-verification-pending. The next bounded automation slice is A2.3: independent-review invocation and a compact main-model handoff. Bounded model repair/re-review remains A3.
 
+
+## Automatic independent review and main checkpoint handoff (A2.3)
+
+After `verify` passes, invoke the read-only reviewer from a fresh provider request:
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py run-review --run-id <run-id>
+python3 tools/agent-pipeline/agent_pipeline.py handoff --run-id <run-id>
+```
+
+The reviewer uses the policy-owned HTTPS DeepSeek chat-completions endpoint and model, with `DEEPSEEK_API_KEY` supplied by the environment. It receives only the immutable task packet, bounded worker source diff (including untracked files), changed-file names, and check statuses. Worker chat transcripts are not forwarded. A new independent request is created for each run, and its answer must match the repository's structured review schema. The worker cannot run or accept its own review. Review attempts are one-shot; provider/schema failures are recorded as `review-attempt.json` without saving raw API responses and block the run. A larger diff is rejected rather than silently truncated. Never send sensitive code to an unapproved provider.
+
+`handoff.json` summarizes task/spec/base identity, worker change digest/files, required checks, independent review findings, status/risk and evidence paths. It is an index for the main-model checkpoint, not acceptance or proof that every review issue is resolved. `record-review` remains available for externally supplied independent evidence, but it must not be used as a worker self-review. Neither command merges branches, repairs code, or archives specifications.
