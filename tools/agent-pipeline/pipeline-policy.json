@@ -82,6 +82,8 @@
     "arguments": [
       "--model",
       "{model}",
+      "--config",
+      "{config_file}",
       "--message-file",
       "{task_file}",
       "--input-history-file",
@@ -97,10 +99,14 @@
       "--no-suggest-shell-commands",
       "--no-detect-urls",
       "--no-analytics",
+      "--no-show-release-notes",
       "--no-check-update",
       "--no-gui",
       "--no-pretty",
       "--disable-playwright"
+    ],
+    "supportedVersions": [
+      "0.86.2"
     ]
   }
 }

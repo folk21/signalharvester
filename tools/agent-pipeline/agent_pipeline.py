@@ -124,6 +124,15 @@ def validate_policy(policy: dict[str, Any]) -> None:
         default_model = worker.get("defaultModel")
         if not isinstance(default_model, str) or not default_model.strip():
             raise ValueError("workerExecution.defaultModel must be a non-empty string")
+        supported_versions = worker.get("supportedVersions")
+        versions_valid = isinstance(supported_versions, list) and bool(supported_versions)
+        if versions_valid:
+            versions_valid = all(
+                isinstance(version, str) and parse_version_tuple(version) is not None
+                for version in supported_versions
+            )
+        if not versions_valid:
+            raise ValueError("workerExecution.supportedVersions must be a non-empty list of x.y.z version strings")
         branch_prefix = worker.get("branchPrefix")
         if not isinstance(branch_prefix, str) or not branch_prefix:
             raise ValueError("workerExecution.branchPrefix must be a non-empty string")
@@ -134,7 +143,13 @@ def validate_policy(policy: dict[str, Any]) -> None:
             or not all(isinstance(part, str) and part for part in arguments)
         ):
             raise ValueError("workerExecution.arguments must be a non-empty string list")
-        allowed_placeholders = {"{model}", "{task_file}", "{input_history_file}", "{chat_history_file}"}
+        allowed_placeholders = {
+            "{model}",
+            "{task_file}",
+            "{input_history_file}",
+            "{chat_history_file}",
+            "{config_file}",
+        }
         for argument in arguments:
             placeholders = set(re.findall(r"\{[^{}]+\}", argument))
             if not placeholders.issubset(allowed_placeholders):
@@ -142,6 +157,144 @@ def validate_policy(policy: dict[str, Any]) -> None:
             if "api-key" in argument.lower():
                 raise ValueError("Worker API keys must come from the environment, not repository policy arguments")
 
+
+def parse_version_tuple(value: str) -> tuple[int, int, int] | None:
+    """Parse the first semantic x.y.z version from bounded tool output."""
+    match = re.search(r"(?<!\d)(\d+)\.(\d+)\.(\d+)(?!\d)", value)
+    if match is None:
+        return None
+    major, minor, patch = match.groups()
+    return int(major), int(minor), int(patch)
+
+
+def prepare_aider_runtime_config(run_dir: Path) -> Path:
+    """Create the empty run-local Aider config that excludes ambient YAML configuration."""
+    config_path = run_dir / "aider.runtime.conf.yml"
+    config_path.write_text("{}\n", encoding="utf-8")
+    return config_path
+
+
+def build_aider_environment() -> tuple[dict[str, str], list[str]]:
+    """Preserve provider credentials while excluding ambient Aider and dotenv configuration."""
+    removed = sorted(name for name in os.environ if name.startswith("AIDER_"))
+    environment = {name: value for name, value in os.environ.items() if name not in removed}
+    environment["PYTHON_DOTENV_DISABLED"] = "1"
+    return environment, removed
+
+
+def configured_aider_flags(worker_policy: dict[str, Any]) -> list[str]:
+    """Return the CLI switches whose presence is required by the repository-owned adapter."""
+    flags = {argument for argument in worker_policy["arguments"] if argument.startswith("--")}
+    flags.add("--read")
+    return sorted(flags)
+
+
+def preflight_aider(
+    worktree: Path,
+    run_dir: Path,
+    worker_policy: dict[str, Any],
+    environment: dict[str, str],
+    removed_environment_names: list[str],
+) -> dict[str, Any]:
+    """Verify Aider compatibility and deterministic invocation prerequisites before model access."""
+    executable = worker_policy["executable"]
+    resolved = shutil.which(executable, path=environment.get("PATH"))
+    config_path = run_dir / "aider.runtime.conf.yml"
+    result: dict[str, Any] = {
+        "status": "FAIL",
+        "configuredExecutable": executable,
+        "resolvedExecutable": resolved,
+        "supportedVersions": worker_policy.get("supportedVersions", []),
+        "version": None,
+        "versionCommandExitCode": None,
+        "helpCommandExitCode": None,
+        "missingOptions": [],
+        "gitIdentityConfigured": False,
+        "ambientModelConfigurationFiles": [],
+        "dotenvDisabled": environment.get("PYTHON_DOTENV_DISABLED") == "1",
+        "removedAiderEnvironmentVariables": removed_environment_names,
+        "config": str(config_path.resolve()),
+        "configSha256": sha256_file(config_path),
+        "failureReason": None,
+    }
+    if resolved is None:
+        result["failureReason"] = f"Worker executable is not available on PATH: {executable}"
+        return result
+
+    version = subprocess.run(
+        [resolved, "--config", str(config_path.resolve()), "--version"],
+        cwd=worktree,
+        env=environment,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    result["versionCommandExitCode"] = version.returncode
+    version_text = version.stdout.strip()
+    result["version"] = version_text or None
+    parsed_version = parse_version_tuple(version_text)
+    supported_versions = {
+        parsed
+        for configured in worker_policy.get("supportedVersions", [])
+        if (parsed := parse_version_tuple(configured)) is not None
+    }
+    if version.returncode != 0 or parsed_version is None:
+        result["failureReason"] = "Unable to determine a compatible Aider version"
+        return result
+    if parsed_version not in supported_versions:
+        result["failureReason"] = (
+            f"Aider {version_text} is not in repository-supported versions: "
+            + ", ".join(worker_policy.get("supportedVersions", []))
+        )
+        return result
+
+    help_result = subprocess.run(
+        [resolved, "--config", str(config_path.resolve()), "--help"],
+        cwd=worktree,
+        env=environment,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    result["helpCommandExitCode"] = help_result.returncode
+    missing_options = [
+        option for option in configured_aider_flags(worker_policy) if option not in help_result.stdout
+    ]
+    result["missingOptions"] = missing_options
+    if help_result.returncode != 0 or missing_options:
+        result["failureReason"] = "Installed Aider CLI does not support the repository-owned worker arguments"
+        return result
+
+    model_config_names = (".aider.model.settings.yml", ".aider.model.metadata.json")
+    model_config_candidates = [
+        *(Path.home() / name for name in model_config_names),
+        *(worktree / name for name in model_config_names),
+    ]
+    ambient_model_files = sorted({str(path.resolve()) for path in model_config_candidates if path.is_file()})
+    result["ambientModelConfigurationFiles"] = ambient_model_files
+    if ambient_model_files:
+        result["failureReason"] = (
+            "Ambient Aider model settings/metadata are not allowed in pipeline execution: "
+            + ", ".join(ambient_model_files)
+        )
+        return result
+
+    git_name = run_git(worktree, "config", "--get", "user.name")
+    git_email = run_git(worktree, "config", "--get", "user.email")
+    result["gitIdentityConfigured"] = bool(git_name and git_email)
+    if not result["gitIdentityConfigured"]:
+        result["failureReason"] = (
+            "Git user.name and user.email must be configured before Aider runs so it cannot mutate shared Git config"
+        )
+        return result
+    if not result["dotenvDisabled"]:
+        result["failureReason"] = "Aider dotenv loading must be disabled for pipeline execution"
+        return result
+
+    result["status"] = "PASS"
+    return result
 
 def validate_repository(repo_root: Path, policy: dict[str, Any]) -> None:
     """Fail closed when required repository context is missing."""
@@ -537,6 +690,7 @@ def build_aider_command(policy: dict[str, Any], manifest: dict[str, Any], run_di
         "{task_file}": task_file,
         "{input_history_file}": str((run_dir / "aider.input.history").resolve()),
         "{chat_history_file}": str((run_dir / "aider.chat.history.md").resolve()),
+        "{config_file}": str((run_dir / "aider.runtime.conf.yml").resolve()),
     }
     arguments: list[str] = []
     for raw in worker_policy["arguments"]:
@@ -620,9 +774,15 @@ def execute_worker(
     if run_git(worktree, "status", "--porcelain") != "":
         raise ValueError("Worker worktree must be clean before the one-shot Aider execution")
 
+    worker_policy = policy.get("workerExecution")
+    if not isinstance(worker_policy, dict):
+        raise ValueError("workerExecution policy is missing")
+    prepare_aider_runtime_config(run_dir)
+    worker_environment, removed_aider_environment = build_aider_environment()
+    preflight = preflight_aider(
+        worktree, run_dir, worker_policy, worker_environment, removed_aider_environment
+    )
     command = build_aider_command(policy, manifest, run_dir)
-    if shutil.which(command[0]) is None:
-        raise ValueError(f"Worker executable is not available on PATH: {command[0]}")
     log_dir = run_dir / "logs"
     log_dir.mkdir(exist_ok=True)
     log_path = log_dir / "worker-attempt-1.log"
@@ -631,24 +791,30 @@ def execute_worker(
     return_code = 127
     startup_error: str | None = None
     with log_path.open("w", encoding="utf-8") as log_handle:
-        try:
-            process = subprocess.Popen(
-                command,
-                cwd=worktree,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                bufsize=1,
-            )
-            assert process.stdout is not None
-            for line in process.stdout:
-                sys.stdout.write(line)
-                log_handle.write(line)
-            return_code = process.wait()
-        except OSError as exc:
-            startup_error = str(exc)
-            log_handle.write(f"ERROR: failed to start worker: {exc}\n")
-            print(f"ERROR: failed to start worker: {exc}", file=sys.stderr)
+        if preflight["status"] != "PASS":
+            startup_error = preflight["failureReason"]
+            log_handle.write(f"ERROR: Aider preflight failed: {startup_error}\n")
+            print(f"ERROR: Aider preflight failed: {startup_error}", file=sys.stderr)
+        else:
+            try:
+                process = subprocess.Popen(
+                    command,
+                    cwd=worktree,
+                    env=worker_environment,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    bufsize=1,
+                )
+                assert process.stdout is not None
+                for line in process.stdout:
+                    sys.stdout.write(line)
+                    log_handle.write(line)
+                return_code = process.wait()
+            except OSError as exc:
+                startup_error = str(exc)
+                log_handle.write(f"ERROR: failed to start worker: {exc}\n")
+                print(f"ERROR: failed to start worker: {exc}", file=sys.stderr)
     duration_ms = round((time.monotonic() - started) * 1000)
     head_commit = run_git(worktree, "rev-parse", "HEAD")
     changed_files, change_evidence = discover_changed_files(worktree, base_commit)
@@ -666,6 +832,7 @@ def execute_worker(
         "exitCode": return_code,
         "status": "PASS" if passed else "FAIL",
         "startupError": startup_error,
+        "preflight": preflight,
         "workspace": workspace,
         "headCommit": head_commit,
         "unexpectedCommit": unexpected_commit,
@@ -967,3 +1134,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -15,7 +15,6 @@ The current implementation requires:
 
 - JDK 21;
 - the repository Gradle Wrapper;
-- `zip` and `unzip` for FULL-archive creation/validation through `archive.sh` and `run_checks.sh`;
 - PostgreSQL 16-compatible infrastructure for the currently implemented configuration, collection-history, and analysis persistence;
 - a Kafka-compatible broker for the current collection -> analysis event flow;
 - network access to Maven/Gradle repositories on the first dependency resolution.

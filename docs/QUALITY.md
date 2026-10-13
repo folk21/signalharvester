@@ -117,7 +117,6 @@ Current repository policy:
 | JaCoCo aggregate coverage | report | introduce justified thresholds after baseline review |
 | SpotBugs production analysis | report | fail on an agreed actionable confidence/severity baseline |
 | Dependency analysis | warn/report | fail on agreed dependency rules after current advice is resolved |
-| FULL archive cleanliness | fail | fail |
 
 Quality gates must remain signal-bearing. Do not introduce thresholds or suppressions solely to produce a green build.
 

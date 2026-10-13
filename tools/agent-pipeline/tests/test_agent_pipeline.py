@@ -276,6 +276,106 @@ class AgentPipelineCliTest(unittest.TestCase):
             ["git", "rev-parse", "HEAD"], cwd=root, text=True, stdout=subprocess.PIPE, check=True
         ).stdout.strip()
 
+    # Protects fail-closed version pinning before any model-backed worker invocation can start.
+    def test_aider_preflight_rejects_unsupported_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            root.mkdir()
+            (root / "placeholder.txt").write_text("base\n", encoding="utf-8")
+            self.init_git_repository(root)
+            run_dir = root / "build/reports/agent-pipeline/preflight"
+            run_dir.mkdir(parents=True)
+            agent_pipeline.prepare_aider_runtime_config(run_dir)
+
+            fake_bin = Path(temp_dir) / "bin"
+            fake_bin.mkdir()
+            fake_aider = fake_bin / "aider"
+            fake_aider.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "if '--version' in sys.argv:\n"
+                "    print('aider 0.86.1')\n"
+                "    raise SystemExit(0)\n"
+                "print('--model --config --message-file --read')\n",
+                encoding="utf-8",
+            )
+            fake_aider.chmod(0o755)
+            environment = dict(os.environ)
+            environment["PATH"] = f"{fake_bin}{os.pathsep}{environment.get('PATH', '')}"
+            environment["PYTHON_DOTENV_DISABLED"] = "1"
+            worker_policy = {
+                "executable": "aider",
+                "supportedVersions": ["0.86.2"],
+                "arguments": [
+                    "--model",
+                    "{model}",
+                    "--config",
+                    "{config_file}",
+                    "--message-file",
+                    "{task_file}",
+                ],
+            }
+
+            preflight = agent_pipeline.preflight_aider(
+                root, run_dir, worker_policy, environment, []
+            )
+
+            self.assertEqual("FAIL", preflight["status"])
+            self.assertIn("not in repository-supported versions", preflight["failureReason"])
+            self.assertIsNone(preflight["helpCommandExitCode"])
+
+    # Protects fail-closed rejection of model configuration that Aider loads outside its main YAML config.
+    def test_aider_preflight_rejects_ambient_model_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            root.mkdir()
+            (root / "placeholder.txt").write_text("base\n", encoding="utf-8")
+            self.init_git_repository(root)
+            (root / ".aider.model.settings.yml").write_text("[]\n", encoding="utf-8")
+            run_dir = root / "build/reports/agent-pipeline/preflight"
+            run_dir.mkdir(parents=True)
+            agent_pipeline.prepare_aider_runtime_config(run_dir)
+
+            fake_bin = Path(temp_dir) / "bin"
+            fake_bin.mkdir()
+            fake_aider = fake_bin / "aider"
+            fake_aider.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "if '--version' in sys.argv:\n"
+                "    print('aider 0.86.2')\n"
+                "    raise SystemExit(0)\n"
+                "print('--model --config --message-file --read')\n",
+                encoding="utf-8",
+            )
+            fake_aider.chmod(0o755)
+            environment = dict(os.environ)
+            environment["PATH"] = f"{fake_bin}{os.pathsep}{environment.get('PATH', '')}"
+            environment["PYTHON_DOTENV_DISABLED"] = "1"
+            worker_policy = {
+                "executable": "aider",
+                "supportedVersions": ["0.86.2"],
+                "arguments": [
+                    "--model",
+                    "{model}",
+                    "--config",
+                    "{config_file}",
+                    "--message-file",
+                    "{task_file}",
+                ],
+            }
+
+            preflight = agent_pipeline.preflight_aider(
+                root, run_dir, worker_policy, environment, []
+            )
+
+            self.assertEqual("FAIL", preflight["status"])
+            self.assertIn("Ambient Aider model settings/metadata", preflight["failureReason"])
+            self.assertEqual(
+                [str((root / ".aider.model.settings.yml").resolve())],
+                preflight["ambientModelConfigurationFiles"],
+            )
+
     # Protects isolated worktree preparation, one-shot Aider execution, and verification in the worker tree.
     def test_cli_runs_fake_aider_in_isolated_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -288,15 +388,19 @@ class AgentPipelineCliTest(unittest.TestCase):
                 "tool": "aider",
                 "executable": "aider",
                 "defaultModel": "deepseek/deepseek-chat",
+                "supportedVersions": ["0.86.2"],
                 "branchPrefix": "agent/",
                 "arguments": [
                     "--model",
                     "{model}",
+                    "--config",
+                    "{config_file}",
                     "--message-file",
                     "{task_file}",
                     "--yes-always",
                     "--no-auto-commits",
                     "--no-suggest-shell-commands",
+                    "--no-show-release-notes",
                 ],
             }
             policy.write_text(json.dumps(policy_data), encoding="utf-8")
@@ -307,7 +411,20 @@ class AgentPipelineCliTest(unittest.TestCase):
             fake_aider = fake_bin / "aider"
             fake_aider.write_text(
                 "#!/usr/bin/env python3\n"
+                "import os\n"
+                "import sys\n"
                 "from pathlib import Path\n"
+                "if '--version' in sys.argv:\n"
+                "    print('aider 0.86.2')\n"
+                "    raise SystemExit(0)\n"
+                "if '--help' in sys.argv:\n"
+                "    print('--model --config --message-file --yes-always --no-auto-commits ')\n"
+                "    print('--no-suggest-shell-commands --no-show-release-notes --read')\n"
+                "    raise SystemExit(0)\n"
+                "assert 'AIDER_MODEL' not in os.environ\n"
+                "assert os.environ.get('PYTHON_DOTENV_DISABLED') == '1'\n"
+                "config = Path(sys.argv[sys.argv.index('--config') + 1])\n"
+                "assert config.read_text(encoding='utf-8') == '{}\\n'\n"
                 "Path('worker-output.txt').write_text('changed by fake aider\\n', encoding='utf-8')\n"
                 "print('fake aider completed')\n",
                 encoding="utf-8",
@@ -315,6 +432,7 @@ class AgentPipelineCliTest(unittest.TestCase):
             fake_aider.chmod(0o755)
             env = dict(os.environ)
             env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+            env["AIDER_MODEL"] = "ambient-model-must-not-leak"
 
             initialized = self.run_cli(
                 root,
@@ -350,6 +468,12 @@ class AgentPipelineCliTest(unittest.TestCase):
                 (root / "build/reports/agent-pipeline/worker-test/worker.json").read_text(encoding="utf-8")
             )
             self.assertEqual("PASS", worker_result["status"])
+            self.assertEqual("PASS", worker_result["preflight"]["status"])
+            self.assertEqual("aider 0.86.2", worker_result["preflight"]["version"])
+            self.assertEqual(["AIDER_MODEL"], worker_result["preflight"]["removedAiderEnvironmentVariables"])
+            self.assertTrue(worker_result["preflight"]["dotenvDisabled"])
+            self.assertTrue(worker_result["preflight"]["gitIdentityConfigured"])
+            self.assertEqual([], worker_result["preflight"]["missingOptions"])
             self.assertEqual(["worker-output.txt"], worker_result["changedFiles"])
             self.assertFalse(worker_result["unexpectedCommit"])
             self.assertEqual(base_commit, worker_result["headCommit"])
@@ -374,3 +498,4 @@ class AgentPipelineCliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

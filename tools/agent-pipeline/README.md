@@ -11,7 +11,7 @@ description: Repository-local orchestration for isolated coding-worker execution
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
 
-Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. It deliberately does **not** add repair loops, automatic independent-review invocation, automatic acceptance, specification archival, merging, or secret-scanner integration. Those remain later stages owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
+Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. It deliberately does **not** add repair loops, automatic independent-review invocation, automatic acceptance, specification archival, merging, or secret-scanner integration. Those remain later stages owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
 
 ## Current boundary
 
@@ -22,6 +22,7 @@ The pipeline owns:
 - an immutable base commit for every Git-backed run;
 - isolated worker branch/worktree preparation;
 - one-shot Aider execution with a repository-owned argument policy;
+- pre-model Aider CLI/version compatibility, Git-identity, and runtime-configuration preflight evidence;
 - worker stdout/stderr, exit status, changed-file list, source-change digest, HEAD identity, and log digest evidence;
 - prevention of worker auto-commits in the A2.1 adapter;
 - execution of focused and canonical verification inside the isolated worker worktree;
@@ -64,7 +65,7 @@ Explicit review escalation or an open escalation-category finding -> NEEDS_MAIN_
 - conservative path-based risk hints;
 - the requirement for a main-model checkpoint before acceptance.
 
-The A2.1 adapter currently uses Aider with `deepseek/deepseek-chat` by default. Provider credentials stay outside repository policy and command evidence; configure them through the environment expected by Aider. The adapter disables Aider auto-commits, automatic lint/test execution, model-suggested shell commands, update checks, URL prompts, analytics, and `.gitignore` mutation. Aider input/chat history is redirected into the run evidence directory instead of the worker tree. Pipeline verification remains responsible for command execution and evidence.
+The A2.1 adapter currently uses Aider `0.86.2` with `deepseek/deepseek-chat` by default. Provider credentials stay outside repository policy and command evidence; export provider-native variables such as `DEEPSEEK_API_KEY` in the launching environment. Pipeline execution strips `AIDER_*` variables, disables python-dotenv loading, and supplies an empty run-local `--config`, so home/repository `.aider.conf.yml` and `.env` files cannot silently change the worker contract. Ambient home/repository `.aider.model.settings.yml` or `.aider.model.metadata.json` files are rejected because Aider merges those independently of `--config`. Unsupported Aider versions or configured CLI switches fail before model access. Git `user.name` and `user.email` must already resolve so Aider cannot fill missing identity by mutating the shared repository Git configuration. The adapter disables Aider auto-commits, automatic lint/test execution, model-suggested shell commands, release-note/update prompts, URL prompts, analytics, and `.gitignore` mutation. Aider input/chat history is redirected into the run evidence directory instead of the worker tree. Pipeline verification remains responsible for command execution and evidence.
 
 Path-based risk is only an escalation hint. It must never be interpreted as proof that a change is safe. When Git/base-commit evidence is unavailable, risk is reported as `UNKNOWN`.
 
@@ -140,6 +141,7 @@ The A2.1 worker is one-shot. A second `run-worker` invocation for the same run i
 `worker.json` records:
 
 - tool/model identity;
+- Aider preflight version/CLI compatibility, sanitized-environment names, Git-identity readiness, and run-local config digest;
 - exact non-secret command arguments;
 - timestamps/duration/exit code;
 - workspace branch/base;
@@ -233,3 +235,4 @@ Do not copy generated run evidence into owning documentation. Accepted stable be
 The active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification owns intended evolution, stage sequencing, and final acceptance criteria. This guide owns current implemented commands and evidence semantics only.
 
 After A2.1 developer verification, the next bounded automation slice is A2.2: repository-owned Gitleaks execution/evidence and tighter automated verification orchestration. A2.3 then focuses on independent-review invocation/handoff. Bounded model repair/re-review remains A3.
+

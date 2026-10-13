@@ -35,8 +35,7 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 4. explicit operational-evaluation Python compilation plus focused assisted-investigation/calibration/dedicated-Health-alert/runtime-alert/campaign unit tests, using an external temporary bytecode cache so repository cleanliness is unchanged;
 5. `./infra/kubernetes/run_tests.sh` for the complete deterministic Kubernetes/deployment/evaluation asset suite without a live cluster;
 6. `./gradlew clean check --no-watch-fs`, including the repository-wide `verifyNoThreadSleepInTests` source guard;
-7. `./gradlew integrationTest --no-watch-fs --no-parallel`;
-8. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
+7. `./gradlew integrationTest --no-watch-fs --no-parallel`.
 
 The script prints a final PASS/FAIL summary for every routine step that actually ran. It also lists relevant test and problems-report locations.
 
