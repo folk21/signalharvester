@@ -11,3 +11,7 @@ logs/
 # Python-generated local bytecode/cache
 **/__pycache__/
 *.py[cod]
+
+# Local AI-assisted development caches
+.aider*
+cache.db

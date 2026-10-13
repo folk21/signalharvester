@@ -1,0 +1,11 @@
+title = "SignalHarvester worker secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore generated build outputs, local IDE metadata, Git internals, and Aider caches"
+paths = [
+  '''(^|/)(build|\.gradle|\.git|\.idea)(/|$)''',
+  '''(^|/)\.aider[^/]*($|/)''',
+]

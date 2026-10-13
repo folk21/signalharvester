@@ -54,7 +54,9 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted. The Stage 6E4 dedicated live normal/transient/critical Health/alert scenarios now have three completed repetitions and a Stage 6E5 manual evidence review supporting no production policy change. Stage 6E4 canonical repository acceptance remains verification-pending. Runtime persisted alert lifecycle and assisted-investigation quality are separate evaluation boundaries.
+The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted. The Stage 6E4 dedicated live normal/transient/critical Health/alert scenarios and the Stage 6E5 manual evidence review supporting no production policy change are accepted after canonical developer verification. Stage 6E6 runtime persisted-alert verification is implemented, verification-pending, and deliberately paused after live evidence proved clean baseline/transient behavior but exposed time-window-aware recovery and cleanup-ordering gaps. Assisted-investigation quality remains a separate evaluation boundary.
+
+The active contributor-tooling track is [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). It formalizes the multi-stage evolution and acceptance criteria for bounded coding-worker automation without changing the product `current_focus` or granting a worker product/architecture authority. A2.1 isolated Aider execution and A2.2 Gitleaks/ordered verification are implemented and verification-pending; A2.3 independent review invocation is next.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -154,7 +156,7 @@ Umbrella:
 
 Current implementation focus:
 
-- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — scenario-based operational-intelligence evaluation; detector/alert evaluation, assisted-investigation quality evaluation, bounded runtime trial capture/export, and repeated-evidence calibration are accepted, while the repeated live calibration-campaign harness is verification-pending.
+- [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) — scenario-based operational-intelligence evaluation; detector/alert evaluation, bounded runtime trial capture/export, repeated-evidence calibration, and the dedicated repeated live Health/alert calibration evidence review are accepted. Stage 6E6 persisted runtime-alert lifecycle verification is implemented, verification-pending, and deliberately paused after clean baseline/transient evidence exposed a five-minute statistical recovery mismatch plus cleanup after the backend control channel had exited.
 
 Verification-pending carryover:
 
@@ -167,6 +169,10 @@ Active supporting tracks:
 
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
+
+Active contributor-tooling track:
+
+- [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md) — bounded coding-worker automation, verification/review evidence, escalation, and externally authorized acceptance/lifecycle automation. A2.1 isolated Aider execution and A2.2 Gitleaks/ordered verification are verification-pending. This track has no product feature ID and does not replace the backend implementation focus.
 
 ## Recently completed sub-specifications
 
@@ -240,3 +246,4 @@ Further scheduling and capacity refinements remain deferred until measurements o
 These are candidates, not active commitments.
 
 Companion-frontend planning and implementation lifecycle belong to `signalharvester-web` and are not maintained in this backend specification index.
+

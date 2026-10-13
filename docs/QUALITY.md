@@ -38,6 +38,10 @@ Run slower baseline/quality checks periodically with:
 
 This split keeps the everyday gate focused while preserving a single self-contained command for the broader quality baseline.
 
+## Agent-pipeline secret detection
+
+The repository-owned `tools/agent-pipeline/gitleaks.toml` extends Gitleaks default rules. Stage A2.2 uses pinned Gitleaks `8.30.1` as a mandatory pre-canonical check for isolated Aider worker runs, including uncommitted files. The pipeline records rule/path/line-only findings and source/config/version evidence in `checks.json` without persisting raw scanner output or matched secrets. A missing scanner, detection, or invalid evidence blocks progression. `./run_checks.sh` remains the canonical default repository gate; pipeline-specific Gitleaks execution is orchestrated by `agent_pipeline.py verify` and requires external installation. The policy and scanner configuration cannot be changed by the worker being verified.
+
 ## JaCoCo
 
 JaCoCo measures combined unit and integration-test coverage for handwritten production Java code.
@@ -114,10 +118,10 @@ Current repository policy:
 | Unit/default tests | fail | fail |
 | Integration tests | fail | fail |
 | ArchUnit boundaries | fail | fail |
+| Agent-pipeline Gitleaks (A2.2) | fail for worker runs | fail with pinned scanner/config evidence |
 | JaCoCo aggregate coverage | report | introduce justified thresholds after baseline review |
 | SpotBugs production analysis | report | fail on an agreed actionable confidence/severity baseline |
 | Dependency analysis | warn/report | fail on agreed dependency rules after current advice is resolved |
-| FULL archive cleanliness | fail | fail |
 
 Quality gates must remain signal-bearing. Do not introduce thresholds or suppressions solely to produce a green build.
 

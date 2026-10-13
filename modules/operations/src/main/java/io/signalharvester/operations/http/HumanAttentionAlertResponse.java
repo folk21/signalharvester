@@ -1,5 +1,6 @@
 package io.signalharvester.operations.http;
 
+import io.micronaut.serde.annotation.Serdeable;
 import io.signalharvester.operations.alert.HumanAttentionAlert;
 import io.signalharvester.operations.alert.HumanAttentionAlertReason;
 import io.signalharvester.operations.alert.HumanAttentionAlertSeverity;
@@ -9,6 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /** REST representation of one application-owned human-attention alert. */
+@Serdeable
 public record HumanAttentionAlertResponse(
         UUID id,
         HumanAttentionAlertState state,

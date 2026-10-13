@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "requiredRepositoryFiles": [
+    "README.md",
+    "AGENTS.md",
+    "docs/specs/README.md",
+    "docs/TESTS.md",
+    "docs/QUALITY.md",
+    "tools/agent-pipeline/gitleaks.toml"
+  ],
+  "requiredChecks": [
+    {
+      "name": "gitleaks",
+      "kind": "gitleaks",
+      "executable": "gitleaks",
+      "supportedVersion": "8.30.1",
+      "config": "tools/agent-pipeline/gitleaks.toml",
+      "description": "Scan worker worktree including uncommitted files for secrets"
+    },
+    {
+      "name": "canonical",
+      "command": [
+        "./run_checks.sh"
+      ],
+      "description": "Canonical routine repository verification"
+    }
+  ],
+  "independentReview": {
+    "required": true,
+    "blockingSeverities": [
+      "HIGH",
+      "CRITICAL"
+    ]
+  },
+  "mainReview": {
+    "requiredBeforeAcceptance": true
+  },
+  "escalationCategories": [
+    "ARCHITECTURE",
+    "CONTRACT",
+    "SECURITY",
+    "PERSISTENCE",
+    "CONCURRENCY",
+    "TRANSACTION",
+    "MIGRATION",
+    "NON_DETERMINISM",
+    "SPEC_AMBIGUITY"
+  ],
+  "riskRules": [
+    {
+      "level": "HIGH",
+      "patterns": [
+        "^contracts/",
+        "^modules/security/",
+        "/db/migration/",
+        "^modules/[^/]+/src/main/java/.*/api/"
+      ]
+    },
+    {
+      "level": "MODERATE",
+      "patterns": [
+        "^modules/",
+        "^app/",
+        "^common/",
+        "^infra/",
+        "^testing/",
+        "^build\\.gradle",
+        "^settings\\.gradle",
+        "^gradle/",
+        "^run_checks\\.sh$",
+        "^run_rare_checks\\.sh$",
+        "^AGENTS\\.md$"
+      ]
+    },
+    {
+      "level": "LOW",
+      "patterns": [
+        "^docs/",
+        "^README\\.md$",
+        "^CHANGELOG\\.md$",
+        "^tools/"
+      ]
+    }
+  ],
+  "workerExecution": {
+    "required": true,
+    "tool": "aider",
+    "executable": "aider",
+    "defaultModel": "deepseek/deepseek-chat",
+    "branchPrefix": "agent/",
+    "arguments": [
+      "--model",
+      "{model}",
+      "--config",
+      "{config_file}",
+      "--message-file",
+      "{task_file}",
+      "--input-history-file",
+      "{input_history_file}",
+      "--chat-history-file",
+      "{chat_history_file}",
+      "--yes-always",
+      "--no-auto-commits",
+      "--no-dirty-commits",
+      "--no-gitignore",
+      "--no-auto-lint",
+      "--no-auto-test",
+      "--no-suggest-shell-commands",
+      "--no-detect-urls",
+      "--no-analytics",
+      "--no-show-release-notes",
+      "--no-check-update",
+      "--no-gui",
+      "--no-pretty",
+      "--disable-playwright"
+    ],
+    "supportedVersions": [
+      "0.86.2"
+    ]
+  }
+}

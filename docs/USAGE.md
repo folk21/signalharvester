@@ -399,6 +399,16 @@ python3 infra/kubernetes/evaluation/run_health_alert_calibration.py
 
 The runner keeps the deployed policy unchanged and produces a clean normal control, a 300-row transient Analysis-outbox backlog expected to be detected without human attention, and a 1,200-row critical backlog expected to be detected and require attention. Backlogs use the real Collection → Analysis → outbox path while dispatch is deliberately slowed, then the runner waits for Prometheus evidence convergence before fault capture and for full Results/outbox/Prometheus recovery afterward. The default artifact is `build/reports/operational-intelligence/health-alert-calibration-evidence.json`.
 
+### Verify the persisted runtime alert lifecycle
+
+After the dedicated calibration scenarios have established the expected Health states, verify the actual application-owned alert persistence separately with:
+
+```bash
+python3 infra/kubernetes/evaluation/run_runtime_alert_verification.py
+```
+
+Use a disposable local Kubernetes environment with no pre-existing `OPEN` human-attention alert. The runner temporarily disables periodic Health sampling, enables the exact repository `human-attention-v1` configuration, and restores the prior Deployment environment during cleanup. After rollout it first performs bounded baseline stabilization (default: up to 360 seconds, polling every 15 seconds) until two consecutive explicit `HEALTHY` snapshots are present. Stabilization is evidence capture, not a way to erase anomalies: any non-healthy baseline snapshot or any persisted alert created during stabilization is retained in `qualityFindings` and blocks overall acceptance even if it later resolves. The scored phase then verifies no alert for the bounded transient backlog, one persisted `OPEN/CRITICAL` alert for the critical backlog, and resolution of that same alert after two consecutive explicit healthy recovery snapshots. The hardened machine-readable result uses `schemaVersion=2` and is written to `build/reports/operational-intelligence/runtime-alert-verification.json` by default. `scenarioOutcome` may therefore be `PASSED` while overall `outcome` is `FAILED` because of baseline quality findings. This is persisted-runtime evidence, not automatic detection-latency evidence.
+
 ### Run a repeated live calibration campaign
 
 For a bounded repeated live collection, run resilience plus the dedicated Health/alert calibration phase two to eight times and build one calibration report from the resulting artifacts:

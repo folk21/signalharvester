@@ -205,6 +205,26 @@ The backlog cases use the real Collection → Analysis → transactional-outbox 
 
 The fixed 300/1,200 magnitudes are versioned dataset inputs, not automatically selected production thresholds. A future Health policy must be deployed and rerun against the same cases rather than being counterfactually projected from old telemetry.
 
+## Persisted runtime alert lifecycle verification
+
+`run_runtime_alert_verification.py` is the verification-pending Stage 6E6 live acceptance runner for actual persisted `human-attention-v1` state. It is intentionally separate from the offline alert projection used by calibration reports.
+
+Run it against an already verified disposable local Kubernetes deployment with:
+
+```bash
+python3 infra/kubernetes/evaluation/run_runtime_alert_verification.py
+```
+
+The runner temporarily disables periodic Health sampling so background snapshots cannot satisfy or break consecutive-snapshot alert thresholds, explicitly enables the current repository `human-attention-v1` parameters, and restores the previous Deployment environment afterward. It fails closed when a pre-existing `OPEN` alert is present. After rollout it performs bounded baseline stabilization: by default it captures Health/alert evidence every 15 seconds for up to 360 seconds until two consecutive `HEALTHY` snapshots exist and no newly created alert remains open. Every stabilization attempt is persisted in the report. Any non-`HEALTHY` stabilization snapshot or any persisted alert created during that baseline becomes an acceptance-blocking quality finding even if it later resolves and the scored lifecycle succeeds. Using the same real Collection → Analysis → transactional-outbox workload as dedicated calibration, the scored phase then verifies through the public Operations API that:
+
+- the stabilized healthy control creates no new scenario alert;
+- the 300-row transient backlog reaches `DEGRADED` but creates no persisted alert;
+- the 1,200-row critical backlog reaches `UNHEALTHY` and creates exactly one `OPEN/CRITICAL` alert tied to that snapshot;
+- after backlog recovery, the first explicit `HEALTHY` snapshot leaves the same alert open;
+- the second consecutive `HEALTHY` snapshot resolves that same alert identity.
+
+The hardened artifact uses `schemaVersion=2` and is written to `build/reports/operational-intelligence/runtime-alert-verification.json`. `baseline.stabilization` contains the bounded post-rollout attempts, `qualityFindings` preserves baseline detector/attention anomalies, and `scenarioOutcome` distinguishes the transient/critical lifecycle result from overall acceptance. If the scenarios pass but baseline quality findings exist, `scenarioOutcome` is `PASSED` while overall `outcome` remains `FAILED`. This runner verifies persisted runtime policy state; it still does not measure automatic fault-to-detection latency because Health snapshots are captured explicitly.
+
 ## Repeated live calibration campaign
 
 `run_calibration_campaign.py` is a bounded live orchestration wrapper around the accepted resilience evidence producer, the dedicated Health/alert calibration runner, and the optional capacity baseline. It does not add another detector or another source of ground truth.

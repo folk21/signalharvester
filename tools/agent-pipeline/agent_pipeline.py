@@ -1,0 +1,1341 @@
+#!/usr/bin/env python3
+"""Create and verify bounded development-agent runs with machine-readable evidence."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable
+
+SCHEMA_VERSION = 1
+STATE_PREPARED = "PREPARED"
+STATE_WORKER_REQUIRED = "WORKER_REQUIRED"
+STATE_VERIFYING = "VERIFYING"
+STATE_REVIEW_REQUIRED = "REVIEW_REQUIRED"
+STATE_BLOCKED = "BLOCKED"
+STATE_NEEDS_MAIN_REVIEW = "NEEDS_MAIN_REVIEW"
+STATE_READY_FOR_MAIN_REVIEW = "READY_FOR_MAIN_REVIEW"
+
+VALID_REVIEW_VERDICTS = {"PASS", "CHANGES_REQUIRED", "ESCALATE"}
+VALID_FINDING_SEVERITIES = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+VALID_FINDING_STATUSES = {"OPEN", "RESOLVED"}
+RISK_ORDER = {"LOW": 1, "MODERATE": 2, "HIGH": 3, "CRITICAL": 4, "UNKNOWN": 5}
+
+
+def utc_now() -> str:
+    """Return a stable UTC timestamp for persisted run evidence."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    """Read one UTF-8 JSON object from disk."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected a JSON object in {path}")
+    return data
+
+
+def write_json(path: Path, data: dict[str, Any]) -> None:
+    """Atomically write one formatted UTF-8 JSON object."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    temp_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temp_path, path)
+
+
+def sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest for one file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def run_git(repo_root: Path, *args: str) -> str | None:
+    """Run a bounded read-only Git query and return trimmed stdout when available."""
+    if shutil.which("git") is None:
+        return None
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
+
+
+def discover_repository_state(repo_root: Path) -> dict[str, Any]:
+    """Capture the Git identity used as the comparison base for a worker run."""
+    inside = run_git(repo_root, "rev-parse", "--is-inside-work-tree")
+    if inside != "true":
+        return {"gitAvailable": False, "baseCommit": None, "branch": None, "clean": None}
+    status = run_git(repo_root, "status", "--porcelain")
+    return {
+        "gitAvailable": True,
+        "baseCommit": run_git(repo_root, "rev-parse", "HEAD"),
+        "branch": run_git(repo_root, "rev-parse", "--abbrev-ref", "HEAD"),
+        "clean": status == "" if status is not None else None,
+    }
+
+
+def validate_policy(policy: dict[str, Any]) -> None:
+    """Validate the small policy surface consumed by the foundation tooling."""
+    if policy.get("schemaVersion") != SCHEMA_VERSION:
+        raise ValueError(f"Unsupported policy schemaVersion: {policy.get('schemaVersion')}")
+    required_checks = policy.get("requiredChecks")
+    if not isinstance(required_checks, list) or not required_checks:
+        raise ValueError("Policy must define at least one required check")
+    seen: set[str] = set()
+    for check in required_checks:
+        if not isinstance(check, dict):
+            raise ValueError("Each required check must be an object")
+        name = check.get("name")
+        if not isinstance(name, str) or not name or name in seen:
+            raise ValueError("Required check names must be unique non-empty strings")
+        kind = check.get("kind", "command")
+        if kind == "command":
+            command = check.get("command")
+            if not isinstance(command, list) or not command or not all(
+                isinstance(part, str) and part for part in command
+            ):
+                raise ValueError(f"Required check {name} must define a non-empty string command list")
+        elif kind == "gitleaks":
+            if name != "gitleaks":
+                raise ValueError("The Gitleaks required check must be named 'gitleaks'")
+            config = check.get("config")
+            if (
+                not isinstance(config, str)
+                or not config
+                or Path(config).is_absolute()
+                or ".." in Path(config).parts
+            ):
+                raise ValueError("Gitleaks config must be a repository-relative path")
+            if not isinstance(check.get("executable"), str) or not check["executable"]:
+                raise ValueError("Gitleaks executable must be configured")
+            if not isinstance(check.get("supportedVersion"), str) or not re.fullmatch(
+                r"\d+\.\d+\.\d+", check["supportedVersion"]
+            ):
+                raise ValueError("Gitleaks supportedVersion must be an exact x.y.z version")
+        else:
+            raise ValueError(f"Unsupported required check kind: {kind}")
+        seen.add(name)
+    if any(entry.get("kind") == "gitleaks" for entry in required_checks):
+        if required_checks[0]["name"] != "gitleaks":
+            raise ValueError("Gitleaks must precede other required checks")
+
+    worker = policy.get("workerExecution")
+    if worker is not None:
+        if not isinstance(worker, dict):
+            raise ValueError("workerExecution must be an object")
+        if worker.get("tool") != "aider":
+            raise ValueError("workerExecution.tool must be 'aider' in A2.1")
+        executable = worker.get("executable")
+        if not isinstance(executable, str) or not executable.strip():
+            raise ValueError("workerExecution.executable must be a non-empty string")
+        default_model = worker.get("defaultModel")
+        if not isinstance(default_model, str) or not default_model.strip():
+            raise ValueError("workerExecution.defaultModel must be a non-empty string")
+        supported_versions = worker.get("supportedVersions")
+        versions_valid = isinstance(supported_versions, list) and bool(supported_versions)
+        if versions_valid:
+            versions_valid = all(
+                isinstance(version, str) and parse_version_tuple(version) is not None
+                for version in supported_versions
+            )
+        if not versions_valid:
+            raise ValueError("workerExecution.supportedVersions must be a non-empty list of x.y.z version strings")
+        branch_prefix = worker.get("branchPrefix")
+        if not isinstance(branch_prefix, str) or not branch_prefix:
+            raise ValueError("workerExecution.branchPrefix must be a non-empty string")
+        arguments = worker.get("arguments")
+        if (
+            not isinstance(arguments, list)
+            or not arguments
+            or not all(isinstance(part, str) and part for part in arguments)
+        ):
+            raise ValueError("workerExecution.arguments must be a non-empty string list")
+        allowed_placeholders = {
+            "{model}",
+            "{task_file}",
+            "{input_history_file}",
+            "{chat_history_file}",
+            "{config_file}",
+        }
+        for argument in arguments:
+            placeholders = set(re.findall(r"\{[^{}]+\}", argument))
+            if not placeholders.issubset(allowed_placeholders):
+                raise ValueError(f"Unsupported worker argument placeholder in: {argument}")
+            if "api-key" in argument.lower():
+                raise ValueError("Worker API keys must come from the environment, not repository policy arguments")
+
+
+def parse_version_tuple(value: str) -> tuple[int, int, int] | None:
+    """Parse the first semantic x.y.z version from bounded tool output."""
+    match = re.search(r"(?<!\d)(\d+)\.(\d+)\.(\d+)(?!\d)", value)
+    if match is None:
+        return None
+    major, minor, patch = match.groups()
+    return int(major), int(minor), int(patch)
+
+
+def prepare_aider_runtime_config(run_dir: Path) -> Path:
+    """Create the empty run-local Aider config that excludes ambient YAML configuration."""
+    config_path = run_dir / "aider.runtime.conf.yml"
+    config_path.write_text("{}\n", encoding="utf-8")
+    return config_path
+
+
+def build_aider_environment() -> tuple[dict[str, str], list[str]]:
+    """Preserve provider credentials while excluding ambient Aider and dotenv configuration."""
+    removed = sorted(name for name in os.environ if name.startswith("AIDER_"))
+    environment = {name: value for name, value in os.environ.items() if name not in removed}
+    environment["PYTHON_DOTENV_DISABLED"] = "1"
+    return environment, removed
+
+
+def configured_aider_flags(worker_policy: dict[str, Any]) -> list[str]:
+    """Return the CLI switches whose presence is required by the repository-owned adapter."""
+    flags = {argument for argument in worker_policy["arguments"] if argument.startswith("--")}
+    flags.add("--read")
+    return sorted(flags)
+
+
+def preflight_aider(
+    worktree: Path,
+    run_dir: Path,
+    worker_policy: dict[str, Any],
+    environment: dict[str, str],
+    removed_environment_names: list[str],
+) -> dict[str, Any]:
+    """Verify Aider compatibility and deterministic invocation prerequisites before model access."""
+    executable = worker_policy["executable"]
+    resolved = shutil.which(executable, path=environment.get("PATH"))
+    config_path = run_dir / "aider.runtime.conf.yml"
+    result: dict[str, Any] = {
+        "status": "FAIL",
+        "configuredExecutable": executable,
+        "resolvedExecutable": resolved,
+        "supportedVersions": worker_policy.get("supportedVersions", []),
+        "version": None,
+        "versionCommandExitCode": None,
+        "helpCommandExitCode": None,
+        "missingOptions": [],
+        "gitIdentityConfigured": False,
+        "ambientModelConfigurationFiles": [],
+        "dotenvDisabled": environment.get("PYTHON_DOTENV_DISABLED") == "1",
+        "removedAiderEnvironmentVariables": removed_environment_names,
+        "config": str(config_path.resolve()),
+        "configSha256": sha256_file(config_path),
+        "failureReason": None,
+    }
+    if resolved is None:
+        result["failureReason"] = f"Worker executable is not available on PATH: {executable}"
+        return result
+
+    version = subprocess.run(
+        [resolved, "--config", str(config_path.resolve()), "--version"],
+        cwd=worktree,
+        env=environment,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    result["versionCommandExitCode"] = version.returncode
+    version_text = version.stdout.strip()
+    result["version"] = version_text or None
+    parsed_version = parse_version_tuple(version_text)
+    supported_versions = {
+        parsed
+        for configured in worker_policy.get("supportedVersions", [])
+        if (parsed := parse_version_tuple(configured)) is not None
+    }
+    if version.returncode != 0 or parsed_version is None:
+        result["failureReason"] = "Unable to determine a compatible Aider version"
+        return result
+    if parsed_version not in supported_versions:
+        result["failureReason"] = (
+            f"Aider {version_text} is not in repository-supported versions: "
+            + ", ".join(worker_policy.get("supportedVersions", []))
+        )
+        return result
+
+    help_result = subprocess.run(
+        [resolved, "--config", str(config_path.resolve()), "--help"],
+        cwd=worktree,
+        env=environment,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    result["helpCommandExitCode"] = help_result.returncode
+    missing_options = [
+        option for option in configured_aider_flags(worker_policy) if option not in help_result.stdout
+    ]
+    result["missingOptions"] = missing_options
+    if help_result.returncode != 0 or missing_options:
+        result["failureReason"] = "Installed Aider CLI does not support the repository-owned worker arguments"
+        return result
+
+    model_config_names = (".aider.model.settings.yml", ".aider.model.metadata.json")
+    model_config_candidates = [
+        *(Path.home() / name for name in model_config_names),
+        *(worktree / name for name in model_config_names),
+    ]
+    ambient_model_files = sorted({str(path.resolve()) for path in model_config_candidates if path.is_file()})
+    result["ambientModelConfigurationFiles"] = ambient_model_files
+    if ambient_model_files:
+        result["failureReason"] = (
+            "Ambient Aider model settings/metadata are not allowed in pipeline execution: "
+            + ", ".join(ambient_model_files)
+        )
+        return result
+
+    git_name = run_git(worktree, "config", "--get", "user.name")
+    git_email = run_git(worktree, "config", "--get", "user.email")
+    result["gitIdentityConfigured"] = bool(git_name and git_email)
+    if not result["gitIdentityConfigured"]:
+        result["failureReason"] = (
+            "Git user.name and user.email must be configured before Aider runs so it cannot mutate shared Git config"
+        )
+        return result
+    if not result["dotenvDisabled"]:
+        result["failureReason"] = "Aider dotenv loading must be disabled for pipeline execution"
+        return result
+
+    result["status"] = "PASS"
+    return result
+
+def validate_repository(repo_root: Path, policy: dict[str, Any]) -> None:
+    """Fail closed when required repository context is missing."""
+    missing = [relative for relative in policy.get("requiredRepositoryFiles", []) if not (repo_root / relative).is_file()]
+    if missing:
+        raise ValueError(f"Missing required repository files: {', '.join(missing)}")
+
+
+def validate_active_spec(repo_root: Path, spec_path: str) -> None:
+    """Require a declared product specification to point at the active specification tree."""
+    if spec_path == "none":
+        return
+    normalized = Path(spec_path)
+    if normalized.is_absolute() or ".." in normalized.parts:
+        raise ValueError("Specification path must be repository-relative")
+    if normalized.parts[:3] != ("docs", "specs", "active"):
+        raise ValueError("Specification path must be under docs/specs/active or be 'none'")
+    full_path = repo_root / normalized
+    if not full_path.is_file():
+        raise ValueError(f"Active specification does not exist: {spec_path}")
+    head = "\n".join(full_path.read_text(encoding="utf-8").splitlines()[:20])
+    if "spec_status: active" not in head:
+        raise ValueError(f"Specification is not marked active: {spec_path}")
+
+
+def required_check_map(policy: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index required check definitions by stable name."""
+    return {entry["name"]: entry for entry in policy["requiredChecks"]}
+
+
+def build_worker_task(
+    stage: str,
+    spec_path: str,
+    worker: str,
+    model: str,
+    task_text: str,
+    policy: dict[str, Any],
+) -> str:
+    """Build the worker packet that keeps repository rules and escalation boundaries explicit."""
+    required_reading = ["README.md", "AGENTS.md", "the nearest applicable local AGENTS.md files"]
+    if spec_path != "none":
+        required_reading.append(spec_path)
+    reading_lines = "\n".join(f"- {item}" for item in required_reading)
+    escalation_lines = "\n".join(f"- {item}" for item in policy.get("escalationCategories", []))
+    check_lines = "\n".join(
+        f"- {entry['name']}: "
+        + (" ".join(entry["command"]) if entry.get("kind", "command") == "command"
+           else "repository-owned Gitleaks worktree scan")
+        for entry in policy.get("requiredChecks", [])
+    )
+    return f"""# Development worker task\n\n## Identity\n\n- Stage: `{stage}`\n- Worker: `{worker}`\n- Model: `{model}`\n- Active specification: `{spec_path}`\n\n## Required repository reading\n\n{reading_lines}\n\nCurrent repository files override chat history, summaries, and prior plans. Read the relevant implementation, tests, contracts, and owning documentation before editing.\n\n## Worker contract\n\n- Make the smallest coherent change that satisfies the task.\n- Follow repository and nearest local `AGENTS.md` rules.\n- Do not weaken tests, validation, security, architecture, or published contracts to make checks pass.\n- Do not declare a stage accepted or archive an active specification. Acceptance remains outside the worker boundary in the current pipeline stage.\n- Record unresolved ambiguity or high-risk findings instead of guessing.\n- Keep code/configuration comments and software documentation in English.\n\n## Mandatory escalation categories\n\n{escalation_lines}\n\n## Task\n\n{task_text.strip()}\n\n## Required verification before handoff\n\n{check_lines}\n\nAn independent review result is required before the run can become ready for the main-model checkpoint.\n"""
+
+
+def create_run(
+    repo_root: Path,
+    runs_root: Path,
+    policy_path: Path,
+    policy: dict[str, Any],
+    stage: str,
+    spec_path: str,
+    task_text: str,
+    worker: str,
+    model: str,
+    scope_hints: list[str],
+    run_id: str | None,
+) -> Path:
+    """Create an immutable run identity plus the initial worker task packet."""
+    validate_repository(repo_root, policy)
+    validate_active_spec(repo_root, spec_path)
+    if not task_text.strip():
+        raise ValueError("Task text must not be empty")
+    resolved_run_id = run_id or f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", resolved_run_id):
+        raise ValueError("Run id may contain only letters, numbers, dot, underscore, and dash")
+    run_dir = runs_root / resolved_run_id
+    if run_dir.exists():
+        raise ValueError(f"Run already exists: {resolved_run_id}")
+    run_dir.mkdir(parents=True)
+    repository_state = discover_repository_state(repo_root)
+    if repository_state.get("gitAvailable") and repository_state.get("clean") is not True:
+        raise ValueError("Git worktree must be clean before initializing an agent-pipeline run")
+    manifest = {
+        "schemaVersion": SCHEMA_VERSION,
+        "runId": resolved_run_id,
+        "stage": stage,
+        "state": STATE_PREPARED,
+        "createdAt": utc_now(),
+        "updatedAt": utc_now(),
+        "specPath": spec_path,
+        "worker": {"tool": worker, "model": model},
+        "scopeHints": scope_hints,
+        "repository": repository_state,
+        "policy": {
+            "path": str(policy_path.relative_to(repo_root)) if policy_path.is_relative_to(repo_root) else str(policy_path),
+            "sha256": sha256_file(policy_path),
+        },
+        "taskSha256": None,
+        "requiredChecks": [entry["name"] for entry in policy["requiredChecks"]],
+        "workerExecutionRequired": bool(policy.get("workerExecution", {}).get("required", False)),
+        "mainReviewRequiredBeforeAcceptance": bool(policy.get("mainReview", {}).get("requiredBeforeAcceptance", True)),
+        "history": [{"at": utc_now(), "state": STATE_PREPARED, "reason": "run initialized"}],
+    }
+    task_path = run_dir / "task.md"
+    task_path.write_text(build_worker_task(stage, spec_path, worker, model, task_text, policy), encoding="utf-8")
+    manifest["taskSha256"] = sha256_file(task_path)
+    write_json(run_dir / "manifest.json", manifest)
+    write_json(run_dir / "checks.json", {"schemaVersion": SCHEMA_VERSION, "checks": []})
+    write_json(run_dir / "reviews.json", {"schemaVersion": SCHEMA_VERSION, "reviews": []})
+    return run_dir
+
+
+def load_run(runs_root: Path, run_id: str) -> tuple[Path, dict[str, Any]]:
+    """Load one known run and reject missing or incompatible manifests."""
+    run_dir = runs_root / run_id
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError(f"Unknown run: {run_id}")
+    manifest = read_json(manifest_path)
+    if manifest.get("schemaVersion") != SCHEMA_VERSION:
+        raise ValueError(f"Unsupported run schemaVersion: {manifest.get('schemaVersion')}")
+    return run_dir, manifest
+
+
+def append_history(manifest: dict[str, Any], state: str, reason: str) -> None:
+    """Persist an auditable state transition without deleting prior state evidence."""
+    manifest["state"] = state
+    manifest["updatedAt"] = utc_now()
+    manifest.setdefault("history", []).append({"at": utc_now(), "state": state, "reason": reason})
+
+
+def execute_check(repo_root: Path, run_dir: Path, name: str, command: list[str], required: bool) -> int:
+    """Execute one command, stream output, and persist its exit status and log digest."""
+    checks_path = run_dir / "checks.json"
+    checks_data = read_json(checks_path)
+    log_dir = run_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-") or "check"
+    prior_attempts = [entry for entry in checks_data.get("checks", []) if entry.get("name") == name]
+    attempt = len(prior_attempts) + 1
+    log_path = log_dir / f"{safe_name}-attempt-{attempt}.log"
+    started_at = utc_now()
+    started = time.monotonic()
+    with log_path.open("w", encoding="utf-8") as log_handle:
+        process = subprocess.Popen(
+            command,
+            cwd=repo_root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            sys.stdout.write(line)
+            log_handle.write(line)
+        return_code = process.wait()
+    duration_ms = round((time.monotonic() - started) * 1000)
+    result = {
+        "name": name,
+        "required": required,
+        "command": command,
+        "startedAt": started_at,
+        "finishedAt": utc_now(),
+        "durationMs": duration_ms,
+        "exitCode": return_code,
+        "status": "PASS" if return_code == 0 else "FAIL",
+        "log": str(log_path.relative_to(run_dir)),
+        "logSha256": sha256_file(log_path),
+    }
+    result["attempt"] = attempt
+    checks_data.setdefault("checks", []).append(result)
+    write_json(checks_path, checks_data)
+    return return_code
+
+
+def execute_gitleaks_check(
+    worktree: Path,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    definition: dict[str, Any],
+) -> int:
+    """Scan the worker filesystem, retaining only secret-free structured evidence."""
+    checks_path = run_dir / "checks.json"
+    checks = read_json(checks_path)
+    attempt = 1 + sum(entry.get("name") == "gitleaks" for entry in checks.get("checks", []))
+    started_at = utc_now()
+    started = time.monotonic()
+    config_relative = definition["config"]
+    config_path = worktree / config_relative
+    base_commit = manifest.get("repository", {}).get("baseCommit")
+    report_findings: list[dict[str, Any]] = []
+    version: str | None = None
+    config_digest: str | None = None
+    scanner_exit = 127
+    failure: str | None = None
+    report_present = False
+    executable = shutil.which(definition["executable"])
+    if not isinstance(base_commit, str) or not base_commit:
+        failure = "Gitleaks requires the immutable worker base commit"
+    elif not config_path.is_file():
+        failure = "Repository-owned Gitleaks config is missing"
+    elif (worktree / ".gitleaksignore").exists():
+        failure = "Worker-provided .gitleaksignore is not allowed to suppress scanner findings"
+    else:
+        original = subprocess.run(
+            ["git", "show", f"{base_commit}:{config_relative}"],
+            cwd=worktree, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
+        )
+        if original.returncode != 0 or original.stdout != config_path.read_bytes():
+            failure = "Worker changed the repository-owned Gitleaks config; start a new reviewed run"
+        else:
+            config_digest = sha256_file(config_path)
+    if failure is None and executable is None:
+        failure = "Configured Gitleaks executable is not available on PATH"
+    if failure is None:
+        try:
+            version_result = subprocess.run(
+                [executable, "version"], cwd=worktree, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15, check=False,
+            )
+            version = version_result.stdout.strip()
+            if version_result.returncode != 0 or parse_version_tuple(version) != parse_version_tuple(
+                definition["supportedVersion"]
+            ):
+                failure = "Installed Gitleaks version does not match repository policy"
+        except (OSError, subprocess.TimeoutExpired):
+            failure = "Gitleaks version preflight failed"
+    if failure is None:
+        try:
+            with tempfile.TemporaryDirectory(prefix="signalharvester-gitleaks-") as temp_dir:
+                report_path = Path(temp_dir) / "report.json"
+                completed = subprocess.run(
+                    [
+                        executable, "dir", ".", "--config", str(config_path.resolve()),
+                        "--report-format", "json", "--report-path", str(report_path),
+                        "--redact=100", "--no-banner", "--no-color",
+                        "--ignore-gitleaks-allow", "--gitleaks-ignore-path", temp_dir,
+                    ],
+                    cwd=worktree, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    timeout=120, check=False,
+                )
+                scanner_exit = completed.returncode
+                report_present = report_path.is_file()
+                if report_present:
+                    report_data = json.loads(report_path.read_text(encoding="utf-8"))
+                    if report_data is None:
+                        report_data = []
+                    if not isinstance(report_data, list):
+                        raise ValueError("Gitleaks report must contain a findings array")
+                    for finding in report_data:
+                        if not isinstance(finding, dict):
+                            raise ValueError("Gitleaks report contains an invalid finding")
+                        report_findings.append({
+                            "ruleId": finding.get("RuleID"),
+                            "file": finding.get("File"),
+                            "startLine": finding.get("StartLine"),
+                        })
+                if scanner_exit not in (0, 1):
+                    failure = "Gitleaks scan failed"
+                elif scanner_exit == 1 and not report_present:
+                    failure = "Gitleaks detected secrets but did not provide a JSON report"
+                elif scanner_exit == 1 or report_findings:
+                    failure = "Gitleaks detected potential secrets"
+        except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired):
+            failure = "Gitleaks execution or JSON report parsing failed"
+    worker_path = run_dir / "worker.json"
+    source_digest = read_json(worker_path).get("changeSha256") if worker_path.is_file() else None
+    result = {
+        "name": "gitleaks", "required": True, "kind": "gitleaks", "attempt": attempt,
+        "startedAt": started_at, "finishedAt": utc_now(),
+        "durationMs": round((time.monotonic() - started) * 1000),
+        "status": "PASS" if failure is None else "FAIL",
+        "exitCode": scanner_exit,
+        "scanner": {
+            "executable": definition["executable"],
+            "version": version,
+            "supportedVersion": definition["supportedVersion"],
+            "config": config_relative,
+            "configSha256": config_digest,
+            "sourceSha256": source_digest,
+            "scope": "worker-worktree-directory",
+            "reportPresent": report_present,
+            "findingCount": len(report_findings),
+            "findings": report_findings,
+            "error": failure,
+        },
+    }
+    checks.setdefault("checks", []).append(result)
+    write_json(checks_path, checks)
+    print(f"Gitleaks: {result['status']} ({len(report_findings)} findings); raw secrets were not recorded")
+    return 0 if failure is None else 1
+
+
+def run_required_check(
+    repo_root: Path,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    definition: dict[str, Any],
+    policy: dict[str, Any],
+) -> int:
+    """Run one policy-defined check in the immutable worker source state."""
+    if policy.get("workerExecution", {}).get("required", False):
+        ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+    worktree = execution_root(repo_root, manifest)
+    if policy.get("workerExecution", {}).get("required", False):
+        protected_paths = {"run_checks.sh", "tools/agent-pipeline/pipeline-policy.json"}
+        changed = set(read_json(run_dir / "worker.json").get("changedFiles", []))
+        if changed.intersection(protected_paths):
+            raise ValueError("Worker modified required verification policy or the canonical gate")
+    if definition.get("kind", "command") == "gitleaks":
+        return execute_gitleaks_check(worktree, run_dir, manifest, definition)
+    return execute_check(worktree, run_dir, definition["name"], definition["command"], True)
+
+
+def validate_security_check_evidence(
+    policy: dict[str, Any], checks_data: dict[str, Any], worker_result: dict[str, Any] | None,
+) -> None:
+    """Reject a claimed successful secret scan without tied structured evidence."""
+    latest = {entry.get("name"): entry for entry in checks_data.get("checks", []) if isinstance(entry, dict)}
+    for definition in policy["requiredChecks"]:
+        if definition.get("kind") != "gitleaks":
+            continue
+        entry = latest.get(definition["name"])
+        if entry is None or entry.get("status") != "PASS":
+            continue
+        scan = entry.get("scanner")
+        if not isinstance(scan, dict) or (
+            entry.get("kind") != "gitleaks"
+            or entry.get("exitCode") != 0
+            or scan.get("version") is None
+            or parse_version_tuple(scan["version"]) != parse_version_tuple(definition["supportedVersion"])
+            or scan.get("scope") != "worker-worktree-directory"
+            or not isinstance(scan.get("reportPresent"), bool)
+            or scan.get("findingCount") != 0
+            or scan.get("findings") != []
+            or not scan.get("configSha256")
+            or scan.get("sourceSha256") != (worker_result or {}).get("changeSha256")
+        ):
+            raise ValueError("Required Gitleaks PASS evidence is missing or inconsistent")
+
+
+def validate_review(review: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize one independent review payload."""
+    if review.get("schemaVersion") != SCHEMA_VERSION:
+        raise ValueError("Review schemaVersion must be 1")
+    reviewer = review.get("reviewer")
+    if not isinstance(reviewer, str) or not reviewer.strip():
+        raise ValueError("Review must identify a non-empty reviewer")
+    verdict = review.get("verdict")
+    if verdict not in VALID_REVIEW_VERDICTS:
+        raise ValueError(f"Unsupported review verdict: {verdict}")
+    findings = review.get("findings")
+    if not isinstance(findings, list):
+        raise ValueError("Review findings must be a list")
+    normalized_findings = []
+    seen_ids: set[str] = set()
+    for finding in findings:
+        if not isinstance(finding, dict):
+            raise ValueError("Each review finding must be an object")
+        finding_id = finding.get("id")
+        severity = finding.get("severity")
+        category = finding.get("category")
+        summary = finding.get("summary")
+        status = finding.get("status")
+        if not isinstance(finding_id, str) or not finding_id or finding_id in seen_ids:
+            raise ValueError("Finding ids must be unique non-empty strings")
+        if severity not in VALID_FINDING_SEVERITIES:
+            raise ValueError(f"Unsupported finding severity: {severity}")
+        if not isinstance(category, str) or not category:
+            raise ValueError("Finding category must be a non-empty string")
+        if not isinstance(summary, str) or not summary:
+            raise ValueError("Finding summary must be a non-empty string")
+        if status not in VALID_FINDING_STATUSES:
+            raise ValueError(f"Unsupported finding status: {status}")
+        seen_ids.add(finding_id)
+        normalized_findings.append(
+            {
+                "id": finding_id,
+                "severity": severity,
+                "category": category,
+                "summary": summary,
+                "status": status,
+                "file": finding.get("file"),
+                "line": finding.get("line"),
+            }
+        )
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "reviewer": reviewer.strip(),
+        "verdict": verdict,
+        "recordedAt": utc_now(),
+        "findings": normalized_findings,
+    }
+
+
+def discover_changed_files(repo_root: Path, base_commit: str | None) -> tuple[list[str], bool]:
+    """Return changed paths since the run base plus uncommitted/untracked paths."""
+    if run_git(repo_root, "rev-parse", "--is-inside-work-tree") != "true" or not base_commit:
+        return [], False
+    commands: list[list[str]] = [
+        ["diff", "--name-only", f"{base_commit}...HEAD"],
+        ["diff", "--name-only"],
+        ["diff", "--cached", "--name-only"],
+        ["ls-files", "--others", "--exclude-standard"],
+    ]
+    paths: set[str] = set()
+    for args in commands:
+        output = run_git(repo_root, *args)
+        if output is None:
+            return [], False
+        paths.update(line.strip() for line in output.splitlines() if line.strip())
+    return sorted(paths), True
+
+
+def classify_risk(paths: Iterable[str], policy: dict[str, Any], evidence_available: bool) -> dict[str, Any]:
+    """Apply conservative path-based escalation hints without treating them as semantic proof."""
+    path_list = sorted(set(paths))
+    if not evidence_available:
+        return {"level": "UNKNOWN", "matchedRules": [], "changedFiles": path_list}
+    level = "LOW"
+    matched: list[dict[str, Any]] = []
+    matched_paths: set[str] = set()
+    for rule in policy.get("riskRules", []):
+        rule_level = rule.get("level")
+        patterns = rule.get("patterns", [])
+        rule_paths = [path for path in path_list if any(re.search(pattern, path) for pattern in patterns)]
+        if rule_paths:
+            matched.append({"level": rule_level, "paths": rule_paths})
+            matched_paths.update(rule_paths)
+            if RISK_ORDER.get(rule_level, 0) > RISK_ORDER[level]:
+                level = rule_level
+    unmatched_paths = [path for path in path_list if path not in matched_paths]
+    if unmatched_paths and RISK_ORDER["MODERATE"] > RISK_ORDER[level]:
+        level = "MODERATE"
+    if not path_list:
+        level = "LOW"
+    return {
+        "level": level,
+        "matchedRules": matched,
+        "unmatchedChangedFiles": unmatched_paths,
+        "changedFiles": path_list,
+    }
+
+
+def run_git_mutation(repo_root: Path, *args: str) -> str:
+    """Run one explicit Git mutation and fail with bounded stderr on error."""
+    if shutil.which("git") is None:
+        raise ValueError("git is required for isolated worker execution")
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or f"exit code {completed.returncode}"
+        raise ValueError(f"git {' '.join(args)} failed: {detail}")
+    return completed.stdout.strip()
+
+
+def relative_or_absolute(path: Path, repo_root: Path) -> str:
+    """Prefer repository-relative paths in persisted evidence when possible."""
+    try:
+        return str(path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        return str(path.resolve())
+
+
+def resolve_manifest_path(repo_root: Path, value: str) -> Path:
+    """Resolve one path persisted in a run manifest."""
+    path = Path(value)
+    return path if path.is_absolute() else repo_root / path
+
+
+def safe_branch_component(value: str) -> str:
+    """Convert a run id to a conservative Git branch-name component."""
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "-", value).strip("-")
+    if not cleaned:
+        raise ValueError("Run id does not contain a usable Git branch component")
+    return cleaned
+
+
+def prepare_worker_workspace(
+    repo_root: Path,
+    worktrees_root: Path,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    """Create one isolated branch/worktree at the immutable run base revision."""
+    worker_policy = policy.get("workerExecution")
+    if not isinstance(worker_policy, dict) or not worker_policy.get("required", False):
+        raise ValueError("Pipeline policy does not require direct worker execution")
+    if manifest.get("workspace") is not None:
+        raise ValueError("Worker workspace is already prepared for this run")
+    repository = manifest.get("repository", {})
+    base_commit = repository.get("baseCommit")
+    if repository.get("gitAvailable") is not True or not isinstance(base_commit, str) or not base_commit:
+        raise ValueError("Direct worker execution requires a Git-backed run with an explicit base commit")
+    current = discover_repository_state(repo_root)
+    if current.get("clean") is not True:
+        raise ValueError("Base Git worktree must remain clean before preparing the worker workspace")
+    if current.get("baseCommit") != base_commit:
+        raise ValueError("Base Git HEAD changed since run initialization; start a new run")
+
+    branch = f"{worker_policy['branchPrefix']}{safe_branch_component(manifest['runId'])}"
+    if run_git(repo_root, "show-ref", "--verify", f"refs/heads/{branch}") is not None:
+        raise ValueError(f"Worker branch already exists: {branch}")
+    worktree_path = (worktrees_root / manifest["runId"]).resolve()
+    if worktree_path.exists():
+        raise ValueError(f"Worker worktree path already exists: {worktree_path}")
+    worktree_path.parent.mkdir(parents=True, exist_ok=True)
+    run_git_mutation(repo_root, "worktree", "add", "-b", branch, str(worktree_path), base_commit)
+
+    head = run_git(worktree_path, "rev-parse", "HEAD")
+    status = run_git(worktree_path, "status", "--porcelain")
+    if head != base_commit or status != "":
+        raise ValueError("Prepared worker worktree does not match the clean run base commit")
+    workspace = {
+        "kind": "git-worktree",
+        "path": relative_or_absolute(worktree_path, repo_root),
+        "branch": branch,
+        "baseCommit": base_commit,
+        "preparedAt": utc_now(),
+    }
+    manifest["workspace"] = workspace
+    append_history(manifest, STATE_WORKER_REQUIRED, "isolated worker worktree prepared")
+    write_json(run_dir / "manifest.json", manifest)
+    return workspace
+
+
+def execution_root(repo_root: Path, manifest: dict[str, Any]) -> Path:
+    """Return the isolated worktree when a run has one, otherwise the repository root."""
+    workspace = manifest.get("workspace")
+    if not isinstance(workspace, dict):
+        return repo_root
+    value = workspace.get("path")
+    if not isinstance(value, str) or not value:
+        raise ValueError("Worker workspace path is missing from the run manifest")
+    path = resolve_manifest_path(repo_root, value).resolve()
+    if not path.exists():
+        raise ValueError(f"Worker workspace is missing: {path}")
+    return path
+
+
+def build_aider_command(policy: dict[str, Any], manifest: dict[str, Any], run_dir: Path) -> list[str]:
+    """Build the repository-owned one-shot Aider command without embedding API keys."""
+    worker_policy = policy.get("workerExecution")
+    if not isinstance(worker_policy, dict):
+        raise ValueError("workerExecution policy is missing")
+    configured_tool = worker_policy.get("tool")
+    if manifest.get("worker", {}).get("tool") != configured_tool:
+        raise ValueError(f"Run worker tool must be {configured_tool}")
+    model = manifest.get("worker", {}).get("model")
+    if not isinstance(model, str) or not model or model == "unspecified":
+        raise ValueError("Direct worker execution requires an explicit model")
+    task_file = str((run_dir / "task.md").resolve())
+    replacements = {
+        "{model}": model,
+        "{task_file}": task_file,
+        "{input_history_file}": str((run_dir / "aider.input.history").resolve()),
+        "{chat_history_file}": str((run_dir / "aider.chat.history.md").resolve()),
+        "{config_file}": str((run_dir / "aider.runtime.conf.yml").resolve()),
+    }
+    arguments: list[str] = []
+    for raw in worker_policy["arguments"]:
+        value = raw
+        for placeholder, replacement in replacements.items():
+            value = value.replace(placeholder, replacement)
+        arguments.append(value)
+    read_files = ["README.md", "AGENTS.md", "docs/specs/README.md"]
+    spec_path = manifest.get("specPath")
+    if isinstance(spec_path, str) and spec_path != "none":
+        read_files.append(spec_path)
+    for read_file in read_files:
+        arguments.extend(["--read", read_file])
+    return [worker_policy["executable"], *arguments]
+
+
+def workspace_change_digest(worktree: Path, changed_files: Iterable[str]) -> str:
+    """Digest the worker-visible source diff, including untracked files, without persisting file contents."""
+    digest = hashlib.sha256()
+    for relative in sorted(set(changed_files)):
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        path = worktree / relative
+        if path.is_symlink():
+            digest.update(b"SYMLINK\0")
+            digest.update(os.readlink(path).encode("utf-8"))
+        elif path.is_file():
+            digest.update(b"FILE\0")
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        elif path.exists():
+            digest.update(b"OTHER\0")
+        else:
+            digest.update(b"DELETED\0")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def ensure_worker_workspace_matches_result(
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Reject source drift after the one-shot worker result was captured."""
+    result_path = run_dir / "worker.json"
+    if not result_path.is_file():
+        raise ValueError("Required worker execution evidence is missing")
+    result = read_json(result_path)
+    if result.get("status") != "PASS":
+        raise ValueError("Required worker execution did not pass")
+    worktree = execution_root(repo_root, manifest)
+    base_commit = manifest.get("repository", {}).get("baseCommit")
+    head_commit = run_git(worktree, "rev-parse", "HEAD")
+    if head_commit != result.get("headCommit") or head_commit != base_commit:
+        raise ValueError("Worker worktree HEAD changed after worker execution")
+    changed_files, available = discover_changed_files(worktree, base_commit)
+    if not available:
+        raise ValueError("Worker worktree change evidence is unavailable")
+    digest = workspace_change_digest(worktree, changed_files)
+    if changed_files != result.get("changedFiles") or digest != result.get("changeSha256"):
+        raise ValueError("Worker worktree source changed after worker execution; start a new run")
+    return result
+
+
+def execute_worker(
+    repo_root: Path,
+    run_dir: Path,
+    manifest: dict[str, Any],
+    policy: dict[str, Any],
+) -> int:
+    """Run one bounded Aider attempt in the isolated worktree and persist result evidence."""
+    result_path = run_dir / "worker.json"
+    if result_path.exists():
+        raise ValueError("Worker execution is already recorded; A2.1 does not provide repair/retry loops")
+    worktree = execution_root(repo_root, manifest)
+    workspace = manifest.get("workspace")
+    if not isinstance(workspace, dict) or workspace.get("kind") != "git-worktree":
+        raise ValueError("Prepare an isolated worker workspace before running the worker")
+    base_commit = workspace.get("baseCommit")
+    if not isinstance(base_commit, str) or run_git(worktree, "rev-parse", "HEAD") != base_commit:
+        raise ValueError("Worker worktree HEAD no longer matches the run base commit")
+    if run_git(worktree, "status", "--porcelain") != "":
+        raise ValueError("Worker worktree must be clean before the one-shot Aider execution")
+
+    worker_policy = policy.get("workerExecution")
+    if not isinstance(worker_policy, dict):
+        raise ValueError("workerExecution policy is missing")
+    prepare_aider_runtime_config(run_dir)
+    worker_environment, removed_aider_environment = build_aider_environment()
+    preflight = preflight_aider(
+        worktree, run_dir, worker_policy, worker_environment, removed_aider_environment
+    )
+    command = build_aider_command(policy, manifest, run_dir)
+    log_dir = run_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_path = log_dir / "worker-attempt-1.log"
+    started_at = utc_now()
+    started = time.monotonic()
+    return_code = 127
+    startup_error: str | None = None
+    with log_path.open("w", encoding="utf-8") as log_handle:
+        if preflight["status"] != "PASS":
+            startup_error = preflight["failureReason"]
+            log_handle.write(f"ERROR: Aider preflight failed: {startup_error}\n")
+            print(f"ERROR: Aider preflight failed: {startup_error}", file=sys.stderr)
+        else:
+            try:
+                process = subprocess.Popen(
+                    command,
+                    cwd=worktree,
+                    env=worker_environment,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    bufsize=1,
+                )
+                assert process.stdout is not None
+                for line in process.stdout:
+                    sys.stdout.write(line)
+                    log_handle.write(line)
+                return_code = process.wait()
+            except OSError as exc:
+                startup_error = str(exc)
+                log_handle.write(f"ERROR: failed to start worker: {exc}\n")
+                print(f"ERROR: failed to start worker: {exc}", file=sys.stderr)
+    duration_ms = round((time.monotonic() - started) * 1000)
+    head_commit = run_git(worktree, "rev-parse", "HEAD")
+    changed_files, change_evidence = discover_changed_files(worktree, base_commit)
+    change_sha256 = workspace_change_digest(worktree, changed_files) if change_evidence else None
+    unexpected_commit = head_commit != base_commit
+    passed = return_code == 0 and not unexpected_commit and change_evidence
+    result = {
+        "schemaVersion": SCHEMA_VERSION,
+        "tool": manifest.get("worker", {}).get("tool"),
+        "model": manifest.get("worker", {}).get("model"),
+        "command": command,
+        "startedAt": started_at,
+        "finishedAt": utc_now(),
+        "durationMs": duration_ms,
+        "exitCode": return_code,
+        "status": "PASS" if passed else "FAIL",
+        "startupError": startup_error,
+        "preflight": preflight,
+        "workspace": workspace,
+        "headCommit": head_commit,
+        "unexpectedCommit": unexpected_commit,
+        "changedFiles": changed_files,
+        "changeEvidenceAvailable": change_evidence,
+        "changeSha256": change_sha256,
+        "log": str(log_path.relative_to(run_dir)),
+        "logSha256": sha256_file(log_path),
+    }
+    write_json(result_path, result)
+    return 0 if passed else 1
+
+
+def derive_state(
+    policy: dict[str, Any],
+    checks_data: dict[str, Any],
+    review: dict[str, Any] | None,
+    worker_result: dict[str, Any] | None = None,
+) -> tuple[str, list[str]]:
+    """Derive the fail-closed run state only from persisted verification evidence."""
+    reasons: list[str] = []
+    if policy.get("workerExecution", {}).get("required", False):
+        if worker_result is None:
+            reasons.append("required worker execution missing")
+            return STATE_WORKER_REQUIRED, reasons
+        if worker_result.get("status") != "PASS":
+            reasons.append("required worker execution failed")
+            return STATE_BLOCKED, reasons
+
+    check_by_name: dict[str, dict[str, Any]] = {}
+    for entry in checks_data.get("checks", []):
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str):
+            check_by_name[entry["name"]] = entry
+    failed_latest = [name for name, entry in check_by_name.items() if entry.get("status") == "FAIL"]
+    if failed_latest:
+        reasons.append(f"latest recorded check failed: {', '.join(sorted(failed_latest))}")
+        return STATE_BLOCKED, reasons
+    for required in policy.get("requiredChecks", []):
+        name = required["name"]
+        entry = check_by_name.get(name)
+        if entry is None:
+            reasons.append(f"required check missing: {name}")
+            return STATE_VERIFYING, reasons
+        if entry.get("status") != "PASS":
+            reasons.append(f"required check failed: {name}")
+            return STATE_BLOCKED, reasons
+
+    if policy.get("independentReview", {}).get("required", True):
+        if review is None:
+            reasons.append("independent review missing")
+            return STATE_REVIEW_REQUIRED, reasons
+        if review.get("verdict") == "ESCALATE":
+            reasons.append("independent review requested escalation")
+            return STATE_NEEDS_MAIN_REVIEW, reasons
+        blocking_severities = set(policy.get("independentReview", {}).get("blockingSeverities", []))
+        blocking_findings = [
+            finding
+            for finding in review.get("findings", [])
+            if finding.get("status") == "OPEN" and finding.get("severity") in blocking_severities
+        ]
+        if review.get("verdict") == "CHANGES_REQUIRED" or blocking_findings:
+            reasons.append("independent review has unresolved blocking findings")
+            return STATE_BLOCKED, reasons
+        escalation_categories = set(policy.get("escalationCategories", []))
+        escalation_findings = [
+            finding
+            for finding in review.get("findings", [])
+            if finding.get("status") == "OPEN" and finding.get("category") in escalation_categories
+        ]
+        if escalation_findings:
+            reasons.append("independent review has an open escalation-category finding")
+            return STATE_NEEDS_MAIN_REVIEW, reasons
+
+    reasons.append("required checks and independent review passed")
+    return STATE_READY_FOR_MAIN_REVIEW, reasons
+
+
+def update_status(repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+    """Recompute state and risk evidence, then persist both in the run manifest."""
+    checks_data = read_json(run_dir / "checks.json")
+    review_path = run_dir / "review.json"
+    review = read_json(review_path) if review_path.is_file() else None
+    worker_path = run_dir / "worker.json"
+    worker_result = read_json(worker_path) if worker_path.is_file() else None
+    if worker_result is not None and worker_result.get("status") == "PASS":
+        worker_result = ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+    validate_security_check_evidence(policy, checks_data, worker_result)
+    state, reasons = derive_state(policy, checks_data, review, worker_result)
+    changed_files, available = discover_changed_files(
+        execution_root(repo_root, manifest), manifest.get("repository", {}).get("baseCommit")
+    )
+    risk = classify_risk(changed_files, policy, available)
+    manifest["riskAssessment"] = risk
+    append_history(manifest, state, "; ".join(reasons))
+    write_json(run_dir / "manifest.json", manifest)
+    latest_checks: dict[str, dict[str, Any]] = {}
+    for entry in checks_data.get("checks", []):
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str):
+            latest_checks[entry["name"]] = {
+                "status": entry.get("status"),
+                "attempt": entry.get("attempt"),
+                "required": entry.get("required"),
+            }
+    open_findings = [] if review is None else [
+        finding for finding in review.get("findings", []) if finding.get("status") == "OPEN"
+    ]
+    status = {
+        "schemaVersion": SCHEMA_VERSION,
+        "runId": manifest["runId"],
+        "stage": manifest["stage"],
+        "state": state,
+        "reasons": reasons,
+        "worker": {
+            "required": bool(policy.get("workerExecution", {}).get("required", False)),
+            "present": worker_result is not None,
+            "status": None if worker_result is None else worker_result.get("status"),
+        },
+        "checks": latest_checks,
+        "review": {
+            "present": review is not None,
+            "verdict": None if review is None else review.get("verdict"),
+            "openFindingCount": len(open_findings),
+        },
+        "riskAssessment": risk,
+        "mainReviewRequiredBeforeAcceptance": manifest.get("mainReviewRequiredBeforeAcceptance", True),
+    }
+    write_json(run_dir / "status.json", status)
+    return status
+
+
+def ensure_run_contract_matches(policy_path: Path, run_dir: Path, manifest: dict[str, Any]) -> None:
+    """Reject mid-run policy or task drift so the worker contract cannot silently weaken."""
+    expected_policy = manifest.get("policy", {}).get("sha256")
+    actual_policy = sha256_file(policy_path)
+    if expected_policy != actual_policy:
+        raise ValueError("Pipeline policy changed since run initialization; start a new run or request main-model review")
+    task_path = run_dir / "task.md"
+    if not task_path.is_file() or manifest.get("taskSha256") != sha256_file(task_path):
+        raise ValueError("Worker task changed since run initialization; start a new run or request main-model review")
+
+
+def parse_command_tail(parts: list[str]) -> list[str]:
+    """Normalize argparse remainder syntax for a command executed without a shell."""
+    if parts and parts[0] == "--":
+        parts = parts[1:]
+    if not parts:
+        raise ValueError("A command must be provided after --")
+    return parts
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line interface for the foundation workflow."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo-root", default=".", help="Repository root, default: current directory")
+    parser.add_argument(
+        "--policy",
+        default="tools/agent-pipeline/pipeline-policy.json",
+        help="Repository-relative or absolute pipeline policy path",
+    )
+    parser.add_argument(
+        "--runs-root",
+        default="build/reports/agent-pipeline",
+        help="Repository-relative or absolute run evidence directory",
+    )
+    parser.add_argument(
+        "--worktrees-root",
+        default="build/agent-worktrees",
+        help="Repository-relative or absolute isolated worker worktree directory",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    init_parser = subparsers.add_parser("init", help="Initialize one bounded worker run")
+    init_parser.add_argument("--stage", required=True)
+    init_parser.add_argument("--spec", required=True, help="Active spec path or 'none' for contributor-tooling work")
+    init_parser.add_argument("--task-file", required=True)
+    init_parser.add_argument("--worker")
+    init_parser.add_argument("--model")
+    init_parser.add_argument("--scope", action="append", default=[])
+    init_parser.add_argument("--run-id")
+
+    prepare_parser = subparsers.add_parser("prepare-worker", help="Create the isolated Git branch/worktree")
+    prepare_parser.add_argument("--run-id", required=True)
+
+    worker_parser = subparsers.add_parser("run-worker", help="Run the configured one-shot Aider worker")
+    worker_parser.add_argument("--run-id", required=True)
+
+    verify_parser = subparsers.add_parser("verify", help="Run all required checks in policy order")
+    verify_parser.add_argument("--run-id", required=True)
+
+    check_parser = subparsers.add_parser("run-check", help="Run one policy-defined required check")
+    check_parser.add_argument("--run-id", required=True)
+    check_parser.add_argument("--name", required=True)
+
+    command_parser = subparsers.add_parser("run-command", help="Run and record one additional focused check")
+    command_parser.add_argument("--run-id", required=True)
+    command_parser.add_argument("--name", required=True)
+    command_parser.add_argument("command_args", nargs=argparse.REMAINDER)
+
+    review_parser = subparsers.add_parser("record-review", help="Record an independent structured review")
+    review_parser.add_argument("--run-id", required=True)
+    review_parser.add_argument("--input", required=True)
+
+    status_parser = subparsers.add_parser("status", help="Recompute and print one run status")
+    status_parser.add_argument("--run-id", required=True)
+    return parser
+
+
+def resolve_under_repo(repo_root: Path, value: str) -> Path:
+    """Resolve a path against the repository while preserving explicit absolute paths."""
+    path = Path(value)
+    return path if path.is_absolute() else repo_root / path
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Execute one agent-pipeline foundation command."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    repo_root = Path(args.repo_root).resolve()
+    policy_path = resolve_under_repo(repo_root, args.policy).resolve()
+    runs_root = resolve_under_repo(repo_root, args.runs_root).resolve()
+    worktrees_root = resolve_under_repo(repo_root, args.worktrees_root).resolve()
+    try:
+        policy = read_json(policy_path)
+        validate_policy(policy)
+        validate_repository(repo_root, policy)
+
+        if args.command == "init":
+            task_path = resolve_under_repo(repo_root, args.task_file)
+            task_text = task_path.read_text(encoding="utf-8")
+            run_dir = create_run(
+                repo_root,
+                runs_root,
+                policy_path,
+                policy,
+                args.stage,
+                args.spec,
+                task_text,
+                args.worker or policy.get("workerExecution", {}).get("tool", "aider"),
+                args.model or policy.get("workerExecution", {}).get("defaultModel", "unspecified"),
+                args.scope,
+                args.run_id,
+            )
+            print(run_dir)
+            return 0
+
+        run_dir, manifest = load_run(runs_root, args.run_id)
+        ensure_run_contract_matches(policy_path, run_dir, manifest)
+
+        if args.command == "prepare-worker":
+            workspace = prepare_worker_workspace(repo_root, worktrees_root, run_dir, manifest, policy)
+            print(json.dumps(workspace, indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "run-worker":
+            result = execute_worker(repo_root, run_dir, manifest, policy)
+            update_status(repo_root, run_dir, manifest, policy)
+            return result
+
+        if args.command == "run-check":
+            definitions = required_check_map(policy)
+            if args.name not in definitions:
+                raise ValueError(f"Unknown required check: {args.name}")
+            result = run_required_check(repo_root, run_dir, manifest, definitions[args.name], policy)
+            update_status(repo_root, run_dir, manifest, policy)
+            return result
+
+        if args.command == "verify":
+            for definition in policy["requiredChecks"]:
+                result = run_required_check(repo_root, run_dir, manifest, definition, policy)
+                update_status(repo_root, run_dir, manifest, policy)
+                if result != 0:
+                    return result
+            return 0
+
+        if args.command == "run-command":
+            if args.name in required_check_map(policy):
+                raise ValueError(f"Use run-check for policy-defined check: {args.name}")
+            command = parse_command_tail(args.command_args)
+            if policy.get("workerExecution", {}).get("required", False):
+                ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+            result = execute_check(execution_root(repo_root, manifest), run_dir, args.name, command, False)
+            update_status(repo_root, run_dir, manifest, policy)
+            return result
+
+        if args.command == "record-review":
+            review_input = resolve_under_repo(repo_root, args.input)
+            review = validate_review(read_json(review_input))
+            reviews_path = run_dir / "reviews.json"
+            reviews = read_json(reviews_path)
+            reviews.setdefault("reviews", []).append(review)
+            write_json(reviews_path, reviews)
+            write_json(run_dir / "review.json", review)
+            status = update_status(repo_root, run_dir, manifest, policy)
+            print(json.dumps(status, indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "status":
+            status = update_status(repo_root, run_dir, manifest, policy)
+            print(json.dumps(status, indent=2, sort_keys=True))
+            return 0
+
+        raise ValueError(f"Unsupported command: {args.command}")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

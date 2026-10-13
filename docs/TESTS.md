@@ -31,12 +31,11 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 
 1. `docker info` preflight for container-backed verification;
 2. optional `git diff --check` when running inside a Git worktree;
-3. `./tools/source-import/run_tests.sh` and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
-4. explicit operational-evaluation Python compilation plus focused assisted-investigation/calibration/dedicated-Health-alert/campaign unit tests, using an external temporary bytecode cache so repository cleanliness is unchanged;
+3. `./tools/agent-pipeline/run_tests.sh`, `./tools/source-import/run_tests.sh`, and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
+4. explicit operational-evaluation Python compilation plus focused assisted-investigation/calibration/dedicated-Health-alert/runtime-alert/campaign unit tests, using an external temporary bytecode cache so repository cleanliness is unchanged;
 5. `./infra/kubernetes/run_tests.sh` for the complete deterministic Kubernetes/deployment/evaluation asset suite without a live cluster;
 6. `./gradlew clean check --no-watch-fs`, including the repository-wide `verifyNoThreadSleepInTests` source guard;
-7. `./gradlew integrationTest --no-watch-fs --no-parallel`;
-8. generation of a temporary FULL archive and validation that it contains `gradle-wrapper.jar` while excluding local/generated artifacts and unrelated JARs.
+7. `./gradlew integrationTest --no-watch-fs --no-parallel`.
 
 The script prints a final PASS/FAIL summary for every routine step that actually ran. It also lists relevant test and problems-report locations.
 
@@ -47,15 +46,18 @@ python3 -m py_compile \
   infra/kubernetes/evaluation/assisted_investigation_evaluator.py \
   infra/kubernetes/evaluation/calibration_report.py \
   infra/kubernetes/evaluation/run_health_alert_calibration.py \
+  infra/kubernetes/evaluation/run_runtime_alert_verification.py \
   infra/kubernetes/evaluation/run_calibration_campaign.py \
   infra/kubernetes/tests/test_assisted_investigation_evaluator.py \
   infra/kubernetes/tests/test_calibration_report.py \
   infra/kubernetes/tests/test_health_alert_calibration.py \
+  infra/kubernetes/tests/test_runtime_alert_verification.py \
   infra/kubernetes/tests/test_calibration_campaign.py
 python3 -m unittest \
   infra.kubernetes.tests.test_assisted_investigation_evaluator \
   infra.kubernetes.tests.test_calibration_report \
   infra.kubernetes.tests.test_health_alert_calibration \
+  infra.kubernetes.tests.test_runtime_alert_verification \
   infra.kubernetes.tests.test_calibration_campaign
 ./infra/kubernetes/run_tests.sh
 ```
@@ -133,7 +135,7 @@ Container-backed integration ownership is:
 - `modules:configuration` — PostgreSQL persistence/server boundary;
 - `modules:collection` — Kafka producer/consumer transport boundary;
 - `modules:analysis` — PostgreSQL durable deduplication;
-- `modules:operations` — deterministic/statistical Health Engine and analysis-package unit coverage plus PostgreSQL change-journal, Health Snapshot/report/Incident Assessment persistence, evidence-reference validation, deterministic fake-provider assisted investigation, bounded read-only tool budgets, rolling-baseline history, change/health correlation, and durable automatic-trigger planning/lease/retry semantics plus deterministic human-attention alert open/escalate/resolve/cooldown semantics;
+- `modules:operations` — deterministic/statistical Health Engine and analysis-package unit coverage plus PostgreSQL change-journal, Health Snapshot/report/Incident Assessment persistence, evidence-reference validation, deterministic fake-provider assisted investigation, bounded read-only tool budgets, rolling-baseline history, change/health correlation, durable automatic-trigger planning/lease/retry semantics, deterministic human-attention alert open/escalate/resolve/cooldown semantics, and alert-history REST response serialization;
   Automatic-trigger integration coverage verifies one trigger per snapshot, exact-token lease renewal, atomic automatic-assessment completion, and bounded retry/exhaustion while the scheduled worker is delayed out of deterministic test execution. Alert integration coverage uses two independent application contexts against the same PostgreSQL instance to verify advisory-lock serialization and convergence on one open incident under concurrent replica decisions. External/local real-model acceptance is opt-in and must remain outside the canonical offline gate. Repository tests use a deterministic fake `IncidentAnalyst`, a loopback HTTP server for the OpenAI-compatible tool-turn protocol, and application-owned fake tool sessions; they never require model credentials or public network access.
 - `modules:results` — PostgreSQL + Kafka terminal-event consumption and idempotent projection persistence;
 - `testing:integration-tests` — PostgreSQL + Kafka cross-module Collection Run and Collection-to-Analysis flows.
@@ -318,19 +320,23 @@ The opt-in live-backend verifier creates temporary persisted profiles when neede
 
 Python is used for independent black-box/data tooling. It is not the primary backend test framework.
 
-The source-manifest importer and live-backend verifier own fast standard-library regression tests under:
+The development-agent pipeline foundation, source-manifest importer, and live-backend verifier own fast standard-library regression tests under:
 
+- `tools/agent-pipeline/tests`;
 - `tools/source-import/tests`;
 - `tools/live-backend/tests`.
 
-Both self-test suites are part of the canonical `run_checks.sh` gate. The live verifier itself is opt-in and is never invoked automatically against a running backend.
+All three self-test suites are part of the canonical `run_checks.sh` gate. The agent-pipeline tests exercise deterministic local orchestration/evidence behavior with temporary Git repositories, a fake `aider` executable, and a fake Gitleaks CLI, including clean/leak/corrupt-evidence paths; they never invoke a real model provider or require network access. The live verifier itself is opt-in and is never invoked automatically against a running backend.
 
 Run them directly with:
 
 ```bash
+./tools/agent-pipeline/run_tests.sh
 ./tools/source-import/run_tests.sh
 ./tools/live-backend/run_tests.sh
 ```
+
+The contributor-tooling A2.2 live security gate is separate from the default repository checks: once the one-shot Aider worker has completed, run `python3 tools/agent-pipeline/agent_pipeline.py verify --run-id <run-id>`. This requires an externally installed Gitleaks `8.30.1` on `PATH`, scans the isolated worktree before `./run_checks.sh`, and stores sanitized scanner/check evidence under `build/reports/agent-pipeline/<run-id>/checks.json`. It is not a historical repository scan and never implicitly runs or installs a model provider.
 
 These tooling tests use deterministic fakes/loopback HTTP only. They do not require Docker, a running backend, or public network access. Actual `tools/live-backend/verify_pipeline.py` execution is a separate manual/live environment check.
 
