@@ -255,7 +255,7 @@ Do not copy generated run evidence into owning documentation. Accepted stable be
 
 The active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification owns intended evolution, stage sequencing, and final acceptance criteria. This guide owns current implemented commands and evidence semantics only.
 
-A2.1 and A2.2 remain developer-verification-pending. The next bounded automation slice is A2.3: independent-review invocation and a compact main-model handoff. Bounded model repair/re-review remains A3.
+A2.1, A2.2, and A2.3 remain developer-verification-pending. A first real Aider documentation pilot reached DeepSeek but applied no changes after edit-format mismatches; that attempt was blocked by the external pilot scope guard before Gitleaks and independent review. The next implementation slice is A3 bounded model repair and re-review, including intrinsic no-diff blocking. The future sub-spec delegation map, stage runner, guarded feature-branch commits, notifications, and lifecycle gates are specified in the active specification, **not implemented by these commands**.
 
 
 ## Automatic independent review and main checkpoint handoff (A2.3)

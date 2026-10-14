@@ -56,7 +56,7 @@ Rules:
 
 The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted. The Stage 6E4 dedicated live normal/transient/critical Health/alert scenarios and the Stage 6E5 manual evidence review supporting no production policy change are accepted after canonical developer verification. Stage 6E6 runtime persisted-alert verification is implemented, verification-pending, and deliberately paused after live evidence proved clean baseline/transient behavior but exposed time-window-aware recovery and cleanup-ordering gaps. Assisted-investigation quality remains a separate evaluation boundary.
 
-The active contributor-tooling track is [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). It formalizes the multi-stage evolution and acceptance criteria for bounded coding-worker automation without changing the product `current_focus` or granting a worker product/architecture authority. A2.1 isolated Aider execution and A2.2 Gitleaks/ordered verification are implemented and verification-pending; A2.3 independent review invocation is next.
+The active contributor-tooling track is [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). It formalizes the multi-stage evolution and acceptance criteria for bounded coding-worker automation without changing the product `current_focus` or granting a worker product/architecture authority. A2.1 isolated Aider execution, A2.2 Gitleaks/ordered verification, and A2.3 independent review/handoff are implemented and verification-pending. A3 bounded repair is the next implementation stage; end-to-end live-worker acceptance remains open.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -78,6 +78,22 @@ Do not create a sub-spec for:
 - local refactors;
 - narrow documentation cleanup;
 - routine dependency maintenance.
+
+## Delegation plans for staged sub-specs
+
+A sub-spec with known module ownership **may** include a `Delegation plan` body section. Use it to describe shared implementation scope once for related stages, with stage-specific exceptions only when needed. Do not add new frontmatter fields or duplicate authoritative module contracts.
+
+When using a delegation plan, identify:
+
+- existing feature IDs from `docs/FEATURES.md` and stage-specific requirement IDs;
+- owning modules, permitted editable paths, and applicable root/local `AGENTS.md`;
+- read-only owning documentation, module contracts/tests, and other modules' public APIs or published contracts needed as context;
+- focused and canonical checks, applicable scanner/linter/static-analysis commands, and acceptance evidence;
+- stage order, known risks, and any stage that requires architecture discovery or developer approval.
+
+Classify stages as **bounded/known ownership** or **discovery/architecture required**. Risk is separate: even a bounded stage may need human authorization when it changes contracts, persistence, transactions, concurrency, security, or deployment. Unknown ownership or missing feature vocabulary requires human-led design before delegation; define any genuinely new feature ID in `docs/FEATURES.md` through the normal specification workflow.
+
+The active [`development-agent-pipeline`](active/subspecs/development-agent-pipeline.md) specification owns the intended task-packet, context-resolution, retry, and acceptance controls. Sub-spec authors describe requirements and scope; they do not embed executable Aider startup scripts or treat the delegation plan as a security boundary. The current pipeline cannot yet execute a whole sub-spec autonomously.
 
 ## Lifecycle
 
@@ -172,7 +188,7 @@ Active supporting tracks:
 
 Active contributor-tooling track:
 
-- [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md) — bounded coding-worker automation, verification/review evidence, escalation, and externally authorized acceptance/lifecycle automation. A2.1 isolated Aider execution and A2.2 Gitleaks/ordered verification are verification-pending. This track has no product feature ID and does not replace the backend implementation focus.
+- [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md) — bounded coding-worker automation, verification/review evidence, escalation, and externally authorized acceptance/lifecycle automation. A2.1–A2.3 worker/verification/reviewer integration is implemented and verification-pending; the first real edit-format pilot did not produce a diff. This track has no product feature ID and does not replace the backend implementation focus.
 
 ## Recently completed sub-specifications
 

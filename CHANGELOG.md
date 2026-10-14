@@ -9,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-10-14 — Clarified the planned spec-driven Aider operating model: optional sub-spec delegation maps, bounded versus discovery stages, independent risk authorization, source-bound checks/review with three repair attempts, guarded stage commits on a feature branch, notifications, and external sub-spec acceptance. Documented the first live edit-format no-diff pilot as unverified execution evidence; no autonomous runner was implemented.
+
 - 2026-10-13 — Added verification-pending A2.3 independent fresh-context reviewer execution with bounded source diff, fail-closed review attempt evidence, and compact main-model handoff.
 
 - 2026-10-13 — Added verification-pending Development Agent Pipeline A2.2 with repository-pinned Gitleaks directory scanning of isolated worker changes, sanitized security evidence, scanner/verification-policy protection, and ordered `verify` orchestration before independent review.
