@@ -1059,3 +1059,148 @@ class AutomaticCycleTest(unittest.TestCase):
             self.assertEqual(2, worker["attempt"])
             self.assertEqual("worker repair made no source changes", worker["failureReason"])
             self.assertEqual([], calls)
+
+
+class AgentPipelineStagePacketTest(unittest.TestCase):
+    """Protects bounded A4 stage packets, advisory context and explicit editable scope."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for relative, content in {
+            "README.md": "# Root\n",
+            "AGENTS.md": "# Root agent rules\n",
+            "docs/specs/README.md": "# Lifecycle\n",
+            "docs/TESTS.md": "# Tests\n",
+            "docs/specs/active/subspecs/pipeline.md": "---\nspec_status: active\n---\n# A4\nAP9 and AP10\n",
+            "docs/specs/active/subspecs/pipeline-implementation-plan.md": "# Advisory A4 plan\n",
+            "tools/agent-pipeline/README.md": "# Owner\n",
+            "tools/agent-pipeline/tests/existing.py": "# Existing test\n",
+            "modules/other/contract.md": "# Contract\n",
+            "modules/other/src/main/java/io/test/impl/Private.java": "private\n",
+        }.items():
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        self.packet = {
+            "schemaVersion": 1,
+            "stageId": "A4",
+            "specPath": "docs/specs/active/subspecs/pipeline.md",
+            "implementationPlanPath": "docs/specs/active/subspecs/pipeline-implementation-plan.md",
+            "requirementIds": ["AP9"],
+            "featureIds": [],
+            "owningPaths": ["tools/agent-pipeline"],
+            "editablePaths": ["tools/agent-pipeline/tests/existing.py"],
+            "contextPaths": ["docs/TESTS.md", "modules/other/contract.md"],
+            "riskLevel": "LOW",
+            "delegation": "BOUNDED",
+            "task": "Add a bounded regression scenario.",
+            "completionCriteria": ["A regression test describes observable behavior."],
+        }
+
+    # Only complete, bounded and spec-linked packets may be delegated.
+    def test_stage_packet_resolves_advisory_context(self) -> None:
+        packet, context = agent_pipeline.validate_stage_packet(self.root, self.packet)
+        self.assertEqual("A4", packet["stageId"])
+        self.assertIn("AGENTS.md", context)
+        self.assertIn("tools/agent-pipeline/README.md", context)
+        self.assertIn(packet["specPath"], context)
+        self.assertIn(packet["implementationPlanPath"], context)
+        self.assertIn("modules/other/contract.md", context)
+
+    # Unknown requirements, missing plans and non-low-risk stages fail before model access.
+    def test_stage_packet_rejects_unapproved_or_stale_authority(self) -> None:
+        for key, value in (("requirementIds", ["AP777"]), ("riskLevel", "HIGH"),
+                           ("delegation", "DISCOVERY"), ("implementationPlanPath", None)):
+            changed = {**self.packet, key: value}
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                agent_pipeline.validate_stage_packet(self.root, changed)
+
+    # A directory authorization cannot silently include repository rules or the active specification.
+    def test_stage_packet_rejects_protected_and_cross_owner_paths(self) -> None:
+        for path in ("tools/agent-pipeline/", "docs/specs/active/subspecs/pipeline.md",
+                     "tools/agent-pipeline/pipeline-policy.json", "../secret", "/tmp/elsewhere"):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                agent_pipeline.validate_stage_packet(self.root, {**self.packet, "editablePaths": [path]})
+
+    # Cross-module read context must be a published contract or API, not private implementation.
+    def test_stage_packet_rejects_private_cross_module_context(self) -> None:
+        changed = {**self.packet, "contextPaths": ["modules/other/src/main/java/io/test/impl/Private.java"]}
+        with self.assertRaisesRegex(ValueError, "Cross-module private"):
+            agent_pipeline.validate_stage_packet(self.root, changed)
+
+    # Stage source digests and immutable packet evidence prevent silent changes after approval.
+    def test_stage_packet_read_only_drift_blocks_execution(self) -> None:
+        _, paths = agent_pipeline.validate_stage_packet(self.root, self.packet)
+        run_dir = self.root / "evidence"
+        run_dir.mkdir()
+        packet_path = run_dir / "stage-packet.json"
+        packet_path.write_text(json.dumps(self.packet), encoding="utf-8")
+        manifest = {"stagePacket": {
+            "sha256": agent_pipeline.sha256_file(packet_path),
+            "contextSha256": agent_pipeline.stage_source_evidence(self.root, paths),
+            "editablePaths": self.packet["editablePaths"],
+        }}
+        agent_pipeline.ensure_stage_contract(self.root, run_dir, manifest)
+        (self.root / self.packet["implementationPlanPath"]).write_text("Changed\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Stage context changed"):
+            agent_pipeline.ensure_stage_contract(self.root, run_dir, manifest)
+
+    # Source paths must match exactly and must not permit similarly prefixed siblings or symlinks.
+    def test_stage_scope_checks_actual_modified_paths(self) -> None:
+        manifest = {"stagePacket": {"editablePaths": self.packet["editablePaths"]}}
+        agent_pipeline.enforce_stage_scope(self.root, manifest, self.packet["editablePaths"])
+        for other in ("tools/agent-pipeline/tests/existing.py.bak", "AGENTS.md", "docs/TESTS.md"):
+            with self.subTest(path=other), self.assertRaisesRegex(ValueError, "outside stage editable scope"):
+                agent_pipeline.enforce_stage_scope(self.root, manifest, [other])
+        outside = self.root / "outside.txt"
+        outside.write_text("external\n", encoding="utf-8")
+        link = self.root / "tools/agent-pipeline/tests/link.py"
+        link.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            agent_pipeline.safe_stage_path(self.root, "tools/agent-pipeline/tests/link.py")
+
+    # Aider must get the advisory source only as --read and the editable target as an edit argument.
+    def test_stage_packet_aider_command_separates_read_and_write(self) -> None:
+        _, context = agent_pipeline.validate_stage_packet(self.root, self.packet)
+        manifest = {"stagePacket": {"contextPaths": context, "editablePaths": self.packet["editablePaths"]},
+                    "specPath": self.packet["specPath"],
+                    "worker": {"tool": "aider", "model": "deepseek/deepseek-chat"}}
+        policy = {"workerExecution": {"tool": "aider", "executable": "aider",
+                    "arguments": ["--model", "{model}", "--message-file", "{task_file}"]}}
+        command = agent_pipeline.build_aider_command(policy, manifest, self.root / "evidence")
+        self.assertIn(self.packet["editablePaths"][0], command)
+        for value in context:
+            index = command.index(value)
+            self.assertEqual("--read", command[index - 1])
+        self.assertNotIn(self.packet["implementationPlanPath"], command[-1:])
+
+    # The public init-stage CLI must persist the same validated packet and source-bound context.
+    def test_init_stage_cli_creates_immutable_evidence(self) -> None:
+        for relative in ("docs/QUALITY.md", "tools/agent-pipeline/gitleaks.toml"):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# Fixture\n", encoding="utf-8")
+        policy = self.root / "policy.json"
+        policy.write_text(json.dumps({
+            "schemaVersion": 1,
+            "requiredRepositoryFiles": ["README.md", "AGENTS.md", "docs/specs/README.md"],
+            "requiredChecks": [{"name": "canonical", "command": [sys.executable, "-c", "print('ok')"]}],
+        }), encoding="utf-8")
+        packet = self.root / "packet.json"
+        packet.write_text(json.dumps(self.packet), encoding="utf-8")
+        cmd = [sys.executable, str(MODULE_PATH), "--repo-root", str(self.root),
+               "--policy", str(policy), "init-stage", "--packet", str(packet), "--run-id", "pilot-a4"]
+        result = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        evidence = self.root / "build/reports/agent-pipeline/pilot-a4"
+        manifest = json.loads((evidence / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(["AP9"], manifest["stagePacket"]["requirementIds"])
+        self.assertEqual("LOW", manifest["stagePacket"]["riskLevel"])
+        self.assertIn("advisory", (evidence / "task.md").read_text(encoding="utf-8"))
+        packet_copy = json.loads((evidence / "stage-packet.json").read_text(encoding="utf-8"))
+        self.assertEqual(self.packet, packet_copy)
+        cmd[-1] = "pilot-a4"
+        repeated = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        self.assertNotEqual(0, repeated.returncode)

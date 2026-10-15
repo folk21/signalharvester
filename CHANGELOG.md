@@ -9,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-10-15 — Added verification-pending A4.1 opt-in JSON Stage Task Packets for bounded LOW-risk delegation, advisory implementation-plan and read-only context SHA-256 binding, changed-path scope enforcement, fail-closed guards for out-of-scope edits, and an opt-in real Aider/DeepSeek pilot task with deterministic regression coverage. Multi-stage scheduling, approval attestation, and feature-branch commits remain pending.
+
 - 2026-10-15 — Defined separate `MAIN_MODEL`/`WORKER_MODEL`/`REVIEWER_MODEL`/`ORCHESTRATOR`/`DEVELOPER` responsibilities and advisory per-sub-spec implementation plans, with normative module impact, source-bound stage guidance, developer-initiated final verification, and paired archival after explicit acceptance. Runtime orchestration remains unchanged.
 
 - 2026-10-14 — Added verification-pending A3.2 opt-in `run-cycle` orchestration for Aider, required checks, fresh independent review, and at most three fail-closed repairs; classified deterministic test/compile failures separately from infrastructure/security/provider faults, rejected no-progress repairs, preserved per-worker check log digests, and recorded terminal cycle outcomes without stage commits or acceptance.

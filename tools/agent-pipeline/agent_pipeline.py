@@ -405,6 +405,168 @@ def build_worker_task(
     return f"""# Development worker task\n\n## Identity\n\n- Stage: `{stage}`\n- Worker: `{worker}`\n- Model: `{model}`\n- Active specification: `{spec_path}`\n\n## Required repository reading\n\n{reading_lines}\n\nCurrent repository files override chat history, summaries, and prior plans. Read the relevant implementation, tests, contracts, and owning documentation before editing.\n\n## Worker contract\n\n- Make the smallest coherent change that satisfies the task.\n- Follow repository and nearest local `AGENTS.md` rules.\n- Do not weaken tests, validation, security, architecture, or published contracts to make checks pass.\n- Do not declare a stage accepted or archive an active specification. Acceptance remains outside the worker boundary in the current pipeline stage.\n- Record unresolved ambiguity or high-risk findings instead of guessing.\n- Keep code/configuration comments and software documentation in English.\n\n## Mandatory escalation categories\n\n{escalation_lines}\n\n## Task\n\n{task_text.strip()}\n\n## Required verification before handoff\n\n{check_lines}\n\nAn independent review result is required before the run can become ready for the main-model checkpoint.\n"""
 
 
+def safe_stage_path(repo_root: Path, raw: str, *, directory: bool = False) -> str:
+    """Validate a repository-relative stage path and reject symlink/escape boundaries."""
+    if not isinstance(raw, str) or not raw or raw != raw.strip():
+        raise ValueError("Stage paths must be non-empty repository-relative strings")
+    is_prefix = raw.endswith("/") if directory else False
+    value = raw[:-1] if is_prefix else raw
+    parts = value.split("/")
+    if (value.startswith("/") or "\\" in value or any(part in ("", ".", "..") for part in parts)
+            or parts[0] in (".git", "build") or any("\x00" in part for part in parts)):
+        raise ValueError(f"Unsafe stage path: {raw}")
+    path = repo_root / value
+    root = repo_root.resolve()
+    if not path.resolve().is_relative_to(root):
+        raise ValueError(f"Stage path escapes repository: {raw}")
+    for parent in (path, *path.parents):
+        if parent == repo_root or not parent.is_relative_to(repo_root):
+            break
+        if parent.is_symlink():
+            raise ValueError(f"Stage path crosses a symlink: {raw}")
+    if directory and is_prefix and not path.is_dir():
+        raise ValueError(f"Stage editable directory does not exist: {raw}")
+    return value + ("/" if is_prefix else "")
+
+
+def stage_scope_contains(relative: str, authorized: list[str]) -> bool:
+    """Match exact files or explicit directory prefixes, never approximate path prefixes."""
+    return any(relative.startswith(value) if value.endswith("/") else relative == value
+               for value in authorized)
+
+
+def stage_context(repo_root: Path, packet: dict[str, Any]) -> list[str]:
+    """Resolve readable repository instructions and module contracts without private cross-module reads."""
+    paths = ["README.md", "AGENTS.md", "docs/specs/README.md", packet["specPath"]]
+    if packet.get("implementationPlanPath"):
+        paths.append(packet["implementationPlanPath"])
+    paths.extend(packet["contextPaths"])
+    owned = packet["owningPaths"]
+    for name in owned:
+        area = repo_root / name
+        for doc in ("README.md", "contract.md"):
+            candidate = area / doc
+            if candidate.is_file():
+                paths.append(f"{name}/{doc}")
+    for value in (*packet["editablePaths"], *paths):
+        location = (repo_root / value.rstrip("/"))
+        for parent in (location, *location.parents):
+            if parent == repo_root:
+                break
+            candidate = parent / "AGENTS.md"
+            if candidate.is_file():
+                paths.append(candidate.relative_to(repo_root).as_posix())
+    resolved: list[str] = []
+    for path in paths:
+        normal = safe_stage_path(repo_root, path)
+        if not (repo_root / normal).is_file():
+            raise ValueError(f"Missing required stage context: {normal}")
+        segments = normal.split("/")
+        if len(segments) >= 3 and segments[0] == "modules":
+            module = "/".join(segments[:2])
+            if module not in owned:
+                is_public_doc = len(segments) == 3 and segments[2] in ("README.md", "contract.md", "AGENTS.md")
+                is_public_api = (len(segments) > 6 and segments[2:5] == ["src", "main", "java"]
+                                 and "api" in segments[5:-1])
+                if not (is_public_doc or is_public_api):
+                    raise ValueError(f"Cross-module private context is prohibited: {normal}")
+        if normal not in resolved:
+            resolved.append(normal)
+    return resolved
+
+
+def validate_stage_packet(repo_root: Path, packet: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Validate the bounded MAIN_MODEL-to-WORKER_MODEL delegation contract."""
+    keys = {"schemaVersion", "stageId", "specPath", "implementationPlanPath", "requirementIds",
+            "featureIds", "owningPaths", "editablePaths", "contextPaths", "riskLevel",
+            "delegation", "task", "completionCriteria"}
+    if set(packet) != keys or packet.get("schemaVersion") != SCHEMA_VERSION:
+        raise ValueError("Stage packet must have exactly the documented v1 fields")
+    if packet["delegation"] != "BOUNDED" or packet["riskLevel"] != "LOW":
+        raise ValueError("Only approved bounded LOW-risk stages are supported in A4.1")
+    for name in ("stageId", "specPath", "task"):
+        if not isinstance(packet[name], str) or not packet[name].strip():
+            raise ValueError(f"Stage packet {name} must be non-empty")
+    for name in ("requirementIds", "featureIds", "owningPaths", "editablePaths", "contextPaths", "completionCriteria"):
+        items = packet[name]
+        if (not isinstance(items, list) or (not items and name not in ("featureIds", "contextPaths"))
+                or not all(isinstance(x, str) and x.strip() for x in items)
+                or len(set(items)) != len(items)):
+            raise ValueError(f"Stage packet {name} must contain unique non-empty strings")
+    if any(not item.strip() for item in packet["completionCriteria"]):
+        raise ValueError("Stage completion criteria cannot be blank")
+    validate_active_spec(repo_root, packet["specPath"])
+    spec_text = (repo_root / packet["specPath"]).read_text(encoding="utf-8")
+    for token in (packet["stageId"], *packet["requirementIds"]):
+        if not re.search(r"(?<![A-Za-z0-9_.-])" + re.escape(token) + r"(?![A-Za-z0-9_.-])", spec_text):
+            raise ValueError(f"Unknown stage/requirement in normative spec: {token}")
+    plan = packet["implementationPlanPath"]
+    if plan is not None:
+        if not isinstance(plan, str) or plan != packet["specPath"].removesuffix(".md") + "-implementation-plan.md":
+            raise ValueError("Implementation plan must be the matching advisory companion")
+        plan = safe_stage_path(repo_root, plan)
+        if not (repo_root / plan).is_file():
+            raise ValueError("Declared advisory implementation plan is missing")
+    elif (repo_root / (packet["specPath"].removesuffix(".md") + "-implementation-plan.md")).exists():
+        raise ValueError("Existing implementation plan cannot be omitted from stage packet")
+    owned = [safe_stage_path(repo_root, path) for path in packet["owningPaths"]]
+    if any(not (repo_root / value).is_dir() for value in owned):
+        raise ValueError("Stage owning paths must identify existing directories")
+    editable = [safe_stage_path(repo_root, path, directory=True) for path in packet["editablePaths"]]
+    if any(not any(path == owner or path.startswith(owner + "/") for owner in owned)
+           for path in editable):
+        raise ValueError("Stage editable paths must belong to a declared owning area")
+    protected = {"AGENTS.md", "README.md", "docs/specs/README.md", packet["specPath"],
+                 "run_checks.sh", "run_rare_checks.sh", "tools/agent-pipeline/pipeline-policy.json",
+                 "tools/agent-pipeline/gitleaks.toml"}
+    if plan:
+        protected.add(plan)
+    if any(stage_scope_contains(path, editable) for path in protected):
+        raise ValueError("Stage editable scope includes protected rules, spec, or verification files")
+    for item in packet["contextPaths"]:
+        safe_stage_path(repo_root, item)
+    context = stage_context(repo_root, packet)
+    if any(stage_scope_contains(path, editable) for path in context):
+        raise ValueError("Stage editable paths overlap required read-only context")
+    return packet, context
+
+
+def stage_source_evidence(repo_root: Path, paths: list[str]) -> dict[str, str]:
+    """Bind every read-only context file to its exact source bytes."""
+    return {value: sha256_file(repo_root / value) for value in paths}
+
+
+def ensure_stage_contract(repo_root: Path, run_dir: Path, manifest: dict[str, Any]) -> None:
+    """Check packet/context integrity at each command, including the isolated worktree."""
+    contract = manifest.get("stagePacket")
+    if contract is None:
+        return
+    packet_path = run_dir / "stage-packet.json"
+    if not packet_path.is_file() or sha256_file(packet_path) != contract["sha256"]:
+        raise ValueError("Stage packet evidence changed after initialization")
+    for path, digest in contract["contextSha256"].items():
+        source = repo_root / path
+        if not source.is_file() or sha256_file(source) != digest:
+            raise ValueError(f"Stage context changed since initialization: {path}")
+    if manifest.get("workspace"):
+        worktree = execution_root(repo_root, manifest)
+        for path, digest in contract["contextSha256"].items():
+            source = worktree / path
+            if not source.is_file() or sha256_file(source) != digest or source.is_symlink():
+                raise ValueError(f"Worker altered read-only stage context: {path}")
+
+
+def enforce_stage_scope(repo_root: Path, manifest: dict[str, Any], changes: list[str]) -> None:
+    """Fail closed on unauthorized edits, including new files and symlink paths."""
+    contract = manifest.get("stagePacket")
+    if contract is None:
+        return
+    for path in changes:
+        safe_stage_path(execution_root(repo_root, manifest), path)
+        if not stage_scope_contains(path, contract["editablePaths"]):
+            raise ValueError(f"Worker changed path outside stage editable scope: {path}")
+
+
 def create_run(
     repo_root: Path,
     runs_root: Path,
@@ -844,6 +1006,7 @@ def write_handoff(repo_root: Path, run_dir: Path, manifest: dict[str, Any], poli
         "stage": manifest["stage"], "spec": manifest["specPath"],
         "baseCommit": manifest["repository"].get("baseCommit"),
         "taskSha256": manifest["taskSha256"], "policySha256": manifest["policy"]["sha256"],
+        "stagePacket": manifest.get("stagePacket"),
         "worker": None if worker is None else {"status": worker["status"],
             "model": worker["model"], "changeSha256": worker["changeSha256"],
             "changedFiles": worker["changedFiles"]},
@@ -1036,8 +1199,17 @@ def build_aider_command(policy: dict[str, Any], manifest: dict[str, Any], run_di
     spec_path = manifest.get("specPath")
     if isinstance(spec_path, str) and spec_path != "none":
         read_files.append(spec_path)
+    contract = manifest.get("stagePacket")
+    if contract is not None:
+        read_files = contract["contextPaths"]
     for read_file in read_files:
         arguments.extend(["--read", read_file])
+    if contract is not None:
+        for path in contract["editablePaths"]:
+            if not path.endswith("/"):
+                # Worktree-relative edit paths are appended only for existing files.
+                # New paths remain discoverable through the task and repository map.
+                arguments.append(path)
     return [worker_policy["executable"], *arguments]
 
 
@@ -1075,6 +1247,8 @@ def ensure_worker_workspace_matches_result(
     if result.get("status") != "PASS":
         raise ValueError("Required worker execution did not pass")
     ensure_source_matches_worker_result(repo_root, run_dir, manifest, result)
+    enforce_stage_scope(repo_root, manifest, result.get("changedFiles", []))
+    ensure_stage_contract(repo_root, run_dir, manifest)
     return result
 
 
@@ -1175,9 +1349,19 @@ def execute_worker(
     change_sha256 = workspace_change_digest(worktree, changed_files) if change_evidence else None
     unexpected_commit = head_commit != base_commit
     made_progress = attempt == 1 or change_sha256 != before_sha256
-    passed = return_code == 0 and not unexpected_commit and change_evidence and bool(changed_files) and made_progress
+    scope_failure = None
+    if manifest.get("stagePacket") is not None:
+        try:
+            enforce_stage_scope(repo_root, manifest, changed_files)
+            ensure_stage_contract(repo_root, run_dir, manifest)
+        except ValueError as exc:
+            scope_failure = str(exc)
+    passed = (return_code == 0 and not unexpected_commit and change_evidence
+              and bool(changed_files) and made_progress and scope_failure is None)
     failure_reason = None
-    if not change_evidence:
+    if scope_failure is not None:
+        failure_reason = "worker stage scope/context violation"
+    elif not change_evidence:
         failure_reason = "worker source evidence unavailable"
     elif unexpected_commit:
         failure_reason = "unexpected worker commit"
@@ -1192,6 +1376,7 @@ def execute_worker(
         "attempt": attempt,
         "taskSha256": sha256_file(task_override) if task_override else manifest["taskSha256"],
         "failureReason": failure_reason,
+        "scopeFailure": scope_failure,
         "tool": manifest.get("worker", {}).get("tool"),
         "model": manifest.get("worker", {}).get("model"),
         "command": command,
@@ -1238,9 +1423,11 @@ def prepare_repair(
     if attempt > maximum:
         raise ValueError("Repair attempt budget exhausted; developer intervention required")
     ensure_source_matches_worker_result(repo_root, run_dir, manifest, worker)
+    ensure_stage_contract(repo_root, run_dir, manifest)
     changed_files = worker.get("changedFiles", [])
     if not isinstance(changed_files, list):
         raise ValueError("Invalid worker changed-file evidence")
+    enforce_stage_scope(repo_root, manifest, changed_files)
     risk = classify_risk(changed_files, policy, True)
     if risk["level"] != "LOW":
         raise ValueError("Non-LOW worker source risk requires developer intervention")
@@ -1635,6 +1822,10 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--scope", action="append", default=[])
     init_parser.add_argument("--run-id")
 
+    stage_parser = subparsers.add_parser("init-stage", help="Initialize a validated LOW-risk stage packet")
+    stage_parser.add_argument("--packet", required=True, help="JSON Stage Task Packet approved by the developer")
+    stage_parser.add_argument("--run-id")
+
     prepare_parser = subparsers.add_parser("prepare-worker", help="Create the isolated Git branch/worktree")
     prepare_parser.add_argument("--run-id", required=True)
 
@@ -1714,8 +1905,42 @@ def main(argv: list[str] | None = None) -> int:
             print(run_dir)
             return 0
 
+        if args.command == "init-stage":
+            packet_path = resolve_under_repo(repo_root, args.packet)
+            packet, context = validate_stage_packet(repo_root, read_json(packet_path))
+            task = (f"Implement stage {packet['stageId']} of the active specification.\n"
+                    f"Requirements: {', '.join(packet['requirementIds'])}\n"
+                    f"Feature IDs: {', '.join(packet['featureIds']) or 'none (contributor tooling)'}\n"
+                    f"Owning areas: {', '.join(packet['owningPaths'])}\n"
+                    f"Editable paths: {', '.join(packet['editablePaths'])}\n"
+                    f"Read-only context: {', '.join(context)}\n"
+                    f"The implementation plan is advisory, not a contract. Explain material deviations.\n"
+                    f"\nTask:\n{packet['task']}\n\nCompletion criteria:\n"
+                    + "\n".join(f"- {item}" for item in packet['completionCriteria']))
+            run_dir = create_run(
+                repo_root, runs_root, policy_path, policy, packet["stageId"], packet["specPath"],
+                task, policy.get("workerExecution", {}).get("tool", "aider"),
+                policy.get("workerExecution", {}).get("defaultModel", "unspecified"),
+                packet["editablePaths"], args.run_id,
+            )
+            (run_dir / "stage-packet.json").write_text(
+                json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            manifest = read_json(run_dir / "manifest.json")
+            manifest["stagePacket"] = {
+                "sha256": sha256_file(run_dir / "stage-packet.json"),
+                "specPath": packet["specPath"], "planPath": packet["implementationPlanPath"],
+                "contextPaths": context, "contextSha256": stage_source_evidence(repo_root, context),
+                "editablePaths": packet["editablePaths"], "requirementIds": packet["requirementIds"],
+                "featureIds": packet["featureIds"], "riskLevel": packet["riskLevel"],
+            }
+            write_json(run_dir / "manifest.json", manifest)
+            print(run_dir)
+            return 0
+
         run_dir, manifest = load_run(runs_root, args.run_id)
         ensure_run_contract_matches(policy_path, run_dir, manifest)
+        ensure_stage_contract(repo_root, run_dir, manifest)
 
         if args.command == "prepare-worker":
             workspace = prepare_worker_workspace(repo_root, worktrees_root, run_dir, manifest, policy)

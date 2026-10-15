@@ -11,13 +11,13 @@ description: Repository-local orchestration for isolated coding-worker execution
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
 
-Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. Stage A2.2 adds repository-owned Gitleaks scanning and ordered required-check orchestration. Stage A2.3 introduces a verification-pending fresh-context reviewer adapter and compact external-checkpoint handoff. A3 now includes verification-pending no-diff blocking, explicit repair, and an opt-in bounded automatic `run-cycle` command. Stage scheduling, acceptance, specification archival, and merging remain later work owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
+Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. Stage A2.2 adds repository-owned Gitleaks scanning and ordered required-check orchestration. Stage A2.3 introduces a verification-pending fresh-context reviewer adapter and compact external-checkpoint handoff. A3 now includes verification-pending no-diff blocking, explicit repair, and an opt-in bounded automatic `run-cycle` command. A4.1 adds opt-in validated stage packets, read-only context digests, and enforced editable paths. Automatic sub-spec stage scheduling, acceptance, specification archival, and merging remain later work owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
 
 ## Current boundary
 
 The pipeline owns:
 
-- creation of a bounded worker task packet;
+- creation of a bounded worker task packet, including validated A4.1 stage packets;
 - required repository/spec preflight and a clean Git base;
 - an immutable base commit for every Git-backed run;
 - isolated worker branch/worktree preparation;
@@ -29,7 +29,7 @@ The pipeline owns:
 - redacted scanner evidence without persisting raw secret matches or scanner output;
 - sequential policy-required verification through `verify` and fail-closed automatic check/review/retry orchestration through `run-cycle`;
 - execution of focused and canonical verification inside the isolated worker worktree;
-- immutable task/policy digests that detect mid-run worker-contract drift;
+- immutable task/policy digests and, for A4.1 stages, advisory-plan/context digests and actual changed-path enforcement;
 - structured independent-review ingestion;
 - fail-closed state derivation;
 - conservative changed-path risk hints;
@@ -75,6 +75,36 @@ The A2.1 adapter currently uses Aider `0.86.2` with `deepseek/deepseek-chat` by 
 Stage A2.2 requires Gitleaks `8.30.1` to be installed on `PATH` before executing pipeline verification; installation is external and never performed by the worker. The pinned `tools/agent-pipeline/gitleaks.toml` extends Gitleaks default detection rules and excludes generated build/IDE/Git internals. The directory scan targets the whole worker filesystem rather than Git history alone, so it covers Aider's uncommitted edits and new files. It rejects worker-created `.gitleaksignore`, disables inline `gitleaks:allow` suppressions, and refuses changes to the scanner config, `pipeline-policy.json`, or `run_checks.sh` inside a worker run. Scanner version/config/source identity, exit status, finding count, rule/file/line metadata, and redacted failure reason are recorded in `checks.json`. Raw secret values, report JSON, and scanner stdout/stderr are not retained; the temporary report is deleted. Some Gitleaks releases do not create an empty report when no findings exist; zero exit status remains authoritative for a successful clean scan. Missing binary, incompatible version, malformed finding report, detected secrets, or an unsuccessful scan blocks progression. This scanner does not replace independent review or separate historical Git secret scanning.
 
 Path-based risk is only an escalation hint. It must never be interpreted as proof that a change is safe. When Git/base-commit evidence is unavailable, risk is reported as `UNKNOWN`.
+
+## Stage Task Packet (A4.1, implemented / verification-pending)
+
+`MAIN_MODEL` and the developer may prepare a bounded JSON Stage Task Packet containing `stageId`, active `specPath`, optional legacy `implementationPlanPath`, `requirementIds`, `featureIds`, `owningPaths`, `editablePaths`, `contextPaths`, `riskLevel`, `delegation`, `task`, and `completionCriteria` (plus `schemaVersion: 1`). The packet must use `delegation: BOUNDED` and `riskLevel: LOW`; higher-risk or unknown-ownership stages still require human-led handling. Existing unstructured `init` remains available for legacy runs, but its `--scope` values remain **hints**, not enforced authorization.
+
+New staged sub-specs use a matching advisory `<subspec-stem>-implementation-plan.md` file. A legacy sub-spec without a companion may use `implementationPlanPath: null`. An existing companion cannot be silently omitted. The active spec must contain the requested stage and requirement identifiers. A developer must review the packet **before** triggering it; packet fields do not grant additional authorization or replace the normative spec.
+
+Initialize with:
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py init-stage \
+  --packet tools/agent-pipeline/examples/a4-pilot-stage-packet.json \
+  --run-id my-reviewed-stage-01
+python3 tools/agent-pipeline/agent_pipeline.py prepare-worker --run-id my-reviewed-stage-01
+python3 tools/agent-pipeline/agent_pipeline.py run-cycle --run-id my-reviewed-stage-01
+```
+
+The controller resolves root rules, active spec, advisory companion, owning README/contract, applicable local `AGENTS.md`, and explicitly requested public cross-module context. Aider receives these files with `--read`; exact existing editable files are supplied as editable arguments. Required context and the packet are bound by SHA-256 to the run evidence, then checked against the base repository and isolated worktree before later commands. `worker.json` fails if actual tracked/untracked changes include a path outside the approved exact-file or explicit `directory/` scope, a symlink escape, or an altered read-only input. Required checks/review cannot accept that failed worker attempt. Directory authorization is rejected if it includes protected rules/spec/policy files. A stage packet cannot authorize editing an unrelated owning area by omission.
+
+This is **edit acceptance enforcement**, not an OS filesystem or model-reading sandbox. Aider's repository map may still inspect other source files; do not use this mode to expose secrets or restrict confidential read access. The A4.1 packet does not yet infer the complete implementation plan from Markdown, verify human approval cryptographically, schedule multiple stages, or autonomously commit changes. Material implementation-plan deviations still require explicit worker explanation and developer/main-model review.
+
+### Opt-in live A4 pilot
+
+After applying and committing this change to a **clean checkout**, run:
+
+```bash
+bash tools/agent-pipeline/run_stage_pilot.sh
+```
+
+The committed example packet assigns Aider a genuine Python task: improve source-bound multi-attempt `handoff.json` evidence and add deterministic regression coverage. It does **not** specify a replacement diff. The script uses a new run ID, invokes the full Gitleaks/canonical/review/repair cycle, leaves results in a separate `build/agent-worktrees/<run-id>/` scratch branch, and writes `build/reports/agent-pipeline/<run-id>/change.patch`. It never commits, merges, archives or accepts the result. If the run fails, preserve its evidence and escalate rather than rerun the same ID. Actual DeepSeek API access and local Aider/Gitleaks prerequisites remain necessary.
 
 ## Initialize a run
 
