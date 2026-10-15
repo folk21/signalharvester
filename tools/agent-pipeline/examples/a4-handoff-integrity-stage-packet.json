@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "stageId": "A4",
+  "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+  "implementationPlanPath": "docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md",
+  "requirementIds": [
+    "AP2",
+    "AP10",
+    "AP13"
+  ],
+  "featureIds": [],
+  "owningPaths": [
+    "tools/agent-pipeline"
+  ],
+  "editablePaths": [
+    "tools/agent-pipeline/agent_pipeline.py",
+    "tools/agent-pipeline/tests/test_agent_pipeline.py"
+  ],
+  "contextPaths": [
+    "docs/TESTS.md"
+  ],
+  "riskLevel": "LOW",
+  "delegation": "BOUNDED",
+  "task": "Implement a compact, source-bound workerAttempts array in write_handoff() for all worker execution and bounded repair attempts. You are starting from a CLEAN current repository commit: the previous candidate from pilot a4-pilot-20261015T142115Z-48391 is UNACCEPTED and exists only in an isolated agent worktree, not in the tracked base. Do not assume summarize_worker_attempts() already exists. Recreate the smallest coherent feature in the two editable Python files; do not transplant the prior worktree or change the pipeline policy. Preserve the existing handoff keys and single-attempt behavior. The prior MAIN_MODEL review found a critical evidence-integrity problem in the earlier candidate: it silently skipped malformed worker-attempt-N.json records and overwrote inconsistent/duplicate attempt numbers. Fix this in the NEW implementation: every discovered worker-attempt-N.json filename must use canonical positive integer N and contain a valid JSON object with matching integer attempt=N; reject JSON errors, invalid shapes/numbers, duplicate numeric aliases, missing required history, gaps in attempt sequence, future/stale attempts, and disagreement between worker.json and a snapshot of the same attempt. Use fail-closed exceptions (and add deterministic tests) rather than silently suppressing corrupted records. Treat worker.json as the authoritative latest attempt after validating its positive integer attempt number; if neither worker.json nor attempt snapshots exist, retain the pre-worker legacy handoff shape with an empty workerAttempts list; if snapshots exist but worker.json is missing, reject the evidence. Require continuous attempts 1..latest; a legacy one-attempt run with only worker.json must remain supported. Real execute_worker() writes a worker-attempt-N.json for each attempt; avoid assumptions that every previous record is present if the current worker attempt number is greater than one. Historical attempt changeSha256 values refer to previous source states and must NOT be recomputed against the current worktree. Keep only bounded, explicitly selected per-attempt metadata (such as status, exitCode, failureReason, changedFiles, changeSha256, headCommit, evidence filename/digest); never copy raw worker logs, model text, commands or credentials into handoff. Add reproducible tests for valid multi-attempt and single-attempt handoff, malformed JSON, mismatched filename/payload, missing attempt, duplicates/conflicts, and worker/snapshot drift. Reuse real Git fixtures and correct unittest class helpers or narrow mocks; ensure tests exercise the intended error path rather than failing on unrelated Git/workspace setup. Do not weaken any existing integrity checks, verification, review, policy, risk classification, authorization or acceptance lifecycle. Explain any material deviation from the advisory plan in your final worker response.",
+  "completionCriteria": [
+    "workerAttempts is a compact additive handoff field with complete ordered source-bound history; original handoff shape is preserved.",
+    "Malformed, missing, duplicated, or inconsistent attempt evidence raises a deterministic error instead of returning an incomplete handoff.",
+    "One-attempt legacy behavior is compatible; legitimate worker repair history from the existing pipeline is accepted.",
+    "Regression tests cover successful multi/single attempts and corrupt, missing, duplicate and conflicting evidence using working fixtures.",
+    "Changed files are limited to the two approved Python paths; security/configuration/acceptance policies are unchanged.",
+    "Gitleaks, canonical checks, and independent review must pass before an external MAIN_MODEL acceptance recommendation."
+  ]
+}
