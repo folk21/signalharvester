@@ -823,3 +823,239 @@ class AutomaticReviewTest(unittest.TestCase):
                     agent_pipeline.run_independent_review(run_dir, run_dir, manifest, policy)
             self.assertFalse((run_dir / "review.json").exists())
             self.assertFalse((run_dir / "review-attempt.json").exists())
+
+
+class AutomaticCycleTest(unittest.TestCase):
+    """Protects fail-closed A3 automated check, independent review, and repair sequencing."""
+
+    def prepare_cycle(self, location: Path, scenario: str, canonical: str) -> tuple[Path, Path, dict, dict, dict]:
+        root = location / "repo"
+        root.mkdir()
+        helper = AgentPipelineCliTest()
+        policy_path, task = helper.create_repository(root)
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        policy["requiredChecks"] = [{"name": "canonical", "command": [sys.executable, "-c", canonical]}]
+        policy["repairExecution"] = {"maxRepairAttempts": 3, "automaticCheckRepairNames": ["canonical"]}
+        policy["workerExecution"] = {
+            "required": True, "tool": "aider", "executable": "aider",
+            "defaultModel": "deepseek/deepseek-chat", "supportedVersions": ["0.86.2"],
+            "branchPrefix": "agent/", "arguments": ["--model", "{model}", "--config", "{config_file}",
+                                                 "--message-file", "{task_file}", "--no-auto-commits"],
+        }
+        policy["independentReview"]["adapter"] = {
+            "endpoint": "https://api.deepseek.com/chat/completions", "model": "deepseek-chat",
+            "apiKeyEnvironment": "DEEPSEEK_API_KEY", "timeoutSeconds": 120, "maxDiffBytes": 100000,
+        }
+        policy_path.write_text(json.dumps(policy), encoding="utf-8")
+        helper.init_git_repository(root)
+        fake_bin = location / "bin"
+        fake_bin.mkdir()
+        fake_aider = fake_bin / "aider"
+        fake_aider.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os,sys\n"
+            "from pathlib import Path\n"
+            "if '--version' in sys.argv: print('aider 0.86.2'); quit()\n"
+            "if '--help' in sys.argv: print('--model --config --message-file --no-auto-commits --read'); quit()\n"
+            "task = Path(sys.argv[sys.argv.index('--message-file') + 1]).read_text()\n"
+            "repair = 'Bounded repair round' in task\n"
+            "scenario = os.environ['FAKE_WORKER_CASE']\n"
+            "if scenario == 'no-diff' and not repair: quit()\n"
+            "if scenario == 'always-no-diff': quit()\n"
+            "if scenario == 'no-progress' and repair: quit()\n"
+            "p = Path('docs/ROADMAP.md')\n"
+            "p.write_text('fixed\\n' if repair else 'initial\\n')\n",
+            encoding="utf-8",
+        )
+        fake_aider.chmod(0o755)
+        runs_root = root / "build/reports/agent-pipeline"
+        run_dir = agent_pipeline.create_run(root, runs_root, policy_path, policy,
+            "A3-cycle", "docs/specs/active/example.md", task.read_text(),
+            "aider", "deepseek/deepseek-chat", ["docs/ROADMAP.md"], "cycle-test")
+        manifest = agent_pipeline.read_json(run_dir / "manifest.json")
+        agent_pipeline.prepare_worker_workspace(root, root / "build/agent-worktrees", run_dir, manifest, policy)
+        manifest = agent_pipeline.read_json(run_dir / "manifest.json")
+        env = {"PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", ""),
+               "FAKE_WORKER_CASE": scenario}
+        return root, run_dir, manifest, policy, env
+
+    def fake_reviewer(self, run_dir: Path, verdicts: list[str]):
+        calls = []
+        def review(repo_root, evidence, manifest, policy):
+            verdict = verdicts[len(calls)]
+            calls.append(verdict)
+            payload = agent_pipeline.validate_review({
+                "schemaVersion": 1, "reviewer": "deterministic-fake-reviewer",
+                "verdict": verdict, "findings": [] if verdict == "PASS" else [{
+                    "id": "F-1", "severity": "MEDIUM", "category": "CORRECTNESS",
+                    "summary": "Unresolved bounded defect", "status": "OPEN",
+                }],
+            })
+            agent_pipeline.write_json(evidence / "review.json", payload)
+            agent_pipeline.write_json(evidence / "review-attempt.json", {
+                "status": "PASS", "workerSha256": agent_pipeline.read_json(evidence / "worker.json")["changeSha256"],
+            })
+            return payload
+        return review, calls
+
+    # A no-diff first attempt is automatically repaired and still requires fresh verification and review.
+    def test_cycle_repairs_no_diff_then_requires_checks_and_review(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "no-diff", "print('ok')")
+            reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                self.assertEqual(0, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
+            cycle = agent_pipeline.read_json(evidence / "cycle.json")
+            self.assertEqual("READY_FOR_MAIN_REVIEW", cycle["status"])
+            self.assertEqual("REVIEW_AND_CHECKS_PASSED", cycle["reasonCode"])
+            self.assertEqual(["PASS"], calls)
+            self.assertEqual(2, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+            self.assertEqual("FAIL", agent_pipeline.read_json(evidence / "worker-attempt-1.json")["status"])
+            self.assertTrue((evidence / "handoff.json").exists())
+            with self.assertRaisesRegex(ValueError, "already attempted"):
+                agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+
+    # Review-requested changes trigger a fresh model attempt, new checks and a fresh reviewer context.
+    def test_cycle_rechecks_after_low_risk_review_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", "print('ok')")
+            reviewer, calls = self.fake_reviewer(evidence, ["CHANGES_REQUIRED", "PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                self.assertEqual(0, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
+            self.assertEqual(["CHANGES_REQUIRED", "PASS"], calls)
+            self.assertTrue((evidence / "attempt-1-review.json").exists())
+            self.assertEqual(2, len([x for x in agent_pipeline.read_json(evidence / "cycle.json")["events"]
+                                     if x["step"] == "check:canonical"]))
+            original_check = agent_pipeline.read_json(evidence / "attempt-1-checks.json")["checks"][0]
+            current_check = agent_pipeline.read_json(evidence / "checks.json")["checks"][0]
+            self.assertNotEqual(original_check["log"], current_check["log"])
+            self.assertEqual(original_check["logSha256"], agent_pipeline.sha256_file(evidence / original_check["log"]))
+            self.assertEqual(current_check["logSha256"], agent_pipeline.sha256_file(evidence / current_check["log"]))
+            self.assertEqual("fixed\n", (root / manifest["workspace"]["path"] / "docs/ROADMAP.md").read_text())
+
+    # Canonical deterministic failures may repair; infrastructure and unknown failures stop immediately.
+    def test_cycle_classifies_build_failure_but_escalates_infrastructure(self) -> None:
+        deterministic = ("from pathlib import Path; import sys; "
+            "fixed=Path('docs/ROADMAP.md').read_text() == 'fixed\\n'; "
+            "print('all tests passed' if fixed else '> Task :modules:analysis:test FAILED\\nThere were failing tests'); "
+            "sys.exit(0 if fixed else 1)")
+        for infrastructure in (False, True):
+            with self.subTest(infrastructure=infrastructure), tempfile.TemporaryDirectory() as td:
+                command = deterministic if not infrastructure else (
+                    "import sys; print('> Task :modules:analysis:test FAILED\\n"
+                    "There were failing tests\\nDocker connection refused'); sys.exit(1)")
+                root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", command)
+                reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+                with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                    result = agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+                cycle = agent_pipeline.read_json(evidence / "cycle.json")
+                if infrastructure:
+                    self.assertEqual(1, result)
+                    self.assertEqual("INFRASTRUCTURE_OR_UNKNOWN", cycle["reasonCode"])
+                    self.assertFalse(calls)
+                    self.assertEqual(1, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+                else:
+                    self.assertEqual(0, result)
+                    self.assertEqual(2, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+                    self.assertEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
+                        evidence, agent_pipeline.read_json(evidence / "attempt-1-checks.json")["checks"][-1],
+                        policy)[0])
+
+    # Stop after one initial attempt plus three repairs, preserving every attempt's evidence.
+    def test_cycle_stops_on_repair_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "always-no-diff", "print('ok')")
+            reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                self.assertEqual(1, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
+            self.assertEqual("REPAIR_BUDGET_EXHAUSTED", agent_pipeline.read_json(evidence / "cycle.json")["reasonCode"])
+            self.assertEqual(4, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+            self.assertEqual([], calls)
+            self.assertEqual(4, len(list(evidence.glob("worker-attempt-*.json"))))
+
+    # Missing/tampered logs never cause automated model retries.
+    def test_classifier_rejects_tampered_log_and_security_check(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            evidence = Path(td)
+            logs = evidence / "logs"
+            logs.mkdir()
+            output = logs / "canonical-attempt-1.log"
+            output.write_text("> Task :modules:analysis:test FAILED\nThere were failing tests\n")
+            policy = {"repairExecution": {"automaticCheckRepairNames": ["canonical"]}}
+            check = {"name": "canonical", "status": "FAIL", "exitCode": 1,
+                     "log": "logs/canonical-attempt-1.log", "logSha256": "incorrect"}
+            self.assertEqual("INVALID_CHECK_EVIDENCE", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)[0])
+            check["logSha256"] = agent_pipeline.sha256_file(output)
+            self.assertEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)[0])
+            check["name"] = "gitleaks"
+            self.assertEqual("SECURITY_FAILURE", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)[0])
+
+    # Provider/schema errors terminate one cycle; they do not cause additional model calls.
+    def test_cycle_escalates_failed_reviewer_without_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", "print('ok')")
+            with mock.patch.dict(os.environ, env), mock.patch.object(
+                agent_pipeline, "run_independent_review", side_effect=ValueError("invalid reviewer schema")
+            ) as reviewer:
+                with self.assertRaisesRegex(ValueError, "invalid reviewer schema"):
+                    agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+            reviewer.assert_called_once()
+            cycle = agent_pipeline.read_json(evidence / "cycle.json")
+            self.assertEqual("ESCALATED", cycle["status"])
+            self.assertEqual("CONTROLLER_OR_POLICY_FAILURE", cycle["reasonCode"])
+            self.assertEqual(1, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+            with self.assertRaisesRegex(ValueError, "already attempted"):
+                agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+
+    # Low-severity security/architecture escalation findings cannot be auto-repaired.
+    def test_cycle_refuses_review_escalation_category(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", "print('ok')")
+            def security_review(repo_root, run_dir, run_manifest, run_policy):
+                review = agent_pipeline.validate_review({
+                    "schemaVersion": 1, "reviewer": "fake-reviewer", "verdict": "CHANGES_REQUIRED",
+                    "findings": [{"id": "SEC-1", "severity": "LOW", "category": "SECURITY",
+                                  "summary": "Security decision required", "status": "OPEN"}],
+                })
+                agent_pipeline.write_json(run_dir / "review.json", review)
+                agent_pipeline.write_json(run_dir / "review-attempt.json", {
+                    "status": "PASS", "workerSha256": agent_pipeline.read_json(run_dir / "worker.json")["changeSha256"],
+                })
+                return review
+            with mock.patch.dict(os.environ, env), mock.patch.object(
+                agent_pipeline, "run_independent_review", security_review
+            ):
+                with self.assertRaisesRegex(ValueError, "escalation findings"):
+                    agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+            self.assertEqual("ESCALATED", agent_pipeline.read_json(evidence / "cycle.json")["status"])
+            self.assertEqual(1, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+
+    # Policy rejects automatic repair of scanner gates or unlisted checks.
+    def test_policy_requires_explicit_non_security_repair_allowlist(self) -> None:
+        test_policy = {
+            "schemaVersion": 1,
+            "requiredChecks": [{"name": "canonical", "command": ["true"]}],
+            "repairExecution": {"maxRepairAttempts": 3, "automaticCheckRepairNames": ["missing"]},
+        }
+        with self.assertRaisesRegex(ValueError, "automaticCheckRepairNames"):
+            agent_pipeline.validate_policy(test_policy)
+        test_policy["repairExecution"]["automaticCheckRepairNames"] = ["canonical"]
+        agent_pipeline.validate_policy(test_policy)
+
+    # A repair that leaves the previous patch unchanged is not counted as a successful worker round.
+    def test_cycle_escalates_repair_without_new_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            check = ("from pathlib import Path; import sys; "
+                     "print('> Task :modules:analysis:test FAILED\\nThere were failing tests'); sys.exit(1)")
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "no-progress", check)
+            reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                self.assertEqual(1, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
+            self.assertEqual("WORKER_EXECUTION_FAILURE", agent_pipeline.read_json(evidence / "cycle.json")["reasonCode"])
+            worker = agent_pipeline.read_json(evidence / "worker.json")
+            self.assertEqual(2, worker["attempt"])
+            self.assertEqual("worker repair made no source changes", worker["failureReason"])
+            self.assertEqual([], calls)

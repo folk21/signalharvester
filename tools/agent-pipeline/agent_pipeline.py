@@ -145,6 +145,12 @@ def validate_policy(policy: dict[str, Any]) -> None:
     if (not isinstance(repair, dict) or type(repair.get("maxRepairAttempts")) is not int
             or not 0 <= repair["maxRepairAttempts"] <= 3):
         raise ValueError("repairExecution.maxRepairAttempts must be an integer from 0 to 3")
+    automatic_checks = repair.get("automaticCheckRepairNames", [])
+    if (not isinstance(automatic_checks, list)
+            or not all(isinstance(name, str) and name for name in automatic_checks)
+            or len(set(automatic_checks)) != len(automatic_checks)
+            or any(name not in seen or name == "gitleaks" for name in automatic_checks)):
+        raise ValueError("repairExecution.automaticCheckRepairNames must reference unique non-security required checks")
 
     reviewer = policy.get("independentReview", {})
     adapter = reviewer.get("adapter")
@@ -485,7 +491,12 @@ def execute_check(repo_root: Path, run_dir: Path, name: str, command: list[str],
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-") or "check"
     prior_attempts = [entry for entry in checks_data.get("checks", []) if entry.get("name") == name]
     attempt = len(prior_attempts) + 1
-    log_path = log_dir / f"{safe_name}-attempt-{attempt}.log"
+    worker_path = run_dir / "worker.json"
+    worker_attempt = read_json(worker_path).get("attempt", 1) if worker_path.exists() else 1
+    if type(worker_attempt) is not int or worker_attempt < 1:
+        raise ValueError("Invalid worker attempt for command evidence")
+    worker_suffix = f"-worker-{worker_attempt}" if worker_attempt > 1 else ""
+    log_path = log_dir / f"{safe_name}{worker_suffix}-attempt-{attempt}.log"
     started_at = utc_now()
     started = time.monotonic()
     with log_path.open("w", encoding="utf-8") as log_handle:
@@ -498,9 +509,12 @@ def execute_check(repo_root: Path, run_dir: Path, name: str, command: list[str],
             bufsize=1,
         )
         assert process.stdout is not None
-        for line in process.stdout:
-            sys.stdout.write(line)
-            log_handle.write(line)
+        try:
+            for line in process.stdout:
+                sys.stdout.write(line)
+                log_handle.write(line)
+        finally:
+            process.stdout.close()
         return_code = process.wait()
     duration_ms = round((time.monotonic() - started) * 1000)
     result = {
@@ -1103,6 +1117,10 @@ def execute_worker(
         raise ValueError("Worker worktree HEAD no longer matches the run base commit")
     if attempt == 1 and run_git(worktree, "status", "--porcelain") != "":
         raise ValueError("Worker worktree must be clean before initial Aider execution")
+    before_paths, before_available = discover_changed_files(worktree, base_commit)
+    before_sha256 = workspace_change_digest(worktree, before_paths) if before_available else None
+    if not before_available:
+        raise ValueError("Worker source evidence is unavailable before execution")
 
     worker_policy = policy.get("workerExecution")
     if not isinstance(worker_policy, dict):
@@ -1140,9 +1158,12 @@ def execute_worker(
                     bufsize=1,
                 )
                 assert process.stdout is not None
-                for line in process.stdout:
-                    sys.stdout.write(line)
-                    log_handle.write(line)
+                try:
+                    for line in process.stdout:
+                        sys.stdout.write(line)
+                        log_handle.write(line)
+                finally:
+                    process.stdout.close()
                 return_code = process.wait()
             except OSError as exc:
                 startup_error = str(exc)
@@ -1153,7 +1174,8 @@ def execute_worker(
     changed_files, change_evidence = discover_changed_files(worktree, base_commit)
     change_sha256 = workspace_change_digest(worktree, changed_files) if change_evidence else None
     unexpected_commit = head_commit != base_commit
-    passed = return_code == 0 and not unexpected_commit and change_evidence and bool(changed_files)
+    made_progress = attempt == 1 or change_sha256 != before_sha256
+    passed = return_code == 0 and not unexpected_commit and change_evidence and bool(changed_files) and made_progress
     failure_reason = None
     if not change_evidence:
         failure_reason = "worker source evidence unavailable"
@@ -1161,6 +1183,8 @@ def execute_worker(
         failure_reason = "unexpected worker commit"
     elif not changed_files:
         failure_reason = "worker produced no source changes"
+    elif not made_progress:
+        failure_reason = "worker repair made no source changes"
     elif return_code != 0:
         failure_reason = "worker command failed"
     result = {
@@ -1199,7 +1223,8 @@ def _latest_checks(checks: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def prepare_repair(
-    repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any]
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any],
+    *, automated_feedback: str | None = None,
 ) -> tuple[int, Path]:
     """Authorize one low-risk correction and archive previous verification evidence."""
     worker_path = run_dir / "worker.json"
@@ -1258,6 +1283,14 @@ def prepare_repair(
     else:
         raise ValueError("No qualifying repairable failure is recorded")
 
+    if automated_feedback is not None:
+        if automated_feedback not in ("TEST_FAILURE", "COMPILATION_FAILURE"):
+            raise ValueError("Unsupported automatic repair feedback category")
+        cause += ("\nThe canonical output identified a deterministic "
+                  + ("test failure" if automated_feedback == "TEST_FAILURE" else "compilation failure")
+                  + ". Inspect the relevant test/compiler diagnostics within the isolated workspace. "
+                    "Never change infrastructure, validation scripts, or scanner configuration to bypass the failure.")
+
     next_attempt = attempt + 1
     task_path = run_dir / f"repair-task-{next_attempt}.md"
     if task_path.exists() or (run_dir / f"worker-attempt-{next_attempt}.json").exists():
@@ -1291,6 +1324,138 @@ def prepare_repair(
     (run_dir / "handoff.json").unlink(missing_ok=True)
     worker_path.unlink()
     return next_attempt, task_path
+
+
+
+
+def classify_automatic_check_failure(
+    run_dir: Path, check: dict[str, Any], policy: dict[str, Any],
+) -> tuple[str, str]:
+    """Identify only allowlisted deterministic build failures from immutable check logs."""
+    name = check.get("name")
+    if name == "gitleaks":
+        return "SECURITY_FAILURE", "Gitleaks must be reviewed by the developer"
+    if name not in policy.get("repairExecution", {}).get("automaticCheckRepairNames", []):
+        return "UNCLASSIFIED_CHECK_FAILURE", "Check is not approved for automatic repair"
+    if check.get("status") != "FAIL" or type(check.get("exitCode")) is not int:
+        return "INVALID_CHECK_EVIDENCE", "Check failure status or exit code is inconsistent"
+    relative = check.get("log")
+    if not isinstance(relative, str) or not re.fullmatch(r"logs/[A-Za-z0-9._-]+\.log", relative):
+        return "INVALID_CHECK_EVIDENCE", "Required check log path is invalid"
+    log_path = run_dir / relative
+    if not log_path.is_file() or sha256_file(log_path) != check.get("logSha256"):
+        return "INVALID_CHECK_EVIDENCE", "Required check log is missing or changed"
+    with log_path.open("rb") as handle:
+        handle.seek(max(0, log_path.stat().st_size - 512 * 1024))
+        tail = handle.read().decode("utf-8", errors="replace")
+    # Any infrastructure indication wins over an apparent test failure.
+    blockers = (
+        r"(?i)\b(?:testcontainers|docker|container runtime|connection refused|"
+        r"could not connect|timed out|timeout|network unreachable|unavailable|"
+        r"permission denied|could not resolve|dependency resolution|"
+        r"daemon disappeared|failed to start|toolchain not found|out of memory)\b"
+    )
+    if re.search(blockers, tail):
+        return "INFRASTRUCTURE_OR_UNKNOWN", "Check log contains an infrastructure failure indicator"
+    task = r"(?m)^> Task :[A-Za-z0-9:_-]+(?:test|Test) FAILED\s*$"
+    compilation = r"(?m)^> Task :[A-Za-z0-9:_-]*compile(?:Test)?Java FAILED\s*$"
+    if re.search(task, tail) and re.search(r"(?i)(there were failing tests|tests? failed|test failure)", tail):
+        return "TEST_FAILURE", "Canonical check reported deterministic test failures"
+    if re.search(compilation, tail) and re.search(r"(?i)(compilation failed|error:)", tail):
+        return "COMPILATION_FAILURE", "Canonical check reported Java compilation errors"
+    return "UNCLASSIFIED_CHECK_FAILURE", "No deterministic implementation failure was identified"
+
+
+def run_automated_cycle(
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any],
+) -> int:
+    """Run one bounded initial worker/check/review/repair cycle without accepting changes."""
+    cycle_path = run_dir / "cycle.json"
+    if cycle_path.exists():
+        raise ValueError("Automatic cycle already attempted; inspect cycle.json before starting another run")
+    if (run_dir / "worker.json").exists() or (run_dir / "review.json").exists() or (
+        run_dir / "review-attempt.json"
+    ).exists() or read_json(run_dir / "checks.json").get("checks"):
+        raise ValueError("Automatic cycle requires a fresh prepared run without execution evidence")
+    worktree = execution_root(repo_root, manifest)
+    if manifest.get("workspace", {}).get("kind") != "git-worktree":
+        raise ValueError("Prepare an isolated worker worktree before the automatic cycle")
+    if run_git(worktree, "status", "--porcelain") != "":
+        raise ValueError("Automatic cycle requires a clean initial worker worktree")
+
+    cycle = {"schemaVersion": SCHEMA_VERSION, "runId": manifest["runId"],
+             "status": "RUNNING", "startedAt": utc_now(), "finishedAt": None,
+             "reasonCode": None, "events": []}
+
+    def event(step: str, attempt: int, outcome: str, reason: str | None = None) -> None:
+        cycle["events"].append({"at": utc_now(), "step": step,
+                                "attempt": attempt, "outcome": outcome, "reasonCode": reason})
+        write_json(cycle_path, cycle)
+
+    def stop(reason: str, *, complete: bool = False) -> int:
+        cycle["status"] = "READY_FOR_MAIN_REVIEW" if complete else "ESCALATED"
+        cycle["reasonCode"] = reason
+        cycle["finishedAt"] = utc_now()
+        write_json(cycle_path, cycle)
+        return 0 if complete else 1
+
+    write_json(cycle_path, cycle)
+    attempt = 1
+    feedback: str | None = None
+    try:
+        while True:
+            if attempt == 1:
+                worker_exit = execute_worker(repo_root, run_dir, manifest, policy)
+            else:
+                next_attempt, repair_task = prepare_repair(
+                    repo_root, run_dir, manifest, policy, automated_feedback=feedback,
+                )
+                if next_attempt != attempt:
+                    raise ValueError("Repair attempt number is inconsistent")
+                event("repair-authorized", attempt, "PASS")
+                worker_exit = execute_worker(
+                    repo_root, run_dir, manifest, policy,
+                    attempt=next_attempt, task_override=repair_task,
+                )
+            worker = read_json(run_dir / "worker.json")
+            event("worker", attempt, worker["status"], worker.get("failureReason"))
+            if worker_exit != 0:
+                if worker.get("failureReason") != "worker produced no source changes" or worker.get("exitCode") != 0:
+                    return stop("WORKER_EXECUTION_FAILURE")
+                feedback = None
+            else:
+                failed_definition: dict[str, Any] | None = None
+                for definition in policy["requiredChecks"]:
+                    result = run_required_check(repo_root, run_dir, manifest, definition, policy)
+                    check = _latest_checks(read_json(run_dir / "checks.json"))[definition["name"]]
+                    event("check:" + definition["name"], attempt, check["status"])
+                    if result != 0:
+                        failed_definition = check
+                        break
+                if failed_definition is not None:
+                    feedback, _ = classify_automatic_check_failure(run_dir, failed_definition, policy)
+                    if feedback not in ("TEST_FAILURE", "COMPILATION_FAILURE"):
+                        return stop(feedback)
+                else:
+                    review = run_independent_review(repo_root, run_dir, manifest, policy)
+                    event("review", attempt, review["verdict"])
+                    status = update_status(repo_root, run_dir, manifest, policy)
+                    if status["state"] == STATE_READY_FOR_MAIN_REVIEW:
+                        write_handoff(repo_root, run_dir, manifest, policy)
+                        event("handoff", attempt, "PASS")
+                        return stop("REVIEW_AND_CHECKS_PASSED", complete=True)
+                    if review["verdict"] != "CHANGES_REQUIRED":
+                        return stop("REVIEW_ESCALATION_OR_BLOCKED")
+                    feedback = None
+            if attempt > policy.get("repairExecution", {}).get("maxRepairAttempts", 3):
+                return stop("REPAIR_BUDGET_EXHAUSTED")
+            # prepare_repair validates LOW risk, source identity, security, and finding categories.
+            # It runs only at the beginning of the next iteration.
+            attempt += 1
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        event("controller", attempt, "FAIL", type(exc).__name__)
+        stop("CONTROLLER_OR_POLICY_FAILURE")
+        raise
 
 
 def derive_state(
@@ -1479,6 +1644,11 @@ def build_parser() -> argparse.ArgumentParser:
     repair_parser = subparsers.add_parser("repair", help="Run one bounded source-repair attempt")
     repair_parser.add_argument("--run-id", required=True)
 
+    cycle_parser = subparsers.add_parser(
+        "run-cycle", help="Run a bounded automatic worker/verification/review/repair cycle"
+    )
+    cycle_parser.add_argument("--run-id", required=True)
+
     verify_parser = subparsers.add_parser("verify", help="Run all required checks in policy order")
     verify_parser.add_argument("--run-id", required=True)
 
@@ -1562,6 +1732,12 @@ def main(argv: list[str] | None = None) -> int:
             result = execute_worker(repo_root, run_dir, manifest, policy,
                                     attempt=attempt, task_override=task)
             update_status(repo_root, run_dir, manifest, policy)
+            return result
+
+        if args.command == "run-cycle":
+            result = run_automated_cycle(repo_root, run_dir, manifest, policy)
+            update_status(repo_root, run_dir, manifest, policy)
+            print(json.dumps(read_json(run_dir / "cycle.json"), indent=2, sort_keys=True))
             return result
 
         if args.command == "run-check":
