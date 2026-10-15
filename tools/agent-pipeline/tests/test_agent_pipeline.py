@@ -481,7 +481,7 @@ class AgentPipelineCliTest(unittest.TestCase):
 
             second_worker = self.run_cli(root, policy, "run-worker", "--run-id", "worker-test", env=env)
             self.assertEqual(2, second_worker.returncode)
-            self.assertIn("does not provide repair/retry loops", second_worker.stderr)
+            self.assertIn("already recorded", second_worker.stderr)
 
             checked = self.run_cli(root, policy, "run-check", "--run-id", "worker-test", "--name", "canonical", env=env)
             self.assertEqual(0, checked.returncode, checked.stderr)
@@ -495,6 +495,170 @@ class AgentPipelineCliTest(unittest.TestCase):
             drifted = self.run_cli(root, policy, "status", "--run-id", "worker-test", env=env)
             self.assertEqual(2, drifted.returncode)
             self.assertIn("source changed after worker execution", drifted.stderr)
+
+    # A no-op worker must not reach security verification or a reviewer.
+    def test_no_diff_worker_fails_and_bounded_repair_preserves_attempt_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            root.mkdir()
+            policy, task = self.create_repository(root)
+            content = json.loads(policy.read_text(encoding="utf-8"))
+            content["workerExecution"] = {
+                "required": True, "tool": "aider", "executable": "aider",
+                "defaultModel": "deepseek/deepseek-chat", "supportedVersions": ["0.86.2"],
+                "branchPrefix": "agent/",
+                "arguments": ["--model", "{model}", "--config", "{config_file}",
+                              "--message-file", "{task_file}", "--no-auto-commits"],
+            }
+            content["repairExecution"] = {"maxRepairAttempts": 3}
+            policy.write_text(json.dumps(content), encoding="utf-8")
+            self.init_git_repository(root)
+            fake_bin = Path(temp_dir) / "bin"
+            fake_bin.mkdir()
+            fake_aider = fake_bin / "aider"
+            fake_aider.write_text(
+                "#!/usr/bin/env python3\n"
+                "import pathlib,sys\n"
+                "if '--version' in sys.argv: print('aider 0.86.2'); quit()\n"
+                "if '--help' in sys.argv: print('--model --config --message-file --no-auto-commits --read'); quit()\n"
+                "task = pathlib.Path(sys.argv[sys.argv.index('--message-file') + 1]).read_text()\n"
+                "if 'Bounded repair round' in task:\n"
+                "    pathlib.Path('docs/ROADMAP.md').parent.mkdir(exist_ok=True)\n"
+                "    pathlib.Path('docs/ROADMAP.md').write_text('fixed\\n')\n"
+                "print('fake model completed')\n",
+                encoding="utf-8",
+            )
+            fake_aider.chmod(0o755)
+            env = dict(os.environ, PATH=f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+            run_id = "no-diff-repair"
+            self.assertEqual(0, self.run_cli(root, policy, "init", "--stage", "A3-test",
+                "--spec", "docs/specs/active/example.md", "--task-file", str(task),
+                "--run-id", run_id, env=env).returncode)
+            self.assertEqual(0, self.run_cli(root, policy, "prepare-worker", "--run-id", run_id,
+                env=env).returncode)
+            first = self.run_cli(root, policy, "run-worker", "--run-id", run_id, env=env)
+            self.assertEqual(1, first.returncode, first.stderr)
+            evidence = root / "build/reports/agent-pipeline" / run_id
+            worker_one = json.loads((evidence / "worker.json").read_text())
+            self.assertEqual("FAIL", worker_one["status"])
+            self.assertEqual("worker produced no source changes", worker_one["failureReason"])
+            self.assertEqual([], worker_one["changedFiles"])
+            self.assertEqual(worker_one, json.loads((evidence / "worker-attempt-1.json").read_text()))
+            denied = self.run_cli(root, policy, "run-check", "--run-id", run_id,
+                                  "--name", "canonical", env=env)
+            self.assertEqual(2, denied.returncode)
+            self.assertIn("did not pass", denied.stderr)
+            self.assertEqual("BLOCKED", json.loads(self.run_cli(root, policy, "status",
+                                  "--run-id", run_id, env=env).stdout)["state"])
+
+            repaired = self.run_cli(root, policy, "repair", "--run-id", run_id, env=env)
+            self.assertEqual(0, repaired.returncode, repaired.stderr)
+            worker_two = json.loads((evidence / "worker.json").read_text())
+            self.assertEqual("PASS", worker_two["status"])
+            self.assertEqual(2, worker_two["attempt"])
+            self.assertEqual(["docs/ROADMAP.md"], worker_two["changedFiles"])
+            self.assertTrue((evidence / "worker-attempt-1.json").exists())
+            self.assertEqual("FAIL", json.loads((evidence / "worker-attempt-1.json").read_text())["status"])
+            self.assertTrue((evidence / "attempt-1-checks.json").exists())
+            self.assertEqual([], json.loads((evidence / "checks.json").read_text())["checks"])
+            self.assertIn("no source diff", (evidence / "repair-task-2.md").read_text())
+            self.assertEqual(0, self.run_cli(root, policy, "run-check", "--run-id", run_id,
+                            "--name", "canonical", env=env).returncode)
+            status = json.loads(self.run_cli(root, policy, "status", "--run-id", run_id,
+                                           env=env).stdout)
+            self.assertEqual("REVIEW_REQUIRED", status["state"])
+
+            # Refuse another repair when there is no failing check or review to fix.
+            denied_again = self.run_cli(root, policy, "repair", "--run-id", run_id, env=env)
+            self.assertEqual(2, denied_again.returncode)
+            self.assertIn("No qualifying", denied_again.stderr)
+
+    # A review-requested repair must archive that review and invalidate all old passes.
+    def test_review_repair_invalidates_prior_success_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "README.md").write_text("base\n", encoding="utf-8")
+            (root / ".gitignore").write_text("evidence/\n", encoding="utf-8")
+            self.init_git_repository(root)
+            base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+            (root / "docs").mkdir(exist_ok=True)
+            (root / "docs/ROADMAP.md").write_text("initial implementation\n", encoding="utf-8")
+            run_dir = root / "evidence"
+            run_dir.mkdir()
+            (run_dir / "task.md").write_text("Implement the requirement.\n")
+            worker = {"status": "PASS", "attempt": 1, "exitCode": 0,
+                      "changedFiles": ["docs/ROADMAP.md"], "headCommit": base,
+                      "changeSha256": agent_pipeline.workspace_change_digest(root, ["docs/ROADMAP.md"])}
+            agent_pipeline.write_json(run_dir / "worker.json", worker)
+            agent_pipeline.write_json(run_dir / "checks.json", {"checks": [{"name": "canonical", "status": "PASS"}]})
+            agent_pipeline.write_json(run_dir / "review.json", {"verdict": "CHANGES_REQUIRED", "findings": [
+                {"id": "REV-1", "status": "OPEN", "category": "CORRECTNESS", "severity": "MEDIUM"}]})
+            agent_pipeline.write_json(run_dir / "handoff.json", {"state": "BLOCKED"})
+            agent_pipeline.write_json(run_dir / "status.json", {"state": "BLOCKED"})
+            policy = {"repairExecution": {"maxRepairAttempts": 3},
+                      "requiredChecks": [{"name": "canonical", "command": ["true"]}],
+                      "riskRules": [{"level": "LOW", "patterns": ["^docs/"]}],
+                      "escalationCategories": ["SECURITY"]}
+            manifest = {"repository": {"baseCommit": base}, "workspace": {"path": str(root)}}
+            attempt, task = agent_pipeline.prepare_repair(root, run_dir, manifest, policy)
+            self.assertEqual(2, attempt)
+            self.assertIn("REV-1", task.read_text())
+            self.assertFalse((run_dir / "review.json").exists())
+            self.assertFalse((run_dir / "handoff.json").exists())
+            self.assertFalse((run_dir / "status.json").exists())
+            self.assertFalse((run_dir / "worker.json").exists())
+            self.assertEqual([], agent_pipeline.read_json(run_dir / "checks.json")["checks"])
+            for filename in ("checks.json", "review.json", "handoff.json", "status.json"):
+                self.assertTrue((run_dir / f"attempt-1-{filename}").exists())
+
+    # Source drift and exhausted retry budgets are terminal without replaying Aider.
+    def test_repair_denies_tampering_and_exhaustion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=root, check=True)
+            (root / "README.md").write_text("base\n")
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "base"], cwd=root, check=True)
+            base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+            run_dir = root / "evidence"
+            run_dir.mkdir()
+            worker = {"status": "FAIL", "attempt": 4, "failureReason": "worker produced no source changes",
+                      "exitCode": 0, "headCommit": base, "changedFiles": [],
+                      "changeSha256": agent_pipeline.workspace_change_digest(root, [])}
+            agent_pipeline.write_json(run_dir / "worker.json", worker)
+            manifest = {"repository": {"baseCommit": base}, "workspace": {"path": str(root)}}
+            policy = {"repairExecution": {"maxRepairAttempts": 3}, "riskRules": []}
+            with self.assertRaisesRegex(ValueError, "budget exhausted"):
+                agent_pipeline.prepare_repair(root, run_dir, manifest, policy)
+            worker["attempt"] = 1
+            agent_pipeline.write_json(run_dir / "worker.json", worker)
+            (root / "README.md").write_text("tampered\n")
+            with self.assertRaisesRegex(ValueError, "source changed"):
+                agent_pipeline.prepare_repair(root, run_dir, manifest, policy)
+
+    def test_repair_denies_escalation_findings_and_security_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = root / "evidence"
+            run_dir.mkdir()
+            worker = {"status": "PASS", "attempt": 1, "changedFiles": ["docs/a.md"]}
+            agent_pipeline.write_json(run_dir / "worker.json", worker)
+            agent_pipeline.write_json(run_dir / "checks.json", {"checks": [{"name": "gitleaks", "status": "FAIL"}]})
+            policy = {"repairExecution": {"maxRepairAttempts": 3},
+                      "requiredChecks": [{"name": "gitleaks", "kind": "gitleaks"}],
+                      "riskRules": [{"level": "LOW", "patterns": ["^docs/"]}],
+                      "escalationCategories": ["SECURITY"]}
+            with mock.patch.object(agent_pipeline, "ensure_source_matches_worker_result"):
+                with self.assertRaisesRegex(ValueError, "Security scan"):
+                    agent_pipeline.prepare_repair(root, run_dir, {}, policy)
+            agent_pipeline.write_json(run_dir / "checks.json", {"checks": [{"name": "canonical", "status": "PASS"}]})
+            agent_pipeline.write_json(run_dir / "review.json", {"verdict": "CHANGES_REQUIRED", "findings": [
+                {"status": "OPEN", "category": "SECURITY", "severity": "LOW", "id": "REV-1"}]})
+            with mock.patch.object(agent_pipeline, "ensure_source_matches_worker_result"):
+                with self.assertRaisesRegex(ValueError, "escalation findings"):
+                    agent_pipeline.prepare_repair(root, run_dir, {}, policy)
 
     # Protects fail-closed Gitleaks ordering and redacted evidence for uncommitted worker files.
     def test_verify_scans_uncommitted_worker_files_before_canonical(self) -> None:
@@ -514,7 +678,7 @@ class AgentPipelineCliTest(unittest.TestCase):
                 policy["workerExecution"] = {
                     "required": True, "tool": "aider", "executable": "aider",
                     "defaultModel": "deepseek/deepseek-chat", "supportedVersions": ["0.86.2"],
-                    "branchPrefix": "agent/", "arguments": ["--model", "{model}"],
+                    "branchPrefix": "agent/", "arguments": ["--model", "{model}", "--message-file", "{task_file}"],
                 }
                 policy_path.write_text(json.dumps(policy), encoding="utf-8")
                 base_commit = self.init_git_repository(root)

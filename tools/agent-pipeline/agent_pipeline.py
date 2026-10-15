@@ -141,6 +141,11 @@ def validate_policy(policy: dict[str, Any]) -> None:
         if required_checks[0]["name"] != "gitleaks":
             raise ValueError("Gitleaks must precede other required checks")
 
+    repair = policy.get("repairExecution", {"maxRepairAttempts": 3})
+    if (not isinstance(repair, dict) or type(repair.get("maxRepairAttempts")) is not int
+            or not 0 <= repair["maxRepairAttempts"] <= 3):
+        raise ValueError("repairExecution.maxRepairAttempts must be an integer from 0 to 3")
+
     reviewer = policy.get("independentReview", {})
     adapter = reviewer.get("adapter")
     if adapter is not None:
@@ -194,6 +199,8 @@ def validate_policy(policy: dict[str, Any]) -> None:
             "{chat_history_file}",
             "{config_file}",
         }
+        if "--message-file" not in arguments or "{task_file}" not in arguments:
+            raise ValueError("Aider worker arguments must contain --message-file {task_file}")
         for argument in arguments:
             placeholders = set(re.findall(r"\{[^{}]+\}", argument))
             if not placeholders.issubset(allowed_placeholders):
@@ -640,6 +647,8 @@ def run_required_check(
     policy: dict[str, Any],
 ) -> int:
     """Run one policy-defined check in the immutable worker source state."""
+    if (run_dir / "review.json").exists() or (run_dir / "review-attempt.json").exists():
+        raise ValueError("Verification after review requires a new repair round")
     if policy.get("workerExecution", {}).get("required", False):
         ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
     worktree = execution_root(repo_root, manifest)
@@ -1051,6 +1060,14 @@ def ensure_worker_workspace_matches_result(
     result = read_json(result_path)
     if result.get("status") != "PASS":
         raise ValueError("Required worker execution did not pass")
+    ensure_source_matches_worker_result(repo_root, run_dir, manifest, result)
+    return result
+
+
+def ensure_source_matches_worker_result(
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any], result: dict[str, Any]
+) -> None:
+    """Protect the last worker attempt against external mutations before a repair."""
     worktree = execution_root(repo_root, manifest)
     base_commit = manifest.get("repository", {}).get("baseCommit")
     head_commit = run_git(worktree, "rev-parse", "HEAD")
@@ -1062,7 +1079,6 @@ def ensure_worker_workspace_matches_result(
     digest = workspace_change_digest(worktree, changed_files)
     if changed_files != result.get("changedFiles") or digest != result.get("changeSha256"):
         raise ValueError("Worker worktree source changed after worker execution; start a new run")
-    return result
 
 
 def execute_worker(
@@ -1070,11 +1086,14 @@ def execute_worker(
     run_dir: Path,
     manifest: dict[str, Any],
     policy: dict[str, Any],
+    *,
+    attempt: int = 1,
+    task_override: Path | None = None,
 ) -> int:
     """Run one bounded Aider attempt in the isolated worktree and persist result evidence."""
     result_path = run_dir / "worker.json"
     if result_path.exists():
-        raise ValueError("Worker execution is already recorded; A2.1 does not provide repair/retry loops")
+        raise ValueError("Worker execution is already recorded; use the bounded repair command")
     worktree = execution_root(repo_root, manifest)
     workspace = manifest.get("workspace")
     if not isinstance(workspace, dict) or workspace.get("kind") != "git-worktree":
@@ -1082,8 +1101,8 @@ def execute_worker(
     base_commit = workspace.get("baseCommit")
     if not isinstance(base_commit, str) or run_git(worktree, "rev-parse", "HEAD") != base_commit:
         raise ValueError("Worker worktree HEAD no longer matches the run base commit")
-    if run_git(worktree, "status", "--porcelain") != "":
-        raise ValueError("Worker worktree must be clean before the one-shot Aider execution")
+    if attempt == 1 and run_git(worktree, "status", "--porcelain") != "":
+        raise ValueError("Worker worktree must be clean before initial Aider execution")
 
     worker_policy = policy.get("workerExecution")
     if not isinstance(worker_policy, dict):
@@ -1094,9 +1113,12 @@ def execute_worker(
         worktree, run_dir, worker_policy, worker_environment, removed_aider_environment
     )
     command = build_aider_command(policy, manifest, run_dir)
+    if task_override is not None:
+        task_flag = command.index("--message-file")
+        command[task_flag + 1] = str(task_override.resolve())
     log_dir = run_dir / "logs"
     log_dir.mkdir(exist_ok=True)
-    log_path = log_dir / "worker-attempt-1.log"
+    log_path = log_dir / f"worker-attempt-{attempt}.log"
     started_at = utc_now()
     started = time.monotonic()
     return_code = 127
@@ -1131,9 +1153,21 @@ def execute_worker(
     changed_files, change_evidence = discover_changed_files(worktree, base_commit)
     change_sha256 = workspace_change_digest(worktree, changed_files) if change_evidence else None
     unexpected_commit = head_commit != base_commit
-    passed = return_code == 0 and not unexpected_commit and change_evidence
+    passed = return_code == 0 and not unexpected_commit and change_evidence and bool(changed_files)
+    failure_reason = None
+    if not change_evidence:
+        failure_reason = "worker source evidence unavailable"
+    elif unexpected_commit:
+        failure_reason = "unexpected worker commit"
+    elif not changed_files:
+        failure_reason = "worker produced no source changes"
+    elif return_code != 0:
+        failure_reason = "worker command failed"
     result = {
         "schemaVersion": SCHEMA_VERSION,
+        "attempt": attempt,
+        "taskSha256": sha256_file(task_override) if task_override else manifest["taskSha256"],
+        "failureReason": failure_reason,
         "tool": manifest.get("worker", {}).get("tool"),
         "model": manifest.get("worker", {}).get("model"),
         "command": command,
@@ -1154,7 +1188,109 @@ def execute_worker(
         "logSha256": sha256_file(log_path),
     }
     write_json(result_path, result)
+    write_json(run_dir / f"worker-attempt-{attempt}.json", result)
     return 0 if passed else 1
+
+
+def _latest_checks(checks: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return the last persisted result for each check name."""
+    return {item["name"]: item for item in checks.get("checks", [])
+            if isinstance(item, dict) and isinstance(item.get("name"), str)}
+
+
+def prepare_repair(
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any]
+) -> tuple[int, Path]:
+    """Authorize one low-risk correction and archive previous verification evidence."""
+    worker_path = run_dir / "worker.json"
+    if not worker_path.exists():
+        raise ValueError("Initial worker attempt is missing")
+    worker = read_json(worker_path)
+    attempt = worker.get("attempt", 1)
+    if type(attempt) is not int or attempt < 1:
+        raise ValueError("Invalid worker attempt number")
+    maximum = policy.get("repairExecution", {}).get("maxRepairAttempts", 3)
+    if attempt > maximum:
+        raise ValueError("Repair attempt budget exhausted; developer intervention required")
+    ensure_source_matches_worker_result(repo_root, run_dir, manifest, worker)
+    changed_files = worker.get("changedFiles", [])
+    if not isinstance(changed_files, list):
+        raise ValueError("Invalid worker changed-file evidence")
+    risk = classify_risk(changed_files, policy, True)
+    if risk["level"] != "LOW":
+        raise ValueError("Non-LOW worker source risk requires developer intervention")
+    if any(path in ("run_checks.sh", "tools/agent-pipeline/pipeline-policy.json")
+           or path.endswith(".gitleaksignore") for path in changed_files):
+        raise ValueError("Worker modified protected verification configuration")
+
+    checks = read_json(run_dir / "checks.json")
+    validate_security_check_evidence(policy, checks, worker)
+    latest = _latest_checks(checks)
+    gitleaks = latest.get("gitleaks")
+    if gitleaks is not None and gitleaks.get("status") != "PASS":
+        raise ValueError("Security scan failure must be escalated, not repaired automatically")
+    if (run_dir / "review-attempt.json").exists() and read_json(run_dir / "review-attempt.json").get("status") != "PASS":
+        raise ValueError("Failed reviewer request requires developer intervention")
+
+    review_path = run_dir / "review.json"
+    review = read_json(review_path) if review_path.exists() else None
+    if review is not None:
+        findings = [f for f in review.get("findings", []) if f.get("status") == "OPEN"]
+        if review.get("verdict") == "ESCALATE" or any(
+            f.get("category") in policy.get("escalationCategories", [])
+            or f.get("severity") in ("HIGH", "CRITICAL") for f in findings
+        ):
+            raise ValueError("Review contains blocking-risk or escalation findings")
+    if worker.get("status") == "FAIL":
+        if worker.get("failureReason") != "worker produced no source changes" or worker.get("exitCode") != 0:
+            raise ValueError("Worker failure is not a safe no-diff repair candidate")
+        cause = "The previous implementation produced no source diff. Re-read the exact file content and make a real change."
+    elif any(entry.get("status") == "FAIL" for entry in latest.values()):
+        # Scanner failures were rejected above. Do not send raw tool logs or potential secrets to the model.
+        failed = [entry for entry in latest.values() if entry.get("status") == "FAIL"]
+        cause = "Required checks failed: " + "; ".join(
+            f"{item['name']} (exit {item.get('exitCode')})" for item in failed
+        ) + ". Diagnose the implementation from current source and tests; do not alter check configuration."
+    elif review is not None and review.get("verdict") == "CHANGES_REQUIRED":
+        safe_findings = [f"{f.get('id')}: {f.get('category')}, {f.get('severity')}"
+                         for f in findings]
+        cause = "Independent review requested changes: " + "; ".join(safe_findings)
+    else:
+        raise ValueError("No qualifying repairable failure is recorded")
+
+    next_attempt = attempt + 1
+    task_path = run_dir / f"repair-task-{next_attempt}.md"
+    if task_path.exists() or (run_dir / f"worker-attempt-{next_attempt}.json").exists():
+        raise ValueError("Next repair attempt already exists")
+    previous_snapshot = run_dir / f"worker-attempt-{attempt}.json"
+    if previous_snapshot.exists() and read_json(previous_snapshot) != worker:
+        raise ValueError("Prior worker attempt evidence is inconsistent")
+    for name in ("checks.json", "review.json", "review-attempt.json", "status.json", "handoff.json"):
+        if (run_dir / name).exists() and (run_dir / f"attempt-{attempt}-{name}").exists():
+            raise ValueError("Repair evidence archive already exists")
+    task_path.write_text(
+        (run_dir / "task.md").read_text(encoding="utf-8")
+        + "\n## Bounded repair round\n\n" + cause
+        + "\nDo not change scope or weaken checks. Return control on ambiguity.\n",
+        encoding="utf-8",
+    )
+    # The prior evidence remains in numbered immutable snapshots; the active view is reset.
+    if not previous_snapshot.exists():
+        write_json(previous_snapshot, worker)
+    for name in ("checks.json", "review.json", "review-attempt.json", "status.json", "handoff.json"):
+        original = run_dir / name
+        if original.exists():
+            snapshot = run_dir / f"attempt-{attempt}-{name}"
+            if snapshot.exists():
+                raise ValueError("Repair evidence archive already exists")
+            shutil.copy2(original, snapshot)
+    write_json(run_dir / "checks.json", {"schemaVersion": SCHEMA_VERSION, "checks": []})
+    review_path.unlink(missing_ok=True)
+    (run_dir / "review-attempt.json").unlink(missing_ok=True)
+    (run_dir / "status.json").unlink(missing_ok=True)
+    (run_dir / "handoff.json").unlink(missing_ok=True)
+    worker_path.unlink()
+    return next_attempt, task_path
 
 
 def derive_state(
@@ -1340,6 +1476,9 @@ def build_parser() -> argparse.ArgumentParser:
     worker_parser = subparsers.add_parser("run-worker", help="Run the configured one-shot Aider worker")
     worker_parser.add_argument("--run-id", required=True)
 
+    repair_parser = subparsers.add_parser("repair", help="Run one bounded source-repair attempt")
+    repair_parser.add_argument("--run-id", required=True)
+
     verify_parser = subparsers.add_parser("verify", help="Run all required checks in policy order")
     verify_parser.add_argument("--run-id", required=True)
 
@@ -1418,6 +1557,13 @@ def main(argv: list[str] | None = None) -> int:
             update_status(repo_root, run_dir, manifest, policy)
             return result
 
+        if args.command == "repair":
+            attempt, task = prepare_repair(repo_root, run_dir, manifest, policy)
+            result = execute_worker(repo_root, run_dir, manifest, policy,
+                                    attempt=attempt, task_override=task)
+            update_status(repo_root, run_dir, manifest, policy)
+            return result
+
         if args.command == "run-check":
             definitions = required_check_map(policy)
             if args.name not in definitions:
@@ -1435,6 +1581,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "run-command":
+            if (run_dir / "review.json").exists() or (run_dir / "review-attempt.json").exists():
+                raise ValueError("Verification after review requires a new repair round")
             if args.name in required_check_map(policy):
                 raise ValueError(f"Use run-check for policy-defined check: {args.name}")
             command = parse_command_tail(args.command_args)
@@ -1454,6 +1602,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "record-review":
+            if (run_dir / "review.json").exists() or (run_dir / "review-attempt.json").exists():
+                raise ValueError("Independent review already recorded for this source attempt")
+            if policy.get("workerExecution", {}).get("required", False):
+                worker = ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+                checks = read_json(run_dir / "checks.json")
+                validate_security_check_evidence(policy, checks, worker)
+                if derive_state(policy, checks, None, worker)[0] != STATE_REVIEW_REQUIRED:
+                    raise ValueError("All required checks must pass before review")
             review_input = resolve_under_repo(repo_root, args.input)
             review = validate_review(read_json(review_input))
             reviews_path = run_dir / "reviews.json"

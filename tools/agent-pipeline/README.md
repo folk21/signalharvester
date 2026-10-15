@@ -11,7 +11,7 @@ description: Repository-local orchestration for isolated coding-worker execution
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
 
-Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. Stage A2.2 adds repository-owned Gitleaks scanning and ordered required-check orchestration. Stage A2.3 introduces a verification-pending fresh-context reviewer adapter and compact external-checkpoint handoff. Repair loops, automatic acceptance, specification archival, and merging remain later stages owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
+Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. Stage A2.2 adds repository-owned Gitleaks scanning and ordered required-check orchestration. Stage A2.3 introduces a verification-pending fresh-context reviewer adapter and compact external-checkpoint handoff. A3 has a verification-pending first slice: intrinsic no-diff blocking and explicit bounded repair attempts. Automatic repair scheduling, automatic end-to-end check/review/retry cycles, acceptance, specification archival, and merging remain later work owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
 
 ## Current boundary
 
@@ -21,7 +21,7 @@ The pipeline owns:
 - required repository/spec preflight and a clean Git base;
 - an immutable base commit for every Git-backed run;
 - isolated worker branch/worktree preparation;
-- one-shot Aider execution with a repository-owned argument policy;
+- one initial Aider execution plus at most three explicitly requested bounded repair attempts with a repository-owned argument policy;
 - pre-model Aider CLI/version compatibility, Git-identity, and runtime-configuration preflight evidence;
 - worker stdout/stderr, exit status, changed-file list, source-change digest, HEAD identity, and log digest evidence;
 - prevention of worker auto-commits in the A2.1 adapter;
@@ -142,7 +142,7 @@ python3 tools/agent-pipeline/agent_pipeline.py run-worker \
   --run-id <run-id>
 ```
 
-The A2.1 worker is one-shot. A second `run-worker` invocation for the same run is rejected. Bounded repair/retry belongs to A3; until then, a failed worker execution requires review and a new run rather than an implicit self-repair loop.
+`run-worker` is the **initial** attempt and cannot be invoked twice for the same run. A successful Aider process that leaves no actual changed/untracked files now records worker `FAIL` with `failureReason: worker produced no source changes` and blocks verification. Do not treat model output as implementation evidence. A subsequent correction must use the explicit `repair` command; it is not an implicit retry.
 
 `worker.json` records:
 
@@ -156,7 +156,24 @@ The A2.1 worker is one-shot. A second `run-worker` invocation for the same run i
 - changed/untracked paths and a content digest for that source state;
 - log path and SHA-256.
 
-An unexpected worker commit fails the worker result. The repository-owned adapter requests `--no-auto-commits`, so the expected A2.1 handoff is an uncommitted diff inside the isolated worktree. After `worker.json` is captured, later checks/status also reject any source drift from that recorded worker state.
+An unexpected worker commit fails the worker result. The repository-owned adapter requests `--no-auto-commits`, so the expected A2.1 handoff is an uncommitted diff inside the isolated worktree. After `worker.json` is captured, later checks/status also reject any source drift from that recorded worker state. Each worker result is also saved as `worker-attempt-N.json`, without rewriting earlier attempts.
+
+## Run one bounded repair (A3, verification-pending)
+
+When the current run is blocked by an **exit-zero no-diff implementation**, a failed deterministic check, or an independent review with low-risk `CHANGES_REQUIRED` findings, the developer may explicitly authorize a repair:
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py repair --run-id <run-id>
+python3 tools/agent-pipeline/agent_pipeline.py verify --run-id <run-id>
+python3 tools/agent-pipeline/agent_pipeline.py run-review --run-id <run-id>
+python3 tools/agent-pipeline/agent_pipeline.py handoff --run-id <run-id>
+```
+
+`repair` reuses the isolated worktree **only when its previous worker source digest and Git HEAD are unchanged**. At most **three** repair attempts are allowed after the initial attempt, controlled by `repairExecution.maxRepairAttempts` (max `3`) in the repository policy. The repair task includes the original task plus bounded feedback identifying the failing check/exit status, missing diff, or reviewer finding IDs/categories/severities; raw security matches and unfiltered check logs are never sent to the model. This first slice requires a developer to decide when a verification failure is repairable and to invoke each repair; it is not the A3 automatic classification/loop runner.
+
+The current repair gate permits only LOW changed-path risk and refuses a Gitleaks failure, high/critical or escalation-category finding, a failed reviewer request, unexpected worker commit, nonzero worker exit, missing source evidence, or source drift. Infrastructure failures and ambiguous requirements must be escalated rather than converted into code edits. Existing changed paths remain **scope hints** until the A4 stage packet/enforced scope is implemented: inspect the diff and do not use this command to authorize new module boundaries.
+
+Before a repair starts, the latest `worker.json`, checks, review, status and handoff evidence are retained in attempt-specific snapshots. The new attempt gets a fresh `worker.json`, empty check results, and no review, so old passes cannot be reused. After changes, **rerun all required checks and fresh independent review**. An independent review is single-use for a source attempt; adding checks after review requires a new repair round. If any gate refuses a repair, stop and involve the developer. No stage or spec is automatically accepted, merged, or committed.
 
 ## Record focused verification
 
@@ -255,7 +272,7 @@ Do not copy generated run evidence into owning documentation. Accepted stable be
 
 The active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification owns intended evolution, stage sequencing, and final acceptance criteria. This guide owns current implemented commands and evidence semantics only.
 
-A2.1, A2.2, and A2.3 remain developer-verification-pending. A first real Aider documentation pilot reached DeepSeek but applied no changes after edit-format mismatches; that attempt was blocked by the external pilot scope guard before Gitleaks and independent review. The next implementation slice is A3 bounded model repair and re-review, including intrinsic no-diff blocking. The future sub-spec delegation map, stage runner, guarded feature-branch commits, notifications, and lifecycle gates are specified in the active specification, **not implemented by these commands**.
+A2.1, A2.2, A2.3, and the first A3 guard/manual-repair slice remain developer-verification-pending. The first real documentation pilot reached DeepSeek but applied no changes after edit-format mismatches; the pipeline now blocks no-diff itself. Next: complete automated A3 failure classification/check/re-review loop and rerun P2 against real Aider/Gitleaks/reviewer infrastructure. The future sub-spec delegation map, stage runner, guarded feature-branch commits, notifications, and lifecycle gates are specified in the active specification, **not implemented by these commands**.
 
 
 ## Automatic independent review and main checkpoint handoff (A2.3)

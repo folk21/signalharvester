@@ -89,6 +89,9 @@
       ]
     }
   ],
+  "repairExecution": {
+    "maxRepairAttempts": 3
+  },
   "workerExecution": {
     "required": true,
     "tool": "aider",
