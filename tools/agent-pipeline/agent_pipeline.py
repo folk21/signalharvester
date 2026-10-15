@@ -1521,45 +1521,76 @@ def prepare_repair(
 
 
 def python_unittest_diagnostic(tail: str, blockers: str) -> tuple[str, str] | None:
-    """Classify a failed repository unittest step from its final structured test report.
+    """Identify a genuine failed verbose unittest run inside canonical check output.
 
-    Successful pipeline tests may print simulated Docker/Gitleaks failures. Only the
-    actual unittest error tracebacks are considered diagnostic infrastructure evidence.
+    Repository tests deliberately print fake check summaries and exception text. A
+    candidate unittest report is trusted for repair classification only when the
+    reported test count, failed test progress and traceback blocks agree. If
+    multiple candidates satisfy that contract, fail closed instead of guessing.
     """
-    summary = tail.rfind("==> Verification summary\n")
-    if summary < 0:
+    summaries = list(re.finditer(r"(?m)^==> Verification summary[ \t]*$", tail))
+    if not summaries:
         return None
+    summary = summaries[-1].start()
     failed = re.findall(r"(?m)^  \[FAIL\] (.+?)\s*$", tail[summary:])
     if failed != ["./tools/agent-pipeline/run_tests.sh"]:
         return None
+    check_header = "==> ./tools/agent-pipeline/run_tests.sh\n"
+    start = tail.find(check_header)
+    if start < 0 or start >= summary:
+        return None
+    start += len(check_header)
     reports = list(re.finditer(
-        r"(?m)^Ran [1-9][0-9]* tests? in [0-9.]+s[ \t]*\n[ \t]*\n"
+        r"(?m)^Ran ([1-9][0-9]*) tests? in [0-9.]+s[ \t]*\n[ \t]*\n"
         r"FAILED \((?:errors|failures)=[1-9][0-9]*(?:, (?:errors|failures)=[1-9][0-9]*)*\)[ \t]*$",
-        tail[:summary],
+        tail[start:summary],
     ))
-    if not reports:
-        return None
-    report = reports[-1]
-    errors = list(re.finditer(
-        r"(?ms)^={10,}[ \t]*\n((?:ERROR|FAIL):[^\n]*\n.*?)"
-        r"(?=^={10,}[ \t]*$|^Ran [1-9][0-9]* tests? in |\Z)",
-        tail[:report.start()],
-    ))
-    expected = sum(int(n) for n in re.findall(r"(?:errors|failures)=([1-9][0-9]*)", report.group()))
-    if len(errors) != expected:
-        return None
-    identifiers = []
-    for match in errors:
-        details = match.group(1)
-        if re.search(blockers, details):
-            return "INFRASTRUCTURE_OR_UNKNOWN", "Unittest traceback includes an infrastructure failure indicator"
-        name_match = re.match(r"(?:ERROR|FAIL): (test_[A-Za-z0-9_]{1,100}) \(", details)
-        if name_match is None:
-            return None
-        types = re.findall(r"(?m)^([A-Za-z][A-Za-z0-9_]{0,63}):", details)
-        type_name = types[-1] if types else "UNKNOWN"
-        identifiers.append(f"{name_match.group(1)} ({type_name})")
-    return "TEST_FAILURE", "; ".join(identifiers[:5])
+    candidates: list[tuple[str, str]] = []
+    for report in reports:
+        # Only the report's own preceding verbose-test run can authenticate it.
+        # Otherwise a fake report emitted by a passing fixture might be chosen.
+        section = tail[start:start + report.start()]
+        progress = re.findall(
+            r"(?m)^(test_[A-Za-z0-9_]{1,100}) \([^\n]{1,200}\) \.\.\. "
+            r"(ok|ERROR|FAIL|skipped [^\n]*|expected failure|unexpected success)[ \t]*$",
+            section,
+        )
+        if len(progress) != int(report.group(1)):
+            continue
+        errors = list(re.finditer(
+            r"(?ms)^={10,}[ \t]*\n((?:ERROR|FAIL):[^\n]*\n.*?)"
+            r"(?=^={10,}[ \t]*$|^Ran [1-9][0-9]* tests? in |\Z)",
+            section,
+        ))
+        expected = sum(int(n) for n in re.findall(
+            r"(?:errors|failures)=([1-9][0-9]*)", report.group(),
+        ))
+        failures = [(name, status) for name, status in progress if status in ("ERROR", "FAIL")]
+        if len(errors) != expected or len(failures) != expected:
+            continue
+        identifiers: list[str] = []
+        outcome: tuple[str, str] | None = None
+        for match in errors:
+            details = match.group(1)
+            if re.search(blockers, details):
+                outcome = (
+                    "INFRASTRUCTURE_OR_UNKNOWN",
+                    "Unittest traceback includes an infrastructure failure indicator",
+                )
+                break
+            name_match = re.match(r"(?:ERROR|FAIL): (test_[A-Za-z0-9_]{1,100}) \(", details)
+            if name_match is None or name_match.group(1) not in [name for name, _ in failures]:
+                break
+            types = re.findall(r"(?m)^([A-Za-z][A-Za-z0-9_]{0,63}):", details)
+            type_name = types[-1] if types else "UNKNOWN"
+            identifiers.append(f"{name_match.group(1)} ({type_name})")
+        else:
+            outcome = ("TEST_FAILURE", "; ".join(identifiers[:5]))
+        if outcome is not None:
+            candidates.append(outcome)
+    # Ambiguous or truncated reports are not a reason to send source changes
+    # back to the model, even when one candidate looks repairable.
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def classify_automatic_check_failure(
