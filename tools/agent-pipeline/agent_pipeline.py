@@ -1409,7 +1409,7 @@ def _latest_checks(checks: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def prepare_repair(
     repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any],
-    *, automated_feedback: str | None = None,
+    *, automated_feedback: str | None = None, automated_details: str | None = None,
 ) -> tuple[int, Path]:
     """Authorize one low-risk correction and archive previous verification evidence."""
     worker_path = run_dir / "worker.json"
@@ -1477,6 +1477,11 @@ def prepare_repair(
                   + ("test failure" if automated_feedback == "TEST_FAILURE" else "compilation failure")
                   + ". Inspect the relevant test/compiler diagnostics within the isolated workspace. "
                     "Never change infrastructure, validation scripts, or scanner configuration to bypass the failure.")
+        if automated_details is not None:
+            # Accept only identifiers produced by the bounded classifier, never raw log text.
+            if len(automated_details) > 500 or not re.fullmatch(r"[A-Za-z0-9_(),:; .-]+", automated_details):
+                raise ValueError("Unsafe automatic repair diagnostic identifiers")
+            cause += "\nVerified failing test identifiers: " + automated_details
 
     next_attempt = attempt + 1
     task_path = run_dir / f"repair-task-{next_attempt}.md"
@@ -1515,6 +1520,48 @@ def prepare_repair(
 
 
 
+def python_unittest_diagnostic(tail: str, blockers: str) -> tuple[str, str] | None:
+    """Classify a failed repository unittest step from its final structured test report.
+
+    Successful pipeline tests may print simulated Docker/Gitleaks failures. Only the
+    actual unittest error tracebacks are considered diagnostic infrastructure evidence.
+    """
+    summary = tail.rfind("==> Verification summary\n")
+    if summary < 0:
+        return None
+    failed = re.findall(r"(?m)^  \[FAIL\] (.+?)\s*$", tail[summary:])
+    if failed != ["./tools/agent-pipeline/run_tests.sh"]:
+        return None
+    reports = list(re.finditer(
+        r"(?m)^Ran [1-9][0-9]* tests? in [0-9.]+s[ \t]*\n[ \t]*\n"
+        r"FAILED \((?:errors|failures)=[1-9][0-9]*(?:, (?:errors|failures)=[1-9][0-9]*)*\)[ \t]*$",
+        tail[:summary],
+    ))
+    if not reports:
+        return None
+    report = reports[-1]
+    errors = list(re.finditer(
+        r"(?ms)^={10,}[ \t]*\n((?:ERROR|FAIL):[^\n]*\n.*?)"
+        r"(?=^={10,}[ \t]*$|^Ran [1-9][0-9]* tests? in |\Z)",
+        tail[:report.start()],
+    ))
+    expected = sum(int(n) for n in re.findall(r"(?:errors|failures)=([1-9][0-9]*)", report.group()))
+    if len(errors) != expected:
+        return None
+    identifiers = []
+    for match in errors:
+        details = match.group(1)
+        if re.search(blockers, details):
+            return "INFRASTRUCTURE_OR_UNKNOWN", "Unittest traceback includes an infrastructure failure indicator"
+        name_match = re.match(r"(?:ERROR|FAIL): (test_[A-Za-z0-9_]{1,100}) \(", details)
+        if name_match is None:
+            return None
+        types = re.findall(r"(?m)^([A-Za-z][A-Za-z0-9_]{0,63}):", details)
+        type_name = types[-1] if types else "UNKNOWN"
+        identifiers.append(f"{name_match.group(1)} ({type_name})")
+    return "TEST_FAILURE", "; ".join(identifiers[:5])
+
+
 def classify_automatic_check_failure(
     run_dir: Path, check: dict[str, Any], policy: dict[str, Any],
 ) -> tuple[str, str]:
@@ -1542,6 +1589,9 @@ def classify_automatic_check_failure(
         r"permission denied|could not resolve|dependency resolution|"
         r"daemon disappeared|failed to start|toolchain not found|out of memory)\b"
     )
+    python_unittest = python_unittest_diagnostic(tail, blockers)
+    if python_unittest is not None:
+        return python_unittest
     if re.search(blockers, tail):
         return "INFRASTRUCTURE_OR_UNKNOWN", "Check log contains an infrastructure failure indicator"
     task = r"(?m)^> Task :[A-Za-z0-9:_-]+(?:test|Test) FAILED\s*$"
@@ -1589,13 +1639,15 @@ def run_automated_cycle(
     write_json(cycle_path, cycle)
     attempt = 1
     feedback: str | None = None
+    feedback_details: str | None = None
     try:
         while True:
             if attempt == 1:
                 worker_exit = execute_worker(repo_root, run_dir, manifest, policy)
             else:
                 next_attempt, repair_task = prepare_repair(
-                    repo_root, run_dir, manifest, policy, automated_feedback=feedback,
+                    repo_root, run_dir, manifest, policy,
+                    automated_feedback=feedback, automated_details=feedback_details,
                 )
                 if next_attempt != attempt:
                     raise ValueError("Repair attempt number is inconsistent")
@@ -1610,6 +1662,7 @@ def run_automated_cycle(
                 if worker.get("failureReason") != "worker produced no source changes" or worker.get("exitCode") != 0:
                     return stop("WORKER_EXECUTION_FAILURE")
                 feedback = None
+                feedback_details = None
             else:
                 failed_definition: dict[str, Any] | None = None
                 for definition in policy["requiredChecks"]:
@@ -1620,7 +1673,8 @@ def run_automated_cycle(
                         failed_definition = check
                         break
                 if failed_definition is not None:
-                    feedback, _ = classify_automatic_check_failure(run_dir, failed_definition, policy)
+                    feedback, feedback_details = classify_automatic_check_failure(
+                        run_dir, failed_definition, policy)
                     if feedback not in ("TEST_FAILURE", "COMPILATION_FAILURE"):
                         return stop(feedback)
                 else:
@@ -1634,6 +1688,7 @@ def run_automated_cycle(
                     if review["verdict"] != "CHANGES_REQUIRED":
                         return stop("REVIEW_ESCALATION_OR_BLOCKED")
                     feedback = None
+                    feedback_details = None
             if attempt > policy.get("repairExecution", {}).get("maxRepairAttempts", 3):
                 return stop("REPAIR_BUDGET_EXHAUSTED")
             # prepare_repair validates LOW risk, source identity, security, and finding categories.
@@ -2035,4 +2090,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
