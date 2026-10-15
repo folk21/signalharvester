@@ -481,7 +481,7 @@ class AgentPipelineCliTest(unittest.TestCase):
 
             second_worker = self.run_cli(root, policy, "run-worker", "--run-id", "worker-test", env=env)
             self.assertEqual(2, second_worker.returncode)
-            self.assertIn("does not provide repair/retry loops", second_worker.stderr)
+            self.assertIn("already recorded", second_worker.stderr)
 
             checked = self.run_cli(root, policy, "run-check", "--run-id", "worker-test", "--name", "canonical", env=env)
             self.assertEqual(0, checked.returncode, checked.stderr)
@@ -495,6 +495,170 @@ class AgentPipelineCliTest(unittest.TestCase):
             drifted = self.run_cli(root, policy, "status", "--run-id", "worker-test", env=env)
             self.assertEqual(2, drifted.returncode)
             self.assertIn("source changed after worker execution", drifted.stderr)
+
+    # A no-op worker must not reach security verification or a reviewer.
+    def test_no_diff_worker_fails_and_bounded_repair_preserves_attempt_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            root.mkdir()
+            policy, task = self.create_repository(root)
+            content = json.loads(policy.read_text(encoding="utf-8"))
+            content["workerExecution"] = {
+                "required": True, "tool": "aider", "executable": "aider",
+                "defaultModel": "deepseek/deepseek-chat", "supportedVersions": ["0.86.2"],
+                "branchPrefix": "agent/",
+                "arguments": ["--model", "{model}", "--config", "{config_file}",
+                              "--message-file", "{task_file}", "--no-auto-commits"],
+            }
+            content["repairExecution"] = {"maxRepairAttempts": 3}
+            policy.write_text(json.dumps(content), encoding="utf-8")
+            self.init_git_repository(root)
+            fake_bin = Path(temp_dir) / "bin"
+            fake_bin.mkdir()
+            fake_aider = fake_bin / "aider"
+            fake_aider.write_text(
+                "#!/usr/bin/env python3\n"
+                "import pathlib,sys\n"
+                "if '--version' in sys.argv: print('aider 0.86.2'); quit()\n"
+                "if '--help' in sys.argv: print('--model --config --message-file --no-auto-commits --read'); quit()\n"
+                "task = pathlib.Path(sys.argv[sys.argv.index('--message-file') + 1]).read_text()\n"
+                "if 'Bounded repair round' in task:\n"
+                "    pathlib.Path('docs/ROADMAP.md').parent.mkdir(exist_ok=True)\n"
+                "    pathlib.Path('docs/ROADMAP.md').write_text('fixed\\n')\n"
+                "print('fake model completed')\n",
+                encoding="utf-8",
+            )
+            fake_aider.chmod(0o755)
+            env = dict(os.environ, PATH=f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+            run_id = "no-diff-repair"
+            self.assertEqual(0, self.run_cli(root, policy, "init", "--stage", "A3-test",
+                "--spec", "docs/specs/active/example.md", "--task-file", str(task),
+                "--run-id", run_id, env=env).returncode)
+            self.assertEqual(0, self.run_cli(root, policy, "prepare-worker", "--run-id", run_id,
+                env=env).returncode)
+            first = self.run_cli(root, policy, "run-worker", "--run-id", run_id, env=env)
+            self.assertEqual(1, first.returncode, first.stderr)
+            evidence = root / "build/reports/agent-pipeline" / run_id
+            worker_one = json.loads((evidence / "worker.json").read_text())
+            self.assertEqual("FAIL", worker_one["status"])
+            self.assertEqual("worker produced no source changes", worker_one["failureReason"])
+            self.assertEqual([], worker_one["changedFiles"])
+            self.assertEqual(worker_one, json.loads((evidence / "worker-attempt-1.json").read_text()))
+            denied = self.run_cli(root, policy, "run-check", "--run-id", run_id,
+                                  "--name", "canonical", env=env)
+            self.assertEqual(2, denied.returncode)
+            self.assertIn("did not pass", denied.stderr)
+            self.assertEqual("BLOCKED", json.loads(self.run_cli(root, policy, "status",
+                                  "--run-id", run_id, env=env).stdout)["state"])
+
+            repaired = self.run_cli(root, policy, "repair", "--run-id", run_id, env=env)
+            self.assertEqual(0, repaired.returncode, repaired.stderr)
+            worker_two = json.loads((evidence / "worker.json").read_text())
+            self.assertEqual("PASS", worker_two["status"])
+            self.assertEqual(2, worker_two["attempt"])
+            self.assertEqual(["docs/ROADMAP.md"], worker_two["changedFiles"])
+            self.assertTrue((evidence / "worker-attempt-1.json").exists())
+            self.assertEqual("FAIL", json.loads((evidence / "worker-attempt-1.json").read_text())["status"])
+            self.assertTrue((evidence / "attempt-1-checks.json").exists())
+            self.assertEqual([], json.loads((evidence / "checks.json").read_text())["checks"])
+            self.assertIn("no source diff", (evidence / "repair-task-2.md").read_text())
+            self.assertEqual(0, self.run_cli(root, policy, "run-check", "--run-id", run_id,
+                            "--name", "canonical", env=env).returncode)
+            status = json.loads(self.run_cli(root, policy, "status", "--run-id", run_id,
+                                           env=env).stdout)
+            self.assertEqual("REVIEW_REQUIRED", status["state"])
+
+            # Refuse another repair when there is no failing check or review to fix.
+            denied_again = self.run_cli(root, policy, "repair", "--run-id", run_id, env=env)
+            self.assertEqual(2, denied_again.returncode)
+            self.assertIn("No qualifying", denied_again.stderr)
+
+    # A review-requested repair must archive that review and invalidate all old passes.
+    def test_review_repair_invalidates_prior_success_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "README.md").write_text("base\n", encoding="utf-8")
+            (root / ".gitignore").write_text("evidence/\n", encoding="utf-8")
+            self.init_git_repository(root)
+            base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+            (root / "docs").mkdir(exist_ok=True)
+            (root / "docs/ROADMAP.md").write_text("initial implementation\n", encoding="utf-8")
+            run_dir = root / "evidence"
+            run_dir.mkdir()
+            (run_dir / "task.md").write_text("Implement the requirement.\n")
+            worker = {"status": "PASS", "attempt": 1, "exitCode": 0,
+                      "changedFiles": ["docs/ROADMAP.md"], "headCommit": base,
+                      "changeSha256": agent_pipeline.workspace_change_digest(root, ["docs/ROADMAP.md"])}
+            agent_pipeline.write_json(run_dir / "worker.json", worker)
+            agent_pipeline.write_json(run_dir / "checks.json", {"checks": [{"name": "canonical", "status": "PASS"}]})
+            agent_pipeline.write_json(run_dir / "review.json", {"verdict": "CHANGES_REQUIRED", "findings": [
+                {"id": "REV-1", "status": "OPEN", "category": "CORRECTNESS", "severity": "MEDIUM"}]})
+            agent_pipeline.write_json(run_dir / "handoff.json", {"state": "BLOCKED"})
+            agent_pipeline.write_json(run_dir / "status.json", {"state": "BLOCKED"})
+            policy = {"repairExecution": {"maxRepairAttempts": 3},
+                      "requiredChecks": [{"name": "canonical", "command": ["true"]}],
+                      "riskRules": [{"level": "LOW", "patterns": ["^docs/"]}],
+                      "escalationCategories": ["SECURITY"]}
+            manifest = {"repository": {"baseCommit": base}, "workspace": {"path": str(root)}}
+            attempt, task = agent_pipeline.prepare_repair(root, run_dir, manifest, policy)
+            self.assertEqual(2, attempt)
+            self.assertIn("REV-1", task.read_text())
+            self.assertFalse((run_dir / "review.json").exists())
+            self.assertFalse((run_dir / "handoff.json").exists())
+            self.assertFalse((run_dir / "status.json").exists())
+            self.assertFalse((run_dir / "worker.json").exists())
+            self.assertEqual([], agent_pipeline.read_json(run_dir / "checks.json")["checks"])
+            for filename in ("checks.json", "review.json", "handoff.json", "status.json"):
+                self.assertTrue((run_dir / f"attempt-1-{filename}").exists())
+
+    # Source drift and exhausted retry budgets are terminal without replaying Aider.
+    def test_repair_denies_tampering_and_exhaustion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=root, check=True)
+            (root / "README.md").write_text("base\n")
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "base"], cwd=root, check=True)
+            base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+            run_dir = root / "evidence"
+            run_dir.mkdir()
+            worker = {"status": "FAIL", "attempt": 4, "failureReason": "worker produced no source changes",
+                      "exitCode": 0, "headCommit": base, "changedFiles": [],
+                      "changeSha256": agent_pipeline.workspace_change_digest(root, [])}
+            agent_pipeline.write_json(run_dir / "worker.json", worker)
+            manifest = {"repository": {"baseCommit": base}, "workspace": {"path": str(root)}}
+            policy = {"repairExecution": {"maxRepairAttempts": 3}, "riskRules": []}
+            with self.assertRaisesRegex(ValueError, "budget exhausted"):
+                agent_pipeline.prepare_repair(root, run_dir, manifest, policy)
+            worker["attempt"] = 1
+            agent_pipeline.write_json(run_dir / "worker.json", worker)
+            (root / "README.md").write_text("tampered\n")
+            with self.assertRaisesRegex(ValueError, "source changed"):
+                agent_pipeline.prepare_repair(root, run_dir, manifest, policy)
+
+    def test_repair_denies_escalation_findings_and_security_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = root / "evidence"
+            run_dir.mkdir()
+            worker = {"status": "PASS", "attempt": 1, "changedFiles": ["docs/a.md"]}
+            agent_pipeline.write_json(run_dir / "worker.json", worker)
+            agent_pipeline.write_json(run_dir / "checks.json", {"checks": [{"name": "gitleaks", "status": "FAIL"}]})
+            policy = {"repairExecution": {"maxRepairAttempts": 3},
+                      "requiredChecks": [{"name": "gitleaks", "kind": "gitleaks"}],
+                      "riskRules": [{"level": "LOW", "patterns": ["^docs/"]}],
+                      "escalationCategories": ["SECURITY"]}
+            with mock.patch.object(agent_pipeline, "ensure_source_matches_worker_result"):
+                with self.assertRaisesRegex(ValueError, "Security scan"):
+                    agent_pipeline.prepare_repair(root, run_dir, {}, policy)
+            agent_pipeline.write_json(run_dir / "checks.json", {"checks": [{"name": "canonical", "status": "PASS"}]})
+            agent_pipeline.write_json(run_dir / "review.json", {"verdict": "CHANGES_REQUIRED", "findings": [
+                {"status": "OPEN", "category": "SECURITY", "severity": "LOW", "id": "REV-1"}]})
+            with mock.patch.object(agent_pipeline, "ensure_source_matches_worker_result"):
+                with self.assertRaisesRegex(ValueError, "escalation findings"):
+                    agent_pipeline.prepare_repair(root, run_dir, {}, policy)
 
     # Protects fail-closed Gitleaks ordering and redacted evidence for uncommitted worker files.
     def test_verify_scans_uncommitted_worker_files_before_canonical(self) -> None:
@@ -514,7 +678,7 @@ class AgentPipelineCliTest(unittest.TestCase):
                 policy["workerExecution"] = {
                     "required": True, "tool": "aider", "executable": "aider",
                     "defaultModel": "deepseek/deepseek-chat", "supportedVersions": ["0.86.2"],
-                    "branchPrefix": "agent/", "arguments": ["--model", "{model}"],
+                    "branchPrefix": "agent/", "arguments": ["--model", "{model}", "--message-file", "{task_file}"],
                 }
                 policy_path.write_text(json.dumps(policy), encoding="utf-8")
                 base_commit = self.init_git_repository(root)
@@ -659,3 +823,384 @@ class AutomaticReviewTest(unittest.TestCase):
                     agent_pipeline.run_independent_review(run_dir, run_dir, manifest, policy)
             self.assertFalse((run_dir / "review.json").exists())
             self.assertFalse((run_dir / "review-attempt.json").exists())
+
+
+class AutomaticCycleTest(unittest.TestCase):
+    """Protects fail-closed A3 automated check, independent review, and repair sequencing."""
+
+    def prepare_cycle(self, location: Path, scenario: str, canonical: str) -> tuple[Path, Path, dict, dict, dict]:
+        root = location / "repo"
+        root.mkdir()
+        helper = AgentPipelineCliTest()
+        policy_path, task = helper.create_repository(root)
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        policy["requiredChecks"] = [{"name": "canonical", "command": [sys.executable, "-c", canonical]}]
+        policy["repairExecution"] = {"maxRepairAttempts": 3, "automaticCheckRepairNames": ["canonical"]}
+        policy["workerExecution"] = {
+            "required": True, "tool": "aider", "executable": "aider",
+            "defaultModel": "deepseek/deepseek-chat", "supportedVersions": ["0.86.2"],
+            "branchPrefix": "agent/", "arguments": ["--model", "{model}", "--config", "{config_file}",
+                                                 "--message-file", "{task_file}", "--no-auto-commits"],
+        }
+        policy["independentReview"]["adapter"] = {
+            "endpoint": "https://api.deepseek.com/chat/completions", "model": "deepseek-chat",
+            "apiKeyEnvironment": "DEEPSEEK_API_KEY", "timeoutSeconds": 120, "maxDiffBytes": 100000,
+        }
+        policy_path.write_text(json.dumps(policy), encoding="utf-8")
+        helper.init_git_repository(root)
+        fake_bin = location / "bin"
+        fake_bin.mkdir()
+        fake_aider = fake_bin / "aider"
+        fake_aider.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os,sys\n"
+            "from pathlib import Path\n"
+            "if '--version' in sys.argv: print('aider 0.86.2'); quit()\n"
+            "if '--help' in sys.argv: print('--model --config --message-file --no-auto-commits --read'); quit()\n"
+            "task = Path(sys.argv[sys.argv.index('--message-file') + 1]).read_text()\n"
+            "repair = 'Bounded repair round' in task\n"
+            "scenario = os.environ['FAKE_WORKER_CASE']\n"
+            "if scenario == 'no-diff' and not repair: quit()\n"
+            "if scenario == 'always-no-diff': quit()\n"
+            "if scenario == 'no-progress' and repair: quit()\n"
+            "p = Path('docs/ROADMAP.md')\n"
+            "p.write_text('fixed\\n' if repair else 'initial\\n')\n",
+            encoding="utf-8",
+        )
+        fake_aider.chmod(0o755)
+        runs_root = root / "build/reports/agent-pipeline"
+        run_dir = agent_pipeline.create_run(root, runs_root, policy_path, policy,
+            "A3-cycle", "docs/specs/active/example.md", task.read_text(),
+            "aider", "deepseek/deepseek-chat", ["docs/ROADMAP.md"], "cycle-test")
+        manifest = agent_pipeline.read_json(run_dir / "manifest.json")
+        agent_pipeline.prepare_worker_workspace(root, root / "build/agent-worktrees", run_dir, manifest, policy)
+        manifest = agent_pipeline.read_json(run_dir / "manifest.json")
+        env = {"PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", ""),
+               "FAKE_WORKER_CASE": scenario}
+        return root, run_dir, manifest, policy, env
+
+    def fake_reviewer(self, run_dir: Path, verdicts: list[str]):
+        calls = []
+        def review(repo_root, evidence, manifest, policy):
+            verdict = verdicts[len(calls)]
+            calls.append(verdict)
+            payload = agent_pipeline.validate_review({
+                "schemaVersion": 1, "reviewer": "deterministic-fake-reviewer",
+                "verdict": verdict, "findings": [] if verdict == "PASS" else [{
+                    "id": "F-1", "severity": "MEDIUM", "category": "CORRECTNESS",
+                    "summary": "Unresolved bounded defect", "status": "OPEN",
+                }],
+            })
+            agent_pipeline.write_json(evidence / "review.json", payload)
+            agent_pipeline.write_json(evidence / "review-attempt.json", {
+                "status": "PASS", "workerSha256": agent_pipeline.read_json(evidence / "worker.json")["changeSha256"],
+            })
+            return payload
+        return review, calls
+
+    # A no-diff first attempt is automatically repaired and still requires fresh verification and review.
+    def test_cycle_repairs_no_diff_then_requires_checks_and_review(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "no-diff", "print('ok')")
+            reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                self.assertEqual(0, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
+            cycle = agent_pipeline.read_json(evidence / "cycle.json")
+            self.assertEqual("READY_FOR_MAIN_REVIEW", cycle["status"])
+            self.assertEqual("REVIEW_AND_CHECKS_PASSED", cycle["reasonCode"])
+            self.assertEqual(["PASS"], calls)
+            self.assertEqual(2, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+            self.assertEqual("FAIL", agent_pipeline.read_json(evidence / "worker-attempt-1.json")["status"])
+            self.assertTrue((evidence / "handoff.json").exists())
+            with self.assertRaisesRegex(ValueError, "already attempted"):
+                agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+
+    # Review-requested changes trigger a fresh model attempt, new checks and a fresh reviewer context.
+    def test_cycle_rechecks_after_low_risk_review_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", "print('ok')")
+            reviewer, calls = self.fake_reviewer(evidence, ["CHANGES_REQUIRED", "PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                self.assertEqual(0, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
+            self.assertEqual(["CHANGES_REQUIRED", "PASS"], calls)
+            self.assertTrue((evidence / "attempt-1-review.json").exists())
+            self.assertEqual(2, len([x for x in agent_pipeline.read_json(evidence / "cycle.json")["events"]
+                                     if x["step"] == "check:canonical"]))
+            original_check = agent_pipeline.read_json(evidence / "attempt-1-checks.json")["checks"][0]
+            current_check = agent_pipeline.read_json(evidence / "checks.json")["checks"][0]
+            self.assertNotEqual(original_check["log"], current_check["log"])
+            self.assertEqual(original_check["logSha256"], agent_pipeline.sha256_file(evidence / original_check["log"]))
+            self.assertEqual(current_check["logSha256"], agent_pipeline.sha256_file(evidence / current_check["log"]))
+            self.assertEqual("fixed\n", (root / manifest["workspace"]["path"] / "docs/ROADMAP.md").read_text())
+
+    # Canonical deterministic failures may repair; infrastructure and unknown failures stop immediately.
+    def test_cycle_classifies_build_failure_but_escalates_infrastructure(self) -> None:
+        deterministic = ("from pathlib import Path; import sys; "
+            "fixed=Path('docs/ROADMAP.md').read_text() == 'fixed\\n'; "
+            "print('all tests passed' if fixed else '> Task :modules:analysis:test FAILED\\nThere were failing tests'); "
+            "sys.exit(0 if fixed else 1)")
+        for infrastructure in (False, True):
+            with self.subTest(infrastructure=infrastructure), tempfile.TemporaryDirectory() as td:
+                command = deterministic if not infrastructure else (
+                    "import sys; print('> Task :modules:analysis:test FAILED\\n"
+                    "There were failing tests\\nDocker connection refused'); sys.exit(1)")
+                root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", command)
+                reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+                with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                    result = agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+                cycle = agent_pipeline.read_json(evidence / "cycle.json")
+                if infrastructure:
+                    self.assertEqual(1, result)
+                    self.assertEqual("INFRASTRUCTURE_OR_UNKNOWN", cycle["reasonCode"])
+                    self.assertFalse(calls)
+                    self.assertEqual(1, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+                else:
+                    self.assertEqual(0, result)
+                    self.assertEqual(2, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+                    self.assertEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
+                        evidence, agent_pipeline.read_json(evidence / "attempt-1-checks.json")["checks"][-1],
+                        policy)[0])
+
+    # Stop after one initial attempt plus three repairs, preserving every attempt's evidence.
+    def test_cycle_stops_on_repair_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "always-no-diff", "print('ok')")
+            reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                self.assertEqual(1, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
+            self.assertEqual("REPAIR_BUDGET_EXHAUSTED", agent_pipeline.read_json(evidence / "cycle.json")["reasonCode"])
+            self.assertEqual(4, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+            self.assertEqual([], calls)
+            self.assertEqual(4, len(list(evidence.glob("worker-attempt-*.json"))))
+
+    # Missing/tampered logs never cause automated model retries.
+    def test_classifier_rejects_tampered_log_and_security_check(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            evidence = Path(td)
+            logs = evidence / "logs"
+            logs.mkdir()
+            output = logs / "canonical-attempt-1.log"
+            output.write_text("> Task :modules:analysis:test FAILED\nThere were failing tests\n")
+            policy = {"repairExecution": {"automaticCheckRepairNames": ["canonical"]}}
+            check = {"name": "canonical", "status": "FAIL", "exitCode": 1,
+                     "log": "logs/canonical-attempt-1.log", "logSha256": "incorrect"}
+            self.assertEqual("INVALID_CHECK_EVIDENCE", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)[0])
+            check["logSha256"] = agent_pipeline.sha256_file(output)
+            self.assertEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)[0])
+            check["name"] = "gitleaks"
+            self.assertEqual("SECURITY_FAILURE", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)[0])
+
+    # Provider/schema errors terminate one cycle; they do not cause additional model calls.
+    def test_cycle_escalates_failed_reviewer_without_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", "print('ok')")
+            with mock.patch.dict(os.environ, env), mock.patch.object(
+                agent_pipeline, "run_independent_review", side_effect=ValueError("invalid reviewer schema")
+            ) as reviewer:
+                with self.assertRaisesRegex(ValueError, "invalid reviewer schema"):
+                    agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+            reviewer.assert_called_once()
+            cycle = agent_pipeline.read_json(evidence / "cycle.json")
+            self.assertEqual("ESCALATED", cycle["status"])
+            self.assertEqual("CONTROLLER_OR_POLICY_FAILURE", cycle["reasonCode"])
+            self.assertEqual(1, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+            with self.assertRaisesRegex(ValueError, "already attempted"):
+                agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+
+    # Low-severity security/architecture escalation findings cannot be auto-repaired.
+    def test_cycle_refuses_review_escalation_category(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", "print('ok')")
+            def security_review(repo_root, run_dir, run_manifest, run_policy):
+                review = agent_pipeline.validate_review({
+                    "schemaVersion": 1, "reviewer": "fake-reviewer", "verdict": "CHANGES_REQUIRED",
+                    "findings": [{"id": "SEC-1", "severity": "LOW", "category": "SECURITY",
+                                  "summary": "Security decision required", "status": "OPEN"}],
+                })
+                agent_pipeline.write_json(run_dir / "review.json", review)
+                agent_pipeline.write_json(run_dir / "review-attempt.json", {
+                    "status": "PASS", "workerSha256": agent_pipeline.read_json(run_dir / "worker.json")["changeSha256"],
+                })
+                return review
+            with mock.patch.dict(os.environ, env), mock.patch.object(
+                agent_pipeline, "run_independent_review", security_review
+            ):
+                with self.assertRaisesRegex(ValueError, "escalation findings"):
+                    agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+            self.assertEqual("ESCALATED", agent_pipeline.read_json(evidence / "cycle.json")["status"])
+            self.assertEqual(1, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+
+    # Policy rejects automatic repair of scanner gates or unlisted checks.
+    def test_policy_requires_explicit_non_security_repair_allowlist(self) -> None:
+        test_policy = {
+            "schemaVersion": 1,
+            "requiredChecks": [{"name": "canonical", "command": ["true"]}],
+            "repairExecution": {"maxRepairAttempts": 3, "automaticCheckRepairNames": ["missing"]},
+        }
+        with self.assertRaisesRegex(ValueError, "automaticCheckRepairNames"):
+            agent_pipeline.validate_policy(test_policy)
+        test_policy["repairExecution"]["automaticCheckRepairNames"] = ["canonical"]
+        agent_pipeline.validate_policy(test_policy)
+
+    # A repair that leaves the previous patch unchanged is not counted as a successful worker round.
+    def test_cycle_escalates_repair_without_new_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            check = ("from pathlib import Path; import sys; "
+                     "print('> Task :modules:analysis:test FAILED\\nThere were failing tests'); sys.exit(1)")
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "no-progress", check)
+            reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                self.assertEqual(1, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
+            self.assertEqual("WORKER_EXECUTION_FAILURE", agent_pipeline.read_json(evidence / "cycle.json")["reasonCode"])
+            worker = agent_pipeline.read_json(evidence / "worker.json")
+            self.assertEqual(2, worker["attempt"])
+            self.assertEqual("worker repair made no source changes", worker["failureReason"])
+            self.assertEqual([], calls)
+
+
+class AgentPipelineStagePacketTest(unittest.TestCase):
+    """Protects bounded A4 stage packets, advisory context and explicit editable scope."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for relative, content in {
+            "README.md": "# Root\n",
+            "AGENTS.md": "# Root agent rules\n",
+            "docs/specs/README.md": "# Lifecycle\n",
+            "docs/TESTS.md": "# Tests\n",
+            "docs/specs/active/subspecs/pipeline.md": "---\nspec_status: active\n---\n# A4\nAP9 and AP10\n",
+            "docs/specs/active/subspecs/pipeline-implementation-plan.md": "# Advisory A4 plan\n",
+            "tools/agent-pipeline/README.md": "# Owner\n",
+            "tools/agent-pipeline/tests/existing.py": "# Existing test\n",
+            "modules/other/contract.md": "# Contract\n",
+            "modules/other/src/main/java/io/test/impl/Private.java": "private\n",
+        }.items():
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        self.packet = {
+            "schemaVersion": 1,
+            "stageId": "A4",
+            "specPath": "docs/specs/active/subspecs/pipeline.md",
+            "implementationPlanPath": "docs/specs/active/subspecs/pipeline-implementation-plan.md",
+            "requirementIds": ["AP9"],
+            "featureIds": [],
+            "owningPaths": ["tools/agent-pipeline"],
+            "editablePaths": ["tools/agent-pipeline/tests/existing.py"],
+            "contextPaths": ["docs/TESTS.md", "modules/other/contract.md"],
+            "riskLevel": "LOW",
+            "delegation": "BOUNDED",
+            "task": "Add a bounded regression scenario.",
+            "completionCriteria": ["A regression test describes observable behavior."],
+        }
+
+    # Only complete, bounded and spec-linked packets may be delegated.
+    def test_stage_packet_resolves_advisory_context(self) -> None:
+        packet, context = agent_pipeline.validate_stage_packet(self.root, self.packet)
+        self.assertEqual("A4", packet["stageId"])
+        self.assertIn("AGENTS.md", context)
+        self.assertIn("tools/agent-pipeline/README.md", context)
+        self.assertIn(packet["specPath"], context)
+        self.assertIn(packet["implementationPlanPath"], context)
+        self.assertIn("modules/other/contract.md", context)
+
+    # Unknown requirements, missing plans and non-low-risk stages fail before model access.
+    def test_stage_packet_rejects_unapproved_or_stale_authority(self) -> None:
+        for key, value in (("requirementIds", ["AP777"]), ("riskLevel", "HIGH"),
+                           ("delegation", "DISCOVERY"), ("implementationPlanPath", None)):
+            changed = {**self.packet, key: value}
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                agent_pipeline.validate_stage_packet(self.root, changed)
+
+    # A directory authorization cannot silently include repository rules or the active specification.
+    def test_stage_packet_rejects_protected_and_cross_owner_paths(self) -> None:
+        for path in ("tools/agent-pipeline/", "docs/specs/active/subspecs/pipeline.md",
+                     "tools/agent-pipeline/pipeline-policy.json", "../secret", "/tmp/elsewhere"):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                agent_pipeline.validate_stage_packet(self.root, {**self.packet, "editablePaths": [path]})
+
+    # Cross-module read context must be a published contract or API, not private implementation.
+    def test_stage_packet_rejects_private_cross_module_context(self) -> None:
+        changed = {**self.packet, "contextPaths": ["modules/other/src/main/java/io/test/impl/Private.java"]}
+        with self.assertRaisesRegex(ValueError, "Cross-module private"):
+            agent_pipeline.validate_stage_packet(self.root, changed)
+
+    # Stage source digests and immutable packet evidence prevent silent changes after approval.
+    def test_stage_packet_read_only_drift_blocks_execution(self) -> None:
+        _, paths = agent_pipeline.validate_stage_packet(self.root, self.packet)
+        run_dir = self.root / "evidence"
+        run_dir.mkdir()
+        packet_path = run_dir / "stage-packet.json"
+        packet_path.write_text(json.dumps(self.packet), encoding="utf-8")
+        manifest = {"stagePacket": {
+            "sha256": agent_pipeline.sha256_file(packet_path),
+            "contextSha256": agent_pipeline.stage_source_evidence(self.root, paths),
+            "editablePaths": self.packet["editablePaths"],
+        }}
+        agent_pipeline.ensure_stage_contract(self.root, run_dir, manifest)
+        (self.root / self.packet["implementationPlanPath"]).write_text("Changed\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Stage context changed"):
+            agent_pipeline.ensure_stage_contract(self.root, run_dir, manifest)
+
+    # Source paths must match exactly and must not permit similarly prefixed siblings or symlinks.
+    def test_stage_scope_checks_actual_modified_paths(self) -> None:
+        manifest = {"stagePacket": {"editablePaths": self.packet["editablePaths"]}}
+        agent_pipeline.enforce_stage_scope(self.root, manifest, self.packet["editablePaths"])
+        for other in ("tools/agent-pipeline/tests/existing.py.bak", "AGENTS.md", "docs/TESTS.md"):
+            with self.subTest(path=other), self.assertRaisesRegex(ValueError, "outside stage editable scope"):
+                agent_pipeline.enforce_stage_scope(self.root, manifest, [other])
+        outside = self.root / "outside.txt"
+        outside.write_text("external\n", encoding="utf-8")
+        link = self.root / "tools/agent-pipeline/tests/link.py"
+        link.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            agent_pipeline.safe_stage_path(self.root, "tools/agent-pipeline/tests/link.py")
+
+    # Aider must get the advisory source only as --read and the editable target as an edit argument.
+    def test_stage_packet_aider_command_separates_read_and_write(self) -> None:
+        _, context = agent_pipeline.validate_stage_packet(self.root, self.packet)
+        manifest = {"stagePacket": {"contextPaths": context, "editablePaths": self.packet["editablePaths"]},
+                    "specPath": self.packet["specPath"],
+                    "worker": {"tool": "aider", "model": "deepseek/deepseek-chat"}}
+        policy = {"workerExecution": {"tool": "aider", "executable": "aider",
+                    "arguments": ["--model", "{model}", "--message-file", "{task_file}"]}}
+        command = agent_pipeline.build_aider_command(policy, manifest, self.root / "evidence")
+        self.assertIn(self.packet["editablePaths"][0], command)
+        for value in context:
+            index = command.index(value)
+            self.assertEqual("--read", command[index - 1])
+        self.assertNotIn(self.packet["implementationPlanPath"], command[-1:])
+
+    # The public init-stage CLI must persist the same validated packet and source-bound context.
+    def test_init_stage_cli_creates_immutable_evidence(self) -> None:
+        for relative in ("docs/QUALITY.md", "tools/agent-pipeline/gitleaks.toml"):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# Fixture\n", encoding="utf-8")
+        policy = self.root / "policy.json"
+        policy.write_text(json.dumps({
+            "schemaVersion": 1,
+            "requiredRepositoryFiles": ["README.md", "AGENTS.md", "docs/specs/README.md"],
+            "requiredChecks": [{"name": "canonical", "command": [sys.executable, "-c", "print('ok')"]}],
+        }), encoding="utf-8")
+        packet = self.root / "packet.json"
+        packet.write_text(json.dumps(self.packet), encoding="utf-8")
+        cmd = [sys.executable, str(MODULE_PATH), "--repo-root", str(self.root),
+               "--policy", str(policy), "init-stage", "--packet", str(packet), "--run-id", "pilot-a4"]
+        result = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        evidence = self.root / "build/reports/agent-pipeline/pilot-a4"
+        manifest = json.loads((evidence / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(["AP9"], manifest["stagePacket"]["requirementIds"])
+        self.assertEqual("LOW", manifest["stagePacket"]["riskLevel"])
+        self.assertIn("advisory", (evidence / "task.md").read_text(encoding="utf-8"))
+        packet_copy = json.loads((evidence / "stage-packet.json").read_text(encoding="utf-8"))
+        self.assertEqual(self.packet, packet_copy)
+        cmd[-1] = "pilot-a4"
+        repeated = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        self.assertNotEqual(0, repeated.returncode)

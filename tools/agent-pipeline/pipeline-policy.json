@@ -89,6 +89,12 @@
       ]
     }
   ],
+  "repairExecution": {
+    "maxRepairAttempts": 3,
+    "automaticCheckRepairNames": [
+      "canonical"
+    ]
+  },
   "workerExecution": {
     "required": true,
     "tool": "aider",

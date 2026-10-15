@@ -56,7 +56,7 @@ Rules:
 
 The current bounded backend implementation focus is [`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md). Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation, structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted. The Stage 6E4 dedicated live normal/transient/critical Health/alert scenarios and the Stage 6E5 manual evidence review supporting no production policy change are accepted after canonical developer verification. Stage 6E6 runtime persisted-alert verification is implemented, verification-pending, and deliberately paused after live evidence proved clean baseline/transient behavior but exposed time-window-aware recovery and cleanup-ordering gaps. Assisted-investigation quality remains a separate evaluation boundary.
 
-The active contributor-tooling track is [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). It formalizes the multi-stage evolution and acceptance criteria for bounded coding-worker automation without changing the product `current_focus` or granting a worker product/architecture authority. A2.1 isolated Aider execution and A2.2 Gitleaks/ordered verification are implemented and verification-pending; A2.3 independent review invocation is next.
+The active contributor-tooling track is [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). It formalizes the multi-stage evolution and acceptance criteria for bounded coding-worker automation without changing the product `current_focus` or granting a worker product/architecture authority. A2.1 isolated Aider execution, A2.2 Gitleaks/ordered verification, and A2.3 independent review/handoff are implemented and verification-pending. A3 bounded repair is the next implementation stage; end-to-end live-worker acceptance remains open.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -79,6 +79,46 @@ Do not create a sub-spec for:
 - narrow documentation cleanup;
 - routine dependency maintenance.
 
+## Delegation plans for staged sub-specs
+
+A sub-spec with known module ownership **may** include a `Delegation plan` body section. Use it to describe shared implementation scope once for related stages, with stage-specific exceptions only when needed. Do not add new frontmatter fields or duplicate authoritative module contracts.
+
+When using a delegation plan, identify:
+
+- existing feature IDs from `docs/FEATURES.md` and stage-specific requirement IDs;
+- owning modules, permitted editable paths, and applicable root/local `AGENTS.md`;
+- read-only owning documentation, module contracts/tests, and other modules' public APIs or published contracts needed as context;
+- focused and canonical checks, applicable scanner/linter/static-analysis commands, and acceptance evidence;
+- stage order, known risks, and any stage that requires architecture discovery or developer approval.
+
+Classify stages as **bounded/known ownership** or **discovery/architecture required**. Risk is separate: even a bounded stage may need human authorization when it changes contracts, persistence, transactions, concurrency, security, or deployment. Unknown ownership or missing feature vocabulary requires human-led design before delegation; define any genuinely new feature ID in `docs/FEATURES.md` through the normal specification workflow.
+
+The active [`development-agent-pipeline`](active/subspecs/development-agent-pipeline.md) specification owns the intended task-packet, context-resolution, retry, and acceptance controls. Sub-spec authors describe requirements and scope; they do not embed executable Aider startup scripts or treat the delegation plan as a security boundary. The current pipeline cannot yet execute a whole sub-spec autonomously.
+
+## Sub-specification module impact and implementation plans
+
+Every newly authored staged sub-specification must identify its **known implementation module impact** in the normative sub-spec body. Use an `Implementation scope` section (or the existing `Delegation plan` when applicable) to distinguish owning modules, cross-module public contracts/APIs needed for context, known affected Feature IDs, and areas that remain undecided. Name stage-specific exceptions only when the shared scope does not apply. Do not invent ownership: unresolved modules, contracts, or feature vocabulary must be marked for developer/`MAIN_MODEL` discovery and must not be authorized for autonomous worker edits. Historical sub-specifications do not need retroactive companion files.
+
+For each newly authored **staged** sub-specification, `MAIN_MODEL` must also prepare a same-directory advisory companion named `<subspec-stem>-implementation-plan.md`, for example:
+
+```text
+docs/specs/active/subspecs/example-change.md
+docs/specs/active/subspecs/example-change-implementation-plan.md
+```
+
+The companion is **not a separate sub-specification**, must not have `document_role: subspec`, and must not acquire its own acceptance status. It follows its owning sub-specification through the active/archive lifecycle. Use normal minimal document metadata if frontmatter is present; link to the relative sub-spec path in the document body. Include, where knowable and useful:
+
+- the owning sub-spec and existing stage/requirement IDs (do not invent new IDs);
+- likely architectural approach, existing patterns, important invariants, and relevant alternatives;
+- applicable root/local `AGENTS.md`, owning READMEs, module contracts, active specs, tests, and public interfaces of related modules to read;
+- per-stage suggested implementation steps and expected verification, without prescribing a finished diff;
+- likely existing files to modify and candidate files to add, explicitly marked as **expected**, **candidate**, or **to be discovered**;
+- material assumptions, unresolved questions, known risks, and rationale for proposed trade-offs.
+
+The sub-specification remains **normative** for behavior, authorized module boundaries, constraints, and acceptance criteria. The companion is **advisory**: it must not override repository rules, current contracts, active requirements, developer approvals, or the validated stage task packet. `WORKER_MODEL` may propose a better implementation within approved boundaries, but must record material deviations and their effect on files, contracts, tests, or risk. Architectural or scope changes require developer-led review and updates to the owning sub-specification before further delegated work.
+
+`MAIN_MODEL` and the developer should update the companion when assumptions, module impact, or the architectural approach materially change. Do not rewrite it after every private refactor. The pipeline's planned stage packet should bind the versions/digests of both the normative spec and its companion when present, and provide the companion as read-only context. A missing required or materially stale companion blocks new autonomous stage delegation; it does not alter acceptance requirements or authorize a broader scope. Implementation plans are not listed as independent active sub-specifications in this index.
+
 ## Lifecycle
 
 1. Keep the umbrella under `docs/specs/active/spec-*.md`.
@@ -87,12 +127,14 @@ Do not create a sub-spec for:
 4. Keep umbrella `current_focus` and human-readable status synchronized.
 5. Reference stable feature IDs from `docs/FEATURES.md` when they improve navigation.
 6. Give important normative requirements stable local IDs when tests or reviews need them.
-7. Implement and validate the slice.
-8. After developer acceptance, move stable behavior into current-state documentation.
-9. Move the completed sub-spec to `docs/specs/archive/subspecs/`.
-10. Archive the umbrella only when its own acceptance target is complete.
+7. Implement and validate the slice; retain source-bound stage, check, and review evidence.
+8. The **developer initiates final verification** by asking `MAIN_MODEL` in ChatGPT to review the finished sub-spec against current repository sources, its companion plan, stage diffs/commits, tests, and independent reviewer findings.
+9. `MAIN_MODEL` reports remaining defects, risks, and an acceptance recommendation; **only the developer** may explicitly accept the completed sub-spec.
+10. After developer acceptance, move stable behavior into current-state documentation and synchronize umbrella/index references.
+11. Move the completed sub-spec **and its implementation-plan companion** together to `docs/specs/archive/subspecs/` in one lifecycle change; update relative links as needed.
+12. Archive the umbrella only when its own acceptance target is complete.
 
-A specification must exist in exactly one lifecycle location. Archival is a move, not a copy.
+A specification and its companion must each exist in exactly one lifecycle location. Archival is a move, not a copy. The pair must not be split between `active/` and `archive/`. For legacy sub-specifications created before the companion convention, a missing plan does not block historical acceptance or archival.
 
 An implemented but unverified slice may remain active with `spec_status: verification-pending`.
 
@@ -172,7 +214,7 @@ Active supporting tracks:
 
 Active contributor-tooling track:
 
-- [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md) — bounded coding-worker automation, verification/review evidence, escalation, and externally authorized acceptance/lifecycle automation. A2.1 isolated Aider execution and A2.2 Gitleaks/ordered verification are verification-pending. This track has no product feature ID and does not replace the backend implementation focus.
+- [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md) — bounded coding-worker automation, verification/review evidence, escalation, and externally authorized acceptance/lifecycle automation. A2.1–A2.3 worker/verification/reviewer integration is implemented and verification-pending; the first real edit-format pilot did not produce a diff. This track has no product feature ID and does not replace the backend implementation focus.
 
 ## Recently completed sub-specifications
 
@@ -246,4 +288,3 @@ Further scheduling and capacity refinements remain deferred until measurements o
 These are candidates, not active commitments.
 
 Companion-frontend planning and implementation lifecycle belong to `signalharvester-web` and are not maintained in this backend specification index.
-

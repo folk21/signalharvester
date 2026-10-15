@@ -141,6 +141,17 @@ def validate_policy(policy: dict[str, Any]) -> None:
         if required_checks[0]["name"] != "gitleaks":
             raise ValueError("Gitleaks must precede other required checks")
 
+    repair = policy.get("repairExecution", {"maxRepairAttempts": 3})
+    if (not isinstance(repair, dict) or type(repair.get("maxRepairAttempts")) is not int
+            or not 0 <= repair["maxRepairAttempts"] <= 3):
+        raise ValueError("repairExecution.maxRepairAttempts must be an integer from 0 to 3")
+    automatic_checks = repair.get("automaticCheckRepairNames", [])
+    if (not isinstance(automatic_checks, list)
+            or not all(isinstance(name, str) and name for name in automatic_checks)
+            or len(set(automatic_checks)) != len(automatic_checks)
+            or any(name not in seen or name == "gitleaks" for name in automatic_checks)):
+        raise ValueError("repairExecution.automaticCheckRepairNames must reference unique non-security required checks")
+
     reviewer = policy.get("independentReview", {})
     adapter = reviewer.get("adapter")
     if adapter is not None:
@@ -194,6 +205,8 @@ def validate_policy(policy: dict[str, Any]) -> None:
             "{chat_history_file}",
             "{config_file}",
         }
+        if "--message-file" not in arguments or "{task_file}" not in arguments:
+            raise ValueError("Aider worker arguments must contain --message-file {task_file}")
         for argument in arguments:
             placeholders = set(re.findall(r"\{[^{}]+\}", argument))
             if not placeholders.issubset(allowed_placeholders):
@@ -392,6 +405,168 @@ def build_worker_task(
     return f"""# Development worker task\n\n## Identity\n\n- Stage: `{stage}`\n- Worker: `{worker}`\n- Model: `{model}`\n- Active specification: `{spec_path}`\n\n## Required repository reading\n\n{reading_lines}\n\nCurrent repository files override chat history, summaries, and prior plans. Read the relevant implementation, tests, contracts, and owning documentation before editing.\n\n## Worker contract\n\n- Make the smallest coherent change that satisfies the task.\n- Follow repository and nearest local `AGENTS.md` rules.\n- Do not weaken tests, validation, security, architecture, or published contracts to make checks pass.\n- Do not declare a stage accepted or archive an active specification. Acceptance remains outside the worker boundary in the current pipeline stage.\n- Record unresolved ambiguity or high-risk findings instead of guessing.\n- Keep code/configuration comments and software documentation in English.\n\n## Mandatory escalation categories\n\n{escalation_lines}\n\n## Task\n\n{task_text.strip()}\n\n## Required verification before handoff\n\n{check_lines}\n\nAn independent review result is required before the run can become ready for the main-model checkpoint.\n"""
 
 
+def safe_stage_path(repo_root: Path, raw: str, *, directory: bool = False) -> str:
+    """Validate a repository-relative stage path and reject symlink/escape boundaries."""
+    if not isinstance(raw, str) or not raw or raw != raw.strip():
+        raise ValueError("Stage paths must be non-empty repository-relative strings")
+    is_prefix = raw.endswith("/") if directory else False
+    value = raw[:-1] if is_prefix else raw
+    parts = value.split("/")
+    if (value.startswith("/") or "\\" in value or any(part in ("", ".", "..") for part in parts)
+            or parts[0] in (".git", "build") or any("\x00" in part for part in parts)):
+        raise ValueError(f"Unsafe stage path: {raw}")
+    path = repo_root / value
+    root = repo_root.resolve()
+    if not path.resolve().is_relative_to(root):
+        raise ValueError(f"Stage path escapes repository: {raw}")
+    for parent in (path, *path.parents):
+        if parent == repo_root or not parent.is_relative_to(repo_root):
+            break
+        if parent.is_symlink():
+            raise ValueError(f"Stage path crosses a symlink: {raw}")
+    if directory and is_prefix and not path.is_dir():
+        raise ValueError(f"Stage editable directory does not exist: {raw}")
+    return value + ("/" if is_prefix else "")
+
+
+def stage_scope_contains(relative: str, authorized: list[str]) -> bool:
+    """Match exact files or explicit directory prefixes, never approximate path prefixes."""
+    return any(relative.startswith(value) if value.endswith("/") else relative == value
+               for value in authorized)
+
+
+def stage_context(repo_root: Path, packet: dict[str, Any]) -> list[str]:
+    """Resolve readable repository instructions and module contracts without private cross-module reads."""
+    paths = ["README.md", "AGENTS.md", "docs/specs/README.md", packet["specPath"]]
+    if packet.get("implementationPlanPath"):
+        paths.append(packet["implementationPlanPath"])
+    paths.extend(packet["contextPaths"])
+    owned = packet["owningPaths"]
+    for name in owned:
+        area = repo_root / name
+        for doc in ("README.md", "contract.md"):
+            candidate = area / doc
+            if candidate.is_file():
+                paths.append(f"{name}/{doc}")
+    for value in (*packet["editablePaths"], *paths):
+        location = (repo_root / value.rstrip("/"))
+        for parent in (location, *location.parents):
+            if parent == repo_root:
+                break
+            candidate = parent / "AGENTS.md"
+            if candidate.is_file():
+                paths.append(candidate.relative_to(repo_root).as_posix())
+    resolved: list[str] = []
+    for path in paths:
+        normal = safe_stage_path(repo_root, path)
+        if not (repo_root / normal).is_file():
+            raise ValueError(f"Missing required stage context: {normal}")
+        segments = normal.split("/")
+        if len(segments) >= 3 and segments[0] == "modules":
+            module = "/".join(segments[:2])
+            if module not in owned:
+                is_public_doc = len(segments) == 3 and segments[2] in ("README.md", "contract.md", "AGENTS.md")
+                is_public_api = (len(segments) > 6 and segments[2:5] == ["src", "main", "java"]
+                                 and "api" in segments[5:-1])
+                if not (is_public_doc or is_public_api):
+                    raise ValueError(f"Cross-module private context is prohibited: {normal}")
+        if normal not in resolved:
+            resolved.append(normal)
+    return resolved
+
+
+def validate_stage_packet(repo_root: Path, packet: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Validate the bounded MAIN_MODEL-to-WORKER_MODEL delegation contract."""
+    keys = {"schemaVersion", "stageId", "specPath", "implementationPlanPath", "requirementIds",
+            "featureIds", "owningPaths", "editablePaths", "contextPaths", "riskLevel",
+            "delegation", "task", "completionCriteria"}
+    if set(packet) != keys or packet.get("schemaVersion") != SCHEMA_VERSION:
+        raise ValueError("Stage packet must have exactly the documented v1 fields")
+    if packet["delegation"] != "BOUNDED" or packet["riskLevel"] != "LOW":
+        raise ValueError("Only approved bounded LOW-risk stages are supported in A4.1")
+    for name in ("stageId", "specPath", "task"):
+        if not isinstance(packet[name], str) or not packet[name].strip():
+            raise ValueError(f"Stage packet {name} must be non-empty")
+    for name in ("requirementIds", "featureIds", "owningPaths", "editablePaths", "contextPaths", "completionCriteria"):
+        items = packet[name]
+        if (not isinstance(items, list) or (not items and name not in ("featureIds", "contextPaths"))
+                or not all(isinstance(x, str) and x.strip() for x in items)
+                or len(set(items)) != len(items)):
+            raise ValueError(f"Stage packet {name} must contain unique non-empty strings")
+    if any(not item.strip() for item in packet["completionCriteria"]):
+        raise ValueError("Stage completion criteria cannot be blank")
+    validate_active_spec(repo_root, packet["specPath"])
+    spec_text = (repo_root / packet["specPath"]).read_text(encoding="utf-8")
+    for token in (packet["stageId"], *packet["requirementIds"]):
+        if not re.search(r"(?<![A-Za-z0-9_.-])" + re.escape(token) + r"(?![A-Za-z0-9_.-])", spec_text):
+            raise ValueError(f"Unknown stage/requirement in normative spec: {token}")
+    plan = packet["implementationPlanPath"]
+    if plan is not None:
+        if not isinstance(plan, str) or plan != packet["specPath"].removesuffix(".md") + "-implementation-plan.md":
+            raise ValueError("Implementation plan must be the matching advisory companion")
+        plan = safe_stage_path(repo_root, plan)
+        if not (repo_root / plan).is_file():
+            raise ValueError("Declared advisory implementation plan is missing")
+    elif (repo_root / (packet["specPath"].removesuffix(".md") + "-implementation-plan.md")).exists():
+        raise ValueError("Existing implementation plan cannot be omitted from stage packet")
+    owned = [safe_stage_path(repo_root, path) for path in packet["owningPaths"]]
+    if any(not (repo_root / value).is_dir() for value in owned):
+        raise ValueError("Stage owning paths must identify existing directories")
+    editable = [safe_stage_path(repo_root, path, directory=True) for path in packet["editablePaths"]]
+    if any(not any(path == owner or path.startswith(owner + "/") for owner in owned)
+           for path in editable):
+        raise ValueError("Stage editable paths must belong to a declared owning area")
+    protected = {"AGENTS.md", "README.md", "docs/specs/README.md", packet["specPath"],
+                 "run_checks.sh", "run_rare_checks.sh", "tools/agent-pipeline/pipeline-policy.json",
+                 "tools/agent-pipeline/gitleaks.toml"}
+    if plan:
+        protected.add(plan)
+    if any(stage_scope_contains(path, editable) for path in protected):
+        raise ValueError("Stage editable scope includes protected rules, spec, or verification files")
+    for item in packet["contextPaths"]:
+        safe_stage_path(repo_root, item)
+    context = stage_context(repo_root, packet)
+    if any(stage_scope_contains(path, editable) for path in context):
+        raise ValueError("Stage editable paths overlap required read-only context")
+    return packet, context
+
+
+def stage_source_evidence(repo_root: Path, paths: list[str]) -> dict[str, str]:
+    """Bind every read-only context file to its exact source bytes."""
+    return {value: sha256_file(repo_root / value) for value in paths}
+
+
+def ensure_stage_contract(repo_root: Path, run_dir: Path, manifest: dict[str, Any]) -> None:
+    """Check packet/context integrity at each command, including the isolated worktree."""
+    contract = manifest.get("stagePacket")
+    if contract is None:
+        return
+    packet_path = run_dir / "stage-packet.json"
+    if not packet_path.is_file() or sha256_file(packet_path) != contract["sha256"]:
+        raise ValueError("Stage packet evidence changed after initialization")
+    for path, digest in contract["contextSha256"].items():
+        source = repo_root / path
+        if not source.is_file() or sha256_file(source) != digest:
+            raise ValueError(f"Stage context changed since initialization: {path}")
+    if manifest.get("workspace"):
+        worktree = execution_root(repo_root, manifest)
+        for path, digest in contract["contextSha256"].items():
+            source = worktree / path
+            if not source.is_file() or sha256_file(source) != digest or source.is_symlink():
+                raise ValueError(f"Worker altered read-only stage context: {path}")
+
+
+def enforce_stage_scope(repo_root: Path, manifest: dict[str, Any], changes: list[str]) -> None:
+    """Fail closed on unauthorized edits, including new files and symlink paths."""
+    contract = manifest.get("stagePacket")
+    if contract is None:
+        return
+    for path in changes:
+        safe_stage_path(execution_root(repo_root, manifest), path)
+        if not stage_scope_contains(path, contract["editablePaths"]):
+            raise ValueError(f"Worker changed path outside stage editable scope: {path}")
+
+
 def create_run(
     repo_root: Path,
     runs_root: Path,
@@ -478,7 +653,12 @@ def execute_check(repo_root: Path, run_dir: Path, name: str, command: list[str],
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-") or "check"
     prior_attempts = [entry for entry in checks_data.get("checks", []) if entry.get("name") == name]
     attempt = len(prior_attempts) + 1
-    log_path = log_dir / f"{safe_name}-attempt-{attempt}.log"
+    worker_path = run_dir / "worker.json"
+    worker_attempt = read_json(worker_path).get("attempt", 1) if worker_path.exists() else 1
+    if type(worker_attempt) is not int or worker_attempt < 1:
+        raise ValueError("Invalid worker attempt for command evidence")
+    worker_suffix = f"-worker-{worker_attempt}" if worker_attempt > 1 else ""
+    log_path = log_dir / f"{safe_name}{worker_suffix}-attempt-{attempt}.log"
     started_at = utc_now()
     started = time.monotonic()
     with log_path.open("w", encoding="utf-8") as log_handle:
@@ -491,9 +671,12 @@ def execute_check(repo_root: Path, run_dir: Path, name: str, command: list[str],
             bufsize=1,
         )
         assert process.stdout is not None
-        for line in process.stdout:
-            sys.stdout.write(line)
-            log_handle.write(line)
+        try:
+            for line in process.stdout:
+                sys.stdout.write(line)
+                log_handle.write(line)
+        finally:
+            process.stdout.close()
         return_code = process.wait()
     duration_ms = round((time.monotonic() - started) * 1000)
     result = {
@@ -640,6 +823,8 @@ def run_required_check(
     policy: dict[str, Any],
 ) -> int:
     """Run one policy-defined check in the immutable worker source state."""
+    if (run_dir / "review.json").exists() or (run_dir / "review-attempt.json").exists():
+        raise ValueError("Verification after review requires a new repair round")
     if policy.get("workerExecution", {}).get("required", False):
         ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
     worktree = execution_root(repo_root, manifest)
@@ -821,6 +1006,7 @@ def write_handoff(repo_root: Path, run_dir: Path, manifest: dict[str, Any], poli
         "stage": manifest["stage"], "spec": manifest["specPath"],
         "baseCommit": manifest["repository"].get("baseCommit"),
         "taskSha256": manifest["taskSha256"], "policySha256": manifest["policy"]["sha256"],
+        "stagePacket": manifest.get("stagePacket"),
         "worker": None if worker is None else {"status": worker["status"],
             "model": worker["model"], "changeSha256": worker["changeSha256"],
             "changedFiles": worker["changedFiles"]},
@@ -1013,8 +1199,17 @@ def build_aider_command(policy: dict[str, Any], manifest: dict[str, Any], run_di
     spec_path = manifest.get("specPath")
     if isinstance(spec_path, str) and spec_path != "none":
         read_files.append(spec_path)
+    contract = manifest.get("stagePacket")
+    if contract is not None:
+        read_files = contract["contextPaths"]
     for read_file in read_files:
         arguments.extend(["--read", read_file])
+    if contract is not None:
+        for path in contract["editablePaths"]:
+            if not path.endswith("/"):
+                # Worktree-relative edit paths are appended only for existing files.
+                # New paths remain discoverable through the task and repository map.
+                arguments.append(path)
     return [worker_policy["executable"], *arguments]
 
 
@@ -1051,6 +1246,16 @@ def ensure_worker_workspace_matches_result(
     result = read_json(result_path)
     if result.get("status") != "PASS":
         raise ValueError("Required worker execution did not pass")
+    ensure_source_matches_worker_result(repo_root, run_dir, manifest, result)
+    enforce_stage_scope(repo_root, manifest, result.get("changedFiles", []))
+    ensure_stage_contract(repo_root, run_dir, manifest)
+    return result
+
+
+def ensure_source_matches_worker_result(
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any], result: dict[str, Any]
+) -> None:
+    """Protect the last worker attempt against external mutations before a repair."""
     worktree = execution_root(repo_root, manifest)
     base_commit = manifest.get("repository", {}).get("baseCommit")
     head_commit = run_git(worktree, "rev-parse", "HEAD")
@@ -1062,7 +1267,6 @@ def ensure_worker_workspace_matches_result(
     digest = workspace_change_digest(worktree, changed_files)
     if changed_files != result.get("changedFiles") or digest != result.get("changeSha256"):
         raise ValueError("Worker worktree source changed after worker execution; start a new run")
-    return result
 
 
 def execute_worker(
@@ -1070,11 +1274,14 @@ def execute_worker(
     run_dir: Path,
     manifest: dict[str, Any],
     policy: dict[str, Any],
+    *,
+    attempt: int = 1,
+    task_override: Path | None = None,
 ) -> int:
     """Run one bounded Aider attempt in the isolated worktree and persist result evidence."""
     result_path = run_dir / "worker.json"
     if result_path.exists():
-        raise ValueError("Worker execution is already recorded; A2.1 does not provide repair/retry loops")
+        raise ValueError("Worker execution is already recorded; use the bounded repair command")
     worktree = execution_root(repo_root, manifest)
     workspace = manifest.get("workspace")
     if not isinstance(workspace, dict) or workspace.get("kind") != "git-worktree":
@@ -1082,8 +1289,12 @@ def execute_worker(
     base_commit = workspace.get("baseCommit")
     if not isinstance(base_commit, str) or run_git(worktree, "rev-parse", "HEAD") != base_commit:
         raise ValueError("Worker worktree HEAD no longer matches the run base commit")
-    if run_git(worktree, "status", "--porcelain") != "":
-        raise ValueError("Worker worktree must be clean before the one-shot Aider execution")
+    if attempt == 1 and run_git(worktree, "status", "--porcelain") != "":
+        raise ValueError("Worker worktree must be clean before initial Aider execution")
+    before_paths, before_available = discover_changed_files(worktree, base_commit)
+    before_sha256 = workspace_change_digest(worktree, before_paths) if before_available else None
+    if not before_available:
+        raise ValueError("Worker source evidence is unavailable before execution")
 
     worker_policy = policy.get("workerExecution")
     if not isinstance(worker_policy, dict):
@@ -1094,9 +1305,12 @@ def execute_worker(
         worktree, run_dir, worker_policy, worker_environment, removed_aider_environment
     )
     command = build_aider_command(policy, manifest, run_dir)
+    if task_override is not None:
+        task_flag = command.index("--message-file")
+        command[task_flag + 1] = str(task_override.resolve())
     log_dir = run_dir / "logs"
     log_dir.mkdir(exist_ok=True)
-    log_path = log_dir / "worker-attempt-1.log"
+    log_path = log_dir / f"worker-attempt-{attempt}.log"
     started_at = utc_now()
     started = time.monotonic()
     return_code = 127
@@ -1118,9 +1332,12 @@ def execute_worker(
                     bufsize=1,
                 )
                 assert process.stdout is not None
-                for line in process.stdout:
-                    sys.stdout.write(line)
-                    log_handle.write(line)
+                try:
+                    for line in process.stdout:
+                        sys.stdout.write(line)
+                        log_handle.write(line)
+                finally:
+                    process.stdout.close()
                 return_code = process.wait()
             except OSError as exc:
                 startup_error = str(exc)
@@ -1131,9 +1348,35 @@ def execute_worker(
     changed_files, change_evidence = discover_changed_files(worktree, base_commit)
     change_sha256 = workspace_change_digest(worktree, changed_files) if change_evidence else None
     unexpected_commit = head_commit != base_commit
-    passed = return_code == 0 and not unexpected_commit and change_evidence
+    made_progress = attempt == 1 or change_sha256 != before_sha256
+    scope_failure = None
+    if manifest.get("stagePacket") is not None:
+        try:
+            enforce_stage_scope(repo_root, manifest, changed_files)
+            ensure_stage_contract(repo_root, run_dir, manifest)
+        except ValueError as exc:
+            scope_failure = str(exc)
+    passed = (return_code == 0 and not unexpected_commit and change_evidence
+              and bool(changed_files) and made_progress and scope_failure is None)
+    failure_reason = None
+    if scope_failure is not None:
+        failure_reason = "worker stage scope/context violation"
+    elif not change_evidence:
+        failure_reason = "worker source evidence unavailable"
+    elif unexpected_commit:
+        failure_reason = "unexpected worker commit"
+    elif not changed_files:
+        failure_reason = "worker produced no source changes"
+    elif not made_progress:
+        failure_reason = "worker repair made no source changes"
+    elif return_code != 0:
+        failure_reason = "worker command failed"
     result = {
         "schemaVersion": SCHEMA_VERSION,
+        "attempt": attempt,
+        "taskSha256": sha256_file(task_override) if task_override else manifest["taskSha256"],
+        "failureReason": failure_reason,
+        "scopeFailure": scope_failure,
         "tool": manifest.get("worker", {}).get("tool"),
         "model": manifest.get("worker", {}).get("model"),
         "command": command,
@@ -1154,7 +1397,252 @@ def execute_worker(
         "logSha256": sha256_file(log_path),
     }
     write_json(result_path, result)
+    write_json(run_dir / f"worker-attempt-{attempt}.json", result)
     return 0 if passed else 1
+
+
+def _latest_checks(checks: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return the last persisted result for each check name."""
+    return {item["name"]: item for item in checks.get("checks", [])
+            if isinstance(item, dict) and isinstance(item.get("name"), str)}
+
+
+def prepare_repair(
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any],
+    *, automated_feedback: str | None = None,
+) -> tuple[int, Path]:
+    """Authorize one low-risk correction and archive previous verification evidence."""
+    worker_path = run_dir / "worker.json"
+    if not worker_path.exists():
+        raise ValueError("Initial worker attempt is missing")
+    worker = read_json(worker_path)
+    attempt = worker.get("attempt", 1)
+    if type(attempt) is not int or attempt < 1:
+        raise ValueError("Invalid worker attempt number")
+    maximum = policy.get("repairExecution", {}).get("maxRepairAttempts", 3)
+    if attempt > maximum:
+        raise ValueError("Repair attempt budget exhausted; developer intervention required")
+    ensure_source_matches_worker_result(repo_root, run_dir, manifest, worker)
+    ensure_stage_contract(repo_root, run_dir, manifest)
+    changed_files = worker.get("changedFiles", [])
+    if not isinstance(changed_files, list):
+        raise ValueError("Invalid worker changed-file evidence")
+    enforce_stage_scope(repo_root, manifest, changed_files)
+    risk = classify_risk(changed_files, policy, True)
+    if risk["level"] != "LOW":
+        raise ValueError("Non-LOW worker source risk requires developer intervention")
+    if any(path in ("run_checks.sh", "tools/agent-pipeline/pipeline-policy.json")
+           or path.endswith(".gitleaksignore") for path in changed_files):
+        raise ValueError("Worker modified protected verification configuration")
+
+    checks = read_json(run_dir / "checks.json")
+    validate_security_check_evidence(policy, checks, worker)
+    latest = _latest_checks(checks)
+    gitleaks = latest.get("gitleaks")
+    if gitleaks is not None and gitleaks.get("status") != "PASS":
+        raise ValueError("Security scan failure must be escalated, not repaired automatically")
+    if (run_dir / "review-attempt.json").exists() and read_json(run_dir / "review-attempt.json").get("status") != "PASS":
+        raise ValueError("Failed reviewer request requires developer intervention")
+
+    review_path = run_dir / "review.json"
+    review = read_json(review_path) if review_path.exists() else None
+    if review is not None:
+        findings = [f for f in review.get("findings", []) if f.get("status") == "OPEN"]
+        if review.get("verdict") == "ESCALATE" or any(
+            f.get("category") in policy.get("escalationCategories", [])
+            or f.get("severity") in ("HIGH", "CRITICAL") for f in findings
+        ):
+            raise ValueError("Review contains blocking-risk or escalation findings")
+    if worker.get("status") == "FAIL":
+        if worker.get("failureReason") != "worker produced no source changes" or worker.get("exitCode") != 0:
+            raise ValueError("Worker failure is not a safe no-diff repair candidate")
+        cause = "The previous implementation produced no source diff. Re-read the exact file content and make a real change."
+    elif any(entry.get("status") == "FAIL" for entry in latest.values()):
+        # Scanner failures were rejected above. Do not send raw tool logs or potential secrets to the model.
+        failed = [entry for entry in latest.values() if entry.get("status") == "FAIL"]
+        cause = "Required checks failed: " + "; ".join(
+            f"{item['name']} (exit {item.get('exitCode')})" for item in failed
+        ) + ". Diagnose the implementation from current source and tests; do not alter check configuration."
+    elif review is not None and review.get("verdict") == "CHANGES_REQUIRED":
+        safe_findings = [f"{f.get('id')}: {f.get('category')}, {f.get('severity')}"
+                         for f in findings]
+        cause = "Independent review requested changes: " + "; ".join(safe_findings)
+    else:
+        raise ValueError("No qualifying repairable failure is recorded")
+
+    if automated_feedback is not None:
+        if automated_feedback not in ("TEST_FAILURE", "COMPILATION_FAILURE"):
+            raise ValueError("Unsupported automatic repair feedback category")
+        cause += ("\nThe canonical output identified a deterministic "
+                  + ("test failure" if automated_feedback == "TEST_FAILURE" else "compilation failure")
+                  + ". Inspect the relevant test/compiler diagnostics within the isolated workspace. "
+                    "Never change infrastructure, validation scripts, or scanner configuration to bypass the failure.")
+
+    next_attempt = attempt + 1
+    task_path = run_dir / f"repair-task-{next_attempt}.md"
+    if task_path.exists() or (run_dir / f"worker-attempt-{next_attempt}.json").exists():
+        raise ValueError("Next repair attempt already exists")
+    previous_snapshot = run_dir / f"worker-attempt-{attempt}.json"
+    if previous_snapshot.exists() and read_json(previous_snapshot) != worker:
+        raise ValueError("Prior worker attempt evidence is inconsistent")
+    for name in ("checks.json", "review.json", "review-attempt.json", "status.json", "handoff.json"):
+        if (run_dir / name).exists() and (run_dir / f"attempt-{attempt}-{name}").exists():
+            raise ValueError("Repair evidence archive already exists")
+    task_path.write_text(
+        (run_dir / "task.md").read_text(encoding="utf-8")
+        + "\n## Bounded repair round\n\n" + cause
+        + "\nDo not change scope or weaken checks. Return control on ambiguity.\n",
+        encoding="utf-8",
+    )
+    # The prior evidence remains in numbered immutable snapshots; the active view is reset.
+    if not previous_snapshot.exists():
+        write_json(previous_snapshot, worker)
+    for name in ("checks.json", "review.json", "review-attempt.json", "status.json", "handoff.json"):
+        original = run_dir / name
+        if original.exists():
+            snapshot = run_dir / f"attempt-{attempt}-{name}"
+            if snapshot.exists():
+                raise ValueError("Repair evidence archive already exists")
+            shutil.copy2(original, snapshot)
+    write_json(run_dir / "checks.json", {"schemaVersion": SCHEMA_VERSION, "checks": []})
+    review_path.unlink(missing_ok=True)
+    (run_dir / "review-attempt.json").unlink(missing_ok=True)
+    (run_dir / "status.json").unlink(missing_ok=True)
+    (run_dir / "handoff.json").unlink(missing_ok=True)
+    worker_path.unlink()
+    return next_attempt, task_path
+
+
+
+
+def classify_automatic_check_failure(
+    run_dir: Path, check: dict[str, Any], policy: dict[str, Any],
+) -> tuple[str, str]:
+    """Identify only allowlisted deterministic build failures from immutable check logs."""
+    name = check.get("name")
+    if name == "gitleaks":
+        return "SECURITY_FAILURE", "Gitleaks must be reviewed by the developer"
+    if name not in policy.get("repairExecution", {}).get("automaticCheckRepairNames", []):
+        return "UNCLASSIFIED_CHECK_FAILURE", "Check is not approved for automatic repair"
+    if check.get("status") != "FAIL" or type(check.get("exitCode")) is not int:
+        return "INVALID_CHECK_EVIDENCE", "Check failure status or exit code is inconsistent"
+    relative = check.get("log")
+    if not isinstance(relative, str) or not re.fullmatch(r"logs/[A-Za-z0-9._-]+\.log", relative):
+        return "INVALID_CHECK_EVIDENCE", "Required check log path is invalid"
+    log_path = run_dir / relative
+    if not log_path.is_file() or sha256_file(log_path) != check.get("logSha256"):
+        return "INVALID_CHECK_EVIDENCE", "Required check log is missing or changed"
+    with log_path.open("rb") as handle:
+        handle.seek(max(0, log_path.stat().st_size - 512 * 1024))
+        tail = handle.read().decode("utf-8", errors="replace")
+    # Any infrastructure indication wins over an apparent test failure.
+    blockers = (
+        r"(?i)\b(?:testcontainers|docker|container runtime|connection refused|"
+        r"could not connect|timed out|timeout|network unreachable|unavailable|"
+        r"permission denied|could not resolve|dependency resolution|"
+        r"daemon disappeared|failed to start|toolchain not found|out of memory)\b"
+    )
+    if re.search(blockers, tail):
+        return "INFRASTRUCTURE_OR_UNKNOWN", "Check log contains an infrastructure failure indicator"
+    task = r"(?m)^> Task :[A-Za-z0-9:_-]+(?:test|Test) FAILED\s*$"
+    compilation = r"(?m)^> Task :[A-Za-z0-9:_-]*compile(?:Test)?Java FAILED\s*$"
+    if re.search(task, tail) and re.search(r"(?i)(there were failing tests|tests? failed|test failure)", tail):
+        return "TEST_FAILURE", "Canonical check reported deterministic test failures"
+    if re.search(compilation, tail) and re.search(r"(?i)(compilation failed|error:)", tail):
+        return "COMPILATION_FAILURE", "Canonical check reported Java compilation errors"
+    return "UNCLASSIFIED_CHECK_FAILURE", "No deterministic implementation failure was identified"
+
+
+def run_automated_cycle(
+    repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any],
+) -> int:
+    """Run one bounded initial worker/check/review/repair cycle without accepting changes."""
+    cycle_path = run_dir / "cycle.json"
+    if cycle_path.exists():
+        raise ValueError("Automatic cycle already attempted; inspect cycle.json before starting another run")
+    if (run_dir / "worker.json").exists() or (run_dir / "review.json").exists() or (
+        run_dir / "review-attempt.json"
+    ).exists() or read_json(run_dir / "checks.json").get("checks"):
+        raise ValueError("Automatic cycle requires a fresh prepared run without execution evidence")
+    worktree = execution_root(repo_root, manifest)
+    if manifest.get("workspace", {}).get("kind") != "git-worktree":
+        raise ValueError("Prepare an isolated worker worktree before the automatic cycle")
+    if run_git(worktree, "status", "--porcelain") != "":
+        raise ValueError("Automatic cycle requires a clean initial worker worktree")
+
+    cycle = {"schemaVersion": SCHEMA_VERSION, "runId": manifest["runId"],
+             "status": "RUNNING", "startedAt": utc_now(), "finishedAt": None,
+             "reasonCode": None, "events": []}
+
+    def event(step: str, attempt: int, outcome: str, reason: str | None = None) -> None:
+        cycle["events"].append({"at": utc_now(), "step": step,
+                                "attempt": attempt, "outcome": outcome, "reasonCode": reason})
+        write_json(cycle_path, cycle)
+
+    def stop(reason: str, *, complete: bool = False) -> int:
+        cycle["status"] = "READY_FOR_MAIN_REVIEW" if complete else "ESCALATED"
+        cycle["reasonCode"] = reason
+        cycle["finishedAt"] = utc_now()
+        write_json(cycle_path, cycle)
+        return 0 if complete else 1
+
+    write_json(cycle_path, cycle)
+    attempt = 1
+    feedback: str | None = None
+    try:
+        while True:
+            if attempt == 1:
+                worker_exit = execute_worker(repo_root, run_dir, manifest, policy)
+            else:
+                next_attempt, repair_task = prepare_repair(
+                    repo_root, run_dir, manifest, policy, automated_feedback=feedback,
+                )
+                if next_attempt != attempt:
+                    raise ValueError("Repair attempt number is inconsistent")
+                event("repair-authorized", attempt, "PASS")
+                worker_exit = execute_worker(
+                    repo_root, run_dir, manifest, policy,
+                    attempt=next_attempt, task_override=repair_task,
+                )
+            worker = read_json(run_dir / "worker.json")
+            event("worker", attempt, worker["status"], worker.get("failureReason"))
+            if worker_exit != 0:
+                if worker.get("failureReason") != "worker produced no source changes" or worker.get("exitCode") != 0:
+                    return stop("WORKER_EXECUTION_FAILURE")
+                feedback = None
+            else:
+                failed_definition: dict[str, Any] | None = None
+                for definition in policy["requiredChecks"]:
+                    result = run_required_check(repo_root, run_dir, manifest, definition, policy)
+                    check = _latest_checks(read_json(run_dir / "checks.json"))[definition["name"]]
+                    event("check:" + definition["name"], attempt, check["status"])
+                    if result != 0:
+                        failed_definition = check
+                        break
+                if failed_definition is not None:
+                    feedback, _ = classify_automatic_check_failure(run_dir, failed_definition, policy)
+                    if feedback not in ("TEST_FAILURE", "COMPILATION_FAILURE"):
+                        return stop(feedback)
+                else:
+                    review = run_independent_review(repo_root, run_dir, manifest, policy)
+                    event("review", attempt, review["verdict"])
+                    status = update_status(repo_root, run_dir, manifest, policy)
+                    if status["state"] == STATE_READY_FOR_MAIN_REVIEW:
+                        write_handoff(repo_root, run_dir, manifest, policy)
+                        event("handoff", attempt, "PASS")
+                        return stop("REVIEW_AND_CHECKS_PASSED", complete=True)
+                    if review["verdict"] != "CHANGES_REQUIRED":
+                        return stop("REVIEW_ESCALATION_OR_BLOCKED")
+                    feedback = None
+            if attempt > policy.get("repairExecution", {}).get("maxRepairAttempts", 3):
+                return stop("REPAIR_BUDGET_EXHAUSTED")
+            # prepare_repair validates LOW risk, source identity, security, and finding categories.
+            # It runs only at the beginning of the next iteration.
+            attempt += 1
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        event("controller", attempt, "FAIL", type(exc).__name__)
+        stop("CONTROLLER_OR_POLICY_FAILURE")
+        raise
 
 
 def derive_state(
@@ -1334,11 +1822,23 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--scope", action="append", default=[])
     init_parser.add_argument("--run-id")
 
+    stage_parser = subparsers.add_parser("init-stage", help="Initialize a validated LOW-risk stage packet")
+    stage_parser.add_argument("--packet", required=True, help="JSON Stage Task Packet approved by the developer")
+    stage_parser.add_argument("--run-id")
+
     prepare_parser = subparsers.add_parser("prepare-worker", help="Create the isolated Git branch/worktree")
     prepare_parser.add_argument("--run-id", required=True)
 
     worker_parser = subparsers.add_parser("run-worker", help="Run the configured one-shot Aider worker")
     worker_parser.add_argument("--run-id", required=True)
+
+    repair_parser = subparsers.add_parser("repair", help="Run one bounded source-repair attempt")
+    repair_parser.add_argument("--run-id", required=True)
+
+    cycle_parser = subparsers.add_parser(
+        "run-cycle", help="Run a bounded automatic worker/verification/review/repair cycle"
+    )
+    cycle_parser.add_argument("--run-id", required=True)
 
     verify_parser = subparsers.add_parser("verify", help="Run all required checks in policy order")
     verify_parser.add_argument("--run-id", required=True)
@@ -1405,8 +1905,42 @@ def main(argv: list[str] | None = None) -> int:
             print(run_dir)
             return 0
 
+        if args.command == "init-stage":
+            packet_path = resolve_under_repo(repo_root, args.packet)
+            packet, context = validate_stage_packet(repo_root, read_json(packet_path))
+            task = (f"Implement stage {packet['stageId']} of the active specification.\n"
+                    f"Requirements: {', '.join(packet['requirementIds'])}\n"
+                    f"Feature IDs: {', '.join(packet['featureIds']) or 'none (contributor tooling)'}\n"
+                    f"Owning areas: {', '.join(packet['owningPaths'])}\n"
+                    f"Editable paths: {', '.join(packet['editablePaths'])}\n"
+                    f"Read-only context: {', '.join(context)}\n"
+                    f"The implementation plan is advisory, not a contract. Explain material deviations.\n"
+                    f"\nTask:\n{packet['task']}\n\nCompletion criteria:\n"
+                    + "\n".join(f"- {item}" for item in packet['completionCriteria']))
+            run_dir = create_run(
+                repo_root, runs_root, policy_path, policy, packet["stageId"], packet["specPath"],
+                task, policy.get("workerExecution", {}).get("tool", "aider"),
+                policy.get("workerExecution", {}).get("defaultModel", "unspecified"),
+                packet["editablePaths"], args.run_id,
+            )
+            (run_dir / "stage-packet.json").write_text(
+                json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            manifest = read_json(run_dir / "manifest.json")
+            manifest["stagePacket"] = {
+                "sha256": sha256_file(run_dir / "stage-packet.json"),
+                "specPath": packet["specPath"], "planPath": packet["implementationPlanPath"],
+                "contextPaths": context, "contextSha256": stage_source_evidence(repo_root, context),
+                "editablePaths": packet["editablePaths"], "requirementIds": packet["requirementIds"],
+                "featureIds": packet["featureIds"], "riskLevel": packet["riskLevel"],
+            }
+            write_json(run_dir / "manifest.json", manifest)
+            print(run_dir)
+            return 0
+
         run_dir, manifest = load_run(runs_root, args.run_id)
         ensure_run_contract_matches(policy_path, run_dir, manifest)
+        ensure_stage_contract(repo_root, run_dir, manifest)
 
         if args.command == "prepare-worker":
             workspace = prepare_worker_workspace(repo_root, worktrees_root, run_dir, manifest, policy)
@@ -1416,6 +1950,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "run-worker":
             result = execute_worker(repo_root, run_dir, manifest, policy)
             update_status(repo_root, run_dir, manifest, policy)
+            return result
+
+        if args.command == "repair":
+            attempt, task = prepare_repair(repo_root, run_dir, manifest, policy)
+            result = execute_worker(repo_root, run_dir, manifest, policy,
+                                    attempt=attempt, task_override=task)
+            update_status(repo_root, run_dir, manifest, policy)
+            return result
+
+        if args.command == "run-cycle":
+            result = run_automated_cycle(repo_root, run_dir, manifest, policy)
+            update_status(repo_root, run_dir, manifest, policy)
+            print(json.dumps(read_json(run_dir / "cycle.json"), indent=2, sort_keys=True))
             return result
 
         if args.command == "run-check":
@@ -1435,6 +1982,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "run-command":
+            if (run_dir / "review.json").exists() or (run_dir / "review-attempt.json").exists():
+                raise ValueError("Verification after review requires a new repair round")
             if args.name in required_check_map(policy):
                 raise ValueError(f"Use run-check for policy-defined check: {args.name}")
             command = parse_command_tail(args.command_args)
@@ -1454,6 +2003,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "record-review":
+            if (run_dir / "review.json").exists() or (run_dir / "review-attempt.json").exists():
+                raise ValueError("Independent review already recorded for this source attempt")
+            if policy.get("workerExecution", {}).get("required", False):
+                worker = ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+                checks = read_json(run_dir / "checks.json")
+                validate_security_check_evidence(policy, checks, worker)
+                if derive_state(policy, checks, None, worker)[0] != STATE_REVIEW_REQUIRED:
+                    raise ValueError("All required checks must pass before review")
             review_input = resolve_under_repo(repo_root, args.input)
             review = validate_review(read_json(review_input))
             reviews_path = run_dir / "reviews.json"

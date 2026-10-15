@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "stageId": "A4",
+  "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+  "implementationPlanPath": "docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md",
+  "requirementIds": ["AP10", "AP13"],
+  "featureIds": [],
+  "owningPaths": ["tools/agent-pipeline"],
+  "editablePaths": [
+    "tools/agent-pipeline/agent_pipeline.py",
+    "tools/agent-pipeline/tests/test_agent_pipeline.py"
+  ],
+  "contextPaths": ["docs/TESTS.md"],
+  "riskLevel": "LOW",
+  "delegation": "BOUNDED",
+  "task": "Improve the stage/run handoff evidence for multi-attempt workflows. The current handoff exposes only the latest worker result. Make it provide a compact source-bound summary of all recorded worker attempts and their outcome, without duplicating raw logs or model output. Preserve existing handoff keys and legacy single-attempt behavior. Add deterministic regression coverage. Decide the smallest useful schema extension yourself; document any material departure from this advisory suggestion in the worker's response. Do not alter the checks, policy, requirements or acceptance lifecycle.",
+  "completionCriteria": [
+    "Handoff evidence summarizes initial and repair attempts without copying raw logs.",
+    "Existing handoff fields and single-attempt behavior remain compatible.",
+    "Focused deterministic regression tests cover the new behavior.",
+    "Changed files stay inside the two authorized Python paths."
+  ]
+}
