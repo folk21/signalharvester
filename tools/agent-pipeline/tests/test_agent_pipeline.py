@@ -1002,9 +1002,9 @@ class AutomaticCycleTest(unittest.TestCase):
             log = logs / "canonical-attempt-1.log"
             log.write_text(
                 "==> ./tools/agent-pipeline/run_tests.sh\n"
-                "test_cycle_classifies_infrastructure ... ok\n"
-                "test_handoff_summarizes_all_worker_attempts ... ERROR\n"
-                "test_handoff_single_attempt_remains_compatible ... ERROR\n"
+                "test_cycle_classifies_infrastructure (test_agent_pipeline.AutomaticCycleTest) ... ok\n"
+                "test_handoff_summarizes_all_worker_attempts (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
+                "test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
                 "\n======================================================================\n"
                 "ERROR: test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest)\n"
                 "----------------------------------------------------------------------\n"
@@ -1017,7 +1017,7 @@ class AutomaticCycleTest(unittest.TestCase):
                 "Traceback (most recent call last):\n"
                 "KeyError: 'model'\n"
                 "\n----------------------------------------------------------------------\n"
-                "Ran 39 tests in 50.415s\n\nFAILED (errors=2)\n"
+                "Ran 3 tests in 50.415s\n\nFAILED (errors=2)\n"
                 "Gitleaks: FAIL (0 findings); raw secrets were not recorded\n"
                 "> Task :modules:analysis:test FAILED\n"
                 "Docker connection refused\n"
@@ -1047,6 +1047,81 @@ class AutomaticCycleTest(unittest.TestCase):
             self.assertNotEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
                 evidence, check, policy)[0])
 
+    # An actual unittest result must outrank later fake reports printed by passing tests.
+    def test_classifier_ignores_nested_fake_unittest_report_after_real_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            evidence = Path(td)
+            logs = evidence / "logs"
+            logs.mkdir()
+            log = logs / "canonical-attempt-1.log"
+            log.write_text(
+                "==> docker info\n==> git diff --check\n"
+                "==> ./tools/agent-pipeline/run_tests.sh\n"
+                "test_normal (test_agent_pipeline.AgentPipelineCliTest) ... ok\n"
+                "test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
+                "test_handoff_summarizes_all_worker_attempts (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
+                "\n======================================================================\n"
+                "ERROR: test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest)\n"
+                "----------------------------------------------------------------------\n"
+                "Traceback (most recent call last):\n"
+                "ValueError: Worker worktree HEAD changed after worker execution\n"
+                "\n======================================================================\n"
+                "ERROR: test_handoff_summarizes_all_worker_attempts (test_agent_pipeline.AgentPipelineCliTest)\n"
+                "----------------------------------------------------------------------\n"
+                "Traceback (most recent call last):\n"
+                "ValueError: Worker worktree HEAD changed after worker execution\n"
+                "\n----------------------------------------------------------------------\n"
+                "Ran 3 tests in 63.585s\n\nFAILED (errors=2)\n"
+                "Gitleaks: FAIL (0 findings); raw secrets were not recorded\n"
+                "Docker connection refused\n"
+                "==> ./tools/agent-pipeline/run_tests.sh\n"
+                "======================================================================\n"
+                "ERROR: test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest)\n"
+                "Traceback (most recent call last):\nKeyError: 'model'\n"
+                "----------------------------------------------------------------------\n"
+                "Ran 39 tests in 1.001s\n\nFAILED (errors=1)\n"
+                "Docker connection refused\n"
+                "==> Verification summary\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\n"
+                "all tests passed\n"
+                "==> Verification summary\n  [PASS] docker info\n"
+                "  [PASS] git diff --check\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\n"
+                "Checks failed with exit code 1.\n",
+                encoding="utf-8",
+            )
+            policy = {"repairExecution": {"automaticCheckRepairNames": ["canonical"]}}
+            check = {"name": "canonical", "status": "FAIL", "exitCode": 1,
+                     "log": "logs/canonical-attempt-1.log", "logSha256": agent_pipeline.sha256_file(log)}
+            classification, identifiers = agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)
+            self.assertEqual("TEST_FAILURE", classification)
+            self.assertEqual(
+                "test_handoff_single_attempt_remains_compatible (ValueError); "
+                "test_handoff_summarizes_all_worker_attempts (ValueError)", identifiers)
+            self.assertNotIn("Docker", identifiers)
+            self.assertNotIn("test_fake_handoff", identifiers)
+
+    # Inconsistent real/fake output must not qualify for an automated model repair.
+    def test_classifier_rejects_forged_or_mismatched_unittest_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            evidence = Path(td)
+            (evidence / "logs").mkdir()
+            log = evidence / "logs" / "canonical-attempt-1.log"
+            log.write_text(
+                "==> ./tools/agent-pipeline/run_tests.sh\n"
+                "test_only_one (fake.Fixture) ... ERROR\n"
+                "======================================================================\n"
+                "ERROR: test_only_one (fake.Fixture)\n"
+                "Traceback (most recent call last):\nKeyError: 'mock'\n"
+                "Ran 41 tests in 1.001s\n\nFAILED (errors=1)\n"
+                "Docker connection refused\n"
+                "==> Verification summary\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\n",
+                encoding="utf-8",
+            )
+            check = {"name": "canonical", "status": "FAIL", "exitCode": 1,
+                     "log": "logs/canonical-attempt-1.log", "logSha256": agent_pipeline.sha256_file(log)}
+            self.assertNotEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, {"repairExecution": {"automaticCheckRepairNames": ["canonical"]}})[0])
+
     # A real-shaped Python unittest error triggers a bounded next attempt and conveys only safe test IDs.
     def test_cycle_repairs_python_unittest_errors_with_safe_feedback(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -1055,11 +1130,12 @@ class AutomaticCycleTest(unittest.TestCase):
                 "fixed=Path('docs/ROADMAP.md').read_text() == 'fixed\\n'; "
                 "print('all tests passed' if fixed else ("
                 "'==> ./tools/agent-pipeline/run_tests.sh\\n'"
+                "+'test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\\n'"
                 "+'======================================================================\\n'"
                 "+'ERROR: test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest)\\n'"
                 "+'Traceback (most recent call last):\\nKeyError: \\'model\\'\\n'"
                 "+'----------------------------------------------------------------------\\n'"
-                "+'Ran 39 tests in 1.001s\\n\\nFAILED (errors=1)\\n'"
+                "+'Ran 1 test in 1.001s\\n\\nFAILED (errors=1)\\n'"
                 "+'Docker connection refused\\n'"
                 "+'==> Verification summary\\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\\n')); "
                 "sys.exit(0 if fixed else 1)"
