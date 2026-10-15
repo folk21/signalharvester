@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "stageId": "A4",
+  "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+  "implementationPlanPath": "docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md",
+  "requirementIds": ["AP2", "AP10", "AP13", "AP14"],
+  "featureIds": [],
+  "owningPaths": ["tools/agent-pipeline"],
+  "editablePaths": [
+    "tools/agent-pipeline/agent_pipeline.py",
+    "tools/agent-pipeline/tests/test_agent_pipeline.py"
+  ],
+  "contextPaths": ["docs/TESTS.md"],
+  "riskLevel": "LOW",
+  "delegation": "BOUNDED",
+  "task": "Implement a compact, source-bound workerAttempts array in write_handoff() for all initial and repair worker attempts. Follow the active development-agent-pipeline specification (AP2/AP10/AP13/AP14) and read the paired read-only implementation plan, especially section 'A4 bounded handoff-integrity pilot — concrete verification scenarios' with cases HI-01..HI-14. Treat that plan as advisory implementation guidance; do not weaken its owning normative contracts. In-scope behavior: numerically ordered attempt summaries, canonical filenames and strict integer identifiers, complete record consistency for latest worker and its saved snapshot, validated continuous histories, snapshot file/digest references whenever snapshots exist, no raw model logs/commands in the compact list, compatibility for no-worker and legacy single-worker runs. Add realistic deterministic regression tests for listed cases, including independent mutations of taskSha256, model, logSha256 and command. Fix inconsistent test fixtures rather than relaxing source/worktree integrity. Avoid policy, verification, risk, reviewer and acceptance lifecycle changes. Record material implementation-plan deviations with reasons. Do not claim historical snapshot immutability from a digest calculated only at handoff.",
+  "completionCriteria": [
+    "All HI-01..HI-14 scenarios in the bound companion implementation plan have explicit regression coverage or documented principled limitations.",
+    "write_handoff retains existing keys and adds compact workerAttempts with digest references for existing snapshots.",
+    "Malformed, missing, mismatched and non-contiguous worker attempt evidence fails closed.",
+    "The worker cannot edit the independently run benchmark oracle or owning specifications.",
+    "All required checks, independent review and external acceptance boundaries remain unchanged."
+  ]
+}
