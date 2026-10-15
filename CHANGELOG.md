@@ -9,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-10-15 — Hardened verification-pending A3.2 automatic failure classification after a real A4.1 coding pilot: recognize source-bound failing Python unittest reports despite expected simulated infrastructure output from passing tests, preserve escalation for actual failing infrastructure tracebacks, and send only sanitized test identifiers/types into bounded repair attempts. Strengthened the pilot packet to require complete legacy worker fixtures; real rerun remains pending.
+
 - 2026-10-15 — Added verification-pending A4.1 opt-in JSON Stage Task Packets for bounded LOW-risk delegation, advisory implementation-plan and read-only context SHA-256 binding, changed-path scope enforcement, fail-closed guards for out-of-scope edits, and an opt-in real Aider/DeepSeek pilot task with deterministic regression coverage. Multi-stage scheduling, approval attestation, and feature-branch commits remain pending.
 
 - 2026-10-15 — Defined separate `MAIN_MODEL`/`WORKER_MODEL`/`REVIEWER_MODEL`/`ORCHESTRATOR`/`DEVELOPER` responsibilities and advisory per-sub-spec implementation plans, with normative module impact, source-bound stage guidance, developer-initiated final verification, and paired archival after explicit acceptance. Runtime orchestration remains unchanged.
@@ -198,4 +200,5 @@ description: Notable project changes organized by release state, with each chang
 2026-09-13 — Pipelined collection fetch completion into terminal publication with bounded backpressure so raw source payload retention scales with configured concurrency instead of total run size.
 
 Future notable change lines must begin with an ISO calendar date (`YYYY-MM-DD`). Time-of-day is intentionally omitted.
+
 

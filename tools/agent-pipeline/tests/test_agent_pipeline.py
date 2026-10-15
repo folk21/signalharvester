@@ -993,6 +993,91 @@ class AutomaticCycleTest(unittest.TestCase):
             self.assertEqual("SECURITY_FAILURE", agent_pipeline.classify_automatic_check_failure(
                 evidence, check, policy)[0])
 
+    # The final unittest report, not simulated infrastructure output from passing tests, controls repair.
+    def test_classifier_accepts_real_unittest_errors_with_simulated_failure_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            evidence = Path(td)
+            logs = evidence / "logs"
+            logs.mkdir()
+            log = logs / "canonical-attempt-1.log"
+            log.write_text(
+                "==> ./tools/agent-pipeline/run_tests.sh\n"
+                "test_cycle_classifies_infrastructure ... ok\n"
+                "test_handoff_summarizes_all_worker_attempts ... ERROR\n"
+                "test_handoff_single_attempt_remains_compatible ... ERROR\n"
+                "\n======================================================================\n"
+                "ERROR: test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest)\n"
+                "----------------------------------------------------------------------\n"
+                "Traceback (most recent call last):\n"
+                "  File \"test_agent_pipeline.py\", line 757, in test_handoff_single_attempt_remains_compatible\n"
+                "KeyError: 'model'\n"
+                "\n======================================================================\n"
+                "ERROR: test_handoff_summarizes_all_worker_attempts (test_agent_pipeline.AgentPipelineCliTest)\n"
+                "----------------------------------------------------------------------\n"
+                "Traceback (most recent call last):\n"
+                "KeyError: 'model'\n"
+                "\n----------------------------------------------------------------------\n"
+                "Ran 39 tests in 50.415s\n\nFAILED (errors=2)\n"
+                "Gitleaks: FAIL (0 findings); raw secrets were not recorded\n"
+                "> Task :modules:analysis:test FAILED\n"
+                "Docker connection refused\n"
+                "==> Verification summary\n"
+                "  [PASS] docker info\n"
+                "  [FAIL] ./tools/agent-pipeline/run_tests.sh\n"
+                "Checks failed with exit code 1.\n",
+                encoding="utf-8",
+            )
+            policy = {"repairExecution": {"automaticCheckRepairNames": ["canonical"]}}
+            check = {"name": "canonical", "status": "FAIL", "exitCode": 1,
+                     "log": "logs/canonical-attempt-1.log", "logSha256": agent_pipeline.sha256_file(log)}
+            classification, detail = agent_pipeline.classify_automatic_check_failure(evidence, check, policy)
+            self.assertEqual("TEST_FAILURE", classification)
+            self.assertIn("test_handoff_single_attempt_remains_compatible (KeyError)", detail)
+            self.assertIn("test_handoff_summarizes_all_worker_attempts (KeyError)", detail)
+            self.assertNotIn("Docker", detail)
+            self.assertNotIn("'model'", detail)
+            # Infrastructure evidence inside the actual failing traceback must still escalate.
+            log.write_text(log.read_text().replace("KeyError: 'model'", "RuntimeError: Docker connection refused"))
+            check["logSha256"] = agent_pipeline.sha256_file(log)
+            self.assertEqual("INFRASTRUCTURE_OR_UNKNOWN", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)[0])
+            # A forged or missing canonical verification summary never enables auto-repair.
+            log.write_text(log.read_text().replace("  [FAIL] ./tools/agent-pipeline/run_tests.sh", "  [PASS] ./tools/agent-pipeline/run_tests.sh"))
+            check["logSha256"] = agent_pipeline.sha256_file(log)
+            self.assertNotEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
+                evidence, check, policy)[0])
+
+    # A real-shaped Python unittest error triggers a bounded next attempt and conveys only safe test IDs.
+    def test_cycle_repairs_python_unittest_errors_with_safe_feedback(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            command = (
+                "from pathlib import Path; import sys; "
+                "fixed=Path('docs/ROADMAP.md').read_text() == 'fixed\\n'; "
+                "print('all tests passed' if fixed else ("
+                "'==> ./tools/agent-pipeline/run_tests.sh\\n'"
+                "+'======================================================================\\n'"
+                "+'ERROR: test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest)\\n'"
+                "+'Traceback (most recent call last):\\nKeyError: \\'model\\'\\n'"
+                "+'----------------------------------------------------------------------\\n'"
+                "+'Ran 39 tests in 1.001s\\n\\nFAILED (errors=1)\\n'"
+                "+'Docker connection refused\\n'"
+                "+'==> Verification summary\\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\\n')); "
+                "sys.exit(0 if fixed else 1)"
+            )
+            root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", command)
+            reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                result = agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
+            self.assertEqual(0, result)
+            self.assertEqual(2, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
+            self.assertEqual(["PASS"], calls)
+            repair_task = (evidence / "repair-task-2.md").read_text()
+            self.assertIn("test_fake_handoff (KeyError)", repair_task)
+            repair_feedback = repair_task.split("## Bounded repair round", 1)[1]
+            self.assertNotIn("Docker connection refused", repair_feedback)
+            self.assertNotIn("'model'", repair_feedback)
+            self.assertEqual("READY_FOR_MAIN_REVIEW", agent_pipeline.read_json(evidence / "cycle.json")["status"])
+
     # Provider/schema errors terminate one cycle; they do not cause additional model calls.
     def test_cycle_escalates_failed_reviewer_without_retry(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -1204,3 +1289,4 @@ class AgentPipelineStagePacketTest(unittest.TestCase):
         cmd[-1] = "pilot-a4"
         repeated = subprocess.run(cmd, text=True, capture_output=True, check=False)
         self.assertNotEqual(0, repeated.returncode)
+
