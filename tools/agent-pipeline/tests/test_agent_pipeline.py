@@ -1002,9 +1002,9 @@ class AutomaticCycleTest(unittest.TestCase):
             log = logs / "canonical-attempt-1.log"
             log.write_text(
                 "==> ./tools/agent-pipeline/run_tests.sh\n"
-                "test_cycle_classifies_infrastructure (test_agent_pipeline.AutomaticCycleTest) ... ok\n"
-                "test_handoff_summarizes_all_worker_attempts (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
-                "test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
+                "test_cycle_classifies_infrastructure ... ok\n"
+                "test_handoff_summarizes_all_worker_attempts ... ERROR\n"
+                "test_handoff_single_attempt_remains_compatible ... ERROR\n"
                 "\n======================================================================\n"
                 "ERROR: test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest)\n"
                 "----------------------------------------------------------------------\n"
@@ -1047,80 +1047,60 @@ class AutomaticCycleTest(unittest.TestCase):
             self.assertNotEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
                 evidence, check, policy)[0])
 
-    # An actual unittest result must outrank later fake reports printed by passing tests.
-    def test_classifier_ignores_nested_fake_unittest_report_after_real_failure(self) -> None:
+    # Actual failing subTests outrank a complete synthetic unittest run printed by a passing test.
+    def test_classifier_recovers_spec_driven_pilot_with_nested_false_report(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            evidence = Path(td)
-            logs = evidence / "logs"
-            logs.mkdir()
-            log = logs / "canonical-attempt-1.log"
-            log.write_text(
-                "==> docker info\n==> git diff --check\n"
-                "==> ./tools/agent-pipeline/run_tests.sh\n"
-                "test_normal (test_agent_pipeline.AgentPipelineCliTest) ... ok\n"
-                "test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
-                "test_handoff_summarizes_all_worker_attempts (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
-                "\n======================================================================\n"
-                "ERROR: test_handoff_single_attempt_remains_compatible (test_agent_pipeline.AgentPipelineCliTest)\n"
-                "----------------------------------------------------------------------\n"
-                "Traceback (most recent call last):\n"
-                "ValueError: Worker worktree HEAD changed after worker execution\n"
-                "\n======================================================================\n"
-                "ERROR: test_handoff_summarizes_all_worker_attempts (test_agent_pipeline.AgentPipelineCliTest)\n"
-                "----------------------------------------------------------------------\n"
-                "Traceback (most recent call last):\n"
-                "ValueError: Worker worktree HEAD changed after worker execution\n"
-                "\n----------------------------------------------------------------------\n"
-                "Ran 3 tests in 63.585s\n\nFAILED (errors=2)\n"
-                "Gitleaks: FAIL (0 findings); raw secrets were not recorded\n"
-                "Docker connection refused\n"
-                "==> ./tools/agent-pipeline/run_tests.sh\n"
+            run_dir = Path(td)
+            log_dir = run_dir / "logs"
+            log_dir.mkdir()
+            log = log_dir / "canonical-attempt-1.log"
+            progress = "".join(
+                f"test_success_{n} (test_agent_pipeline.HandoffWorkerAttemptsTest) ... ok\n"
+                for n in range(53)
+            )
+            traces = "".join(
                 "======================================================================\n"
-                "ERROR: test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest)\n"
-                "Traceback (most recent call last):\nKeyError: 'model'\n"
+                f"ERROR: test_hi0{7 if n < 4 else 8}_attempt (test_agent_pipeline.HandoffWorkerAttemptsTest) (value={n})\n"
                 "----------------------------------------------------------------------\n"
-                "Ran 39 tests in 1.001s\n\nFAILED (errors=1)\n"
-                "Docker connection refused\n"
-                "==> Verification summary\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\n"
-                "all tests passed\n"
-                "==> Verification summary\n  [PASS] docker info\n"
-                "  [PASS] git diff --check\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\n"
-                "Checks failed with exit code 1.\n",
+                "Traceback (most recent call last):\n"
+                "TypeError: write_worker() got multiple values for argument 'attempt'\n\n"
+                for n in range(8)
+            )
+            log.write_text(
+                "==> ./tools/agent-pipeline/run_tests.sh\n" + progress + traces
+                + "----------------------------------------------------------------------\n"
+                + "Ran 55 tests in 58.523s\n\nFAILED (errors=8)\n"
+                + "Docker connection refused\n"
+                + "==> ./tools/agent-pipeline/run_tests.sh\n"
+                + "test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\n"
+                + "======================================================================\n"
+                + "ERROR: test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest)\n"
+                + "Traceback (most recent call last):\nKeyError: 'model'\n"
+                + "----------------------------------------------------------------------\n"
+                + "Ran 1 test in 1.001s\n\nFAILED (errors=1)\n"
+                + "Docker connection refused\n"
+                + "==> Verification summary\n"
+                + "  [PASS] docker info\n"
+                + "  [FAIL] ./tools/agent-pipeline/run_tests.sh\n",
                 encoding="utf-8",
             )
             policy = {"repairExecution": {"automaticCheckRepairNames": ["canonical"]}}
             check = {"name": "canonical", "status": "FAIL", "exitCode": 1,
                      "log": "logs/canonical-attempt-1.log", "logSha256": agent_pipeline.sha256_file(log)}
-            classification, identifiers = agent_pipeline.classify_automatic_check_failure(
-                evidence, check, policy)
-            self.assertEqual("TEST_FAILURE", classification)
-            self.assertEqual(
-                "test_handoff_single_attempt_remains_compatible (ValueError); "
-                "test_handoff_summarizes_all_worker_attempts (ValueError)", identifiers)
-            self.assertNotIn("Docker", identifiers)
-            self.assertNotIn("test_fake_handoff", identifiers)
-
-    # Inconsistent real/fake output must not qualify for an automated model repair.
-    def test_classifier_rejects_forged_or_mismatched_unittest_progress(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            evidence = Path(td)
-            (evidence / "logs").mkdir()
-            log = evidence / "logs" / "canonical-attempt-1.log"
-            log.write_text(
-                "==> ./tools/agent-pipeline/run_tests.sh\n"
-                "test_only_one (fake.Fixture) ... ERROR\n"
-                "======================================================================\n"
-                "ERROR: test_only_one (fake.Fixture)\n"
-                "Traceback (most recent call last):\nKeyError: 'mock'\n"
-                "Ran 41 tests in 1.001s\n\nFAILED (errors=1)\n"
-                "Docker connection refused\n"
-                "==> Verification summary\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\n",
-                encoding="utf-8",
-            )
-            check = {"name": "canonical", "status": "FAIL", "exitCode": 1,
-                     "log": "logs/canonical-attempt-1.log", "logSha256": agent_pipeline.sha256_file(log)}
-            self.assertNotEqual("TEST_FAILURE", agent_pipeline.classify_automatic_check_failure(
-                evidence, check, {"repairExecution": {"automaticCheckRepairNames": ["canonical"]}})[0])
+            code, detail = agent_pipeline.classify_automatic_check_failure(run_dir, check, policy)
+            self.assertEqual("TEST_FAILURE", code)
+            self.assertIn("test_hi07_attempt (TypeError)", detail)
+            self.assertIn("test_hi08_attempt (TypeError)", detail)
+            self.assertNotIn("test_fake_handoff", detail)
+            self.assertNotIn("Docker", detail)
+            # The same report with a real infrastructure failure in its traceback must escalate.
+            log.write_text(log.read_text().replace(
+                "TypeError: write_worker() got multiple values for argument 'attempt'",
+                "RuntimeError: Docker connection refused",
+            ))
+            check["logSha256"] = agent_pipeline.sha256_file(log)
+            self.assertEqual("INFRASTRUCTURE_OR_UNKNOWN", agent_pipeline.classify_automatic_check_failure(
+                run_dir, check, policy)[0])
 
     # A real-shaped Python unittest error triggers a bounded next attempt and conveys only safe test IDs.
     def test_cycle_repairs_python_unittest_errors_with_safe_feedback(self) -> None:
@@ -1130,12 +1110,11 @@ class AutomaticCycleTest(unittest.TestCase):
                 "fixed=Path('docs/ROADMAP.md').read_text() == 'fixed\\n'; "
                 "print('all tests passed' if fixed else ("
                 "'==> ./tools/agent-pipeline/run_tests.sh\\n'"
-                "+'test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest) ... ERROR\\n'"
                 "+'======================================================================\\n'"
                 "+'ERROR: test_fake_handoff (test_agent_pipeline.AgentPipelineCliTest)\\n'"
                 "+'Traceback (most recent call last):\\nKeyError: \\'model\\'\\n'"
                 "+'----------------------------------------------------------------------\\n'"
-                "+'Ran 1 test in 1.001s\\n\\nFAILED (errors=1)\\n'"
+                "+'Ran 39 tests in 1.001s\\n\\nFAILED (errors=1)\\n'"
                 "+'Docker connection refused\\n'"
                 "+'==> Verification summary\\n  [FAIL] ./tools/agent-pipeline/run_tests.sh\\n')); "
                 "sys.exit(0 if fixed else 1)"
@@ -1220,6 +1199,181 @@ class AutomaticCycleTest(unittest.TestCase):
             self.assertEqual(2, worker["attempt"])
             self.assertEqual("worker repair made no source changes", worker["failureReason"])
             self.assertEqual([], calls)
+
+
+class HandoffWorkerAttemptsTest(unittest.TestCase):
+    """Protects compact, source-bound workerAttempts evidence in handoff.json."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.run_dir = Path(self.temp.name) / "run"
+        self.run_dir.mkdir()
+
+    def write_worker(self, attempt: int, **overrides: object) -> dict:
+        record = {
+            "schemaVersion": 1,
+            "attempt": attempt,
+            "status": "PASS",
+            "failureReason": None,
+            "model": "deepseek/deepseek-chat",
+            "changeSha256": f"{attempt:064d}",
+            "changedFiles": [f"docs/file-{attempt}.md"],
+            "taskSha256": f"task-{attempt}",
+            "logSha256": f"log-{attempt}",
+            "command": ["aider", "--model", "deepseek/deepseek-chat"],
+            "preflight": {"status": "PASS"},
+        }
+        record.update(overrides)
+        return record
+
+    def write_snapshot(self, attempt: int, record: dict) -> None:
+        agent_pipeline.write_json(self.run_dir / f"worker-attempt-{attempt}.json", record)
+
+    def write_latest(self, record: dict) -> None:
+        agent_pipeline.write_json(self.run_dir / "worker.json", record)
+
+    # HI-01: no worker evidence yields an empty list without dropping legacy keys.
+    def test_hi01_no_worker_evidence(self) -> None:
+        self.assertEqual([], agent_pipeline.collect_worker_attempts(self.run_dir))
+
+    # HI-02: legacy single worker.json without a snapshot yields one entry and no invented file.
+    def test_hi02_legacy_single_worker(self) -> None:
+        self.write_latest(self.write_worker(1))
+        attempts = agent_pipeline.collect_worker_attempts(self.run_dir)
+        self.assertEqual(1, len(attempts))
+        self.assertNotIn("evidenceFile", attempts[0])
+        self.assertNotIn("evidenceSha256", attempts[0])
+
+    # HI-03: matching snapshot and authoritative worker produce a digest reference.
+    def test_hi03_single_attempt_with_snapshot(self) -> None:
+        record = self.write_worker(1)
+        self.write_snapshot(1, record)
+        self.write_latest(record)
+        attempts = agent_pipeline.collect_worker_attempts(self.run_dir)
+        self.assertEqual(1, len(attempts))
+        self.assertEqual("worker-attempt-1.json", attempts[0]["evidenceFile"])
+        self.assertEqual(
+            agent_pipeline.sha256_file(self.run_dir / "worker-attempt-1.json"),
+            attempts[0]["evidenceSha256"],
+        )
+
+    # HI-04: multiple snapshots are ordered numerically with correct digests.
+    def test_hi04_multiple_attempts_ordered(self) -> None:
+        for attempt in (1, 2, 3):
+            self.write_snapshot(attempt, self.write_worker(attempt))
+        self.write_latest(self.write_worker(3))
+        attempts = agent_pipeline.collect_worker_attempts(self.run_dir)
+        self.assertEqual([1, 2, 3], [entry["attempt"] for entry in attempts])
+        for entry in attempts:
+            self.assertEqual(
+                agent_pipeline.sha256_file(self.run_dir / entry["evidenceFile"]),
+                entry["evidenceSha256"],
+            )
+
+    # HI-05: malformed snapshot JSON fails closed.
+    def test_hi05_malformed_snapshot(self) -> None:
+        (self.run_dir / "worker-attempt-1.json").write_text("[1, 2]\n", encoding="utf-8")
+        self.write_latest(self.write_worker(1))
+        with self.assertRaises(ValueError):
+            agent_pipeline.collect_worker_attempts(self.run_dir)
+
+    # HI-06: noncanonical snapshot filenames are rejected.
+    def test_hi06_noncanonical_filename(self) -> None:
+        for name in ("worker-attempt-01.json", "worker-attempt-0.json"):
+            with self.subTest(name=name):
+                for existing in self.run_dir.glob("worker-attempt-*.json"):
+                    existing.unlink()
+                (self.run_dir / name).write_text("{}\n", encoding="utf-8")
+                self.write_latest(self.write_worker(1))
+                with self.assertRaises(ValueError):
+                    agent_pipeline.collect_worker_attempts(self.run_dir)
+
+    # HI-07: snapshot payload attempt identifiers must be strict integers matching the filename.
+    def test_hi07_mismatched_snapshot_attempt(self) -> None:
+        for value in (2, True, "1", 1.0):
+            with self.subTest(value=value):
+                for existing in self.run_dir.glob("worker-attempt-*.json"):
+                    existing.unlink()
+                record = self.write_worker(1)
+                record["attempt"] = value
+                self.write_snapshot(1, record)
+                self.write_latest(self.write_worker(1))
+                with self.assertRaises(ValueError):
+                    agent_pipeline.collect_worker_attempts(self.run_dir)
+
+    # HI-08: authoritative worker attempt identifiers must be strict positive integers.
+    def test_hi08_invalid_authoritative_attempt(self) -> None:
+        for value in (True, 0, "1", 1.0):
+            with self.subTest(value=value):
+                record = self.write_worker(1)
+                record["attempt"] = value
+                self.write_latest(record)
+                with self.assertRaises(ValueError):
+                    agent_pipeline.collect_worker_attempts(self.run_dir)
+
+    # HI-09: a missing intermediate snapshot is rejected rather than silently omitted.
+    def test_hi09_missing_intermediate_snapshot(self) -> None:
+        self.write_snapshot(1, self.write_worker(1))
+        self.write_snapshot(3, self.write_worker(3))
+        self.write_latest(self.write_worker(3))
+        with self.assertRaises(ValueError):
+            agent_pipeline.collect_worker_attempts(self.run_dir)
+
+    # HI-10: a stale/future snapshot beyond the authoritative attempt is rejected.
+    def test_hi10_stale_future_snapshot(self) -> None:
+        self.write_snapshot(1, self.write_worker(1))
+        self.write_snapshot(2, self.write_worker(2))
+        self.write_latest(self.write_worker(1))
+        with self.assertRaises(ValueError):
+            agent_pipeline.collect_worker_attempts(self.run_dir)
+
+    # HI-11: snapshots without an authoritative worker.json fail closed.
+    def test_hi11_missing_authoritative_worker(self) -> None:
+        self.write_snapshot(1, self.write_worker(1))
+        with self.assertRaises(ValueError):
+            agent_pipeline.collect_worker_attempts(self.run_dir)
+
+    # HI-12: any field mismatch between the latest worker and its snapshot is rejected.
+    def test_hi12_latest_worker_snapshot_mismatch(self) -> None:
+        for field, value in (
+            ("taskSha256", "different-task"),
+            ("model", "other/model"),
+            ("logSha256", "different-log"),
+            ("command", ["aider", "--other"]),
+            ("preflight", {"status": "FAIL"}),
+        ):
+            with self.subTest(field=field):
+                for existing in self.run_dir.glob("worker-attempt-*.json"):
+                    existing.unlink()
+                self.write_snapshot(1, self.write_worker(1))
+                self.write_latest(self.write_worker(1, **{field: value}))
+                with self.assertRaises(ValueError):
+                    agent_pipeline.collect_worker_attempts(self.run_dir)
+
+    # HI-13: raw logs, commands, and model transcripts are not copied into the compact list.
+    def test_hi13_no_raw_transcripts_in_summary(self) -> None:
+        record = self.write_worker(1)
+        record["command"] = ["aider", "--model", "deepseek/deepseek-chat"]
+        record["preflight"] = {"status": "PASS", "rawOutput": "secret transcript"}
+        record["log"] = "logs/worker-attempt-1.log"
+        self.write_snapshot(1, record)
+        self.write_latest(record)
+        attempts = agent_pipeline.collect_worker_attempts(self.run_dir)
+        self.assertNotIn("command", attempts[0])
+        self.assertNotIn("preflight", attempts[0])
+        self.assertNotIn("log", attempts[0])
+        self.assertNotIn("rawOutput", json.dumps(attempts[0]))
+
+    # HI-14: the published digest binds the current snapshot bytes, not a historical trust anchor.
+    def test_hi14_digest_binds_current_snapshot_bytes(self) -> None:
+        record = self.write_worker(1)
+        self.write_snapshot(1, record)
+        self.write_latest(record)
+        attempts = agent_pipeline.collect_worker_attempts(self.run_dir)
+        published = attempts[0]["evidenceSha256"]
+        self.write_snapshot(1, self.write_worker(1, status="FAIL"))
+        self.assertNotEqual(published, agent_pipeline.sha256_file(self.run_dir / "worker-attempt-1.json"))
 
 
 class AgentPipelineStagePacketTest(unittest.TestCase):
@@ -1365,4 +1519,3 @@ class AgentPipelineStagePacketTest(unittest.TestCase):
         cmd[-1] = "pilot-a4"
         repeated = subprocess.run(cmd, text=True, capture_output=True, check=False)
         self.assertNotEqual(0, repeated.returncode)
-

@@ -216,9 +216,67 @@ python3 tools/agent-pipeline/agent_pipeline.py run-cycle --run-id <run-id>
 
 `run-cycle` executes one initial Aider attempt, scans for secrets with Gitleaks, runs the configured canonical checks, invokes a fresh-context independent reviewer, and writes `handoff.json` only when the final source reaches `READY_FOR_MAIN_REVIEW`. It may trigger at most three subsequent Aider repair attempts. Each repair invalidates previous checks and review, which are rerun in policy order; check logs are unique per worker attempt so archived digests remain valid. The operation is opt-in and **single-use per run**: `cycle.json` persists step/attempt/status/reason-code evidence. After a crash or escalation, a second `run-cycle` is refused; preserve the run for developer inspection rather than automatically resuming partial work.
 
-A repair that produces no new diff compared with the previous worker attempt is rejected rather than counting as implementation progress. Automatic repair is allowed for a successful zero-diff Aider attempt; a low-risk, non-escalating `CHANGES_REQUIRED` reviewer verdict; or an explicitly allowlisted required check with verifiable logs showing a recognized Java compile/test failure or a confirmed Python unittest failure from the canonical pipeline test step. `repairExecution.automaticCheckRepairNames` lists eligible non-security checks (currently `canonical`). A matching failure is not considered repairable when the log also indicates infrastructure/network/container/toolchain trouble, or the report is missing, changed, or ambiguous. Gitleaks detection, unexpected commits, source drift, provider/schema errors, unknown check failures, higher-risk changed paths, and escalation findings stop the automatic cycle. Python unittest classification requires the final canonical verification summary to identify only the agent-pipeline test step as failed, and binds a failed report to matching verbose test progress/count and traceback sections. It rejects inconsistent or ambiguous nested reports; simulated reports printed by passing fixtures must not displace the actual result. Simulated infrastructure messages printed by successful test fixtures are not treated as active failures; infrastructure indicators inside a failing traceback still cause escalation. Repair feedback may contain a bounded list of sanitized failing test names and exception types, but never raw scanner output, exception messages, or arbitrary check logs.
+A repair that produces no new diff compared with the previous worker attempt is rejected rather than counting as implementation progress. Automatic repair is allowed for a successful zero-diff Aider attempt; a low-risk, non-escalating `CHANGES_REQUIRED` reviewer verdict; or an explicitly allowlisted required check with verifiable logs showing a recognized Java compile/test failure or a confirmed Python unittest failure from the canonical pipeline test step. `repairExecution.automaticCheckRepairNames` lists eligible non-security checks (currently `canonical`). A matching failure is not considered repairable when the log also indicates infrastructure/network/container/toolchain trouble, or the report is missing, changed, or ambiguous. Gitleaks detection, unexpected commits, source drift, provider/schema errors, unknown check failures, higher-risk changed paths, and escalation findings stop the automatic cycle. Python unittest classification requires the canonical verification summary to identify only the agent-pipeline test step as failed and validates the actual unittest error sections. Simulated infrastructure messages printed by successful test fixtures are not treated as active failures; infrastructure indicators inside a failing traceback still cause escalation. Repair feedback may contain a bounded list of sanitized failing test names and exception types, but never raw scanner output, exception messages, or arbitrary check logs.
 
 This A3.2 heuristic is intentionally narrow; it does **not** provide semantic failure understanding, a stage scope sandbox, or automatic authorization for changes outside the approved task. Policy-enforced stage task packets and editable-scope restrictions are A4 work. `READY_FOR_MAIN_REVIEW` is only a handoff state; there are no automated stage commits, merges, notifications, spec archival, or acceptance decisions.
+
+## Developer-led MAIN_MODEL recovery after a terminal run
+
+A `BLOCKED` status or terminal `ESCALATED` `cycle.json` does **not** authorize
+resuming the same `run-cycle`, accepting its source, or merging its scratch
+`agent/<run-id>` branch. `READY_FOR_MAIN_REVIEW` also remains a checkpoint,
+not acceptance. Preserve the terminal run ID, worktree, and evidence before
+starting a developer-led recovery.
+
+The supported manual recovery sequence is:
+
+1. **Preserve and export evidence.** Retain `cycle.json`, `manifest.json`,
+   `worker.json`, all `worker-attempt-*.json`, `checks.json`, `status.json`,
+   `review.json` or `review-attempt.json` when present, the exact `change.patch`,
+   and independent benchmark reports when present. Share a minimal `review.zip`
+   without raw model responses, scanner matches, credentials, or unreviewed logs.
+   Inspect the archive before sharing. A structured archive may omit the failed
+   check's detailed traceback; provide a *redacted* relevant check-log excerpt
+   separately when necessary. An absent reviewer verdict is not a PASS.
+2. **Refresh repository context.** After committing any independently approved
+   changes to the developer branch, regenerate `signalharvester_files.txt` and
+   replace the previous ChatGPT Project Source. Record its commit/dirty state
+   and compare it with the failed run's `manifest.json` base revision. The
+   concatenated snapshot is an indexed repository view, not a worker patch.
+   The `review.zip` contains the proposed unaccepted source delta. If the
+   latest snapshot does not contain the actual run base, provide the missing
+   intervening commit diff or refresh the snapshot from the correct base; do
+   not silently overlay stale file content on a newer repository.
+3. **Request MAIN_MODEL recovery.** The developer asks ChatGPT to read the
+   current repository rules, active sub-spec and advisory companion, source
+   delta, attempt/check/review evidence, and applicable tests. Distinguish
+   `WORKER_MODEL` code defects from test-fixture defects, orchestrator
+   classification mistakes, provider/reviewer failures, and specification
+   ambiguities. Review the complete permitted source delta for correctness,
+   architecture, evidence binding, security, compatibility, and test coverage.
+   Reproduce failures and independently challenge model-authored tests.
+4. **Prepare an explicit corrected patch.** `MAIN_MODEL` may implement
+   bounded fixes to the worker result and relevant controller/docs/tests,
+   while respecting the same repository authorities and developer-approved
+   scope. Escalate any new high-risk/unknown ownership rather than expanding
+   it silently. Deliver a ZIP containing only changed/added files relative
+   to an identified target base, list any deletions separately, and report
+   actual validation versus unverified checks. Do not treat a successful
+   independent benchmark alone as complete acceptance.
+5. **Verify and decide.** The developer applies the corrected patch to a new
+   feature branch at the verified base, reviews the diff, and runs focused
+   regression/contract checks plus `./run_checks.sh` and any required rare or
+   stage-specific checks. Because source changed, the failed run's checks and
+   independent reviewer verdicts are historical evidence only; obtain fresh
+   review for the corrected source state. The developer explicitly decides
+   whether to accept the bounded stage and proceed to the next sub-spec stage.
+   Sub-spec acceptance and paired archival still follow `docs/specs/README.md`.
+
+**Recovery is developer-directed, not a new automatic retry mode.** Do not
+re-enter a terminal `RUN_ID`, overwrite preserved attempt evidence, cherry-pick
+unverified worker edits without review, or auto-merge/auto-archive. After
+accepted fixes are committed, refresh the Project Source again; use the new
+snapshot plus current stage-specific evidence rather than old patch chains.
 
 ## Record focused verification
 
@@ -342,4 +400,3 @@ python3 tools/agent-pipeline/agent_pipeline.py handoff --run-id <run-id>
 The reviewer uses the policy-owned HTTPS DeepSeek chat-completions endpoint and model, with `DEEPSEEK_API_KEY` supplied by the environment. It receives only the immutable task packet, bounded worker source diff (including untracked files), changed-file names, and check statuses. Worker chat transcripts are not forwarded. A new independent request is created for each run, and its answer must match the repository's structured review schema. The worker cannot run or accept its own review. Review attempts are one-shot; provider/schema failures are recorded as `review-attempt.json` without saving raw API responses and block the run. A larger diff is rejected rather than silently truncated. Never send sensitive code to an unapproved provider.
 
 `handoff.json` summarizes task/spec/base identity, worker change digest/files, required checks, independent review findings, status/risk and evidence paths. It is an index for the main-model checkpoint, not acceptance or proof that every review issue is resolved. `record-review` remains available for externally supplied independent evidence, but it must not be used as a worker self-review. Neither command merges branches, repairs code, or archives specifications.
-
