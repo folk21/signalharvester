@@ -9,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-10-15 — Defined separate `MAIN_MODEL`/`WORKER_MODEL`/`REVIEWER_MODEL`/`ORCHESTRATOR`/`DEVELOPER` responsibilities and advisory per-sub-spec implementation plans, with normative module impact, source-bound stage guidance, developer-initiated final verification, and paired archival after explicit acceptance. Runtime orchestration remains unchanged.
+
 - 2026-10-14 — Added verification-pending A3.2 opt-in `run-cycle` orchestration for Aider, required checks, fresh independent review, and at most three fail-closed repairs; classified deterministic test/compile failures separately from infrastructure/security/provider faults, rejected no-progress repairs, preserved per-worker check log digests, and recorded terminal cycle outcomes without stage commits or acceptance.
 
 - 2026-10-14 — Added verification-pending A3 first slice: fail-closed no-diff Aider detection, explicitly requested bounded repair attempts (maximum three) with source-drift and security/escalation guards, immutable worker attempt records, archived prior check/review evidence, and fresh verification requirements. Automated repair orchestration remains pending.

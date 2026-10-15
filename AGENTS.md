@@ -344,6 +344,20 @@ Repository documentation is working context for both developers and coding agent
 
 Repository-local worker orchestration may automate task preparation, verification evidence, and independent review, but it does not weaken any rule in this file. A coding worker must treat current repository files as source of truth, must not declare its own work accepted, and must not archive an active specification before the configured external acceptance checkpoint. Current workflow/evidence behavior is documented in `tools/agent-pipeline/README.md`; intended multi-stage evolution and acceptance criteria are owned by `docs/specs/active/subspecs/development-agent-pipeline.md`.
 
+### Model roles and advisory implementation guidance
+
+For staged sub-specification work, use these role names without tying them to a particular model provider:
+
+- **`MAIN_MODEL`** is the developer-invoked design and architectural review role, usually the ChatGPT session. It drafts the normative sub-specification and its advisory implementation plan. It identifies module impact, resolves architecture questions with the developer, and reviews completed work when explicitly asked. It may implement discovery or high-risk stages under normal developer control.
+- **`WORKER_MODEL`** is invoked through Aider for an approved bounded stage. It reads current repository sources and implements/tests within authorized scope. It records material deviations from the suggested approach. It cannot accept work or expand authorization.
+- **`REVIEWER_MODEL`** independently reviews source-bound changes in a fresh context. Its findings are evidence, not acceptance.
+- **`ORCHESTRATOR`** deterministically controls context, Git isolation, checks, repair budgets, evidence, and escalation. It must enforce editable scope outside model prompts.
+- **`DEVELOPER`** authorizes delegation and risk decisions, initiates final `MAIN_MODEL` review in ChatGPT, and decides acceptance.
+
+A new staged sub-specification must have a same-directory `<subspec-stem>-implementation-plan.md` companion, as defined by `docs/specs/README.md`. The sub-specification owns requirements, known module scope, constraints, and acceptance criteria. The companion is **advisory guidance**, not another specification or an authorization source. `WORKER_MODEL` may improve on suggested steps or file choices within the approved requirements and scope. It must explain material deviations and their impact. Unknown ownership or changes to approved boundaries require developer-led re-planning.
+
+The developer must explicitly request final sub-specification review from `MAIN_MODEL` after implementation evidence is available. Passing checks, independent review, or a main-model recommendation do not constitute acceptance. Only explicit developer acceptance permits moving the sub-specification and its companion to `docs/specs/archive/subspecs/` together. Update owning current-state documentation in the same lifecycle change. Do not auto-archive either file from a worker result.
+
 ## Progressive Disclosure
 
 Read detailed guidance only when relevant:

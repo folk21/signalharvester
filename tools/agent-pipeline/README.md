@@ -283,6 +283,16 @@ Run evidence and worker worktrees are under ignored `build/` paths; do not inclu
 
 Do not copy generated run evidence into owning documentation. Accepted stable behavior belongs in the repository documents that already own that topic.
 
+## Planned model-role and implementation-plan integration (A4+)
+
+The root `AGENTS.md` defines `MAIN_MODEL`, `WORKER_MODEL`, `REVIEWER_MODEL`, `ORCHESTRATOR`, and `DEVELOPER`. The active specification defines how those roles interact; the roles are not tied to a particular model brand.
+
+For a newly authored staged sub-spec, `MAIN_MODEL` prepares a same-directory `<subspec-stem>-implementation-plan.md`. It contains non-binding architecture and per-stage file/context suggestions. The owning sub-spec remains normative for requirements and known module scope; the companion must not authorize edits, redefine checks, or replace local `AGENTS.md` and module contracts. A worker may propose a better in-scope approach, recording material deviations and escalating new ownership or risk.
+
+A4 should validate and source-bind the sub-spec and companion plan separately, resolve current repository context, pass the plan to Aider **read-only**, and enforce approved editable paths outside the prompt. Current `init`/`prepare-worker`/`run-worker`/`run-cycle` commands do **not** discover companion plans, enforce a stage task packet, or run an entire sub-spec based on these documents. Do not infer this functionality from a plan existing in the repository.
+
+After end-to-end implementation the developer initiates a final `MAIN_MODEL` review through ChatGPT; neither the reviewer adapter nor `handoff` automatically initiates ChatGPT review. Only explicit developer acceptance can authorize paired archival of the sub-spec and companion plan. Current pipeline commands do not perform lifecycle moves.
+
 ## Specification and next stages
 
 The active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification owns intended evolution, stage sequencing, and final acceptance criteria. This guide owns current implemented commands and evidence semantics only.
