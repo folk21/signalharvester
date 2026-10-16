@@ -995,6 +995,75 @@ def run_independent_review(repo_root: Path, run_dir: Path, manifest: dict[str, A
         raise ValueError("Independent reviewer failed; see review-attempt.json (no raw response stored)") from None
 
 
+WORKER_ATTEMPT_PATTERN = re.compile(r"^worker-attempt-([1-9][0-9]*)\.json$")
+
+
+def collect_worker_attempts(run_dir: Path) -> list[dict[str, Any]]:
+    """Build a compact, source-bound index of every persisted worker attempt.
+
+    The authoritative latest ``worker.json`` must match its saved snapshot when
+    one exists. Snapshots must form a contiguous numeric history starting at 1.
+    Malformed, missing, mismatched, or non-contiguous evidence fails closed.
+    """
+    worker_path = run_dir / "worker.json"
+    worker = read_json(worker_path) if worker_path.exists() else None
+    snapshots: dict[int, tuple[str, dict[str, Any]]] = {}
+    for entry in sorted(run_dir.glob("worker-attempt-*.json")):
+        match = WORKER_ATTEMPT_PATTERN.match(entry.name)
+        if match is None:
+            raise ValueError(f"Noncanonical worker attempt snapshot filename: {entry.name}")
+        attempt = int(match.group(1))
+        if attempt in snapshots:
+            raise ValueError(f"Duplicate worker attempt snapshot: {entry.name}")
+        snapshots[attempt] = (entry.name, read_json(entry))
+    if not snapshots:
+        if worker is None:
+            return []
+        attempt = worker.get("attempt", 1)
+        if type(attempt) is not int or attempt != 1:
+            raise ValueError("Authoritative worker attempt identifier is invalid")
+        return [_worker_attempt_summary(worker, None, None)]
+    expected = list(range(1, max(snapshots) + 1))
+    if sorted(snapshots) != expected:
+        raise ValueError("Worker attempt snapshots are not a contiguous history")
+    if worker is None:
+        raise ValueError("Authoritative worker.json is missing for saved attempt snapshots")
+    latest_attempt = worker.get("attempt")
+    if type(latest_attempt) is not int or latest_attempt < 1:
+        raise ValueError("Authoritative worker attempt identifier is invalid")
+    if latest_attempt != max(snapshots):
+        raise ValueError("Authoritative worker attempt does not match the latest snapshot")
+    summaries: list[dict[str, Any]] = []
+    for attempt in expected:
+        filename, snapshot = snapshots[attempt]
+        if snapshot.get("attempt") != attempt or type(snapshot.get("attempt")) is not int:
+            raise ValueError(f"Worker attempt snapshot {filename} has an inconsistent attempt identifier")
+        if attempt == latest_attempt and snapshot != worker:
+            raise ValueError("Authoritative worker.json does not match its saved snapshot")
+        summaries.append(_worker_attempt_summary(snapshot, filename, sha256_file(run_dir / filename)))
+    return summaries
+
+
+def _worker_attempt_summary(
+    record: dict[str, Any], evidence_file: str | None, evidence_sha256: str | None
+) -> dict[str, Any]:
+    """Select compact, non-secret worker attempt metadata for the handoff index."""
+    summary = {
+        "attempt": record.get("attempt", 1),
+        "status": record.get("status"),
+        "failureReason": record.get("failureReason"),
+        "model": record.get("model"),
+        "changeSha256": record.get("changeSha256"),
+        "changedFiles": record.get("changedFiles"),
+        "taskSha256": record.get("taskSha256"),
+        "logSha256": record.get("logSha256"),
+    }
+    if evidence_file is not None:
+        summary["evidenceFile"] = evidence_file
+        summary["evidenceSha256"] = evidence_sha256
+    return summary
+
+
 def write_handoff(repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     """Publish a bounded evidence index for the external acceptance checkpoint."""
     status = update_status(repo_root, run_dir, manifest, policy)
@@ -1002,6 +1071,7 @@ def write_handoff(repo_root: Path, run_dir: Path, manifest: dict[str, Any], poli
     worker = read_json(worker_path) if worker_path.exists() else None
     review_path = run_dir / "review.json"
     review = read_json(review_path) if review_path.exists() else None
+    worker_attempts = collect_worker_attempts(run_dir)
     handoff = {"schemaVersion": SCHEMA_VERSION, "runId": manifest["runId"],
         "stage": manifest["stage"], "spec": manifest["specPath"],
         "baseCommit": manifest["repository"].get("baseCommit"),
@@ -1010,6 +1080,7 @@ def write_handoff(repo_root: Path, run_dir: Path, manifest: dict[str, Any], poli
         "worker": None if worker is None else {"status": worker["status"],
             "model": worker["model"], "changeSha256": worker["changeSha256"],
             "changedFiles": worker["changedFiles"]},
+        "workerAttempts": worker_attempts,
         "checks": status["checks"], "review": review, "state": status["state"],
         "risk": status["riskAssessment"],
         "requiresExternalAcceptance": True,
@@ -1521,76 +1592,80 @@ def prepare_repair(
 
 
 def python_unittest_diagnostic(tail: str, blockers: str) -> tuple[str, str] | None:
-    """Identify a genuine failed verbose unittest run inside canonical check output.
+    """Resolve the real unittest report without trusting nested fixture output.
 
-    Repository tests deliberately print fake check summaries and exception text. A
-    candidate unittest report is trusted for repair classification only when the
-    reported test count, failed test progress and traceback blocks agree. If
-    multiple candidates satisfy that contract, fail closed instead of guessing.
+    Passing negative tests can print complete fake unittest runs, including an
+    infrastructure exception. A report is eligible only when its error sections
+    and (when present) verbose progress agree with its summary. Among multiple
+    eligible reports, one uniquely larger completed suite is the outer run;
+    ties or contradictory evidence remain unclassified.
     """
-    summaries = list(re.finditer(r"(?m)^==> Verification summary[ \t]*$", tail))
-    if not summaries:
+    summary = tail.rfind("==> Verification summary\n")
+    if summary < 0:
         return None
-    summary = summaries[-1].start()
     failed = re.findall(r"(?m)^  \[FAIL\] (.+?)\s*$", tail[summary:])
     if failed != ["./tools/agent-pipeline/run_tests.sh"]:
         return None
-    check_header = "==> ./tools/agent-pipeline/run_tests.sh\n"
-    start = tail.find(check_header)
-    if start < 0 or start >= summary:
-        return None
-    start += len(check_header)
     reports = list(re.finditer(
         r"(?m)^Ran ([1-9][0-9]*) tests? in [0-9.]+s[ \t]*\n[ \t]*\n"
         r"FAILED \((?:errors|failures)=[1-9][0-9]*(?:, (?:errors|failures)=[1-9][0-9]*)*\)[ \t]*$",
-        tail[start:summary],
+        tail[:summary],
     ))
-    candidates: list[tuple[str, str]] = []
+    if not reports:
+        return None
+    error_pattern = re.compile(
+        r"(?ms)^={10,}[ \t]*\n((?:ERROR|FAIL):[^\n]*\n.*?)"
+        r"(?=^={10,}[ \t]*$|^Ran [1-9][0-9]* tests? in |\Z)",
+    )
+    progress_pattern = re.compile(r"(?m)^test_[A-Za-z0-9_]+ \([A-Za-z0-9_.]+\) \.\.\.")
+    candidates: list[tuple[int, str, str]] = []
+    previous_end = 0
     for report in reports:
-        # Only the report's own preceding verbose-test run can authenticate it.
-        # Otherwise a fake report emitted by a passing fixture might be chosen.
-        section = tail[start:start + report.start()]
-        progress = re.findall(
-            r"(?m)^(test_[A-Za-z0-9_]{1,100}) \([^\n]{1,200}\) \.\.\. "
-            r"(ok|ERROR|FAIL|skipped [^\n]*|expected failure|unexpected success)[ \t]*$",
-            section,
-        )
-        if len(progress) != int(report.group(1)):
-            continue
-        errors = list(re.finditer(
-            r"(?ms)^={10,}[ \t]*\n((?:ERROR|FAIL):[^\n]*\n.*?)"
-            r"(?=^={10,}[ \t]*$|^Ran [1-9][0-9]* tests? in |\Z)",
-            section,
+        section = tail[previous_end:report.start()]
+        previous_end = report.end()
+        errors = list(error_pattern.finditer(section))
+        expected = sum(int(n) for n in re.findall(r"(?:errors|failures)=([1-9][0-9]*)", report.group()))
+        progress = len(progress_pattern.findall(section))
+        # Real unittest -v prints one progress line per test method. Each
+        # failing subTest can generate multiple ERROR sections for that method.
+        count = int(report.group(1))
+        # Failing subTests may have an interrupted progress line before the
+        # individual ERROR sections, so allow one missing line per failing
+        # test method, never a large mismatch with the reported suite size.
+        failing_methods = set(re.findall(
+            r"(?m)^(?:ERROR|FAIL): (test_[A-Za-z0-9_]+) \(", section,
         ))
-        expected = sum(int(n) for n in re.findall(
-            r"(?:errors|failures)=([1-9][0-9]*)", report.group(),
-        ))
-        failures = [(name, status) for name, status in progress if status in ("ERROR", "FAIL")]
-        if len(errors) != expected or len(failures) != expected:
+        if len(errors) != expected or (progress and (
+            progress > count or count - progress > len(failing_methods)
+        )):
             continue
         identifiers: list[str] = []
-        outcome: tuple[str, str] | None = None
+        outcome = "TEST_FAILURE"
+        valid = True
         for match in errors:
             details = match.group(1)
             if re.search(blockers, details):
-                outcome = (
-                    "INFRASTRUCTURE_OR_UNKNOWN",
-                    "Unittest traceback includes an infrastructure failure indicator",
-                )
-                break
+                outcome = "INFRASTRUCTURE_OR_UNKNOWN"
             name_match = re.match(r"(?:ERROR|FAIL): (test_[A-Za-z0-9_]{1,100}) \(", details)
-            if name_match is None or name_match.group(1) not in [name for name, _ in failures]:
+            if name_match is None:
+                valid = False
                 break
             types = re.findall(r"(?m)^([A-Za-z][A-Za-z0-9_]{0,63}):", details)
-            type_name = types[-1] if types else "UNKNOWN"
-            identifiers.append(f"{name_match.group(1)} ({type_name})")
-        else:
-            outcome = ("TEST_FAILURE", "; ".join(identifiers[:5]))
-        if outcome is not None:
-            candidates.append(outcome)
-    # Ambiguous or truncated reports are not a reason to send source changes
-    # back to the model, even when one candidate looks repairable.
-    return candidates[0] if len(candidates) == 1 else None
+            identifier = f"{name_match.group(1)} ({types[-1] if types else 'UNKNOWN'})"
+            if identifier not in identifiers:
+                identifiers.append(identifier)
+        if valid:
+            candidates.append((count, outcome, "; ".join(identifiers[:5])))
+    if not candidates:
+        return None
+    largest = max(candidate[0] for candidate in candidates)
+    outer = [candidate for candidate in candidates if candidate[0] == largest]
+    if len(outer) != 1:
+        return None
+    _, outcome, details = outer[0]
+    if outcome == "INFRASTRUCTURE_OR_UNKNOWN":
+        return outcome, "Unittest traceback includes an infrastructure failure indicator"
+    return outcome, details
 
 
 def classify_automatic_check_failure(
@@ -2121,5 +2196,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

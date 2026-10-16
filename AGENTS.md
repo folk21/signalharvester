@@ -344,6 +344,14 @@ Repository documentation is working context for both developers and coding agent
 
 Repository-local worker orchestration may automate task preparation, verification evidence, and independent review, but it does not weaken any rule in this file. A coding worker must treat current repository files as source of truth, must not declare its own work accepted, and must not archive an active specification before the configured external acceptance checkpoint. Current workflow/evidence behavior is documented in `tools/agent-pipeline/README.md`; intended multi-stage evolution and acceptance criteria are owned by `docs/specs/active/subspecs/development-agent-pipeline.md`.
 
+A terminal `BLOCKED` or `ESCALATED` worker run is a developer-led
+`MAIN_MODEL` recovery checkpoint, not permission to resume a single-use cycle.
+The developer may supply a refreshed source snapshot and sanitized run evidence
+and ask `MAIN_MODEL` for full code/architecture review and a corrected patch.
+The corrected source requires fresh verification/review and explicit developer
+acceptance before any stage progression. Preserve failed attempts as evidence;
+follow the detailed procedure owned by `tools/agent-pipeline/README.md`.
+
 ### Model roles and advisory implementation guidance
 
 For staged sub-specification work, use these role names without tying them to a particular model provider:

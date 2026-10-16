@@ -121,6 +121,13 @@ The sub-specification remains **normative** for behavior, authorized module boun
 
 ## Lifecycle
 
+When a delegated stage ends `BLOCKED`/`ESCALATED`, the developer may request a
+`MAIN_MODEL` recovery review with the latest repository snapshot and sanitized
+attempt evidence. The corrected patch must be reverified on its new source
+state before the stage resumes; the failed run remains historical evidence.
+The repository-owned recovery steps are in
+[`tools/agent-pipeline/README.md`](../../tools/agent-pipeline/README.md).
+
 1. Keep the umbrella under `docs/specs/active/spec-*.md`.
 2. Put one unresolved bounded implementation slice under `docs/specs/active/subspecs/`.
 3. Record its parent and lifecycle state in frontmatter.
