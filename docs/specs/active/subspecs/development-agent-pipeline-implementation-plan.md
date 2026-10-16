@@ -166,3 +166,350 @@ checks the public `summarize_run_evidence` helper with deterministic temporary
 fixtures. It is non-editable to the worker but can be visible via repository
 context; **oracle PASS is not an unseen benchmark or developer acceptance**.
 The full canonical gate and independent reviewer remain mandatory.
+
+## A4.2b — structured worker deviations (implementation blueprint)
+
+**Status:** proposed advisory design, not implemented or authorized by this
+change. This section expands AP2, AP9, AP10, AP13, and AP14. The active
+sub-specification is the normative source; A4.2b does not add requirement IDs,
+change risk authorization, or grant new editable paths.
+
+**Boundary:** A4.2a's `summarize_run_evidence()` is available in the current
+controller and has passed local developer checks. A4.2b should attach an
+**explicitly reported, source-bound account of material implementation-plan
+deviations** to a single run. It must not infer truth or approval from an LLM
+statement. Multi-run/sub-spec aggregation, model-output capture automation,
+feature-branch promotion, notifications, merge, or archival remain separate
+stages.
+
+### 1. Repository entry points and ownership
+
+| Concern | Current source / owner | Suggested A4.2b action |
+|---|---|---|
+| Normative requirements | `development-agent-pipeline.md`, AP2/AP9/AP10/AP13/AP14 | Read-only; no new authorization |
+| Stage and context identities | `manifest.json` / `manifest.stagePacket` | Bind only to persisted identifiers |
+| Worker attempt identities | `worker.json`, `worker-attempt-N.json` | Reuse `collect_worker_attempts()`; compare authoritative digests |
+| Aggregate report | `summarize_run_evidence(run_dir)` | Add one optional, clearly non-authoritative deviations summary |
+| Published external checkpoint | `write_handoff()` | Defer wiring until read-only contract is independently verified |
+| Runtime and checks | `run_automated_cycle()`, reviewer, Gitleaks, policy | Do not change in this bounded slice |
+| Tests | `tools/agent-pipeline/tests/test_agent_pipeline.py` | New `RunDeviationEvidenceTest` and adversarial cases |
+| Independent acceptance | `tools/agent-pipeline/benchmarks/` | Candidate new read-only oracle in a preparatory patch, outside worker editable scope |
+
+Read the live implementations before coding: `collect_worker_attempts()`,
+`_worker_attempt_summary()`, `summarize_run_evidence()`, `write_handoff()`,
+`read_json()` and `sha256_file()`. Also read the owning
+`tools/agent-pipeline/README.md`, `docs/TESTS.md`, root instructions and stage
+packet schema. Do not copy code snippets in this plan blindly; use the current
+source signatures and record concrete differences.
+
+No local `tools/agent-pipeline/AGENTS.md` is present in the referenced snapshot;
+root `AGENTS.md` applies unless a newer local guide has been added.
+
+### 2. Design choice: explicitly supplied evidence, not transcript mining
+
+**Recommended first slice:** a pure, read-only collector over optional
+`worker-deviations-attempt-N.json` files in an already persisted run directory.
+These files are **controller-side evidence inputs**, not changes that the worker
+may write inside its source worktree. Creating/importing them is a separate,
+explicitly authorized step. Merely adding this reader does not enable Aider to
+create evidence files or widen its editable path list.
+
+Do **not** search Aider stdout/stderr for phrases such as "no deviations".
+Narrative assistant replies are unstructured and can contain misleading
+claims, credentials, or instructions. Future capture automation would need a
+separate bounded protocol, explicit origin/provenance and negative tests.
+
+Presence semantics are essential:
+
+- **`UNREPORTED`** — no explicit record exists. This is *unknown*, not zero
+  deviations and not evidence of compliance.
+- **`REPORTED_NONE`** — a valid, source-bound record explicitly declares an
+  empty list. It is still a worker claim, not independent verification.
+- **`REPORTED`** — at least one bounded, source-bound deviation is recorded.
+- **Invalid/conflicting record** — reject aggregation with `ValueError` rather
+  than silently omitting evidence or producing an apparently clean report.
+
+The source of a deviation report should be described as
+`WORKER_MODEL_CLAIM`, **not** `REVIEWER_VERIFIED` or `DEVELOPER_ACCEPTED`.
+Developer decisions and reviewer findings retain their own evidence channels.
+
+### 3. Suggested persisted JSON shape (version 1)
+
+**Illustrative payload only; no live producer or CLI is added in A4.2b.**
+The eventual import action must verify the file is placed under the correct
+run, without following symlinks, and with documented custody/provenance.
+
+```json
+{
+  "schemaVersion": 1,
+  "runId": "example-run-001",
+  "stage": "A4",
+  "attempt": 2,
+  "taskSha256": "<64-character SHA-256 hex from manifest>",
+  "changeSha256": "<64-character SHA-256 hex from worker attempt>",
+  "reportedBy": "WORKER_MODEL_CLAIM",
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "kind": "DESIGN_ALTERNATIVE",
+      "requirementIds": ["AP14"],
+      "summary": "Used an existing reader instead of a second parser",
+      "rationale": "Avoided duplicate input validation",
+      "affectedPaths": ["tools/agent-pipeline/agent_pipeline.py"],
+      "testImpact": "Added a malformed-record regression test",
+      "riskImpact": "NONE_IDENTIFIED"
+    }
+  ]
+}
+```
+
+Required top-level keys should be exact. Unknown keys, malformed JSON,
+arrays where objects are required, booleans as attempt numbers, duplicate
+IDs, duplicate paths, and unsupported enum values should fail closed.
+
+Suggested bounded schema limits for this initial slice (tune only through an
+explicitly reviewed packet):
+
+| Field | Suggested validation |
+|---|---|
+| `schemaVersion` | Exactly integer `1` (not `true`) |
+| `runId`, `stage` | Non-empty strings identical to manifest; no path interpretation |
+| `attempt` | Strict positive integer matching canonical filename and worker evidence |
+| `taskSha256`, `changeSha256` | Lowercase 64-digit hexadecimal and identical to authoritative evidence |
+| `reportedBy` | Literal `WORKER_MODEL_CLAIM`; never reviewer/developer identity |
+| `deviations` | Array, at most 20 records; empty array means explicitly reported none |
+| `id` | Unique `DEV-[0-9]{3}` in each attempt, ordered by numeric suffix |
+| `kind` | `DESIGN_ALTERNATIVE`, `TEST_STRATEGY`, `FILE_LAYOUT`, `OTHER` |
+| `requirementIds` | Unique IDs from `manifest.stagePacket.requirementIds` when a stage packet is present |
+| `summary`, `rationale`, `testImpact` | Non-empty bounded strings, e.g. 1–500 characters; raw text stays out of compact output |
+| `affectedPaths` | Nonempty unique normalized repository-relative paths, all within this worker attempt's changed files |
+| `riskImpact` | `NONE_IDENTIFIED`, `POTENTIAL`, `REQUIRES_DECISION` |
+
+For legacy runs without a stage packet, avoid inventing a requirement mapping:
+a non-empty `requirementIds` array should require explicit known authority; a
+legacy report can use an empty array and should remain clearly unverified.
+Treat any claim requiring new module ownership, security changes, or expanded
+scope as `REQUIRES_DECISION`; this reader **records** it but does not authorize
+execution or repair. Do not make `NONE_IDENTIFIED` a trusted risk assessment.
+
+### 4. Source binding and failure semantics
+
+Recommended read order:
+
+1. Read and validate `manifest.json`; reuse A4.2a's helper for independent
+   identity checks where practical rather than creating a second report parser.
+2. Call `collect_worker_attempts(run_dir)` to get a validated contiguous worker
+   history. Preserve legacy no-worker and single-worker cases.
+3. Scan only `worker-deviations-attempt-*.json`; reject filenames with leading
+   zero, zero, suffixes, non-decimal attempts or unexpected symlink targets.
+4. For each explicit deviation record, validate schema and compare `runId`,
+   `stage`, `taskSha256`, `attempt`, and `changeSha256` with the manifest and
+   corresponding worker attempt. A report for a nonexistent attempt fails.
+5. Validate requirement IDs, changed paths, bounded text, enum values, and
+   uniqueness. Do not trust a claim's stated risk as approved risk.
+6. Return attempt-ordered compact summaries containing presence state,
+   deviation IDs/categories/counts, safe risk flags, canonical filename and
+   `sha256_file()` of **current** file bytes.
+7. If a deviation file exists but fails any validation, raise a typed error;
+   do not drop it. If no file exists, emit `UNREPORTED` and no invented digest.
+
+A digest published now only binds the report to the file's current bytes. It
+does **not** prove who authored a report, when they wrote it, or that a prior
+version has not changed. Future source-bound custody or signature rules must
+be designed separately; a `reportedBy` string is never authentication.
+
+The reader must not modify `manifest.json`, `worker.json`, the deviation
+records, status, review evidence or source files. It must not invoke Git,
+network, Aider, reviewer or `update_status()`.
+
+### 5. Reference algorithm (illustrative Python)
+
+This is an architectural sketch, **not a finished diff**. `validate_payload`
+and `compact_entry` are explicit design responsibilities, not existing project
+functions. Use strict validation and reuse existing helpers where available.
+
+```python
+DEVIATION_FILENAME = re.compile(r"^worker-deviations-attempt-([1-9][0-9]*)\.json$")
+
+
+def collect_deviation_summaries(run_dir: Path) -> list[dict[str, Any]]:
+    manifest = read_json(run_dir / "manifest.json")
+    workers = collect_worker_attempts(run_dir)
+    by_attempt = {item["attempt"]: item for item in workers}
+
+    files: dict[int, Path] = {}
+    for candidate in sorted(run_dir.glob("worker-deviations-attempt-*.json")):
+        match = DEVIATION_FILENAME.fullmatch(candidate.name)
+        if match is None or candidate.is_symlink() or not candidate.is_file():
+            raise ValueError("Invalid deviation evidence filename or file type")
+        number = int(match.group(1))
+        if number in files or number not in by_attempt:
+            raise ValueError("Duplicate or orphan deviation evidence")
+        files[number] = candidate
+
+    result = []
+    for number, worker in sorted(by_attempt.items()):
+        path = files.get(number)
+        if path is None:
+            result.append({"attempt": number, "state": "UNREPORTED"})
+            continue
+        payload = read_json(path)
+        validate_payload(payload, manifest=manifest, worker=worker,
+                         file_attempt=number)  # implement strict schema checks
+        entries = payload["deviations"]
+        result.append({
+            "attempt": number,
+            "state": "REPORTED" if entries else "REPORTED_NONE",
+            "source": "WORKER_MODEL_CLAIM",
+            "count": len(entries),
+            "entries": [compact_entry(item) for item in entries],
+            "evidenceFile": path.name,
+            "evidenceSha256": sha256_file(path),
+        })
+    return result
+```
+
+**Important integration detail:** `collect_worker_attempts()` returns a compact
+summary, not full `worker.json`. It includes `taskSha256`, `changeSha256`, and
+`changedFiles`, which are enough for the binding above. Validate that the
+manifest's stage packet is present before enforcing its requirement ID list;
+do not silently assume all runs were initialized with `init-stage`.
+
+### 6. Compact report and privacy boundary
+
+A4.2b may add `deviations` to the A4.2a result **additively**. Keep all
+existing `summarize_run_evidence()` fields unchanged. A representative
+projection (not a second persisted contract) is:
+
+```json
+{
+  "deviations": [
+    {
+      "attempt": 1,
+      "state": "UNREPORTED"
+    },
+    {
+      "attempt": 2,
+      "state": "REPORTED",
+      "source": "WORKER_MODEL_CLAIM",
+      "count": 1,
+      "entries": [
+        {"id": "DEV-001", "kind": "DESIGN_ALTERNATIVE", "riskImpact": "NONE_IDENTIFIED"}
+      ],
+      "evidenceFile": "worker-deviations-attempt-2.json",
+      "evidenceSha256": "<SHA-256 of current file bytes>"
+    }
+  ]
+}
+```
+
+Do not propagate `summary`, `rationale`, `testImpact`, model transcripts,
+commands, environment values, raw review text, or arbitrary paths into the
+compact report beyond validated `affectedPaths` if a reviewer explicitly
+needs them. Prefer omitting `affectedPaths` from the public summary and
+keeping them in the bound source file. Reviewers can evaluate the claimed
+rationale from the source artifact via a separately authorized interface.
+
+If stage packet or run state disagrees with record identity, fail closed.
+Avoid modifying `write_handoff()` or export format until the reader tests and
+canonical checks are accepted. If handoff integration is later authorized,
+it must preserve legacy handoff keys and must not turn a claim into PASS.
+
+### 7. Explicit acceptance and escalation boundaries
+
+- `UNREPORTED` must never become `REPORTED_NONE`, including for no-op runs.
+- A worker's statement that there were no deviations is not verification.
+- A claimed deviation neither repairs nor weakens a requirement; a reviewer
+  may still issue `CHANGES_REQUIRED` or `ESCALATE`.
+- `REQUIRES_DECISION` is visible to the main-model/developer checkpoint;
+  it cannot automatically authorize an expanded edit scope.
+- A newly changed source state requires fresh checks and reviewer evidence;
+  earlier PASS verdicts remain historical.
+- No automatic commit, promotion, merge, notification, acceptance or paired
+  archival is part of A4.2b.
+
+### 8. Deterministic verification matrix (DV-01…DV-20)
+
+The IDs below name **test cases**, not AP requirement IDs or stable product
+features. Exercise the public read-only helper and, if approved, the additive
+single-run aggregate projection. Tests must use complete worker fixtures and
+real current-byte SHA-256, not placeholder hashes where code verifies bytes.
+
+| ID | Fixture / mutation | Expected observable result |
+|---|---|---|
+| DV-01 | One valid worker, no deviation file | `UNREPORTED`, no invented evidence digest |
+| DV-02 | One valid worker, explicit empty `deviations` | `REPORTED_NONE`, source `WORKER_MODEL_CLAIM`, digest present |
+| DV-03 | One valid record with a bounded design alternative | `REPORTED`; safe IDs/categories, not raw narrative |
+| DV-04 | Three workers, records for attempts 1 and 3 | Numeric ordering; attempt 2 is `UNREPORTED` |
+| DV-05 | `worker-deviations-attempt-01.json` or attempt 0 | Reject noncanonical names |
+| DV-06 | File attempt 2 but payload attempt 1, `true`, string or float | Reject every mismatch/type |
+| DV-07 | Deviation file for absent worker attempt | Reject orphan evidence |
+| DV-08 | Malformed JSON or JSON array | Fail closed |
+| DV-09 | Mismatched `runId`, `stage` or manifest task digest | Fail closed |
+| DV-10 | Mismatched `changeSha256` from a worker attempt | Fail closed |
+| DV-11 | Duplicate `DEV-001` IDs or unsorted IDs | Reject rather than silently deduplicate |
+| DV-12 | Unknown `kind`, `riskImpact` or extra object key | Reject unsupported schema |
+| DV-13 | `affectedPaths` contains absolute, `..`, duplicate or unchanged path | Reject unsupported scope claim |
+| DV-14 | `requirementIds` outside stage packet list | Reject claim of unauthorized requirement linkage |
+| DV-15 | Excess records or overlong text | Reject bounded-size violation |
+| DV-16 | Raw sentinel in rationale/command-like input | No raw text appears in compact output |
+| DV-17 | A stored deviation file changes after summary | Old published digest no longer matches current bytes |
+| DV-18 | Record exists without `worker.json` or with invalid snapshot history | Reject through worker evidence validator |
+| DV-19 | Legacy worker (no stage packet) and empty requirement IDs | Explicitly reported record can be summarized without invented spec authority |
+| DV-20 | Claim is `REQUIRES_DECISION` with otherwise valid source binding | Visible but never accepted or promoted |
+
+**Additional tests:** mixed `BLOCKED` and `READY_FOR_MAIN_REVIEW` states must
+retain A4.2a semantics; absence of a report cannot be treated as review PASS;
+corrupt evidence must not suppress an already recorded failed check; no writes
+to run files; deterministic repeated invocation; no symlink traversal.
+
+### 9. Suggested implementation order and validation
+
+1. **Before delegation:** developer and `MAIN_MODEL` review the suggested
+   schema/custody boundary and Stage Task Packet; resolve who produces or
+   imports the explicit JSON artifact. Without a trusted origin, this stage
+   is limited to *reading untrusted worker claims*, not authenticated provenance.
+2. Add read-only filename/schema validation and `collect_deviation_summaries()`
+   as narrowly scoped private/public helpers in the current controller.
+3. Add additive `deviations` projection to `summarize_run_evidence()` only if
+   the Stage Task Packet explicitly includes this integration.
+4. Add realistic fixtures and all DV-01…DV-20 regression scenarios under
+   `tools/agent-pipeline/tests/test_agent_pipeline.py`.
+5. Prepare a separate uneditable oracle and opt-in pilot **before** worker
+   execution. Keep those files outside worker editable paths.
+6. Run focused Python tests and the oracle first, then the canonical
+   `./tools/agent-pipeline/run_tests.sh` and `./run_checks.sh` in the
+   authorized developer environment. Use an isolated Git worktree for the
+   worker attempt. Verify both a valid record and actual `BLOCKED` evidence.
+7. Require a new independent reviewer request for the final worker source
+   state, then explicit `MAIN_MODEL` review and developer acceptance.
+
+Suggested stage packet scope: **expected** edits to
+`tools/agent-pipeline/agent_pipeline.py` and
+`tools/agent-pipeline/tests/test_agent_pipeline.py` only; the normative spec,
+companion, benchmark oracle, policy, scanner and `run_checks.sh` remain
+read-only. No runnable Stage Task Packet is created by this documentation
+patch; authorize it separately after the source state and design are checked.
+
+### 10. Alternatives, assumptions and open decisions
+
+- **Chosen first step:** ingest explicit, untrusted per-attempt files. This is
+  testable without provider access and does not infer structured data from
+  Aider's free-form terminal output.
+- **Deferred:** a model-native structured response channel and automatic
+  `worker-deviations-attempt-N.json` producer. It needs a precise capture
+  protocol and source custody rules; the existing Aider adapter does not
+  guarantee such a protocol.
+- **Deferred:** reviewer verification of every deviation, severity-based
+  acceptance policy, and a new mandatory "all deviations acknowledged" gate.
+  These would change risk/acceptance behavior and need explicit authorization.
+- **Open:** choose the trusted importer/producer and its permission boundary
+  before implementing any write action. The read-only collector is useful
+  without that action for developer-supplied sanitized evidence.
+- **Trade-off:** storing rationale in a bounded file helps auditability but
+  creates a sensitive-data handling responsibility. Compact handoff output
+  intentionally publishes only validated categorical metadata and digests.
+
+No part of this blueprint authorizes unreviewed changes to
+`pipeline-policy.json`, reviewer behavior, canonical gates, model provider or
+repository lifecycle.
