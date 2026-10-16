@@ -9,6 +9,8 @@ description: Notable project changes organized by release state, with each chang
 - 2026-09-21 — Accepted the shared demand-driven polling lifecycle refactoring after developer verification, consolidating Results/Event Observation polling lifecycle in the constrained `common` shared kernel.
 ## Unreleased
 
+- 2026-10-16 — Hardened verification-pending A4.2a run evidence aggregation after a live blocked pilot: require symmetric check/status and review/status consistency, strict check attempts, and authoritative required flags. Added safe reviewer failure reason codes without persisting API response text; provider success and canonical developer verification remain pending.
+
 - 2026-10-15 — Added developer-led `BLOCKED`/`ESCALATED` MAIN_MODEL recovery guidance and corrected the spec-driven A4 handoff attempt implementation and regression fixtures. Hardened A3.2 unittest classification against nested synthetic failure reports and missing verbose progress for failing subTests, preserving fail-closed escalation for actual infrastructure tracebacks. Fresh canonical and independent review on the corrected source are still required before acceptance.
 
 - 2026-10-15 — Hardened verification-pending A3.2 automatic failure classification after a real A4.1 coding pilot: recognize source-bound failing Python unittest reports despite expected simulated infrastructure output from passing tests, preserve escalation for actual failing infrastructure tracebacks, and send only sanitized test identifiers/types into bounded repair attempts. Strengthened the pilot packet to require complete legacy worker fixtures; real rerun remains pending.
