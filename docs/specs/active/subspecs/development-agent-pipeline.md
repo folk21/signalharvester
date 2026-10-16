@@ -43,8 +43,13 @@ cleanup boundaries.
 stage runs with an explicit expected stage roster, strict source-packet binding,
 visible missing stages, preserved blocked history, and no acceptance authority.
 
-**Still planned:** complete promoted-stage/sub-spec handoff, guarded feature-branch
-promotion (A5), notifications (A6),
+**A4.4 (verification-pending):** opt-in private preservation of complete
+selected source-bound run evidence outside `build/`, with a digest inventory,
+portable A4.3 replay and separate compact external-review summary. No
+promotion/commit proof is generated in A4.4; the complete promoted-stage
+checkpoint must await A5 evidence.
+
+**Still planned:** guarded feature-branch promotion (A5), notifications (A6),
 and overall pipeline v1 acceptance (A7). Historical failed pilots, including
 Aider edit-format/no-diff failures, remain evidence rather than acceptance.
 
@@ -261,6 +266,31 @@ into verified facts. The A4.3 reader may be exposed as an explicit CLI command,
 but must not change single-run `handoff.json` behavior, reviewer policy,
 security checks, A4.2b report semantics, or A5 progression. Full sub-spec
 handoff and final decision remain separate gates.
+
+### Bounded A4.4 private evidence preservation and external handoff
+
+The selected A4.1 stage runs must be source-bound and pass A4.3 fail-closed
+integrity validation before export. The opt-in custodian creates an owner-only
+private evidence directory **outside the repository/build tree**, including
+unmodified stage packets, manifests, worker/check/reviewer snapshots,
+repair/deviation evidence and logs. The directory must be complete enough to
+re-run the A4.3 summary after the original ignored `build/` tree is removed.
+Include a current-byte SHA-256 inventory of each copied file and verify the
+copy before publication; refuse existing destinations, symlinks, nonregular
+entries, unbounded data and source changes during copying. Digest equality
+is an integrity snapshot, not proof of historical immutability.
+
+A separate compact handoff index may contain stage/requirement/feature
+coverage, observed source/plan digests and base commits, checks, worker repair
+history, reviewer verdict metadata, deviation claims, missing stages and
+blocking states. It must exclude raw commands, check logs and worker transcripts.
+The private raw directory is sensitive and **must not** be presented as a
+redacted review artifact. Distinguish unrecorded promoted/final commits from
+successful stage states: A5 will supply future branch-promotion provenance.
+Never infer external acceptance, automatically archive specifications, commit
+branches, merge, notify or call a provider. Preserving `BLOCKED` history must
+not upgrade it to `READY_FOR_MAIN_REVIEW`.
+
 
 ## Requirements
 

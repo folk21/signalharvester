@@ -544,3 +544,27 @@ versions, sensitive-data omission, read-only behavior and symlink rejection.
 Future A5 stage commits, autonomous sequencing, notifications and paired
 archival are **not** authorized by this slice. The independent reviewer, a
 source-bound run verdict and explicit developer acceptance remain separate.
+
+
+## A4.4 — private run custody and compact sub-spec handoff (advisory)
+
+**Normative authority:** A4.4 boundary and AP2/AP9/AP10/AP13/AP14 in the active
+spec. A4.3 `summarize_subspec_evidence()` remains the source-bound validator.
+An opt-in export should copy the exact selected run evidence, including the
+stage-packet bytes, to an owner-only output directory **outside** all Gradle
+`build/` paths. Use safe filename validation, bounded file counts/sizes,
+reject symlinks and directories, verify the source during copying, create a
+SHA-256 inventory, then recompute A4.3 from the copied bytes before publishing.
+A separate compact `review-handoff.json` should omit raw LLM/check content and
+explicitly retain missing/blocked stages and external acceptance requirements.
+
+Suggested deterministic scenarios HC-01..HC-05 and HE-01..HE-09: replay after
+removing the original run, safe field projection, digest tampering, missing
+stages, persistent failed attempts, archive no-clobber, repository-path denial,
+symlink rejection, and CLI opt-in validation. This is a *private retention*
+boundary, not a provider-backed live pilot. Private `runs/` can include secrets
+and code and must not be sent to ChatGPT by default. The compact index is an
+evidence map; reviewers still need a separately approved code-delta source.
+Future A5 is responsible for expected branch ancestry, per-stage commits and
+final promoted commit evidence. A4.4 must not fabricate them. Never commit,
+merge, notify, auto-accept or archive active specs from this command.

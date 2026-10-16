@@ -2377,6 +2377,187 @@ class SubspecEvidenceSummaryTest(unittest.TestCase):
                 parser.parse_args(["summarize-subspec", "--spec", self.SPEC_PATH])
 
 
+class SubspecPrivateHandoffTest(unittest.TestCase):
+    """A4.4 private custody and compact main-review handoff (HE-01..HE-09)."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.fixture = SubspecEvidenceSummaryTest()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.run = self.fixture.make_run("run-a", "A4.3")
+        self.output = self.root / "private-archive"
+
+    def export(self, *runs: Path, stages: list[str] | None = None,
+               output: Path | None = None) -> dict:
+        return agent_pipeline.export_subspec_handoff(
+            list(runs) if runs else [self.run],
+            spec_path=self.fixture.SPEC_PATH,
+            expected_stages=stages or ["A4.3"],
+            destination=output or self.output, repo_root=self.repo,
+        )
+
+    # HE-01: private evidence remains reusable after the original build tree is deleted.
+    def test_he01_private_bundle_survives_source_cleanup(self) -> None:
+        result = self.export()
+        self.assertEqual("EXPORTED", result["status"])
+        self.assertTrue((self.output / "runs/run-a/stage-packet.json").is_file())
+        self.assertTrue((self.output / "runs/run-a/manifest.json").is_file())
+        import shutil
+        shutil.rmtree(self.run)
+        verified = agent_pipeline._verified_subspec_export(self.output)
+        self.assertEqual("PASS", verified["status"])
+        summary = agent_pipeline.summarize_subspec_evidence(
+            [self.output / "runs/run-a"], spec_path=self.fixture.SPEC_PATH,
+            expected_stages=["A4.3"])
+        self.assertEqual("BLOCKED", summary["stages"][0]["runs"][0]["state"])
+
+    # HE-02: reviewer-facing JSON does not contain raw command/model transcripts.
+    def test_he02_compact_report_redacts_raw_material(self) -> None:
+        self.export()
+        compact = (self.output / "review-handoff.json").read_text(encoding="utf-8")
+        for token in ("raw_transcript_secret", "raw_command_secret"):
+            self.assertNotIn(token, compact)
+        self.assertIn("BLOCKED", compact)
+        self.assertTrue(json.loads(compact)["requiresExternalAcceptance"])
+        self.assertTrue(json.loads(compact)["rawEvidenceSensitive"])
+        self.assertIn("raw_transcript_secret", (self.output / "runs/run-a/worker.json").read_text())
+
+    # HE-03: reject modification of the saved packet or check evidence.
+    def test_he03_mutated_export_detected(self) -> None:
+        self.export()
+        with (self.output / "runs/run-a/stage-packet.json").open("ab") as out:
+            out.write(b"\n")
+        with self.assertRaisesRegex(ValueError, "changed"):
+            agent_pipeline._verified_subspec_export(self.output)
+
+    # HE-04: reject an altered compact handoff even when raw source is unchanged.
+    def test_he04_handoff_drift_detected(self) -> None:
+        self.export()
+        (self.output / "review-handoff.json").write_text("{}\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            agent_pipeline._verified_subspec_export(self.output)
+
+    # HE-05: export is opt-in, outside the repository and never overwrites evidence.
+    def test_he05_existing_and_repository_destinations_rejected(self) -> None:
+        self.export()
+        with self.assertRaises(ValueError):
+            self.export()
+        (self.repo / "build").mkdir()
+        with self.assertRaisesRegex(ValueError, "outside the repository"):
+            self.export(output=self.repo / "build" / "private")
+        with self.assertRaises(ValueError):
+            self.export(output=Path("relative-path"))
+
+    # HE-06: reject symlinked, nested and unsupported source files before publishing.
+    def test_he06_unsafe_source_does_not_publish(self) -> None:
+        (self.run / "linked.log").symlink_to(self.run / "manifest.json")
+        with self.assertRaises(ValueError):
+            self.export()
+        self.assertFalse(self.output.exists())
+
+    # HE-07: reject unexpected bytes and symlinks in exported private evidence.
+    def test_he07_private_export_inventory_is_complete(self) -> None:
+        self.export()
+        (self.output / "runs/run-a/extra.log").write_text("added", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            agent_pipeline._verified_subspec_export(self.output)
+        (self.output / "runs/run-a/extra.log").unlink()
+        (self.output / "runs/run-a/link.log").symlink_to("manifest.json")
+        with self.assertRaises(ValueError):
+            agent_pipeline._verified_subspec_export(self.output)
+
+    # HE-08: blocked history remains distinct from a later READY attempt.
+    def test_he08_multiple_runs_preserve_selection_and_missing_stages(self) -> None:
+        second = self.fixture.make_run("run-b", "A4.3", ready=True)
+        self.export(self.run, second, stages=["A4.3", "A4.4"])
+        result = json.loads((self.output / "review-handoff.json").read_text())
+        self.assertEqual(["A4.4"], result["summary"]["missingStages"])
+        self.assertEqual(["BLOCKED", "READY_FOR_MAIN_REVIEW"],
+                         [r["state"] for r in result["summary"]["stages"][0]["runs"]])
+        self.assertEqual("PASS", agent_pipeline._verified_subspec_export(self.output)["status"])
+
+    # HE-10: subprocess CLI can export and verify using an external run root.
+    def test_he10_live_cli_export_and_verify(self) -> None:
+        policy = self.repo / "policy.json"
+        agent_pipeline.write_json(policy, {
+            "schemaVersion": 1, "requiredRepositoryFiles": [],
+            "requiredChecks": [{"name": "canonical", "command": [sys.executable, "-c", "print(1)"]}],
+        })
+        cmd = [sys.executable, str(MODULE_PATH), "--repo-root", str(self.repo),
+               "--policy", str(policy), "--runs-root", str(self.fixture.base)]
+        exported = subprocess.run(cmd + ["export-subspec", "--spec", self.fixture.SPEC_PATH,
+                                      "--stage", "A4.3", "--run-id", "run-a",
+                                      "--output-dir", str(self.output)],
+                                  capture_output=True, text=True, check=False)
+        self.assertEqual(0, exported.returncode, exported.stderr)
+        verified = subprocess.run(cmd + ["verify-subspec-export", "--bundle-dir",
+                                      str(self.output)], capture_output=True, text=True,
+                                  check=False)
+        self.assertEqual(0, verified.returncode, verified.stderr)
+        self.assertEqual("PASS", json.loads(verified.stdout)["status"])
+        replayed = subprocess.run(cmd[:6] + ["--runs-root", str(self.output / "runs"),
+                                          "summarize-subspec", "--spec", self.fixture.SPEC_PATH,
+                                          "--stage", "A4.3", "--run-id", "run-a"],
+                                  capture_output=True, text=True, check=False)
+        self.assertEqual(0, replayed.returncode, replayed.stderr)
+        self.assertEqual(1, json.loads(replayed.stdout)["selectedRunCount"])
+
+    # HE-11: oversized raw evidence is rejected before a private directory is published.
+    def test_he11_oversized_file_does_not_publish(self) -> None:
+        with (self.run / "large.log").open("wb") as out:
+            out.truncate(agent_pipeline.SUBSPEC_EXPORT_MAX_FILE_BYTES + 1)
+        with self.assertRaisesRegex(ValueError, "bounded export limits"):
+            self.export()
+        self.assertFalse(self.output.exists())
+
+    # HE-12: real pipeline log subdirectories are preserved for private review.
+    def test_he12_log_subtree_preserved_and_tamper_detected(self) -> None:
+        log = self.run / "logs" / "canonical-worker-1-attempt-1.log"
+        log.parent.mkdir()
+        log.write_text("raw_check_log_secret\n", encoding="utf-8")
+        self.export()
+        preserved = self.output / "runs/run-a/logs" / log.name
+        self.assertEqual(log.read_bytes(), preserved.read_bytes())
+        self.assertEqual("PASS", agent_pipeline._verified_subspec_export(self.output)["status"])
+        preserved.write_text("changed\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            agent_pipeline._verified_subspec_export(self.output)
+
+    # HE-13: finding codes survive handoff; untrusted narrative and paths do not.
+    def test_he13_review_finding_summary_redacted(self) -> None:
+        review = self.fixture.make_run("run-b", "A4.3", ready=True)
+        agent_pipeline.write_json(review / "review.json", {
+            "verdict": "PASS", "findings": [{"id": "REV-1", "severity": "LOW",
+                "category": "QUALITY", "status": "RESOLVED",
+                "summary": "SECRET_FINDING_NARRATIVE", "file": "/secret/path"}],
+        })
+        self.export(review)
+        handoff = json.loads((self.output / "review-handoff.json").read_text())
+        self.assertEqual("REV-1", handoff["reviewDetails"][0]["findings"][0]["id"])
+        compact = json.dumps(handoff)
+        self.assertNotIn("SECRET_FINDING_NARRATIVE", compact)
+        self.assertNotIn("/secret/path", compact)
+        self.assertEqual("PASS", agent_pipeline._verified_subspec_export(self.output)["status"])
+
+    # HE-09: CLI exposes only explicit opt-in export/verify operations.
+    def test_he09_parser_requires_destination_and_explicit_roster(self) -> None:
+        parser = agent_pipeline.build_parser()
+        parsed = parser.parse_args(["export-subspec", "--spec", self.fixture.SPEC_PATH,
+                                    "--stage", "A4.3", "--run-id", "run-a",
+                                    "--output-dir", str(self.output)])
+        self.assertEqual("export-subspec", parsed.command)
+        with self.assertRaises(SystemExit):
+            with mock.patch("sys.stderr"):
+                parser.parse_args(["export-subspec", "--spec", self.fixture.SPEC_PATH])
+        self.assertEqual("verify-subspec-export", parser.parse_args([
+            "verify-subspec-export", "--bundle-dir", str(self.output)]).command)
+
+
 class AgentPipelineStagePacketTest(unittest.TestCase):
     """Protects bounded A4 stage packets, advisory context and explicit editable scope."""
 

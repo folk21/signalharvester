@@ -135,9 +135,13 @@ The stage roster is an assertion from the developer, **not** parsed from Markdow
 ```bash
 python3 tools/agent-pipeline/agent_pipeline.py summarize-subspec \
   --spec docs/specs/active/subspecs/development-agent-pipeline.md \
-  --stage A4.2a --stage A4.2b \
+  --stage A4 \
   --run-id <first-existing-run-id> --run-id <second-existing-run-id>
 ```
+
+The `--stage` value must match the persisted `stageId` (e.g. `A4`), not the
+implementation-slice label (`A4.2a`, `A4.2b`). These are placeholders only;
+select real run IDs after inspecting their manifests.
 
 Run IDs are selected in the supplied order; they need not imply actual
 chronological or Git ancestry order. A4.3 preserves repeated/blocked runs for
@@ -164,6 +168,66 @@ cryptographic proof of historical immutability. `READY_FOR_MAIN_REVIEW` is
 only a per-run state; neither the report nor a provider smoke probe proves
 promotion, full planned-stage coverage, main-model approval, or developer
 acceptance. This slice does not change `handoff.json` or the A5 lifecycle.
+
+
+## A4.4 private evidence custody and compact sub-spec handoff (verification-pending)
+
+`export-subspec` is an **explicit, single-shot local export** of selected A4.1
+source-bound runs. It validates A4.3 evidence first, then makes a private,
+replayable copy of every regular direct-child run file. This preserves
+`manifest.json`, the exact `stage-packet.json`, worker attempts, checks, review,
+structured deviation claims, logs and any source patch across a later Gradle
+`clean`. Copies are not independently signed historical evidence: file digests
+only detect changes relative to the generated inventory. Neither this command
+nor the export changes reviewer, checks, Git, or developer acceptance state.
+
+**The entire `runs/` subtree is sensitive.** It may contain raw worker logs,
+secrets, source code, commands and provider output. The CLI creates its bundle
+with restrictive local file permissions (private directory, owner-only files).
+Do not upload, publish or attach the private directory or `bundle-index.json`
+without an explicit security review. Only `review-handoff.json` is a compact,
+raw-transcript-free index suitable for *developer inspection* before sharing.
+It preserves explicit failed runs, missing stages, source/plan digests,
+requirement/feature IDs, check/reviewer/deviation metadata and an external
+acceptance flag. It does not include the exact source diff for code review;
+provide that separately by an approved secure channel when needed. A4.4
+has no stage-commit authority: its `promotionEvidence` is not a claimed commit.
+
+Export **before** any `./run_checks.sh` or `./gradlew clean` that may delete
+ignored `build/reports/agent-pipeline/` in the relevant checkout. The output
+must be a **new absolute directory outside the repository and all build trees**,
+with an existing parent directory. For example, substitute your own real run ID
+and its actual `stageId` from `manifest.json`:
+
+```bash
+PRIVATE_OUT="$(mktemp -d)/evidence-a44"  # Only the parent exists; export creates this child.
+python3 tools/agent-pipeline/agent_pipeline.py export-subspec \
+  --spec docs/specs/active/subspecs/development-agent-pipeline.md \
+  --stage A4 \
+  --run-id '<actual-run-id>' \
+  --output-dir "$PRIVATE_OUT"
+python3 tools/agent-pipeline/agent_pipeline.py verify-subspec-export \
+  --bundle-dir "$PRIVATE_OUT"
+python3 tools/agent-pipeline/agent_pipeline.py \
+  --runs-root "$PRIVATE_OUT/runs" summarize-subspec \
+  --spec docs/specs/active/subspecs/development-agent-pipeline.md \
+  --stage A4 --run-id '<actual-run-id>'
+```
+
+The export **refuses** existing destinations, symbolic links, non-regular
+files, oversized or unexpected evidence shapes, missing packet bindings and
+source changes during copying. If verification reports corruption, do not
+reinterpret it as acceptance or reconstruct missing evidence from a summary.
+Old historical runs deleted by a previous `clean` cannot be recovered by
+this feature. Exported raw evidence must remain in private storage and be
+managed under the developer's retention and secret-handling policy.
+
+Focused independent custody verification:
+
+```bash
+python3 tools/agent-pipeline/benchmarks/subspec_handoff_oracle.py \
+  --candidate tools/agent-pipeline/agent_pipeline.py
+```
 
 ## Initialize a run
 
