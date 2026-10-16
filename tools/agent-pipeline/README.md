@@ -123,6 +123,48 @@ bash tools/agent-pipeline/run_stage_pilot.sh
 
 The committed example packet assigns Aider a genuine Python task: improve source-bound multi-attempt `handoff.json` evidence and add deterministic regression coverage. It does **not** specify a replacement diff. The script uses a new run ID, invokes the full Gitleaks/canonical/review/repair cycle, leaves results in a separate `build/agent-worktrees/<run-id>/` scratch branch, and writes `build/reports/agent-pipeline/<run-id>/change.patch`. It never commits, merges, archives or accepts the result. If the run fails, preserve its evidence and escalate rather than rerun the same ID. Actual DeepSeek API access and local Aider/Gitleaks prerequisites remain necessary.
 
+## A4.3 read-only sub-spec evidence summary (verification-pending)
+
+The opt-in `summarize-subspec` command combines **explicitly selected** persisted
+A4.1 stage runs into one in-memory JSON report. It does not discover all runs,
+assign stage order, mutate evidence, execute checks/review, start new workers,
+commit, notify, or grant sub-spec acceptance. The caller must supply the exact
+active sub-spec path, the *ordered expected stage roster*, and selected run IDs.
+The stage roster is an assertion from the developer, **not** parsed from Markdown.
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py summarize-subspec \
+  --spec docs/specs/active/subspecs/development-agent-pipeline.md \
+  --stage A4.2a --stage A4.2b \
+  --run-id <first-existing-run-id> --run-id <second-existing-run-id>
+```
+
+Run IDs are selected in the supplied order; they need not imply actual
+chronological or Git ancestry order. A4.3 preserves repeated/blocked runs for
+the same stage and reports missing expected stages rather than inventing
+completion. All selected runs must have persisted `stagePacket` authority and
+an intact `stage-packet.json`; legacy packetless runs cannot be included. The
+reader requires consistent sub-spec and advisory plan identities, and exposes
+source digest changes across the selected runs. It reuses A4.2a single-run
+integrity validation and A4.2b worker-deviation collection. Present
+`review-attempt.json` is checked for consistency with the latest worker source.
+It rejects malformed or conflicting evidence, including symlinks.
+
+An independent deterministic acceptance oracle can be run before live review:
+
+```bash
+python3 tools/agent-pipeline/benchmarks/subspec_evidence_oracle.py \
+  --candidate tools/agent-pipeline/agent_pipeline.py
+```
+
+The report contains compact stage/run/check/reviewer/deviation metadata and
+current-byte SHA-256 evidence references, without raw logs, model transcripts,
+reviewer responses, or commands. Source digests are **snapshot indices**, not
+cryptographic proof of historical immutability. `READY_FOR_MAIN_REVIEW` is
+only a per-run state; neither the report nor a provider smoke probe proves
+promotion, full planned-stage coverage, main-model approval, or developer
+acceptance. This slice does not change `handoff.json` or the A5 lifecycle.
+
 ## Initialize a run
 
 Prepare a bounded task description in a temporary file:
