@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "stageId": "A4",
+  "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+  "implementationPlanPath": "docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md",
+  "requirementIds": ["AP2", "AP9", "AP10", "AP13", "AP14"],
+  "featureIds": [],
+  "owningPaths": ["tools/agent-pipeline"],
+  "editablePaths": [
+    "tools/agent-pipeline/agent_pipeline.py",
+    "tools/agent-pipeline/tests/test_agent_pipeline.py"
+  ],
+  "contextPaths": ["docs/TESTS.md"],
+  "riskLevel": "LOW",
+  "delegation": "BOUNDED",
+  "task": "Implement only A4.2b read-only structured worker-deviation evidence from the paired implementation plan, scenarios DV-01..DV-20. Add collect_deviation_summaries(run_dir: Path) -> list[dict[str, Any]] that validates optional explicit worker-deviations-attempt-N.json records already present on the controller evidence filesystem. Reuse collect_worker_attempts and manifest/stagePacket identity; source-bind each claim to an actual worker attempt, unchanged changedFiles, SHA-256 and allowed requirement IDs. Enforce canonical filenames, strict integer IDs, exact schema keys, bounded text/array sizes, safe normalized paths, deterministic ordering and no symlink traversal. Distinguish UNREPORTED, REPORTED_NONE and REPORTED. Record worker claims only as WORKER_MODEL_CLAIM, never verified, accepted or allowed to change risk/scope. Project an additive deviations field into summarize_run_evidence preserving its previous fields, checks and review semantics. Do not introduce a deviation producer, transcript extraction, CLI writer, runtime stage transitions, modify write_handoff, reviewer, policy, security scanner, A5, notification, merge, archival or acceptance. Implement realistic deterministic regression fixtures for DV-01..DV-20 and additional no-write/symlink checks. The oracle remains uneditable, independent and read-only. The plan is advisory; explain any necessary divergence without weakening normative AP contracts.",
+  "completionCriteria": [
+    "DV-01..DV-20 each have deterministic positive or fail-closed regression coverage, including malformed and untrusted deviation evidence.",
+    "collect_deviation_summaries returns attempt-ordered presence states and digest-linked compact entries without leaking narrative or raw command data.",
+    "summarize_run_evidence preserves all existing keys and adds only non-authoritative deviations projection.",
+    "No implicit producer, reviewer PASS, risk authorization or developer acceptance is introduced.",
+    "Worker changes remain inside agent_pipeline.py and tests/test_agent_pipeline.py; owning specifications, plan, oracle, policy and canonical check gates remain unchanged."
+  ]
+}
