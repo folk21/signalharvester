@@ -1,4 +1,3 @@
-
 ---
 type: Implementation Guide
 title: Development agent pipeline implementation guidance
@@ -103,3 +102,67 @@ responsible for real Git/worktree verification, Gitleaks and reviewer gates.
 An oracle PASS alone is **not** developer acceptance. A real run must still
 complete required checks and independent review and receive explicit MAIN_MODEL
 and developer checkpoints.
+
+
+## A4.2a — run evidence aggregation pilot (advisory)
+
+Requirements: AP2, AP10, AP13 and AP14. This is a bounded, read-only
+**single-run evidence report** slice. Structured implementation-plan deviations,
+per-sub-spec aggregation, notification delivery, and A5 stage promotion remain
+separate future work. The active specification and Stage Task Packet are normative.
+
+### Proposed approach
+
+- Add a pure `summarize_run_evidence(run_dir: Path) -> dict[str, Any]` helper in
+  `tools/agent-pipeline/agent_pipeline.py`. It reads persisted JSON evidence; it
+  must not invoke Git, network, policy changes, `update_status()`, reviewer or
+  worker execution, or modify any evidence file.
+- Reuse the existing `collect_worker_attempts()` for validated, numeric-ordered
+  worker history. Validate that every worker attempt's task digest matches the
+  manifest. Do not equate check attempt numbers with worker attempt numbers.
+- Include `schemaVersion: 1`, `runId`, `stage`, `baseCommit`, `taskSha256`,
+  `policySha256`, authoritative `state`, `workerAttempts`, bounded `checks`,
+  a review-presence/verdict summary, `evidenceDigests`, and
+  `requiresExternalAcceptance: true`. The digest map uses the exact filenames
+  for **existing** `manifest.json`, `worker.json`, `checks.json`,
+  `review.json`, `status.json` only. Do not invent absent evidence.
+- `checks` must be deterministic, with each persisted name, status, required
+  flag and attempt number; do not copy the command array or check logs.
+  Reject conflicts between latest `checks.json` records and `status.json`
+  check summaries. `READY_FOR_MAIN_REVIEW` must fail closed unless all
+  manifest-required checks and independent review explicitly passed.
+- For terminal `BLOCKED`/`ESCALATED` or pre-worker states, preserve honest
+  missing evidence: absent reviewer is `{present: false, verdict: null}`;
+  missing required checks never become PASS by default. No `accepted`,
+  `approved`, or implicit merge/archival status may appear.
+- Validate schema, run/stage identity, JSON object types, integer attempts
+  without treating `bool` as integer, and SHA-256 integrity of referenced
+  current evidence files. This report is a snapshot index, **not** a historical
+  tamper-proof trust anchor. Avoid exposing raw model logs, check commands,
+  preflight records, authentication material, or reviewer raw responses.
+- Keep the existing `write_handoff()` and lifecycle behavior unchanged in this
+  slice. The report can be integrated into a later A4.2b handoff once
+  its contract and full source-bound checks have been accepted.
+
+### Independent scenarios (EA-01…EA-12)
+
+| ID | Fixture/action | Required observation |
+|---|---|---|
+| EA-01 | Blocked run with one worker and failing canonical check | Report is produced with correct run/base/blocked state and required checks; never claims acceptance |
+| EA-02 | Ready run with Gitleaks, canonical and independent review PASS | Exact check/reviewer summaries, still requires external acceptance |
+| EA-03 | Blocked run without `review.json` | Review is explicitly absent, not an implied PASS; no invented review digest |
+| EA-04 | Snapshots 1, 2, 3 and authoritative latest worker 3 | Three numeric-ordered `workerAttempts` with digest-linked snapshots |
+| EA-05 | Pre-worker run with no `worker.json` or snapshots | Empty worker history and no invented worker digest |
+| EA-06 | Malformed or array-shaped required JSON | Fail closed rather than returning a success-shaped report |
+| EA-07 | Latest worker conflicts with its snapshot | Fail closed, using the existing worker evidence validator |
+| EA-08 | Worker or historical attempt `taskSha256` disagrees with manifest | Reject source-unbound evidence |
+| EA-09 | Latest check record disagrees with `status.json.checks` | Reject inconsistent status/check evidence |
+| EA-10 | READY state lacks a required PASS check or independent PASS review | Reject unsupported readiness |
+| EA-11 | Evidence contains command, raw log and preflight/transcript sentinel strings | None of those raw fields/values appear in summary |
+| EA-12 | One existing evidence file changes bytes after report creation | Published `evidenceDigests` no longer matches file; report itself does not imply historical immutability |
+
+The independent oracle at `tools/agent-pipeline/benchmarks/run_evidence_oracle.py`
+checks the public `summarize_run_evidence` helper with deterministic temporary
+fixtures. It is non-editable to the worker but can be visible via repository
+context; **oracle PASS is not an unseen benchmark or developer acceptance**.
+The full canonical gate and independent reviewer remain mandatory.
