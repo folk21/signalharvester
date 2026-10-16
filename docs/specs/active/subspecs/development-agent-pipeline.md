@@ -39,7 +39,11 @@ cleanup boundaries.
   provider smoke probe are verification-pending under A2.3; neither substitutes
   for a source-bound reviewer verdict or developer acceptance.
 
-**Still planned:** sub-spec evidence aggregation, guarded feature-branch
+**A4.3 (verification-pending):** read-only aggregation of explicitly selected
+stage runs with an explicit expected stage roster, strict source-packet binding,
+visible missing stages, preserved blocked history, and no acceptance authority.
+
+**Still planned:** complete promoted-stage/sub-spec handoff, guarded feature-branch
 promotion (A5), notifications (A6),
 and overall pipeline v1 acceptance (A7). Historical failed pilots, including
 Aider edit-format/no-diff failures, remain evidence rather than acceptance.
@@ -237,6 +241,26 @@ The developer initiates `MAIN_MODEL` verification using current repository
 sources and bound evidence. Its recommendation is not acceptance. Only
 explicit developer acceptance permits synchronized current-state documentation
 and the **paired move** of the sub-spec and its plan to the archive.
+
+### Bounded A4.3 sub-spec evidence aggregation
+
+A4.3 introduces a read-only, in-memory summary over *explicitly supplied* run
+IDs and ordered expected stage IDs. Selection order is not certified temporal
+order, stage promotion, or a complete sub-spec implementation plan. Each run
+must carry an A4.1 source-bound stage packet, with consistent normative
+specification and advisory companion identities, validated packet bytes,
+per-run evidence digests, checks and independent reviewer state. The summary
+must expose missing expected stages, multiple attempts including failures,
+revision changes of the spec and plan, and explicit absent review/deviation
+claims. Malformed, conflicting, cross-spec or symlink evidence must fail
+closed. Snapshot digests must not be described as historical immutability.
+
+No emitted summary may assert developer acceptance, authorize commits, schedule
+stages, merge branches, archive documents, or turn worker-reported deviations
+into verified facts. The A4.3 reader may be exposed as an explicit CLI command,
+but must not change single-run `handoff.json` behavior, reviewer policy,
+security checks, A4.2b report semantics, or A5 progression. Full sub-spec
+handoff and final decision remain separate gates.
 
 ## Requirements
 

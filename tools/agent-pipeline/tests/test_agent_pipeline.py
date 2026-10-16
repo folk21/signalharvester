@@ -2168,6 +2168,215 @@ class RunDeviationEvidenceTest(unittest.TestCase):
             self.collect()
 
 
+
+class SubspecEvidenceSummaryTest(unittest.TestCase):
+    """Protects A4.3 read-only, externally gated multi-run stage evidence (SE-01..SE-12)."""
+
+    SPEC_PATH = "docs/specs/active/subspecs/development-agent-pipeline.md"
+    PLAN_PATH = "docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md"
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+
+    def make_run(self, run_id: str, stage: str, *, ready: bool = False) -> Path:
+        run_dir = self.base / run_id
+        run_dir.mkdir()
+        packet = {
+            "schemaVersion": 1, "stageId": stage, "specPath": self.SPEC_PATH,
+            "implementationPlanPath": self.PLAN_PATH,
+            "requirementIds": ["AP10", "AP13"], "featureIds": [],
+        }
+        agent_pipeline.write_json(run_dir / "stage-packet.json", packet)
+        manifest = {
+            "schemaVersion": 1, "runId": run_id, "stage": stage, "specPath": self.SPEC_PATH,
+            "taskSha256": "1" * 64, "policy": {"sha256": "2" * 64},
+            "repository": {"baseCommit": "3" * 40}, "requiredChecks": ["canonical"],
+            "stagePacket": {
+                "sha256": agent_pipeline.sha256_file(run_dir / "stage-packet.json"),
+                "specPath": self.SPEC_PATH, "planPath": self.PLAN_PATH,
+                "contextSha256": {self.SPEC_PATH: "a" * 64, self.PLAN_PATH: "b" * 64},
+                "requirementIds": ["AP10", "AP13"], "featureIds": [],
+            },
+        }
+        worker = {
+            "schemaVersion": 1, "attempt": 1, "status": "PASS", "taskSha256": "1" * 64,
+            "changeSha256": "4" * 64, "changedFiles": ["tools/agent-pipeline/agent_pipeline.py"],
+            "model": "synthetic", "failureReason": None, "logSha256": "5" * 64,
+            "rawTranscript": "raw_transcript_secret",
+        }
+        check_status = "PASS" if ready else "FAIL"
+        checks = [{
+            "name": "canonical", "status": check_status, "attempt": 1, "required": True,
+            "command": ["raw_command_secret"],
+        }]
+        status = {
+            "schemaVersion": 1, "runId": run_id, "stage": stage,
+            "state": "READY_FOR_MAIN_REVIEW" if ready else "BLOCKED",
+            "checks": {"canonical": {"status": check_status, "attempt": 1, "required": True}},
+            "review": {"present": ready, "verdict": "PASS" if ready else None},
+        }
+        for name, record in (("manifest", manifest), ("worker", worker),
+                             ("checks", {"schemaVersion": 1, "checks": checks}),
+                             ("status", status)):
+            agent_pipeline.write_json(run_dir / f"{name}.json", record)
+        if ready:
+            agent_pipeline.write_json(run_dir / "review.json", {"verdict": "PASS", "findings": []})
+        return run_dir
+
+    def summary(self, dirs: list[Path], stages: list[str]) -> dict:
+        return agent_pipeline.summarize_subspec_evidence(
+            dirs, spec_path=self.SPEC_PATH, expected_stages=stages
+        )
+
+    # SE-01: a complete supplied roster still requires external acceptance.
+    def test_se01_ready_roster_is_not_accepted(self) -> None:
+        a = self.make_run("run-a", "A4.3", ready=True)
+        b = self.make_run("run-b", "A4.4", ready=True)
+        result = self.summary([a, b], ["A4.3", "A4.4"])
+        self.assertEqual([], result["missingStages"])
+        self.assertTrue(result["requiresExternalAcceptance"])
+        self.assertNotIn("accepted", json.dumps(result).lower())
+        self.assertEqual([1, 1], [x["readyRunCount"] for x in result["stages"]])
+
+    # SE-02: absent expected stages remain explicit gaps, not inferred PASS.
+    def test_se02_missing_stage_is_visible(self) -> None:
+        a = self.make_run("run-a", "A4.3", ready=True)
+        result = self.summary([a], ["A4.3", "A4.4"])
+        self.assertEqual(["A4.4"], result["missingStages"])
+        self.assertEqual([], result["stages"][1]["runs"])
+
+    # SE-03: failed earlier runs remain visible beside later ready runs.
+    def test_se03_preserves_blocked_run_and_selection_order(self) -> None:
+        a = self.make_run("run-a", "A4.3")
+        b = self.make_run("run-b", "A4.3", ready=True)
+        result = self.summary([a, b], ["A4.3"])["stages"][0]
+        self.assertEqual(["BLOCKED", "READY_FOR_MAIN_REVIEW"],
+                         [x["state"] for x in result["runs"]])
+        self.assertEqual([1, 2], [x["selectionOrder"] for x in result["runs"]])
+        self.assertEqual(1, result["readyRunCount"])
+
+    # SE-04: a cross-sub-spec stage run cannot contaminate the selected report.
+    def test_se04_foreign_spec_is_rejected(self) -> None:
+        path = self.make_run("run-a", "A4.3")
+        manifest = agent_pipeline.read_json(path / "manifest.json")
+        manifest["specPath"] = "docs/specs/active/subspecs/other.md"
+        agent_pipeline.write_json(path / "manifest.json", manifest)
+        with self.assertRaises(ValueError):
+            self.summary([path], ["A4.3"])
+
+    # SE-05: duplicate run identity and a non-roster stage fail closed.
+    def test_se05_duplicate_or_foreign_stage_rejected(self) -> None:
+        path = self.make_run("run-a", "A4.3")
+        with self.assertRaises(ValueError):
+            self.summary([path, path], ["A4.3"])
+        with self.assertRaises(ValueError):
+            self.summary([path], ["A4.4"])
+
+    # SE-06: stage packet bytes are checked against their recorded digest.
+    def test_se06_packet_byte_drift_rejected(self) -> None:
+        path = self.make_run("run-a", "A4.3")
+        with (path / "stage-packet.json").open("a", encoding="utf-8") as out:
+            out.write("\n")
+        with self.assertRaises(ValueError):
+            self.summary([path], ["A4.3"])
+
+    # SE-07: stage packet and authoritative manifest must describe the same stage.
+    def test_se07_packet_stage_conflict_rejected(self) -> None:
+        path = self.make_run("run-a", "A4.3")
+        packet = agent_pipeline.read_json(path / "stage-packet.json")
+        packet["stageId"] = "A4.4"
+        agent_pipeline.write_json(path / "stage-packet.json", packet)
+        manifest = agent_pipeline.read_json(path / "manifest.json")
+        manifest["stagePacket"]["sha256"] = agent_pipeline.sha256_file(path / "stage-packet.json")
+        agent_pipeline.write_json(path / "manifest.json", manifest)
+        with self.assertRaises(ValueError):
+            self.summary([path], ["A4.3"])
+
+    # SE-08: mixing unrelated advisory-plan identity must stop the report.
+    def test_se08_plan_mismatch_rejected(self) -> None:
+        a = self.make_run("run-a", "A4.3")
+        b = self.make_run("run-b", "A4.4")
+        manifest = agent_pipeline.read_json(b / "manifest.json")
+        manifest["stagePacket"]["planPath"] = None
+        agent_pipeline.write_json(b / "manifest.json", manifest)
+        with self.assertRaises(ValueError):
+            self.summary([a, b], ["A4.3", "A4.4"])
+
+    # SE-09: distinct source byte revisions are visible rather than silently conflated.
+    def test_se09_source_versions_visible(self) -> None:
+        a = self.make_run("run-a", "A4.3")
+        b = self.make_run("run-b", "A4.4")
+        manifest = agent_pipeline.read_json(b / "manifest.json")
+        manifest["stagePacket"]["contextSha256"][self.SPEC_PATH] = "c" * 64
+        agent_pipeline.write_json(b / "manifest.json", manifest)
+        self.assertEqual(["a" * 64, "c" * 64],
+                         self.summary([a, b], ["A4.3", "A4.4"])["specSourceDigests"])
+
+    # SE-10: no raw worker transcripts or check commands appear in the report.
+    def test_se10_raw_transcript_excluded(self) -> None:
+        path = self.make_run("run-a", "A4.3")
+        report = json.dumps(self.summary([path], ["A4.3"]))
+        self.assertNotIn("raw_transcript_secret", report)
+        self.assertNotIn("raw_command_secret", report)
+
+    # SE-11: aggregation must not modify any persisted run evidence.
+    def test_se11_no_write(self) -> None:
+        path = self.make_run("run-a", "A4.3")
+        before = {x.name: x.read_bytes() for x in path.iterdir()}
+        self.summary([path], ["A4.3"])
+        self.assertEqual(before, {x.name: x.read_bytes() for x in path.iterdir()})
+
+    # SE-12: symlinked evidence and invalid roster fail closed.
+    def test_se12_symlink_and_roster_rejected(self) -> None:
+        path = self.make_run("run-a", "A4.3")
+        with self.assertRaises(ValueError):
+            self.summary([path], ["A4.3", "A4.3"])
+        with self.assertRaises(ValueError):
+            self.summary([], ["A4.3"])
+        (path / "stage-packet.json").rename(path / "packet-real.json")
+        (path / "stage-packet.json").symlink_to("packet-real.json")
+        with self.assertRaises(ValueError):
+            self.summary([path], ["A4.3"])
+
+
+    # SE-13: provider-backed review evidence must target the current source state.
+    def test_se13_reviewer_source_drift_rejected(self) -> None:
+        path = self.make_run("run-a", "A4.3", ready=True)
+        agent_pipeline.write_json(path / "review-attempt.json", {
+            "status": "PASS", "workerSha256": "0" * 64,
+        })
+        with self.assertRaises(ValueError):
+            self.summary([path], ["A4.3"])
+        agent_pipeline.write_json(path / "review-attempt.json", {
+            "status": "PASS", "workerSha256": "4" * 64,
+        })
+        report = self.summary([path], ["A4.3"])
+        self.assertEqual(agent_pipeline.sha256_file(path / "review-attempt.json"),
+                         report["stages"][0]["runs"][0]["reviewAttemptSha256"])
+
+    # SE-14: a ready run cannot omit the authoritative worker source evidence.
+    def test_se14_ready_requires_worker(self) -> None:
+        path = self.make_run("run-a", "A4.3", ready=True)
+        (path / "worker.json").unlink()
+        with self.assertRaises(ValueError):
+            self.summary([path], ["A4.3"])
+
+    # SE-15: CLI arguments explicitly identify the planned stages and selected runs.
+    def test_se15_command_parser_requires_explicit_roster(self) -> None:
+        parser = agent_pipeline.build_parser()
+        args = parser.parse_args([
+            "summarize-subspec", "--spec", self.SPEC_PATH,
+            "--stage", "A4.3", "--stage", "A4.4", "--run-id", "run-a",
+        ])
+        self.assertEqual(["A4.3", "A4.4"], args.stage)
+        self.assertEqual(["run-a"], args.run_id)
+        with self.assertRaises(SystemExit):
+            with mock.patch("sys.stderr"):
+                parser.parse_args(["summarize-subspec", "--spec", self.SPEC_PATH])
+
+
 class AgentPipelineStagePacketTest(unittest.TestCase):
     """Protects bounded A4 stage packets, advisory context and explicit editable scope."""
 

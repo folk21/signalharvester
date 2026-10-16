@@ -513,3 +513,34 @@ patch; authorize it separately after the source state and design are checked.
 No part of this blueprint authorizes unreviewed changes to
 `pipeline-policy.json`, reviewer behavior, canonical gates, model provider or
 repository lifecycle.
+
+## A4.3 — explicitly selected sub-spec evidence summary (advisory)
+
+**Normative authority:** AP2, AP9, AP10, AP13 and AP14 of
+`development-agent-pipeline.md`. Do not infer acceptance from a collector.
+
+A first bounded implementation should use `summarize_run_evidence()` as the
+per-run evidence validator and add a pure `summarize_subspec_evidence()` over
+explicit run directories. The caller supplies a reviewed stage roster, in
+order; the collector must not parse Markdown into unapproved stage authority,
+scan directories to guess runs, perform Git operations, or modify evidence.
+
+Require A4.1 `stagePacket` metadata and digest-matching `stage-packet.json`
+for every run. Reject mixed normative `specPath` or companion `planPath`,
+unknown or duplicate stages, repeated run IDs, inconsistent packet identity,
+malformed/currently conflicting review/check/worker/deviation evidence, and
+symlinked evidence. Preserve historical blocked attempts when a later
+separately selected run is ready. Carry per-run compact check/review and
+source-bound worker-deviation summaries, current-byte evidence digests,
+requirement/feature IDs, and stage-packet/source digests. When the same
+specification or advisory plan changed bytes between runs, expose all observed
+versions; do not silently normalize them to the latest bytes.
+
+A bounded opt-in CLI can print the JSON index, without persisting it. Prefer
+focused deterministic cases SE-01..SE-15 and an independent read-only oracle
+for missing/duplicate stages,
+blocked history, cross-spec injection, packet drift, plan mismatch, source
+versions, sensitive-data omission, read-only behavior and symlink rejection.
+Future A5 stage commits, autonomous sequencing, notifications and paired
+archival are **not** authorized by this slice. The independent reviewer, a
+source-bound run verdict and explicit developer acceptance remain separate.
