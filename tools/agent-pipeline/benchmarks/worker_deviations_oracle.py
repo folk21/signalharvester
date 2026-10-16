@@ -207,11 +207,17 @@ class DeviationContractOracle(unittest.TestCase):
         self.rejected()
 
     def test_dv11_duplicate_or_disordered_ids_rejected(self) -> None:
-        for entries in ([self.entry(1), self.entry(1)],
-                        [self.entry(2), self.entry(1)]):
-            with self.subTest(ids=[x["id"] for x in entries]):
-                self.put(payload=self.record(deviations=entries))
-                self.rejected()
+        self.put(payload=self.record(deviations=[self.entry(1), self.entry(1)]))
+        self.rejected()
+        second_path = "tools/agent-pipeline/tests/test_agent_pipeline.py"
+        worker = self.worker(1)
+        worker["changedFiles"].append(second_path)
+        write_json(self.run / "worker.json", worker)
+        write_json(self.run / "worker-attempt-1.json", worker)
+        second = self.entry(1)
+        second["affectedPaths"] = [second_path]
+        self.put(payload=self.record(deviations=[self.entry(2), second]))
+        self.rejected()
 
     def test_dv12_unknown_enum_or_schema_keys_rejected(self) -> None:
         mutations = (
@@ -319,6 +325,61 @@ class DeviationContractOracle(unittest.TestCase):
         before = {path.name: sha256_file(path) for path in self.run.glob("*.json")}
         self.assertEqual(self.collect(), self.collect())
         self.assertEqual(before, {path.name: sha256_file(path) for path in self.run.glob("*.json")})
+
+
+    def test_extra_distinct_claims_may_share_one_changed_path(self) -> None:
+        self.put(payload=self.record(deviations=[self.entry(1), self.entry(2)]))
+        self.assertEqual(2, self.collect()[0]["count"])
+
+    def test_extra_malformed_matching_digest_fails_closed(self) -> None:
+        for field, malformed in (("taskSha256", "Z" * 64),
+                                 ("changeSha256", "A" * 64)):
+            with self.subTest(field=field):
+                original_manifest = copy.deepcopy(self.manifest)
+                worker = self.worker(1)
+                record = self.record()
+                record[field] = malformed
+                if field == "taskSha256":
+                    self.manifest[field] = malformed
+                    write_json(self.run / "manifest.json", self.manifest)
+                    worker[field] = malformed
+                else:
+                    worker[field] = malformed
+                write_json(self.run / "worker.json", worker)
+                write_json(self.run / "worker-attempt-1.json", worker)
+                self.put(payload=record)
+                self.rejected()
+                self.manifest = original_manifest
+                self.persist_baseline()
+        worker = self.worker(1)
+        worker["taskSha256"] = "f" * 64
+        write_json(self.run / "worker.json", worker)
+        write_json(self.run / "worker-attempt-1.json", worker)
+        self.put(payload=self.record())
+        self.rejected()
+
+    def test_extra_noncanonical_suffix_is_rejected(self) -> None:
+        self.put()
+        (self.run / "worker-deviations-attempt-1.json.bak").write_text("{}\n", encoding="utf-8")
+        self.rejected()
+
+    def test_extra_nonstring_identity_and_enums_fail_closed(self) -> None:
+        for name in ("runId", "stage"):
+            with self.subTest(field=name):
+                original = self.manifest[name]
+                self.manifest[name] = " "
+                write_json(self.run / "manifest.json", self.manifest)
+                payload = self.record()
+                self.put(payload=payload)
+                self.rejected()
+                self.manifest[name] = original
+                write_json(self.run / "manifest.json", self.manifest)
+        for name in ("kind", "riskImpact"):
+            with self.subTest(field=name):
+                entry = self.entry()
+                entry[name] = ["INVALID"]
+                self.put(payload=self.record(deviations=[entry]))
+                self.rejected()
 
 
 def main() -> int:

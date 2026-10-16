@@ -1664,6 +1664,373 @@ class RunEvidenceSummaryTest(unittest.TestCase):
         self.reject()
 
 
+class RunDeviationEvidenceTest(unittest.TestCase):
+    """Protects A4.2b read-only structured worker-deviation evidence (DV-01..DV-20)."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.run_dir = Path(self.temp.name) / "run"
+        self.run_dir.mkdir()
+        self.manifest = {
+            "schemaVersion": 1,
+            "runId": "run-DV",
+            "stage": "A4",
+            "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+            "taskSha256": "1" * 64,
+            "policy": {"sha256": "2" * 64},
+            "repository": {"baseCommit": "3" * 40},
+            "requiredChecks": ["gitleaks", "canonical"],
+            "stagePacket": {"requirementIds": ["AP9", "AP10"]},
+        }
+        self.worker = {
+            "schemaVersion": 1,
+            "attempt": 1,
+            "status": "PASS",
+            "failureReason": None,
+            "taskSha256": "1" * 64,
+            "model": "worker",
+            "changeSha256": "4" * 64,
+            "changedFiles": ["tools/agent-pipeline/agent_pipeline.py"],
+            "logSha256": "5" * 64,
+        }
+        agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+
+    def write_worker(self, attempt: int, **overrides: object) -> dict:
+        record = dict(self.worker, attempt=attempt)
+        record.update(overrides)
+        return record
+
+    def write_deviation(self, attempt: int, payload: dict) -> None:
+        agent_pipeline.write_json(self.run_dir / f"worker-deviations-attempt-{attempt}.json", payload)
+
+    def valid_payload(self, attempt: int = 1, **overrides: object) -> dict:
+        payload = {
+            "schemaVersion": 1,
+            "runId": "run-DV",
+            "stage": "A4",
+            "attempt": attempt,
+            "taskSha256": "1" * 64,
+            "changeSha256": "4" * 64,
+            "reportedBy": "WORKER_MODEL_CLAIM",
+            "deviations": [{
+                "id": "DEV-001",
+                "kind": "DESIGN_ALTERNATIVE",
+                "requirementIds": ["AP9"],
+                "summary": "Used an existing reader instead of a second parser",
+                "rationale": "Avoided duplicate input validation",
+                "testImpact": "Added a malformed-record regression test",
+                "affectedPaths": ["tools/agent-pipeline/agent_pipeline.py"],
+                "riskImpact": "NONE_IDENTIFIED",
+            }],
+        }
+        payload.update(overrides)
+        return payload
+
+    def collect(self) -> list[dict]:
+        return agent_pipeline.collect_deviation_summaries(self.run_dir)
+
+    def reject(self) -> None:
+        with self.assertRaises((ValueError, TypeError, KeyError, json.JSONDecodeError)):
+            self.collect()
+
+    # DV-01: no deviation file yields UNREPORTED without an invented digest.
+    def test_dv01_unreported(self) -> None:
+        result = self.collect()
+        self.assertEqual([{"attempt": 1, "state": "UNREPORTED"}], result)
+
+    # DV-02: an explicit empty list is REPORTED_NONE with a digest.
+    def test_dv02_reported_none(self) -> None:
+        self.write_deviation(1, self.valid_payload(deviations=[]))
+        result = self.collect()
+        self.assertEqual("REPORTED_NONE", result[0]["state"])
+        self.assertEqual("WORKER_MODEL_CLAIM", result[0]["source"])
+        self.assertEqual(0, result[0]["count"])
+        self.assertEqual(
+            agent_pipeline.sha256_file(self.run_dir / "worker-deviations-attempt-1.json"),
+            result[0]["evidenceSha256"],
+        )
+
+    # DV-03: a bounded design alternative is REPORTED with safe categorical metadata only.
+    def test_dv03_reported_bounded(self) -> None:
+        self.write_deviation(1, self.valid_payload())
+        result = self.collect()
+        self.assertEqual("REPORTED", result[0]["state"])
+        self.assertEqual(1, result[0]["count"])
+        self.assertEqual(
+            {"id": "DEV-001", "kind": "DESIGN_ALTERNATIVE", "riskImpact": "NONE_IDENTIFIED"},
+            result[0]["entries"][0],
+        )
+        self.assertNotIn("summary", json.dumps(result[0]))
+
+    # DV-04: multiple attempts are ordered numerically with UNREPORTED gaps preserved.
+    def test_dv04_numeric_ordering_with_gap(self) -> None:
+        for attempt in (1, 2, 3):
+            agent_pipeline.write_json(self.run_dir / f"worker-attempt-{attempt}.json", self.write_worker(attempt))
+        self.worker["attempt"] = 3
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        self.write_deviation(1, self.valid_payload(attempt=1))
+        self.write_deviation(3, self.valid_payload(attempt=3, changeSha256="4" * 64))
+        result = self.collect()
+        self.assertEqual([1, 2, 3], [entry["attempt"] for entry in result])
+        self.assertEqual(["REPORTED", "UNREPORTED", "REPORTED"], [entry["state"] for entry in result])
+
+    # DV-05: noncanonical filenames are rejected.
+    def test_dv05_noncanonical_filename(self) -> None:
+        for name in ("worker-deviations-attempt-01.json", "worker-deviations-attempt-0.json"):
+            with self.subTest(name=name):
+                for existing in self.run_dir.glob("worker-deviations-attempt-*.json"):
+                    existing.unlink()
+                (self.run_dir / name).write_text("{}\n", encoding="utf-8")
+                self.reject()
+
+    # DV-06: payload attempt identifiers must be strict integers matching the filename.
+    def test_dv06_mismatched_payload_attempt(self) -> None:
+        for value in (2, True, "1", 1.0):
+            with self.subTest(value=value):
+                self.write_deviation(1, self.valid_payload(attempt=value))
+                self.reject()
+
+    # DV-07: a deviation file for an absent worker attempt is rejected.
+    def test_dv07_orphan_deviation(self) -> None:
+        self.write_deviation(2, self.valid_payload(attempt=2))
+        self.reject()
+
+    # DV-08: malformed JSON or array-shaped payloads fail closed.
+    def test_dv08_malformed_payload(self) -> None:
+        for payload in ("[]\n", "{broken"):
+            with self.subTest(payload=payload):
+                (self.run_dir / "worker-deviations-attempt-1.json").write_text(payload, encoding="utf-8")
+                self.reject()
+
+    # DV-09: mismatched runId, stage or task digest fails closed.
+    def test_dv09_identity_mismatch(self) -> None:
+        for key, value in (("runId", "other"), ("stage", "A5"), ("taskSha256", "9" * 64)):
+            with self.subTest(key=key):
+                self.write_deviation(1, self.valid_payload(**{key: value}))
+                self.reject()
+
+    # DV-10: a mismatched changeSha256 fails closed.
+    def test_dv10_change_sha_mismatch(self) -> None:
+        self.write_deviation(1, self.valid_payload(changeSha256="9" * 64))
+        self.reject()
+
+    # DV-11: duplicate or unsorted deviation IDs are rejected.
+    def test_dv11_duplicate_ids(self) -> None:
+        entry = self.valid_payload()["deviations"][0]
+        self.write_deviation(1, self.valid_payload(deviations=[entry, dict(entry)]))
+        self.reject()
+
+    # DV-12: unknown kind, riskImpact or extra keys are rejected.
+    def test_dv12_unsupported_schema(self) -> None:
+        for key, value in (("kind", "UNKNOWN"), ("riskImpact", "UNKNOWN"), ("extra", "x")):
+            with self.subTest(key=key):
+                entry = dict(self.valid_payload()["deviations"][0])
+                entry[key] = value
+                self.write_deviation(1, self.valid_payload(deviations=[entry]))
+                self.reject()
+
+    # DV-13: absolute, traversal, duplicate or unchanged affectedPaths are rejected.
+    def test_dv13_unsupported_scope_paths(self) -> None:
+        for path in ("/etc/passwd", "../secret", "docs/other.md"):
+            with self.subTest(path=path):
+                entry = dict(self.valid_payload()["deviations"][0])
+                entry["affectedPaths"] = [path]
+                self.write_deviation(1, self.valid_payload(deviations=[entry]))
+                self.reject()
+        entry = dict(self.valid_payload()["deviations"][0])
+        entry["affectedPaths"] = ["tools/agent-pipeline/agent_pipeline.py",
+                                  "tools/agent-pipeline/agent_pipeline.py"]
+        self.write_deviation(1, self.valid_payload(deviations=[entry]))
+        self.reject()
+
+    # DV-14: requirementIds outside the stage packet list are rejected.
+    def test_dv14_unauthorized_requirement(self) -> None:
+        entry = dict(self.valid_payload()["deviations"][0])
+        entry["requirementIds"] = ["AP999"]
+        self.write_deviation(1, self.valid_payload(deviations=[entry]))
+        self.reject()
+
+    # DV-15: excess records or overlong text are rejected.
+    def test_dv15_bounded_size_violation(self) -> None:
+        entry = self.valid_payload()["deviations"][0]
+        self.write_deviation(1, self.valid_payload(deviations=[entry] * 21))
+        self.reject()
+        long_entry = dict(entry)
+        long_entry["summary"] = "x" * 501
+        self.write_deviation(1, self.valid_payload(deviations=[long_entry]))
+        self.reject()
+
+    # DV-16: raw narrative and command-like input never appear in the compact output.
+    def test_dv16_no_raw_text_in_output(self) -> None:
+        entry = dict(self.valid_payload()["deviations"][0])
+        entry["rationale"] = "raw_command_secret"
+        entry["testImpact"] = "raw_log_secret"
+        self.write_deviation(1, self.valid_payload(deviations=[entry]))
+        result = json.dumps(self.collect())
+        self.assertNotIn("raw_command_secret", result)
+        self.assertNotIn("raw_log_secret", result)
+
+    # DV-17: the published digest binds current bytes, not a historical trust anchor.
+    def test_dv17_digest_binds_current_bytes(self) -> None:
+        self.write_deviation(1, self.valid_payload())
+        published = self.collect()[0]["evidenceSha256"]
+        self.write_deviation(1, self.valid_payload(deviations=[]))
+        self.assertNotEqual(
+            published,
+            agent_pipeline.sha256_file(self.run_dir / "worker-deviations-attempt-1.json"),
+        )
+
+    # DV-18: a deviation record without a valid worker history fails closed.
+    def test_dv18_missing_worker_history(self) -> None:
+        (self.run_dir / "worker.json").unlink()
+        self.write_deviation(1, self.valid_payload())
+        self.reject()
+
+    # DV-19: a legacy worker without a stage packet can report an empty requirement list.
+    def test_dv19_legacy_worker_without_stage_packet(self) -> None:
+        self.manifest.pop("stagePacket")
+        agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+        entry = dict(self.valid_payload()["deviations"][0])
+        entry["requirementIds"] = []
+        self.write_deviation(1, self.valid_payload(deviations=[entry]))
+        result = self.collect()
+        self.assertEqual("REPORTED", result[0]["state"])
+        self.assertEqual([], result[0]["entries"][0].get("requirementIds", []))
+
+    # DV-20: REQUIRES_DECISION is visible but never accepted or promoted.
+    def test_dv20_requires_decision_visible_not_accepted(self) -> None:
+        entry = dict(self.valid_payload()["deviations"][0])
+        entry["riskImpact"] = "REQUIRES_DECISION"
+        self.write_deviation(1, self.valid_payload(deviations=[entry]))
+        result = self.collect()
+        self.assertEqual("REQUIRES_DECISION", result[0]["entries"][0]["riskImpact"])
+        self.assertNotIn("accepted", json.dumps(result))
+        self.assertNotIn("approved", json.dumps(result))
+
+    # No writes to run files and no symlink traversal.
+    def test_no_writes_and_no_symlink_traversal(self) -> None:
+        self.write_deviation(1, self.valid_payload())
+        before = {path.name: agent_pipeline.sha256_file(path)
+                  for path in self.run_dir.iterdir() if path.is_file()}
+        self.collect()
+        after = {path.name: agent_pipeline.sha256_file(path)
+                 for path in self.run_dir.iterdir() if path.is_file()}
+        self.assertEqual(before, after)
+        outside = Path(self.temp.name) / "outside.json"
+        outside.write_text(json.dumps(self.valid_payload()), encoding="utf-8")
+        link = self.run_dir / "worker-deviations-attempt-2.json"
+        link.symlink_to(outside)
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-2.json", self.write_worker(2))
+        self.worker["attempt"] = 2
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        self.reject()
+
+    # summarize_run_evidence preserves existing keys and adds only a non-authoritative projection.
+    def test_summary_projection_is_additive_and_non_authoritative(self) -> None:
+        self.write_deviation(1, self.valid_payload())
+        self.manifest["requiredChecks"] = ["canonical"]
+        agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+        agent_pipeline.write_json(self.run_dir / "checks.json", {"schemaVersion": 1, "checks": [
+            {"name": "canonical", "attempt": 1, "status": "FAIL", "required": True},
+        ]})
+        agent_pipeline.write_json(self.run_dir / "status.json", {
+            "schemaVersion": 1, "runId": "run-DV", "stage": "A4", "state": "BLOCKED",
+            "checks": {"canonical": {"attempt": 1, "status": "FAIL", "required": True}},
+            "worker": {"present": True, "required": True, "status": "PASS"},
+            "review": {"present": False, "verdict": None, "openFindingCount": 0},
+            "mainReviewRequiredBeforeAcceptance": True,
+        })
+        report = agent_pipeline.summarize_run_evidence(self.run_dir)
+        for key in ("schemaVersion", "runId", "stage", "baseCommit", "taskSha256",
+                    "policySha256", "state", "workerAttempts", "checks", "review",
+                    "evidenceDigests", "requiresExternalAcceptance"):
+            self.assertIn(key, report)
+        self.assertEqual("REPORTED", report["deviations"][0]["state"])
+        self.assertTrue(report["requiresExternalAcceptance"])
+        self.assertNotIn("accepted", json.dumps(report))
+
+
+    def test_recovery_unsorted_ids_with_distinct_affected_paths(self) -> None:
+        second_path = "tools/agent-pipeline/tests/test_agent_pipeline.py"
+        self.worker["changedFiles"].append(second_path)
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        first = dict(self.valid_payload()["deviations"][0], id="DEV-002")
+        second = dict(first, id="DEV-001", affectedPaths=[second_path])
+        self.write_deviation(1, self.valid_payload(deviations=[first, second]))
+        with self.assertRaisesRegex(ValueError, "numerically ascending"):
+            self.collect()
+        self.write_deviation(1, self.valid_payload(deviations=[second, first]))
+        self.assertEqual(2, self.collect()[0]["count"])
+
+    def test_recovery_shared_path_between_distinct_deviations_is_valid(self) -> None:
+        first = self.valid_payload()["deviations"][0]
+        second = dict(first, id="DEV-002", kind="TEST_STRATEGY")
+        self.write_deviation(1, self.valid_payload(deviations=[first, second]))
+        self.assertEqual(["DEV-001", "DEV-002"],
+                         [entry["id"] for entry in self.collect()[0]["entries"]])
+
+    def test_recovery_rejects_malformed_matching_digest_and_worker_task_drift(self) -> None:
+        for field, invalid in (("taskSha256", "X" * 64),
+                               ("changeSha256", "ABCDEF" * 10 + "ABCD")):
+            with self.subTest(field=field):
+                saved_manifest = dict(self.manifest)
+                saved_worker = dict(self.worker)
+                payload = self.valid_payload()
+                if field == "taskSha256":
+                    self.manifest[field] = invalid
+                    self.worker[field] = invalid
+                    agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+                else:
+                    self.worker[field] = invalid
+                agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+                payload[field] = invalid
+                self.write_deviation(1, payload)
+                with self.assertRaisesRegex(ValueError, "SHA-256"):
+                    self.collect()
+                self.manifest = saved_manifest
+                self.worker = saved_worker
+                agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+                agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        self.worker["taskSha256"] = "a" * 64
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        self.write_deviation(1, self.valid_payload())
+        with self.assertRaisesRegex(ValueError, "Worker taskSha256"):
+            self.collect()
+
+    def test_recovery_rejects_noncanonical_filename_suffix(self) -> None:
+        self.write_deviation(1, self.valid_payload())
+        extra = self.run_dir / "worker-deviations-attempt-1.json.bak"
+        extra.write_text("{}\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "filename"):
+            self.collect()
+
+    def test_recovery_rejects_malformed_authoritative_identity_and_enums(self) -> None:
+        for field in ("runId", "stage"):
+            with self.subTest(field=field):
+                value = self.manifest[field]
+                self.manifest[field] = " "
+                agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+                self.write_deviation(1, self.valid_payload(**{field: " "}))
+                with self.assertRaisesRegex(ValueError, "non-empty"):
+                    self.collect()
+                self.manifest[field] = value
+                agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+        for field in ("kind", "riskImpact"):
+            with self.subTest(field=field):
+                entry = dict(self.valid_payload()["deviations"][0])
+                entry[field] = ["DESIGN_ALTERNATIVE"]
+                self.write_deviation(1, self.valid_payload(deviations=[entry]))
+                with self.assertRaises(ValueError):
+                    self.collect()
+        self.manifest["stagePacket"] = {"requirementIds": "AP9"}
+        agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+        self.write_deviation(1, self.valid_payload())
+        with self.assertRaisesRegex(ValueError, "stagePacket requirementIds"):
+            self.collect()
+
+
 class AgentPipelineStagePacketTest(unittest.TestCase):
     """Protects bounded A4 stage packets, advisory context and explicit editable scope."""
 
