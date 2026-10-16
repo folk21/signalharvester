@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "stageId": "A4",
+  "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+  "implementationPlanPath": "docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md",
+  "requirementIds": [
+    "AP2",
+    "AP10",
+    "AP13",
+    "AP14"
+  ],
+  "featureIds": [],
+  "owningPaths": [
+    "tools/agent-pipeline"
+  ],
+  "editablePaths": [
+    "tools/agent-pipeline/agent_pipeline.py",
+    "tools/agent-pipeline/tests/test_agent_pipeline.py"
+  ],
+  "contextPaths": [
+    "docs/TESTS.md"
+  ],
+  "riskLevel": "LOW",
+  "delegation": "BOUNDED",
+  "task": "Implement the bounded A4.2a single-run read-only evidence aggregator described in the companion implementation plan section \"A4.2a — run evidence aggregation pilot\". Add summarize_run_evidence(run_dir: Path) -> dict[str, Any] to agent_pipeline.py and focused deterministic regression tests covering EA-01..EA-12. Treat the active AP2/AP10/AP13/AP14 requirements as normative, the plan as advisory, and the separate run_evidence_oracle.py as read-only. Validate evidence consistency and manifest task identity; do not infer acceptance. Preserve existing write_handoff and reviewer/security/cycle behavior. Do not implement deviations, multi-run scheduling, A5 promotion, merge, notification or archival. Never weaken tests, policy, source-integrity checks, or scope enforcement. Document any material deviations from the plan and their impact.",
+  "completionCriteria": [
+    "Provide deterministic coverage for EA-01..EA-12; genuine missing/invalid/mismatched evidence fails closed where specified.",
+    "summarize_run_evidence emits a compact bounded, digest-linked, read-only report for both ready and blocked runs, without raw commands or model logs.",
+    "Status/check/reviewer summaries are source-consistent and never infer reviewer PASS or developer acceptance.",
+    "No changes to worker runner lifecycle, Gitleaks/reviewer policy, existing handoff contract, or unrelated areas.",
+    "All canonical checks and independent review still required before acceptance."
+  ]
+}
