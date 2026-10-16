@@ -26,9 +26,35 @@ The accepted backend baseline includes:
 - controlled live system resilience acceptance;
 - accepted `SCALABILITY.KAFKA_CONSUMERS` horizontal worker scaling.
 
-`backend-profile-owned-analysis-settings`, `backend-results-production-browsing`, `backend-controlled-dead-letter-recovery`, the repository-wide `backend-jdbi-persistence-refactoring`, `backend-scheduler-pre-run-lease-recovery`, `backend-analysis-outbox-lease-renewal`, `backend-kafka-offset-commit-failure-separation`, `backend-module-contract-discoverability`, `backend-scheduler-expired-lease-fencing`, `backend-kafka-listener-interruption-fencing`, `backend-kafka-listener-failed-poll-rewind`, `backend-analysis-outbox-interruption-fencing`, `backend-sse-inflight-poll-cancellation`, `backend-shared-polling-lifecycle-refactoring`, `backend-collection-run-interruption-recovery`, `backend-source-fetch-worker-interruption-propagation`, `backend-analysis-outbox-expired-lease-fencing`, and `backend-analysis-outbox-failure-lease-fencing` are accepted after their relevant repository tests and validations passed. Kafka consumer lifecycle Review I, background-worker/executor lifecycle Review II, and durable-ownership/crash-window Review III found no additional material correctness defects after their bounded fixes. `backend-analysis-all-relevant-default` remains verification-pending. The current bounded implementation focus is `backend-observability-intelligence`: the application-owned alert policy, labeled resilience/capacity scenario-evidence foundation, expectation-aware offline detector/alert evaluation, provider-neutral assisted-investigation evaluator, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, and the first repeated live calibration campaign are accepted after developer verification. Stage 6E4 delivered dedicated live Health/alert calibration scenarios with explicit normal, transient outbox-backlog, and critical outbox-backlog expectations. Stage 6E5 reviewed the completed three-repeat campaign and selected no changes to the existing Health/alert v1 policies. Both stages are accepted after canonical developer verification. Alert outcomes were evaluated as offline policy projections, not as persisted runtime alerts. Stage 6E6 now adds verification-pending live persisted-alert lifecycle acceptance over the public Operations API while keeping both v1 policy semantics unchanged. `backend-capacity-telemetry-expansion` and `backend-capacity-observability-baseline` remain separate verification-pending carryover until their canonical repository gates are recorded.
+Several completed reliability, scheduling, outbox, Kafka-consumer,
+persistence, and API hardening sub-specs are accepted and archived; their
+individual histories are available in `docs/specs/archive/subspecs/` and the
+specification index. Kafka consumer lifecycle Review I,
+background-worker/executor lifecycle Review II, and durable-ownership/crash-
+window Review III found no additional material correctness defects after
+their bounded fixes.
 
-Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web` specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated across repository boundaries; this backend specification does not duplicate the companion repository's current implementation inventory.
+**Current implementation focus:** `backend-observability-intelligence`.
+Its accepted work includes the application-owned alert policy, labeled
+scenario evidence, offline detector/alert evaluation, assisted-investigation
+evaluation, runtime trial capture, descriptive calibration, and the first
+repeated live campaign. Stages 6E4 and 6E5 added the dedicated normal,
+transient-backlog, and critical-backlog scenarios, then reviewed the
+three-repeat evidence without changing either v1 Health/alert policy.
+Those alert results are **offline projections**, not persisted runtime
+alert-lifecycle acceptance.
+
+**Verification-pending:** Stage 6E6's persisted-alert lifecycle through the
+public Operations API, `backend-analysis-all-relevant-default`,
+`backend-capacity-telemetry-expansion`, and
+`backend-capacity-observability-baseline`. Stage 6E6 does not change the v1
+policy defaults. See the active owning sub-spec for its exact live recovery
+and cleanup blockers.
+
+Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web`
+specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated
+across repository boundaries; this backend specification does not duplicate the companion repository's
+current implementation inventory.
 
 Stable feature identifiers referenced by this specification are defined in [`../../FEATURES.md`](../../FEATURES.md).
 
@@ -49,7 +75,9 @@ Deliver an observable event-driven information collection and analysis platform 
 - turn telemetry and recorded operational changes into persisted health reports, anomaly evidence, and optional assisted incident investigation;
 - run locally in Kubernetes as a realistic distributed-system learning environment.
 
-The project is intentionally both a useful application and a learning platform for Java concurrency, Kafka, PostgreSQL, Kubernetes, event-driven design, reliability patterns, observability, AI-assisted development, and Spec-Driven Development.
+The project is intentionally both a useful application and a learning platform for Java concurrency,
+Kafka, PostgreSQL, Kubernetes, event-driven design, reliability patterns, observability, AI-assisted
+development, and Spec-Driven Development.
 
 ## Product concept
 
@@ -102,7 +130,10 @@ Accepted backend capabilities already cover the main functional pipeline:
 - bounded Kafka retry and dead-letter handling;
 - Analysis transactional outbox delivery.
 
-Backend-owned `DEPLOYMENT.KUBERNETES`, `OBSERVABILITY.INFRASTRUCTURE`, and the controlled system resilience workflow are accepted. Requirements whose final acceptance depends on both backend and frontend deliverables remain cross-repository acceptance concerns; the companion repository owns its own implementation status and evidence.
+Backend-owned `DEPLOYMENT.KUBERNETES`, `OBSERVABILITY.INFRASTRUCTURE`, and the controlled system
+resilience workflow are accepted. Requirements whose final acceptance depends on both backend and
+frontend deliverables remain cross-repository acceptance concerns; the companion repository owns its own
+implementation status and evidence.
 
 The intended technology direction remains:
 
@@ -690,7 +721,9 @@ Feature: `OBSERVABILITY.HEALTH_INTELLIGENCE`.
 
 The platform must be able to transform its existing metrics, logs, traces, capacity evidence, and application state into a bounded persisted operational health representation.
 
-Health analysis must support structured snapshots, human-readable reports, component status, numeric comparison/scoring, anomaly evidence, and comparison with a recent baseline. The initial implementation must work without an external LLM or paid observability service.
+Health analysis must support structured snapshots, human-readable reports, component status, numeric
+comparison/scoring, anomaly evidence, and comparison with a recent baseline. The initial implementation
+must work without an external LLM or paid observability service.
 
 Automated anomaly detection should begin with deterministic rules and lightweight statistical methods. A custom neural network is optional future work and must be justified against measured evaluation data.
 
@@ -698,9 +731,13 @@ Automated anomaly detection should begin with deterministic rules and lightweigh
 
 Feature: `OPERATIONS.CHANGE_JOURNAL`.
 
-Supported configuration, administrative, deployment/tuning, and operator changes that can materially affect system behavior or health must pass through a standard redacted journaling procedure where SignalHarvester owns the mutation workflow.
+Supported configuration, administrative, deployment/tuning, and operator changes that can materially
+affect system behavior or health must pass through a standard redacted journaling procedure where
+SignalHarvester owns the mutation workflow.
 
-The system must retain enough change metadata to reconstruct who/what changed, when it changed, what target was affected, the safe before/after difference or marker, outcome, and available correlation/deployment identity. Secrets must never be persisted in the change journal.
+The system must retain enough change metadata to reconstruct who/what changed, when it changed, what
+target was affected, the safe before/after difference or marker, outcome, and available
+correlation/deployment identity. Secrets must never be persisted in the change journal.
 
 Health analysis must be able to place recent changes and health transitions on one timeline and compare before/after windows. Temporal proximity may identify a candidate correlation but must not by itself be reported as proven causality.
 
@@ -712,7 +749,9 @@ A Health Report must be exportable for manual analysis by a local or external LL
 
 Automated LLM investigation must use sanitized bounded evidence and an explicit read-only tool surface for telemetry/history lookup. Model output consumed by the application must be structured and validated.
 
-An LLM must not become the sole authority for health state, severity, alert emission, or operational mutation. Alerting and any future remediation remain application-owned policies over deterministic/statistical health state plus optional model assessment.
+An LLM must not become the sole authority for health state, severity, alert emission, or operational
+mutation. Alerting and any future remediation remain application-owned policies over
+deterministic/statistical health state plus optional model assessment.
 
 ## Scenarios
 

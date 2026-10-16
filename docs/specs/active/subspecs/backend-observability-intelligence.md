@@ -10,9 +10,61 @@ parent: ../spec-signal-harvester-platform.md
 
 ## Status
 
-Active. Stages 1, 2, 3, 4a, 4b, the Stage 6 application-owned alert policy, scenario evidence, expectation-aware offline Health/alert evaluation, assisted-investigation evaluation, bounded runtime trial capture/export, descriptive calibration, and the bounded repeated live calibration campaign are accepted after developer verification. A complete campaign of three resilience repetitions plus three capacity baselines passed. Manual evidence review selected **no Health or alert parameter change** from that campaign because the original resilience faults did not define detector/attention expectations strongly enough to tune production policy. The expectation-aware Stage 6E3 semantics are accepted after canonical developer verification. Accepted Stage 6E4 added a dedicated live Health/alert calibration runner: a clean normal control, a bounded 300-row transient Analysis-outbox backlog expected to be detected without human attention, and a 1,200-row critical Analysis-outbox backlog expected to be detected with attention. The subsequent three-repeat campaign `20261007T073415Z-b812e125` completed all resilience, Health/alert, and capacity phases. Stage 6E5 manual evidence review verified manifest and artifact digests; six of six Health detections, six healthy controls, three critical attention projections, and zero false-positive projections across nine no-attention cases. No scored snapshots were incomplete or contaminated before fault injection. This evidence supports **no change** to production `deterministic-statistical-v1` or `human-attention-v1`. Alert scores are offline projections only, not proof of the persisted runtime alert lifecycle; reported sub-second detection/attention timings begin immediately before explicit Health capture rather than at fault onset. Stage 6E4 and the Stage 6E5 evidence review are accepted after the canonical repository gate passed. Stage 6E6 is implemented, verification-pending, and deliberately paused while contributor automation moves to Agent Pipeline A2.1. The standalone live runner uses the real Collection → Analysis → outbox path, temporarily enables exact `human-attention-v1` runtime parameters, disables periodic Health sampling during the controlled run, and verifies persisted alert state through the public Operations API without changing production policy defaults. Early runs exposed a post-restart rolling-median/MAD baseline anomaly and then a missing Micronaut Serde declaration on `HumanAttentionAlertResponse`; the Serde fix is now proven live because the alert-history endpoint returned the persisted alert and the pre-existing alert resolved through the normal runtime policy. A later hardened run achieved two clean `HEALTHY` baseline snapshots and the expected 300-row transient `DEGRADED` observation with no alert, then stopped because immediate transient recovery remained `DEGRADED` solely from the five-minute HTTP latency rolling baseline after the outbox had drained. The same failure exposed cleanup ordering: temporary profile/source deletes ran after the backend port-forward context exited and failed with connection refused. Resume Stage 6E6 from time-window-aware recovery evidence plus cleanup-in-live-control-channel hardening. These findings do not justify changing either v1 policy by themselves.
+Active. **Accepted after developer verification:** Stages 1, 2, 3,
+4a, 4b, the Stage 6 application-owned alert policy, scenario evidence,
+expectation-aware offline Health/alert evaluation, assisted-investigation
+evaluation, bounded runtime trial capture/export, descriptive calibration,
+and the repeated live calibration campaign.
 
-The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until their canonical acceptance is recorded. This specification does not weaken or replace those acceptance gates.
+**Stage 6E3–6E5 evidence:**
+
+- A complete campaign of three resilience repetitions and three capacity
+  baselines passed. The initial faults lacked explicit detector/attention
+  expectations, so manual review selected **no Health or alert parameter
+  changes**.
+- Accepted Stage 6E3 defined expectation-aware scoring.
+- Accepted Stage 6E4 added a clean normal control, a 300-row transient
+  Analysis-outbox backlog requiring detection without human attention, and a
+  1,200-row critical backlog requiring detection with attention.
+- The three-repeat campaign `20261007T073415Z-b812e125` completed the
+  resilience, Health/alert and capacity phases. Stage 6E5 verified manifest
+  and artifact digests, all six detections, all six healthy controls,
+  three critical attention projections and zero false-positive projections
+  across nine no-attention scenarios. No scored snapshots were incomplete
+  or contaminated before fault injection.
+- Both `deterministic-statistical-v1` and `human-attention-v1` remain
+  unchanged after the canonical developer gate. Alert scores are **offline
+  policy projections**, not persisted runtime alert proof. Sub-second
+  reported timing starts before explicit Health capture, not fault onset.
+
+**Stage 6E6: implemented, verification-pending, deliberately paused.**
+
+The standalone runner exercises the real Collection → Analysis → outbox path,
+uses exact temporary `human-attention-v1` parameters, disables periodic
+Health sampling for the controlled run, and reads persisted alert state via
+the public Operations API without changing production defaults.
+
+Live evidence and remaining blockers:
+
+1. An early run found a post-restart rolling-median/MAD baseline anomaly and
+   missing Micronaut Serde metadata on `HumanAttentionAlertResponse`. The
+   Serde fix is proven live; the alert-history endpoint returned the persisted
+   alert and the earlier alert resolved under normal runtime policy.
+2. A later run obtained two clean `HEALTHY` baseline snapshots and the expected
+   300-row transient `DEGRADED` observation with no alert.
+3. Immediate transient recovery remained `DEGRADED` after outbox drain because
+   the five-minute HTTP latency baseline was still elevated.
+4. Cleanup attempted temporary profile/source deletes after the backend
+   port-forward control channel had exited and failed with connection refused.
+
+Resume with time-window-aware recovery evidence and cleanup inside the live
+control channel. Neither finding independently justifies changing the v1
+Health or alert policies.
+
+The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and
+`backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until
+their canonical acceptance is recorded. This specification does not weaken or replace those acceptance
+gates.
 
 ## Implementation progress
 
@@ -26,7 +78,37 @@ Stages 1 and 2 are accepted. The implemented scope now includes:
 - shared versioned scenario-evidence artifacts from resilience/capacity tooling with detector-neutral labels, durable scenario markers, explicit Health Snapshots, curated measurements, and companion artifact references;
 - count-bounded Health Snapshot retention configured by `SIGNALHARVESTER_OPERATIONS_HEALTH_SNAPSHOT_RETENTION_COUNT`.
 
-Stage 2 replaces the placeholder interpretation with policy `deterministic-statistical-v1`: configurable hard thresholds, rolling median/MAD deviation, structured anomaly evidence, cluster-wide allowlisted Prometheus signals with local outbox fallback, and explicit uncertainty when required telemetry or rolling history is unavailable. Periodic sampling is multi-replica coordinated and telemetry I/O stays outside database transactions. Stage 3 adds `health-analysis-v1`, persisted `IncidentAssessment`, manual assessment import, deterministic fake-provider verification, and an explicit OpenAI-compatible HTTP adapter. Accepted Stage 4a adds snapshot-scoped read-only tool sessions, bounded OpenAI-compatible tool turns, telemetry sanitization, and capacity-result markers. Accepted Stage 4b adds durable event/periodic trigger planning, exact-token lease claims/heartbeats, cooldown/deduplication, bounded retry/exhaustion, and atomic assessment-plus-trigger completion. Accepted Stage 6 adds deterministic human-attention alert decisions. Accepted scenario-evidence tooling turns controlled resilience/capacity runs into shared labeled artifacts, and accepted expectation-aware offline Health/alert evaluation scores only explicit detector/attention expectations without changing runtime authority. The assisted-investigation evaluator, bounded runtime trial capture/export, descriptive calibration report, and repeated live calibration campaign are accepted. Stage 6E4 dedicated Health/alert calibration evidence now has three completed live repetitions and an accepted Stage 6E5 no-change policy decision after canonical developer verification. Stage 6E6 adds verification-pending live evidence for the actual persisted `human-attention-v1` lifecycle: no alert for the bounded transient backlog, one persisted `OPEN/CRITICAL` alert for the critical backlog, continued `OPEN` state after the first healthy recovery snapshot, and `RESOLVED` state on the same alert identity after the second healthy recovery snapshot. Periodic Health sampling is disabled only for this controlled run so unrelated scheduled snapshots cannot satisfy or disrupt consecutive-snapshot alert thresholds. Before scored scenarios, bounded baseline stabilization requires two consecutive healthy snapshots and records every intermediate snapshot/alert. Baseline degradation or attention is never converted into a clean control merely because it later recovers; it blocks overall acceptance and must be reviewed separately from the scored lifecycle. The latest run proved baseline stabilization and transient detection but also showed that outbox recovery can precede five-minute statistical Health recovery, and that cleanup must stay inside the live backend control channel. Stage 6E6 is paused at that exact boundary while Agent Pipeline A2.1 is implemented. Resilience faults and capacity baselines without explicit detector/attention expectations remain descriptive-only.
+Accepted implementation increments are grouped by capability:
+
+| Stage | Implemented capability |
+|---|---|
+| 2 | `deterministic-statistical-v1` hard thresholds, rolling median/MAD, structured anomalies, cluster-wide allowlisted Prometheus evidence with local outbox fallback, and explicit uncertainty; multi-replica coordination keeps telemetry I/O outside database transactions |
+| 3 | `health-analysis-v1`, persisted `IncidentAssessment`, manual import, fake-provider verification, and an explicit OpenAI-compatible HTTP adapter |
+| 4a | Snapshot-scoped read-only tools, bounded OpenAI-compatible tool turns, telemetry sanitization, and capacity-result markers |
+| 4b | Durable periodic/event triggers, exact-token leases and heartbeats, cooldown/deduplication, bounded retry/exhaustion, and atomic assessment/trigger completion |
+| 6 | Deterministic, application-owned human-attention alert policy |
+| 6E3–6E5 | Labeled resilience/capacity evidence, explicit detector/alert expectations, independent offline scoring, accepted descriptive calibration and three repetitions with a no-change policy decision |
+
+**Stage 6E6 (verification-pending)** tests the *persisted* lifecycle of
+`human-attention-v1` rather than an offline policy projection:
+
+1. Transient outbox backlog must produce no attention alert.
+2. Critical backlog must produce exactly one persisted `OPEN/CRITICAL` alert.
+3. The first healthy recovery snapshot must retain that alert as `OPEN`.
+4. A second healthy snapshot must resolve the **same alert identity**.
+
+For this controlled run, periodic Health sampling is disabled so unrelated
+scheduled snapshots cannot satisfy or disrupt consecutive-snapshot thresholds.
+Baseline stabilization requires two consecutive healthy snapshots while
+recording intermediate snapshot and alert evidence. Degraded baselines or
+attention cannot be retrospectively turned into clean controls; they block
+acceptance even if later recovery succeeds.
+
+The latest live evidence proves clean baseline stabilization and transient
+detection, but outbox drain can precede five-minute statistical recovery.
+Cleanup also must remain inside the live backend control channel. Stage 6E6
+remains paused at these boundaries. Resilience faults and capacity baselines
+without explicit detector/attention expectations are descriptive-only.
 
 ## Feature scope
 
@@ -52,17 +134,43 @@ Turn the existing metrics/logs/traces and capacity evidence into an operational 
 - which subsystem is worth investigating next;
 - whether human attention is required.
 
-The first useful result must not require an external SaaS or an LLM. SignalHarvester must be able to produce a persisted structured Health Snapshot and a compact human/LLM-readable Health Report using the existing Prometheus/Loki/Tempo/Grafana stack plus application-owned operational state.
+The first useful result must not require an external SaaS or an LLM. SignalHarvester must be able to
+produce a persisted structured Health Snapshot and a compact human/LLM-readable Health Report using the
+existing Prometheus/Loki/Tempo/Grafana stack plus application-owned operational state.
 
-LLM analysis is an optional secondary reasoning layer. It may use either an external provider configured with deployment secrets or a local model adapter. It must consume sanitized bounded evidence and must not become the sole source of health state, severity, or alert decisions.
+LLM analysis is an optional secondary reasoning layer. It may use either an external provider configured
+with deployment secrets or a local model adapter. It must consume sanitized bounded evidence and must
+not become the sole source of health state, severity, or alert decisions.
 
 ## Current state and gap
 
-The accepted observability baseline already provides Micrometer/Prometheus metrics, OpenTelemetry traces in Tempo, trace-correlated logs in Loki, Kubernetes/Redpanda telemetry, Grafana dashboards, resilience evidence, and deterministic capacity reports. The latest capacity work also exposes Analysis outbox backlog and dispatcher latency signals.
+The accepted observability baseline already provides Micrometer/Prometheus metrics, OpenTelemetry traces
+in Tempo, trace-correlated logs in Loki, Kubernetes/Redpanda telemetry, Grafana dashboards, resilience
+evidence, and deterministic capacity reports. The latest capacity work also exposes Analysis outbox
+backlog and dispatcher latency signals.
 
-Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot, versioned health-scoring/anomaly policy, and cross-capability change journal. Stage 3 has closed the manual/provider-neutral assessment gap. Accepted Stage 4a provides bounded read-only telemetry/history tools and explicit agentic investigation. Accepted Stage 4b provides the multi-replica-safe automatic event/periodic trigger policy. Accepted Stage 6 provides the application-owned alert decision boundary. The accepted evaluation foundation reuses controlled resilience/capacity runs as labeled bounded evidence, and accepted expectation-aware offline Health/alert evaluation scores deterministic observations plus alert-policy projections without changing runtime authority. The accepted assisted-investigation evaluator measures structured model output against the same scenario/snapshot ground truth, accepted runtime capture/export preserves the actual execution counters and evidence references needed for those comparisons, accepted repeated-evidence calibration keeps Health-policy observations, alert projections, and provider/model/budget groups separate, and the repeated live campaign has completed its first accepted three-repeat resilience-plus-capacity run. That run established a deliberate no-change calibration decision. Stage 6E3 then made scoring expectations explicit. Stage 6E4 delivered the dedicated live detector/alert cases with fixed operational magnitudes; Stage 6E5 reviewed the repeated campaign evidence and found no basis for a Health/alert policy-version change. Runtime alert lifecycle and assisted-investigation/model quality require separate evidence.
+Stages 1 and 2 have closed the original operational-interpretation gap with a durable Health Snapshot,
+versioned health-scoring/anomaly policy, and cross-capability change journal. Stage 3 has closed the
+manual/provider-neutral assessment gap. Accepted Stage 4a provides bounded read-only telemetry/history
+tools and explicit agentic investigation. Accepted Stage 4b provides the multi-replica-safe automatic
+event/periodic trigger policy. Accepted Stage 6 provides the application-owned alert decision boundary.
+The accepted evaluation foundation reuses controlled resilience/capacity runs as labeled bounded
+evidence, and accepted expectation-aware offline Health/alert evaluation scores deterministic
+observations plus alert-policy projections without changing runtime authority. The accepted
+assisted-investigation evaluator measures structured model output against the same scenario/snapshot
+ground truth, accepted runtime capture/export preserves the actual execution counters and evidence
+references needed for those comparisons, accepted repeated-evidence calibration keeps Health-policy
+observations, alert projections, and provider/model/budget groups separate, and the repeated live
+campaign has completed its first accepted three-repeat resilience-plus-capacity run. That run
+established a deliberate no-change calibration decision. Stage 6E3 then made scoring expectations
+explicit. Stage 6E4 delivered the dedicated live detector/alert cases with fixed operational magnitudes;
+Stage 6E5 reviewed the repeated campaign evidence and found no basis for a Health/alert policy-version
+change. Runtime alert lifecycle and assisted-investigation/model quality require separate evidence.
 
-Security administration already emits audit-safe logs, but log lines are not a sufficient general change journal for correlating configuration/runtime changes with later health behavior. Event Observation is also not the authoritative store for this purpose because it is a bounded diagnostic materialization of pipeline events.
+Security administration already emits audit-safe logs, but log lines are not a sufficient general change
+journal for correlating configuration/runtime changes with later health behavior. Event Observation is
+also not the authoritative store for this purpose because it is a bounded diagnostic materialization of
+pipeline events.
 
 ## Design principles
 
@@ -104,7 +212,9 @@ SignalHarvester must generate two representations from the same snapshot/evidenc
 - canonical structured JSON suitable for machines and later LLM analysis;
 - derived Markdown/text suitable for a human operator or manual upload to a powerful LLM.
 
-The report should cover current health, change from previous/baseline state, anomalous signals, subsystem status, recent operational changes, representative log patterns/traces, capacity/backlog evidence, uncertainties, and evidence references.
+The report should cover current health, change from previous/baseline state, anomalous signals,
+subsystem status, recent operational changes, representative log patterns/traces, capacity/backlog
+evidence, uncertainties, and evidence references.
 
 The report must be bounded by explicit limits. It must summarize logs/traces rather than embedding uncontrolled volumes of raw telemetry.
 
@@ -133,7 +243,11 @@ A durable change record must include, where applicable:
 
 Passwords, tokens, secret values, credential headers, and other sensitive material must never be persisted in the journal. Secret-setting changes may record only safe metadata such as key name/scope and that a value changed.
 
-Direct database mutation is not a supported configuration workflow and is outside the journal guarantee. Changes made directly with generic `kubectl` or external tools cannot be guaranteed to appear automatically; repository-owned operational tooling must emit explicit change markers for behavior-affecting changes it performs, and detectable untracked drift may be reported separately. No Terraform-style control plane is required by this feature.
+Direct database mutation is not a supported configuration workflow and is outside the journal guarantee.
+Changes made directly with generic `kubectl` or external tools cannot be guaranteed to appear
+automatically; repository-owned operational tooling must emit explicit change markers for
+behavior-affecting changes it performs, and detectable untracked drift may be reported separately. No
+Terraform-style control plane is required by this feature.
 
 ### OI4 — health/change timeline correlation
 
@@ -141,7 +255,9 @@ Features: `OBSERVABILITY.HEALTH_INTELLIGENCE`, `OPERATIONS.CHANGE_JOURNAL`.
 
 Health analysis must be able to retrieve changes that occurred before or during a snapshot window and expose them on one operational timeline.
 
-The engine must support before/after comparison around a selected change and may raise candidate correlations such as “outbox backlog increased after replica-count change.” Candidate correlations must include evidence and must not be presented as proven root cause solely because of temporal proximity.
+The engine must support before/after comparison around a selected change and may raise candidate
+correlations such as “outbox backlog increased after replica-count change.” Candidate correlations must
+include evidence and must not be presented as proven root cause solely because of temporal proximity.
 
 ### OI5 — deterministic and statistical anomaly detection
 
@@ -181,7 +297,12 @@ The runtime policy must support at least:
 - event-driven invocation for qualifying anomaly/health transitions;
 - optional low-frequency periodic reassessment of an active incident.
 
-External provider credentials must use deployment secrets. A local model adapter must be possible without changing the health engine. Invocation must have explicit timeouts, rate/cost bounds, cooldown/deduplication, and a maximum investigation duration. Multi-replica trigger leases must prevent concurrent ownership of one automatic investigation, but the design must not claim external exactly-once model invocation across process crashes; a bounded retry may repeat a provider call if the process fails after the provider response but before durable completion.
+External provider credentials must use deployment secrets. A local model adapter must be possible
+without changing the health engine. Invocation must have explicit timeouts, rate/cost bounds,
+cooldown/deduplication, and a maximum investigation duration. Multi-replica trigger leases must prevent
+concurrent ownership of one automatic investigation, but the design must not claim external exactly-once
+model invocation across process crashes; a bounded retry may repeat a provider call if the process fails
+after the provider response but before durable completion.
 
 No new LLM/agent framework dependency is mandated by this specification. Dependency selection must follow repository approval rules and prefer the smallest OSS/provider-neutral solution that preserves testability.
 
@@ -214,13 +335,19 @@ LLM output used by the application must conform to a validated structured schema
 - recommended next checks;
 - optional suggestion that human attention is warranted.
 
-The LLM must not be the sole authority for `HEALTHY`/`UNHEALTHY` state or alert emission. Alerting must remain an application policy over deterministic/statistical health state, persistence/duration, deduplication/cooldown, and optionally the structured LLM assessment. Free-form model text must never directly trigger an operational action.
+The LLM must not be the sole authority for `HEALTHY`/`UNHEALTHY` state or alert emission. Alerting must
+remain an application policy over deterministic/statistical health state, persistence/duration,
+deduplication/cooldown, and optionally the structured LLM assessment. Free-form model text must never
+directly trigger an operational action.
 
 ### OI10 — telemetry trust, redaction, and prompt-injection boundary
 
 Feature: `OBSERVABILITY.ASSISTED_INVESTIGATION`.
 
-Logs, event payload summaries, external-source text, and trace attributes must be treated as untrusted evidence. Before external LLM transmission, the system must apply a bounded sanitization/redaction step that removes known secrets, authorization material, sensitive headers, and fields explicitly classified as non-exportable.
+Logs, event payload summaries, external-source text, and trace attributes must be treated as untrusted
+evidence. Before external LLM transmission, the system must apply a bounded sanitization/redaction step
+that removes known secrets, authorization material, sensitive headers, and fields explicitly classified
+as non-exportable.
 
 Agent policy must state that telemetry content cannot issue instructions or change tool permissions. Tool selection and authorization come only from application configuration.
 
@@ -228,11 +355,67 @@ Agent policy must state that telemetry content cannot issue instructions or chan
 
 Features: `OBSERVABILITY.HEALTH_INTELLIGENCE`, `OBSERVABILITY.ASSISTED_INVESTIGATION`, `TESTING.DETERMINISTIC_LOCAL`.
 
-Existing and future resilience/capacity scenarios must double as an evaluation dataset source. Representative labels should include normal operation, PostgreSQL outage/latency, Kafka lag or broker restart, pod restart, slow external source, outbox backlog, and load spikes.
+Existing and future resilience/capacity scenarios must double as an evaluation dataset source.
+Representative labels should include normal operation, PostgreSQL outage/latency, Kafka lag or broker
+restart, pod restart, slow external source, outbox backlog, and load spikes.
 
-Evaluation evidence should preserve the scenario label plus bounded metrics/logs/traces/change markers/Health Snapshots needed for replay or offline assessment. Ground truth and scoring expectation must remain separate: `faultInjected` states what the harness deliberately changed, while an additive `evaluationExpectations` block states whether Health should `DETECT`, `REMAIN_HEALTHY`, or be `DESCRIPTIVE_ONLY`, and whether alert projection should require `ATTENTION_REQUIRED`, `NO_ATTENTION`, or remain descriptive-only. Version-1 evidence without explicit expectations must default to descriptive-only rather than inheriting an expectation from its fault/normal label. Capacity evidence without an explicit performance/Health budget must not be converted into detector ground truth. The accepted foundation provides one shared versioned artifact format and wires current resilience/capacity runners into it. Accepted offline Health/alert evaluation consumes those artifacts, uses explicit `FAULT_START`/`FAULT_END` markers when available, excludes unobservable fault windows instead of inventing false negatives, excludes `DETECT` trials whose captured pre-fault Health state is already degraded/unhealthy, and records the exact alert-policy projection parameters in its output. The accepted assisted-investigation evaluator consumes a separate bounded trial artifact that references captured scenario/snapshot identity, structured Incident Assessment output, evidence allowlists, explicit execution counts/duration, and optional human/replay claim annotations. The runtime capture/export path now emits that version-1 artifact for completed explicit provider runs after validating the selected Health Snapshot against a durable TEST_SCENARIO marker. It does not infer hallucination labels from free-form text with another model. The calibration report groups repeated scenario artifacts by the persisted Health policy version, projects only bounded alert-policy parameter grids over those captured snapshots, and groups assisted-investigation evidence by provider/model/runtime budgets. The live calibration-campaign harness may collect two to eight sequential repetitions of resilience plus the dedicated Health/alert calibration scenarios, with optional capacity baselines, into one non-overwriting output directory before invoking that same report. Controlled PostgreSQL-outage evidence must come from the repository-owned bounded datasource/driver timeout profile so retry exhaustion and terminal DLQ timing are comparable across repeated runs. Controlled Kafka-broker-restart evidence must distinguish broker rollout readiness from application consumer recovery, require the repository-owned Analysis/Results/Event Observation groups to return to stable membership/assignment before the post-recovery mutation, and bound that single acknowledged Collection request by the scenario budget without retrying it. Sequential resilience/calibration/capacity preflight must also allow a bounded Prometheus target-convergence window after workload rollouts, because backend DNS discovery refresh and scrape cadence may lag Kubernetes readiness; timeout diagnostics must preserve the failed query, expected value, and last observed value. Alternative Health thresholds and alternative assisted-investigation budgets require new captured runs; the tooling does not invent counterfactual detector/model behavior. Affected-subsystem scoring must compare only explicitly mapped vocabulary between scenario ground truth and Health components; unmapped subsystem names must be reported separately rather than counted as detector misses.
+Evaluation evidence should preserve the scenario label plus bounded metrics/logs/traces/change
+markers/Health Snapshots needed for replay or offline assessment. Ground truth and scoring expectation
+must remain separate: `faultInjected` states what the harness deliberately changed, while an additive
+`evaluationExpectations` block states whether Health should `DETECT`, `REMAIN_HEALTHY`, or be
+`DESCRIPTIVE_ONLY`, and whether alert projection should require `ATTENTION_REQUIRED`, `NO_ATTENTION`, or
+remain descriptive-only.
 
-The first dedicated Health/alert calibration runner must keep the runtime Health policy unchanged and exercise the real Collection → Analysis → outbox path with the outbox dispatcher deliberately slowed rather than disabled so backlog telemetry remains observable. Its initial fixed scenarios are: clean normal operation (`REMAIN_HEALTHY` / `NO_ATTENTION`), a 300-row transient outbox backlog (`DETECT` / `NO_ATTENTION`), and a 1,200-row critical outbox backlog (`DETECT` / `ATTENTION_REQUIRED`). The transient scenario is invalid if the oldest pending row reaches 120 seconds before capture, because that would no longer represent the intended short-lived backlog. Each fault must wait for Prometheus backlog evidence to converge before Health capture and must drain Results/outbox plus Prometheus backlog evidence back to baseline before the recovery snapshot. These magnitudes are dataset inputs, not automatically selected production thresholds.
+Version-1 evidence without explicit expectations must default to descriptive-only rather than inheriting
+an expectation from its fault/normal label. Capacity evidence without an explicit performance/Health
+budget must not be converted into detector ground truth.
+
+The accepted foundation provides one shared versioned artifact format and wires current
+resilience/capacity runners into it. Accepted offline Health/alert evaluation consumes those artifacts,
+uses explicit `FAULT_START`/`FAULT_END` markers when available, excludes unobservable fault windows
+instead of inventing false negatives, excludes `DETECT` trials whose captured pre-fault Health state is
+already degraded/unhealthy, and records the exact alert-policy projection parameters in its output.
+
+The accepted assisted-investigation evaluator consumes a separate bounded trial artifact that references
+captured scenario/snapshot identity, structured Incident Assessment output, evidence allowlists,
+explicit execution counts/duration, and optional human/replay claim annotations. The runtime
+capture/export path now emits that version-1 artifact for completed explicit provider runs after
+validating the selected Health Snapshot against a durable TEST_SCENARIO marker.
+
+It does not infer hallucination labels from free-form text with another model. The calibration report
+groups repeated scenario artifacts by the persisted Health policy version, projects only bounded
+alert-policy parameter grids over those captured snapshots, and groups assisted-investigation evidence
+by provider/model/runtime budgets.
+
+The live calibration-campaign harness may collect two to eight sequential repetitions of resilience plus
+the dedicated Health/alert calibration scenarios, with optional capacity baselines, into one
+non-overwriting output directory before invoking that same report. Controlled PostgreSQL-outage evidence
+must come from the repository-owned bounded datasource/driver timeout profile so retry exhaustion and
+terminal DLQ timing are comparable across repeated runs.
+
+Controlled Kafka-broker-restart evidence must distinguish broker rollout readiness from application
+consumer recovery, require the repository-owned Analysis/Results/Event Observation groups to return to
+stable membership/assignment before the post-recovery mutation, and bound that single acknowledged
+Collection request by the scenario budget without retrying it. Sequential
+resilience/calibration/capacity preflight must also allow a bounded Prometheus target-convergence window
+after workload rollouts, because backend DNS discovery refresh and scrape cadence may lag Kubernetes
+readiness; timeout diagnostics must preserve the failed query, expected value, and last observed value.
+
+Alternative Health thresholds and alternative assisted-investigation budgets require new captured runs;
+the tooling does not invent counterfactual detector/model behavior. Affected-subsystem scoring must
+compare only explicitly mapped vocabulary between scenario ground truth and Health components; unmapped
+subsystem names must be reported separately rather than counted as detector misses.
+
+The first dedicated Health/alert calibration runner must keep the runtime Health policy unchanged and
+exercise the real Collection → Analysis → outbox path with the outbox dispatcher deliberately slowed
+rather than disabled so backlog telemetry remains observable. Its initial fixed scenarios are: clean
+normal operation (`REMAIN_HEALTHY` / `NO_ATTENTION`), a 300-row transient outbox backlog (`DETECT` /
+`NO_ATTENTION`), and a 1,200-row critical outbox backlog (`DETECT` / `ATTENTION_REQUIRED`). The
+transient scenario is invalid if the oldest pending row reaches 120 seconds before capture, because that
+would no longer represent the intended short-lived backlog. Each fault must wait for Prometheus backlog
+evidence to converge before Health capture and must drain Results/outbox plus Prometheus backlog
+evidence back to baseline before the recovery snapshot. These magnitudes are dataset inputs, not
+automatically selected production thresholds.
 
 Detector/LLM evaluation should measure at least:
 
@@ -249,7 +432,9 @@ Custom ML/neural models must be compared against the simpler baseline using the 
 
 Features: `OBSERVABILITY.HEALTH_INTELLIGENCE`, `OBSERVABILITY.ASSISTED_INVESTIGATION`.
 
-Health sampling, report generation, anomaly detection, and LLM investigation must remain auxiliary workloads. They must have explicit scheduling/concurrency/time bounds and must not hold business transactions, consumer threads, or outbox leases while querying telemetry or waiting for a model.
+Health sampling, report generation, anomaly detection, and LLM investigation must remain auxiliary
+workloads. They must have explicit scheduling/concurrency/time bounds and must not hold business
+transactions, consumer threads, or outbox leases while querying telemetry or waiting for a model.
 
 Failure of health analysis or an LLM provider must degrade the intelligence feature to `UNKNOWN`/unavailable evidence as appropriate and must not stop Collection, Analysis, Results, or existing operational observability.
 
@@ -318,5 +503,8 @@ Each implementation stage must add focused deterministic tests before broader li
 - [x] add bounded read-only Prometheus/Loki/Tempo/change-history/capacity investigation tools;
 - [x] add multi-replica-safe event/periodic trigger policy with cooldown/deduplication;
 - [x] add alert decision policy that does not delegate authority to free-form LLM text;
-- [ ] resume the deliberately paused Stage 6E6 persisted-alert lifecycle verification by making transient recovery time-window-aware and keeping temporary-resource cleanup inside a live backend control channel; preserve the clean baseline/transient evidence already observed and decide on any versioned policy investigation only from repeated evidence;
+- [ ] resume the deliberately paused Stage 6E6 persisted-alert lifecycle verification by making
+  transient recovery time-window-aware and keeping temporary-resource cleanup inside a live backend
+  control channel; preserve the clean baseline/transient evidence already observed and decide on any
+  versioned policy investigation only from repeated evidence;
 - [ ] run focused and canonical validation, then move accepted behavior into owning current-state documentation.

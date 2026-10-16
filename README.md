@@ -20,7 +20,16 @@ The current bounded backend focus is **intelligent observability**, called opera
 - **Accepted:** persisted operational history, the deterministic/statistical Health Engine, manual and bounded read-only assisted investigation, durable automatic investigation triggers, deterministic human-attention alert policy, labeled scenario evidence, expectation-aware offline Health/alert evaluation, provider-neutral assisted-investigation quality evaluation, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, the bounded repeated live calibration campaign, and the dedicated Stage 6E4 Health/alert calibration scenarios plus Stage 6E5 evidence review after canonical developer verification.
 - **Current calibration evidence:** the dedicated Health/alert runner completed a three-repeat live campaign including resilience and capacity phases. Stage 6E5 confirmed all six expected Health detections, six healthy controls, and the expected alert outcomes for three critical and nine no-attention cases in **offline alert-policy projection**.
 - **Implemented, verification-pending, and paused:** Stage 6E6 verifies persisted `human-attention-v1` lifecycle through the public Operations API. Live reruns have now proven the alert-history Serde fix, normal persisted resolution of the earlier alert, two clean baseline snapshots, and the expected no-alert transient backlog. The latest run stopped at transient recovery because the outbox had drained while the five-minute HTTP latency window remained statistically `DEGRADED`; cleanup then attempted fixture deletes after its backend port-forward had exited. Stage 6E6 is deliberately paused at those recovery/cleanup boundaries while contributor automation advances.
-- **Current contributor-tooling slices:** Development Agent Pipeline A2.1 runs isolated one-shot Aider + DeepSeek, A2.2 adds Gitleaks and ordered verification, and A2.3 adds an independent reviewer and main-model handoff. All three remain verification-pending; the first real-worker pilot exposed an edit-format no-diff failure before end-to-end acceptance. The A3 no-diff guard, bounded repair command, and opt-in automatic check/review/repair cycle are implemented but verification-pending; A4.1 now adds opt-in stage packets, read-only spec/plan binding, and enforced edit scope (verification-pending). The next live goal is an end-to-end P2 pilot using that real stage workflow; automated sub-spec scheduling, feature-branch progression, and notifications remain future work. Stage 6E6 remains paused and both v1 policies remain unchanged until its time-window-aware recovery and cleanup gaps are resumed with evidence. Assisted-investigation quality remains a separate evaluation track, and custom ML/neural detection remains later work.
+- **Current contributor-tooling slices:** Development Agent Pipeline A2/A3 and A4.1
+  provide isolated Aider execution, Gitleaks/canonical verification, independent
+  review integration, bounded repair, and source-bound stage packets. A4.2a adds
+  read-only per-run evidence aggregation; it passed developer verification after
+  `MAIN_MODEL` recovery, while a live independent-review attempt failed. A4.2b
+  structured deviations and autonomous stage progression remain planned.
+  Current details and acceptance boundaries belong to the
+  [active contributor-tooling spec](docs/specs/active/subspecs/development-agent-pipeline.md)
+  and [pipeline README](tools/agent-pipeline/README.md). Stage 6E6 stays paused,
+  with the v1 Health/alert policies unchanged.
 - **Separate carryover:** capacity telemetry/baseline and explicit all-relevant Analysis remain verification-pending until their own canonical acceptance is recorded.
 
 SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.
@@ -253,4 +262,3 @@ Development rules live in [`AGENTS.md`](AGENTS.md) and the nearest local `AGENTS
 ## License
 
 See [`LICENSE.md`](LICENSE.md). No redistribution license is assumed unless that file is updated explicitly.
-

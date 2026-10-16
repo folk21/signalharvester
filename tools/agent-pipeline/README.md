@@ -11,7 +11,21 @@ description: Repository-local orchestration for isolated coding-worker execution
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
 
-Stage A1 is accepted after canonical developer verification. Stage A2.1 adds verification-pending isolated Git worktree preparation and one-shot Aider execution. The current A2.1 hardening also fail-closes on unsupported Aider versions/options and isolates the worker from ambient Aider YAML/environment/dotenv configuration before model access. Stage A2.2 adds repository-owned Gitleaks scanning and ordered required-check orchestration. Stage A2.3 introduces a verification-pending fresh-context reviewer adapter and compact external-checkpoint handoff. A3 now includes verification-pending no-diff blocking, explicit repair, and an opt-in bounded automatic `run-cycle` command. A4.1 adds opt-in validated stage packets, read-only context digests, and enforced editable paths. Automatic sub-spec stage scheduling, acceptance, specification archival, and merging remain later work owned by the active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification.
+Stage A1 is accepted after canonical developer verification. A2.1–A2.3,
+A3, and A4.1 provide isolated Aider worktrees, pinned preflight, security and
+canonical checks, independent review, bounded repair, and source-bound stage
+packets. A4.2a adds read-only single-run evidence aggregation; its live pilot
+passed worker/check/oracle gates but failed reviewer invocation. The later
+`MAIN_MODEL` recovery passed developer checks, without transferring a reviewer
+PASS from the old source state. These slices remain verification-pending at
+their respective external acceptance boundaries.
+
+A4.2b structured worker deviations, multi-stage scheduling, branch promotion,
+notifications, merging and automatic archival are **not** implemented. The
+intended behavior and stages are owned by the active
+[`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md)
+specification. Detailed advisory design belongs in its
+[implementation plan](../../docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md).
 
 ## Current boundary
 
