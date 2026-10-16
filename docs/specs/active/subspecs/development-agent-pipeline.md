@@ -32,8 +32,15 @@ cleanup boundaries.
   `./run_checks.sh`, the pipeline regressions, and the independent oracle;
   its reviewer/acceptance checkpoint remains separate.
 
-**Still planned:** A4.2b structured worker deviations, sub-spec evidence
-aggregation, guarded feature-branch promotion (A5), notifications (A6),
+- **A4.2b:** structured worker deviation collection passed developer recovery
+  verification (100/100 Agent Pipeline tests and 26/26 independent oracle),
+  but the live pilot remains `BLOCKED` because its independent reviewer returned
+  `INVALID_REVIEW_SCHEMA`. Reviewer JSON-contract hardening and a synthetic
+  provider smoke probe are verification-pending under A2.3; neither substitutes
+  for a source-bound reviewer verdict or developer acceptance.
+
+**Still planned:** sub-spec evidence aggregation, guarded feature-branch
+promotion (A5), notifications (A6),
 and overall pipeline v1 acceptance (A7). Historical failed pilots, including
 Aider edit-format/no-diff failures, remain evidence rather than acceptance.
 
@@ -373,8 +380,9 @@ companion are exempt from retroactive creation.
   packets, spec/plan/context digest binding, and source-scope enforcement.
   A4.2a adds read-only, single-run aggregation and has passed local developer
   checks after recovery; its provider-backed reviewer checkpoint remains open.
-  A4.2b structured deviations and multi-stage/sub-spec aggregation are still
-  planned. Normative Markdown map extraction, explicit developer-approval
+  A4.2b structured deviations passed developer recovery verification, but
+  independent provider review is still pending; multi-stage/sub-spec aggregation
+  remains planned. Normative Markdown map extraction, explicit developer-approval
   evidence, focused/static-analysis ingestion and complete handoff remain
   future A4 work. A4 does not schedule or commit stages or accept specs.
 - [ ] **A5 — sequential feature-branch lifecycle:** support one approved feature branch per sub-spec,

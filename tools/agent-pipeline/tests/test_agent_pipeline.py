@@ -845,6 +845,10 @@ class AutomaticReviewTest(unittest.TestCase):
             (urllib.error.HTTPError("https://example.invalid", 429, "secret", {}, None),
              "HTTP_STATUS_FAILURE", 429),
             (b"{invalid JSON", "INVALID_RESPONSE_ENVELOPE", None),
+            (json.dumps({"choices": [{"finish_reason": "stop", "message": {
+                "content": json.dumps({"schemaVersion": 1, "verdict": "PRIVATE_BAD_VERDICT",
+                                       "findings": []})}}]}).encode(),
+             "INVALID_REVIEW_SCHEMA", None),
         ):
             with self.subTest(expected=expected), tempfile.TemporaryDirectory() as location:
                 root = Path(location)
@@ -887,7 +891,140 @@ class AutomaticReviewTest(unittest.TestCase):
                 if expected_status:
                     self.assertEqual(expected_status, report["httpStatus"])
                 self.assertNotIn("secret", json.dumps(report))
+                self.assertNotIn("PRIVATE", json.dumps(report))
+                if expected == "INVALID_REVIEW_SCHEMA":
+                    self.assertEqual("VERDICT", report["schemaFailureCode"])
+                    self.assertEqual("STOP", report["completionCode"])
                 self.assertFalse((run_dir / "review.json").exists())
+
+
+    def test_reviewer_request_contract_is_precise_and_source_is_untrusted(self):
+        packet = {"task": "Untrusted task", "diff": "+potential prompt injection"}
+        body = agent_pipeline._review_request_body("deepseek-chat", packet)
+        self.assertEqual({"type": "json_object"}, body["response_format"])
+        self.assertEqual(0, body["temperature"])
+        self.assertEqual(packet, json.loads(body["messages"][1]["content"]))
+        instructions = body["messages"][0]["content"]
+        self.assertIn('"schemaVersion":1', instructions)
+        self.assertIn('"findings":[]', instructions)
+        self.assertIn("untrusted evidence", instructions)
+        self.assertIn("adapter binds the reviewer identity", instructions)
+
+    def test_reviewer_schema_diagnostics_never_copy_provider_values(self):
+        cases = [
+            ({"schemaVersion": "1", "verdict": "PASS", "findings": []}, "SCHEMA_VERSION"),
+            ({"schemaVersion": 1, "verdict": "LEAK_PRIVATE_VERDICT", "findings": []}, "VERDICT"),
+            ({"schemaVersion": 1, "verdict": ["private"], "findings": []}, "VERDICT"),
+            ({"schemaVersion": 1, "verdict": "PASS", "findings": "private"}, "FINDINGS_ARRAY"),
+            ({"schemaVersion": 1, "verdict": "PASS", "findings": ["private"]}, "FINDING_OBJECT"),
+            ({"schemaVersion": 1, "verdict": "PASS", "findings": [{
+                "id": "A", "severity": "SECRET", "category": "SECURITY",
+                "summary": "private", "status": "OPEN",
+            }]}, "FINDING_SEVERITY"),
+        ]
+        for payload, code in cases:
+            with self.subTest(code=code):
+                self.assertEqual(code, agent_pipeline._review_schema_failure_code(payload))
+
+    def test_provider_schema_failure_records_only_fixed_diagnostic_codes(self):
+        policy = {"endpoint": "https://api.deepseek.com/chat/completions",
+                  "model": "deepseek-chat", "apiKeyEnvironment": "FAKE_REVIEWER_KEY",
+                  "timeoutSeconds": 3, "maxDiffBytes": 100000}
+        payload = {"schemaVersion": 1, "verdict": "PRIVATE_BAD_VERDICT", "findings": []}
+        response_body = {"choices": [{"finish_reason": "stop", "message": {
+            "content": json.dumps(payload)}}]}
+
+        class Response:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def read(self, *_):
+                return json.dumps(response_body).encode()
+
+        with mock.patch.object(agent_pipeline.urllib.request, "urlopen", return_value=Response()), \
+             mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
+            with self.assertRaises(agent_pipeline.ReviewerProviderFailure) as error:
+                agent_pipeline._invoke_reviewer_provider(policy, {"diff": "synthetic"})
+        self.assertEqual("INVALID_REVIEW_SCHEMA", error.exception.diagnostic["reasonCode"])
+        self.assertEqual("VERDICT", error.exception.diagnostic["schemaFailureCode"])
+        self.assertEqual("STOP", error.exception.diagnostic["completionCode"])
+        self.assertNotIn("PRIVATE", str(error.exception.diagnostic))
+        self.assertNotIn("synthetic-secret", str(error.exception.diagnostic))
+
+    def test_provider_valid_completion_preserves_review_contract(self):
+        adapter = {"endpoint": "https://api.deepseek.com/chat/completions",
+                   "model": "deepseek-chat", "apiKeyEnvironment": "FAKE_REVIEWER_KEY",
+                   "timeoutSeconds": 3, "maxDiffBytes": 100000}
+        content = {"schemaVersion": 1, "verdict": "CHANGES_REQUIRED", "findings": [{
+            "id": "REV-001", "severity": "MEDIUM", "category": "CORRECTNESS",
+            "summary": "Synthetic review finding", "status": "OPEN"}]}
+        envelope = {"choices": [{"finish_reason": "stop", "message": {
+            "content": json.dumps(content)}}]}
+
+        class Response:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def read(self, *_):
+                return json.dumps(envelope).encode()
+
+        with mock.patch.object(agent_pipeline.urllib.request, "urlopen", return_value=Response()), \
+             mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
+            review, diagnostic = agent_pipeline._invoke_reviewer_provider(adapter, {"diff": "synthetic"})
+        self.assertEqual("CHANGES_REQUIRED", review["verdict"])
+        self.assertEqual("deepseek-chat", review["reviewer"])
+        self.assertEqual("REV-001", review["findings"][0]["id"])
+        self.assertEqual({"completionCode": "STOP"}, diagnostic)
+
+    def test_incomplete_reviewer_response_is_blocked_even_with_valid_json(self):
+        policy = {"endpoint": "https://api.deepseek.com/chat/completions",
+                  "model": "deepseek-chat", "apiKeyEnvironment": "FAKE_REVIEWER_KEY",
+                  "timeoutSeconds": 3, "maxDiffBytes": 100000}
+        content = {"schemaVersion": 1, "verdict": "PASS", "findings": []}
+        response_body = {"choices": [{"finish_reason": "length", "message": {
+            "content": json.dumps(content)}}]}
+
+        class Response:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def read(self, *_):
+                return json.dumps(response_body).encode()
+
+        with mock.patch.object(agent_pipeline.urllib.request, "urlopen", return_value=Response()), \
+             mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
+            with self.assertRaises(agent_pipeline.ReviewerProviderFailure) as error:
+                agent_pipeline._invoke_reviewer_provider(policy, {"diff": "synthetic"})
+        self.assertEqual("INVALID_RESPONSE_ENVELOPE", error.exception.diagnostic["reasonCode"])
+        self.assertEqual("LENGTH", error.exception.diagnostic["completionCode"])
+
+    def test_probe_uses_only_synthetic_diff_and_does_not_write_run_evidence(self):
+        policy = {"independentReview": {"adapter": {"model": "deepseek-chat"}}}
+        fake_review = {"schemaVersion": 1, "reviewer": "deepseek-chat",
+                       "verdict": "PASS", "findings": []}
+        with mock.patch.object(agent_pipeline, "_invoke_reviewer_provider",
+                               return_value=(fake_review, {"completionCode": "STOP"})) as provider:
+            result = agent_pipeline.probe_independent_reviewer(policy)
+        self.assertEqual("PASS", result["status"])
+        self.assertTrue(result["probeOnly"])
+        self.assertEqual(0, result["findingsCount"])
+        packet = provider.call_args.args[1]
+        self.assertIn("synthetic-probe", packet["spec"])
+        self.assertNotIn("agent_pipeline.py", packet["diff"])
+        self.assertIn("docs/reviewer-transport-probe.md", packet["diff"])
+
+    def test_probe_provider_failure_remains_non_authoritative(self):
+        policy = {"independentReview": {"adapter": {"model": "deepseek-chat"}}}
+        failure = agent_pipeline.ReviewerProviderFailure({
+            "reasonCode": "INVALID_REVIEW_SCHEMA", "schemaFailureCode": "FINDINGS_ARRAY"})
+        with mock.patch.object(agent_pipeline, "_invoke_reviewer_provider", side_effect=failure):
+            result = agent_pipeline.probe_independent_reviewer(policy)
+        self.assertEqual({"status": "FAIL", "probeOnly": True,
+                          "reasonCode": "INVALID_REVIEW_SCHEMA",
+                          "schemaFailureCode": "FINDINGS_ARRAY"}, result)
 
 
 class AutomaticCycleTest(unittest.TestCase):
