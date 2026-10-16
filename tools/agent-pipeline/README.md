@@ -20,8 +20,11 @@ passed worker/check/oracle gates but failed reviewer invocation. The later
 PASS from the old source state. These slices remain verification-pending at
 their respective external acceptance boundaries.
 
-A4.2b structured worker deviations, multi-stage scheduling, branch promotion,
-notifications, merging and automatic archival are **not** implemented. The
+A4.2b structured worker deviations now has a recovery implementation that
+passed developer canonical verification and 26/26 independent oracle cases;
+its provider-backed reviewer checkpoint is still open. Multi-stage evidence
+aggregation, scheduling, branch promotion, notifications, merging, and
+automatic archival are **not** implemented. The
 intended behavior and stages are owned by the active
 [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md)
 specification. Detailed advisory design belongs in its
@@ -412,5 +415,37 @@ python3 tools/agent-pipeline/agent_pipeline.py handoff --run-id <run-id>
 ```
 
 The reviewer uses the policy-owned HTTPS DeepSeek chat-completions endpoint and model, with `DEEPSEEK_API_KEY` supplied by the environment. It receives only the immutable task packet, bounded worker source diff (including untracked files), changed-file names, and check statuses. Worker chat transcripts are not forwarded. A new independent request is created for each run, and its answer must match the repository's structured review schema. The worker cannot run or accept its own review. Review attempts are one-shot; provider/schema failures are recorded as `review-attempt.json` without saving raw API responses and block the run. Failed attempts now include a sanitized `reasonCode` (`HTTP_STATUS_FAILURE`, `REQUEST_TIMEOUT`, `TRANSPORT_FAILURE`, `INVALID_RESPONSE_ENVELOPE`, `INVALID_REVIEW_JSON`, `INVALID_REVIEW_SCHEMA`, or `REVIEW_EVIDENCE_FAILURE`) and optional numeric `httpStatus` for HTTP errors. These codes diagnose which boundary failed; they do not constitute a reviewer verdict, reveal raw provider output, or authorize retrying a terminal run. A larger diff is rejected rather than silently truncated. Never send sensitive code to an unapproved provider.
+
+### Reviewer response diagnostics and transport probe
+
+The A2.3 reviewer adapter uses DeepSeek JSON-object mode and a concrete v1
+response example. The provider returns `schemaVersion`, `verdict`, and `findings`;
+reviewer identity is injected by the trusted adapter. The adapter still
+requires full `validate_review()` success, and never treats an incomplete
+completion (`finish_reason` other than `stop`) as a successful review.
+
+For a **synthetic, opt-in provider transport check** that does not start Aider,
+read actual repository code, create a run, or grant acceptance:
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py probe-reviewer
+```
+
+This command requires the normal `DEEPSEEK_API_KEY` environment variable and
+makes one billable request to the policy-approved endpoint. It prints only
+bounded structured diagnostics (`probeOnly`, `status`, optional `verdict` and
+`findingsCount`). A successful probe proves JSON adapter compatibility for
+synthetic input only; a real source-bound run still needs all normal gates and
+a fresh independent reviewer verdict.
+
+On provider errors, `review-attempt.json` retains the existing sanitized
+`reasonCode`. A failure in review schema validation can additionally retain
+`schemaFailureCode` (`SCHEMA_VERSION`, `VERDICT`, `FINDINGS_ARRAY`,
+`FINDING_OBJECT`, `FINDING_ID`, `FINDING_SEVERITY`, `FINDING_CATEGORY`,
+`FINDING_SUMMARY`, `FINDING_STATUS`, or `OTHER`). Provider completion metadata
+is reduced to `completionCode` (`STOP`, `LENGTH`, `CONTENT_FILTER`, or `OTHER`).
+No rejected JSON fields, findings, raw responses, error messages, or API
+credentials are recorded in these diagnostics. A provider/schema failure
+remains `BLOCKED`, and a terminal run is never resumed.
 
 `handoff.json` summarizes task/spec/base identity, worker change digest/files, required checks, independent review findings, status/risk and evidence paths. It is an index for the main-model checkpoint, not acceptance or proof that every review issue is resolved. `record-review` remains available for externally supplied independent evidence, but it must not be used as a worker self-review. Neither command merges branches, repairs code, or archives specifications.
