@@ -919,6 +919,23 @@ def validate_review(review: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _review_failure_reason_code(error: Exception, phase: str) -> str:
+    """Classify a failed reviewer attempt without retaining provider content."""
+    if isinstance(error, urllib.error.HTTPError):
+        return "HTTP_STATUS_FAILURE"
+    if isinstance(error, TimeoutError):
+        return "REQUEST_TIMEOUT"
+    if isinstance(error, (urllib.error.URLError, OSError)):
+        return "TRANSPORT_FAILURE"
+    if phase == "envelope":
+        return "INVALID_RESPONSE_ENVELOPE"
+    if phase == "content":
+        return "INVALID_REVIEW_JSON"
+    if phase == "schema":
+        return "INVALID_REVIEW_SCHEMA"
+    return "REVIEW_EVIDENCE_FAILURE"
+
+
 def run_independent_review(repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     """Invoke a fresh-context, read-only reviewer after verified worker evidence."""
     if (run_dir / "review.json").exists() or (run_dir / "review-attempt.json").exists():
@@ -969,18 +986,27 @@ def run_independent_review(repo_root: Path, run_dir: Path, manifest: dict[str, A
             {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
         ]}
     started = utc_now()
+    phase = "request"
     try:
         request = urllib.request.Request(reviewer_policy["endpoint"],
             data=json.dumps(request_body).encode("utf-8"),
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(request, timeout=reviewer_policy["timeoutSeconds"]) as response:
             raw = response.read(256 * 1024 + 1)
+        phase = "envelope"
         if len(raw) > 256 * 1024:
             raise ValueError("Reviewer response exceeds limit")
         content = json.loads(raw)["choices"][0]["message"]["content"]
+        if not isinstance(content, str):
+            raise ValueError("Reviewer content must be a JSON string")
+        phase = "content"
         reviewed = json.loads(content)
+        if not isinstance(reviewed, dict):
+            raise ValueError("Reviewer content must be a JSON object")
         reviewed["reviewer"] = reviewer_policy["model"]
+        phase = "schema"
         review = validate_review(reviewed)
+        phase = "persistence"
         write_json(run_dir / "review.json", review)
         reviews_path = run_dir / "reviews.json"
         reviews = read_json(reviews_path)
@@ -989,9 +1015,13 @@ def run_independent_review(repo_root: Path, run_dir: Path, manifest: dict[str, A
         write_json(run_dir / "review-attempt.json", {"status": "PASS", "at": started,
             "model": reviewer_policy["model"], "workerSha256": worker["changeSha256"]})
         return review
-    except (OSError, ValueError, KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-        write_json(run_dir / "review-attempt.json", {"status": "FAIL", "at": started,
-            "model": reviewer_policy["model"], "reason": "reviewer request or schema failed"})
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        attempt = {"status": "FAIL", "at": started,
+            "model": reviewer_policy["model"], "reason": "reviewer request or schema failed",
+            "reasonCode": _review_failure_reason_code(exc, phase)}
+        if isinstance(exc, urllib.error.HTTPError):
+            attempt["httpStatus"] = exc.code
+        write_json(run_dir / "review-attempt.json", attempt)
         raise ValueError("Independent reviewer failed; see review-attempt.json (no raw response stored)") from None
 
 
@@ -1062,6 +1092,157 @@ def _worker_attempt_summary(
         summary["evidenceFile"] = evidence_file
         summary["evidenceSha256"] = evidence_sha256
     return summary
+
+
+EVIDENCE_DIGEST_FILES = ("manifest.json", "worker.json", "checks.json", "review.json", "status.json")
+
+
+def _require_json_object(path: Path) -> dict[str, Any]:
+    """Read one required JSON object, failing closed on malformed or array-shaped evidence."""
+    if not path.is_file():
+        raise ValueError(f"Required evidence file is missing: {path.name}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Required evidence file is not a JSON object: {path.name}")
+    return data
+
+
+def _require_positive_int(value: Any, name: str) -> int:
+    """Require a strict positive integer, rejecting booleans and non-integers."""
+    if type(value) is not int or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def _bounded_check_summary(entry: dict[str, Any]) -> dict[str, Any]:
+    """Select compact, non-secret check metadata without commands or logs."""
+    return {
+        "name": entry.get("name"),
+        "status": entry.get("status"),
+        "required": entry.get("required"),
+        "attempt": entry.get("attempt"),
+    }
+
+
+def summarize_run_evidence(run_dir: Path) -> dict[str, Any]:
+    """Build a compact, read-only, digest-linked index of one run's persisted evidence.
+
+    This helper never invokes Git, the network, the worker, the reviewer, or
+    ``update_status()``; it only reads persisted JSON evidence. It is a snapshot
+    index bound to the current file bytes, not a historical tamper-proof trust
+    anchor. It never infers reviewer PASS or developer acceptance.
+    """
+    manifest = _require_json_object(run_dir / "manifest.json")
+    if manifest.get("schemaVersion") != SCHEMA_VERSION:
+        raise ValueError("Unsupported manifest schemaVersion")
+    run_id = manifest.get("runId")
+    stage = manifest.get("stage")
+    if not isinstance(run_id, str) or not run_id:
+        raise ValueError("Manifest runId must be a non-empty string")
+    if not isinstance(stage, str) or not stage:
+        raise ValueError("Manifest stage must be a non-empty string")
+    task_sha256 = manifest.get("taskSha256")
+    if not isinstance(task_sha256, str) or not task_sha256:
+        raise ValueError("Manifest taskSha256 must be a non-empty string")
+    policy_sha256 = manifest.get("policy", {}).get("sha256")
+    if not isinstance(policy_sha256, str) or not policy_sha256:
+        raise ValueError("Manifest policy sha256 must be a non-empty string")
+    base_commit = manifest.get("repository", {}).get("baseCommit")
+    required_checks = manifest.get("requiredChecks")
+    if not isinstance(required_checks, list) or not all(
+        isinstance(name, str) and name for name in required_checks
+    ) or len(set(required_checks)) != len(required_checks):
+        raise ValueError("Manifest requiredChecks must be unique non-empty strings")
+
+    status = _require_json_object(run_dir / "status.json")
+    if status.get("runId") != run_id or status.get("stage") != stage:
+        raise ValueError("status.json run/stage identity does not match the manifest")
+    state = status.get("state")
+    if not isinstance(state, str) or not state:
+        raise ValueError("status.json state must be a non-empty string")
+
+    checks_data = _require_json_object(run_dir / "checks.json")
+    raw_checks = checks_data.get("checks")
+    if not isinstance(raw_checks, list):
+        raise ValueError("checks.json must contain a checks array")
+    latest_checks: dict[str, dict[str, Any]] = {}
+    for entry in raw_checks:
+        if not isinstance(entry, dict):
+            raise ValueError("checks.json contains an invalid check record")
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError("checks.json check name must be a non-empty string")
+        _require_positive_int(entry.get("attempt"), f"Check {name} attempt")
+        if type(entry.get("required")) is not bool:
+            raise ValueError(f"Check {name} required flag must be a boolean")
+        latest_checks[name] = entry
+
+    status_checks = status.get("checks")
+    if not isinstance(status_checks, dict):
+        raise ValueError("status.json must contain a checks object")
+    if set(status_checks) != set(latest_checks):
+        raise ValueError("status.json and checks.json contain different check names")
+    for name, summary in status_checks.items():
+        if not isinstance(summary, dict):
+            raise ValueError("status.json check summary must be an object")
+        latest = latest_checks.get(name)
+        if latest is None:
+            raise ValueError(f"status.json references an unknown check: {name}")
+        if (latest.get("status") != summary.get("status")
+                or latest.get("attempt") != summary.get("attempt")
+                or latest.get("required") != summary.get("required")):
+            raise ValueError(f"status.json check summary disagrees with checks.json: {name}")
+
+    worker_attempts = collect_worker_attempts(run_dir)
+    for attempt in worker_attempts:
+        if attempt.get("taskSha256") != task_sha256:
+            raise ValueError("Worker attempt task digest does not match the manifest")
+
+    review_path = run_dir / "review.json"
+    if review_path.is_file():
+        review = _require_json_object(review_path)
+        verdict = review.get("verdict")
+        if verdict not in VALID_REVIEW_VERDICTS:
+            raise ValueError("review.json verdict is invalid")
+        review_summary = {"present": True, "verdict": verdict}
+    else:
+        review_summary = {"present": False, "verdict": None}
+
+    status_review = status.get("review")
+    if not isinstance(status_review, dict):
+        raise ValueError("status.json must contain a review summary")
+    if (status_review.get("present") is not review_summary["present"]
+            or status_review.get("verdict") != review_summary["verdict"]):
+        raise ValueError("status.json review summary disagrees with review.json")
+
+    if state == STATE_READY_FOR_MAIN_REVIEW:
+        for name in required_checks:
+            entry = latest_checks.get(name)
+            if entry is None or entry.get("status") != "PASS" or entry.get("required") is not True:
+                raise ValueError("READY_FOR_MAIN_REVIEW requires every required check to pass")
+        if not review_summary["present"] or review_summary["verdict"] != "PASS":
+            raise ValueError("READY_FOR_MAIN_REVIEW requires an explicit independent review PASS")
+
+    evidence_digests: dict[str, str] = {}
+    for name in EVIDENCE_DIGEST_FILES:
+        candidate = run_dir / name
+        if candidate.is_file():
+            evidence_digests[name] = sha256_file(candidate)
+
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "runId": run_id,
+        "stage": stage,
+        "baseCommit": base_commit,
+        "taskSha256": task_sha256,
+        "policySha256": policy_sha256,
+        "state": state,
+        "workerAttempts": worker_attempts,
+        "checks": [_bounded_check_summary(latest_checks[name]) for name in sorted(latest_checks)],
+        "review": review_summary,
+        "evidenceDigests": evidence_digests,
+        "requiresExternalAcceptance": True,
+    }
 
 
 def write_handoff(repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:

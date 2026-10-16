@@ -824,6 +824,71 @@ class AutomaticReviewTest(unittest.TestCase):
             self.assertFalse((run_dir / "review.json").exists())
             self.assertFalse((run_dir / "review-attempt.json").exists())
 
+    def test_reviewer_failure_codes_do_not_expose_error_messages(self):
+        import urllib.error
+        cases = [
+            (urllib.error.HTTPError("https://example.invalid", 429, "private", {}, None),
+             "request", "HTTP_STATUS_FAILURE"),
+            (TimeoutError("credential or endpoint"), "request", "REQUEST_TIMEOUT"),
+            (urllib.error.URLError("private provider response"), "request", "TRANSPORT_FAILURE"),
+            (ValueError("private content"), "envelope", "INVALID_RESPONSE_ENVELOPE"),
+            (ValueError("private content"), "content", "INVALID_REVIEW_JSON"),
+            (ValueError("private content"), "schema", "INVALID_REVIEW_SCHEMA"),
+        ]
+        for error, phase, expected in cases:
+            with self.subTest(expected=expected):
+                self.assertEqual(expected, agent_pipeline._review_failure_reason_code(error, phase))
+
+    def test_reviewer_records_safe_http_status_and_invalid_envelope(self):
+        import urllib.error
+        for response, expected, expected_status in (
+            (urllib.error.HTTPError("https://example.invalid", 429, "secret", {}, None),
+             "HTTP_STATUS_FAILURE", 429),
+            (b"{invalid JSON", "INVALID_RESPONSE_ENVELOPE", None),
+        ):
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as location:
+                root = Path(location)
+                run_dir = root / "evidence"
+                run_dir.mkdir()
+                (run_dir / "task.md").write_text("task", encoding="utf-8")
+                agent_pipeline.write_json(run_dir / "checks.json", {"checks": []})
+                manifest = {"stage": "A4", "specPath": "docs/specs/active/test.md",
+                            "repository": {"baseCommit": "abc"}}
+                policy = {"requiredChecks": [], "independentReview": {"adapter": {
+                    "endpoint": "https://example.invalid/chat/completions", "model": "reviewer",
+                    "apiKeyEnvironment": "REVIEWER_FAKE_TEST_KEY", "timeoutSeconds": 1,
+                    "maxDiffBytes": 100000}}}
+                worker = {"status": "PASS", "changedFiles": [], "changeSha256": "a" * 64}
+                completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="diff --git a/foo b/foo\n+code")
+
+                class Response:
+                    def __enter__(self):
+                        return self
+                    def __exit__(self, *args):
+                        return False
+                    def read(self, *_):
+                        return response
+
+                def transport(*args, **kwargs):
+                    if isinstance(response, Exception):
+                        raise response
+                    return Response()
+
+                with mock.patch.object(agent_pipeline, "ensure_worker_workspace_matches_result", return_value=worker), \
+                     mock.patch.object(agent_pipeline, "derive_state", return_value=(agent_pipeline.STATE_REVIEW_REQUIRED, [])), \
+                     mock.patch.object(agent_pipeline.subprocess, "run", return_value=completed), \
+                     mock.patch.object(agent_pipeline.urllib.request, "urlopen", side_effect=transport), \
+                     mock.patch.dict(os.environ, {"REVIEWER_FAKE_TEST_KEY": "not-a-real-secret"}):
+                    with self.assertRaisesRegex(ValueError, "Independent reviewer failed"):
+                        agent_pipeline.run_independent_review(root, run_dir, manifest, policy)
+                report = agent_pipeline.read_json(run_dir / "review-attempt.json")
+                self.assertEqual("FAIL", report["status"])
+                self.assertEqual(expected, report["reasonCode"])
+                if expected_status:
+                    self.assertEqual(expected_status, report["httpStatus"])
+                self.assertNotIn("secret", json.dumps(report))
+                self.assertFalse((run_dir / "review.json").exists())
+
 
 class AutomaticCycleTest(unittest.TestCase):
     """Protects fail-closed A3 automated check, independent review, and repair sequencing."""
@@ -1374,6 +1439,229 @@ class HandoffWorkerAttemptsTest(unittest.TestCase):
         published = attempts[0]["evidenceSha256"]
         self.write_snapshot(1, self.write_worker(1, status="FAIL"))
         self.assertNotEqual(published, agent_pipeline.sha256_file(self.run_dir / "worker-attempt-1.json"))
+
+
+class RunEvidenceSummaryTest(unittest.TestCase):
+    """Protects the A4.2a read-only single-run evidence aggregator (EA-01..EA-12)."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.run_dir = Path(self.temp.name) / "run"
+        self.run_dir.mkdir()
+        self.manifest = {
+            "schemaVersion": 1,
+            "runId": "run-EA-01",
+            "stage": "A4",
+            "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+            "taskSha256": "1" * 64,
+            "policy": {"sha256": "2" * 64},
+            "repository": {"baseCommit": "3" * 40},
+            "requiredChecks": ["gitleaks", "canonical"],
+        }
+        self.worker = {
+            "schemaVersion": 1,
+            "attempt": 1,
+            "status": "PASS",
+            "failureReason": None,
+            "taskSha256": "1" * 64,
+            "model": "worker",
+            "changeSha256": "4" * 64,
+            "changedFiles": ["tools/agent-pipeline/agent_pipeline.py"],
+            "logSha256": "5" * 64,
+            "command": ["raw_command_secret"],
+            "log": "raw_log_secret",
+            "preflight": {"rawOutput": "raw_transcript_secret"},
+        }
+        self.checks = [
+            {"name": "gitleaks", "attempt": 1, "status": "PASS", "required": True,
+             "command": ["raw_command_secret"]},
+            {"name": "canonical", "attempt": 1, "status": "FAIL", "required": True,
+             "log": "raw_log_secret"},
+        ]
+        self.status = {
+            "schemaVersion": 1,
+            "runId": "run-EA-01",
+            "stage": "A4",
+            "state": "BLOCKED",
+            "checks": {
+                "gitleaks": {"attempt": 1, "status": "PASS", "required": True},
+                "canonical": {"attempt": 1, "status": "FAIL", "required": True},
+            },
+            "worker": {"present": True, "required": True, "status": "PASS"},
+            "review": {"present": False, "verdict": None, "openFindingCount": 0},
+            "mainReviewRequiredBeforeAcceptance": True,
+        }
+        self.persist()
+
+    def persist(self) -> None:
+        agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        agent_pipeline.write_json(self.run_dir / "checks.json", {"schemaVersion": 1, "checks": self.checks})
+        agent_pipeline.write_json(self.run_dir / "status.json", self.status)
+
+    def report(self) -> dict:
+        return agent_pipeline.summarize_run_evidence(self.run_dir)
+
+    def reject(self) -> None:
+        with self.assertRaises((ValueError, TypeError, KeyError, json.JSONDecodeError)):
+            self.report()
+
+    def ready(self) -> None:
+        self.checks[1]["status"] = "PASS"
+        self.status["checks"]["canonical"]["status"] = "PASS"
+        self.status["state"] = "READY_FOR_MAIN_REVIEW"
+        self.status["review"] = {"present": True, "verdict": "PASS", "openFindingCount": 0}
+        self.persist()
+        agent_pipeline.write_json(
+            self.run_dir / "review.json",
+            {"schemaVersion": 1, "reviewer": "reviewer", "verdict": "PASS", "findings": []},
+        )
+
+    # EA-01: a blocked run reports source identity and never claims acceptance.
+    def test_ea01_blocked_source_identity(self) -> None:
+        report = self.report()
+        self.assertEqual(("run-EA-01", "A4", "BLOCKED"),
+                         (report["runId"], report["stage"], report["state"]))
+        self.assertEqual("3" * 40, report["baseCommit"])
+        self.assertEqual("1" * 64, report["taskSha256"])
+        self.assertEqual("2" * 64, report["policySha256"])
+        self.assertTrue(report["requiresExternalAcceptance"])
+        self.assertNotIn("accepted", report)
+
+    # EA-02: a ready run requires explicit PASS evidence but still requires external acceptance.
+    def test_ea02_ready_requires_explicit_pass_but_not_accepted(self) -> None:
+        self.ready()
+        result = self.report()
+        self.assertEqual("READY_FOR_MAIN_REVIEW", result["state"])
+        self.assertTrue(result["review"]["present"])
+        self.assertEqual("PASS", result["review"]["verdict"])
+        self.assertEqual({"PASS"}, {item["status"] for item in result["checks"]})
+        self.assertTrue(result["requiresExternalAcceptance"])
+        self.assertNotIn("accepted", result)
+
+    # EA-03: a missing review is explicitly absent, never an implied PASS.
+    def test_ea03_no_review_never_becomes_pass(self) -> None:
+        result = self.report()
+        self.assertFalse(result["review"]["present"])
+        self.assertIsNone(result["review"]["verdict"])
+        self.assertNotIn("review.json", result["evidenceDigests"])
+
+    # EA-04: multiple snapshots are ordered numerically with digest-linked evidence.
+    def test_ea04_ordered_snapshot_digests(self) -> None:
+        for n in (1, 2, 3):
+            agent_pipeline.write_json(
+                self.run_dir / f"worker-attempt-{n}.json", dict(self.worker, attempt=n)
+            )
+        self.worker["attempt"] = 3
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        result = self.report()
+        self.assertEqual([1, 2, 3], [x["attempt"] for x in result["workerAttempts"]])
+        for x in result["workerAttempts"]:
+            self.assertEqual(
+                agent_pipeline.sha256_file(self.run_dir / x["evidenceFile"]),
+                x["evidenceSha256"],
+            )
+
+    # EA-05: a pre-worker run reports empty history without inventing a worker digest.
+    def test_ea05_missing_worker_is_not_invented(self) -> None:
+        (self.run_dir / "worker.json").unlink()
+        self.status["worker"] = {"present": False, "required": True, "status": None}
+        agent_pipeline.write_json(self.run_dir / "status.json", self.status)
+        result = self.report()
+        self.assertEqual([], result["workerAttempts"])
+        self.assertNotIn("worker.json", result["evidenceDigests"])
+
+    # EA-06: malformed or array-shaped required JSON fails closed.
+    def test_ea06_malformed_or_array_manifest_fails_closed(self) -> None:
+        for payload in ("[]\n", "{broken"):
+            with self.subTest(payload=payload):
+                (self.run_dir / "manifest.json").write_text(payload, encoding="utf-8")
+                self.reject()
+
+    # EA-07: a latest worker that conflicts with its snapshot fails closed.
+    def test_ea07_latest_snapshot_mismatch(self) -> None:
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-1.json", self.worker)
+        self.worker["model"] = "changed"
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        self.reject()
+
+    # EA-08: a worker or snapshot task digest that disagrees with the manifest is rejected.
+    def test_ea08_task_sha_mismatch_latest_or_snapshot(self) -> None:
+        self.worker["taskSha256"] = "9" * 64
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        self.reject()
+        self.worker["taskSha256"] = "1" * 64
+        self.persist()
+        agent_pipeline.write_json(
+            self.run_dir / "worker-attempt-1.json", dict(self.worker, taskSha256="9" * 64)
+        )
+        self.reject()
+
+    # EA-09: a latest check record that disagrees with status.json fails closed.
+    def test_ea09_status_check_disagreement(self) -> None:
+        self.status["checks"]["canonical"]["status"] = "PASS"
+        agent_pipeline.write_json(self.run_dir / "status.json", self.status)
+        self.reject()
+
+    # EA-10: READY without a required PASS check or independent PASS review is rejected.
+    def test_ea10_unsupported_ready_without_check_or_review(self) -> None:
+        self.status["state"] = "READY_FOR_MAIN_REVIEW"
+        agent_pipeline.write_json(self.run_dir / "status.json", self.status)
+        self.reject()
+        self.checks[1]["status"] = "PASS"
+        self.status["checks"]["canonical"]["status"] = "PASS"
+        self.persist()
+        self.reject()
+
+    # EA-11: raw commands, logs, and transcripts never appear in the summary.
+    def test_ea11_no_raw_fields(self) -> None:
+        result = json.dumps(self.report())
+        for needle in ("raw_command_secret", "raw_log_secret", "raw_transcript_secret"):
+            self.assertNotIn(needle, result)
+
+    # EA-12: published digests bind current file bytes, not a historical trust anchor.
+    def test_ea12_file_digest_current_bytes(self) -> None:
+        result = self.report()
+        self.assertEqual(
+            agent_pipeline.sha256_file(self.run_dir / "checks.json"),
+            result["evidenceDigests"]["checks.json"],
+        )
+        with (self.run_dir / "checks.json").open("ab") as out:
+            out.write(b"\n")
+        self.assertNotEqual(
+            agent_pipeline.sha256_file(self.run_dir / "checks.json"),
+            result["evidenceDigests"]["checks.json"],
+        )
+
+    def test_aggregate_rejects_check_present_only_in_checks_json(self) -> None:
+        self.status["checks"].pop("canonical")
+        self.persist()
+        self.reject()
+
+    def test_aggregate_rejects_ready_check_not_marked_required(self) -> None:
+        self.ready()
+        self.checks[1]["required"] = False
+        self.status["checks"]["canonical"]["required"] = False
+        self.persist()
+        self.reject()
+
+    def test_aggregate_rejects_review_status_disagreement(self) -> None:
+        self.ready()
+        self.status["review"]["verdict"] = "CHANGES_REQUIRED"
+        self.persist()
+        self.reject()
+
+    def test_aggregate_rejects_noninteger_check_attempt(self) -> None:
+        self.checks[1]["attempt"] = True
+        self.status["checks"]["canonical"]["attempt"] = True
+        self.persist()
+        self.reject()
+
+    def test_aggregate_rejects_duplicate_required_check_names(self) -> None:
+        self.manifest["requiredChecks"].append("canonical")
+        self.persist()
+        self.reject()
 
 
 class AgentPipelineStagePacketTest(unittest.TestCase):
