@@ -20,15 +20,21 @@ passed worker/check/oracle gates but failed reviewer invocation. The later
 PASS from the old source state. These slices remain verification-pending at
 their respective external acceptance boundaries.
 
-A4.2b structured worker deviations now has a recovery implementation that
-passed developer canonical verification and 26/26 independent oracle cases;
-its provider-backed reviewer checkpoint is still open. Multi-stage evidence
-aggregation, scheduling, branch promotion, notifications, merging, and
-automatic archival are **not** implemented. The
-intended behavior and stages are owned by the active
+A4.2b captures structured worker deviations. A4.3 aggregates explicitly
+selected stages without inferring approval; A4.4 preserves complete private
+run evidence beyond Gradle `clean` and publishes a compact review index.
+A5.1 supports an explicitly approved one-stage CAS commit. A5.2 prepares the
+**next** LOW-risk stage only after matching its predecessor receipt, ordered
+stage roster and exact checked-out feature HEAD. These are bounded,
+verification-pending slices; previous provider-backed `BLOCKED` runs are not
+retroactively accepted. End-to-end autonomous stage scheduling, notifications,
+merging and archival are **not** implemented. The intended behavior and stages
+are owned by the active
 [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md)
 specification. Detailed advisory design belongs in its
 [implementation plan](../../docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md).
+
+For an adaptation to a different repository, start with the [Porting Guide](PORTING.md). It separates reusable safety contracts from SignalHarvester-specific configuration and provides a target-project model request.
 
 ## Current boundary
 
@@ -494,13 +500,18 @@ Run evidence and worker worktrees are under ignored `build/` paths; do not inclu
 
 Do not copy generated run evidence into owning documentation. Accepted stable behavior belongs in the repository documents that already own that topic.
 
-## Planned model-role and implementation-plan integration (A4+)
+## Model-role and implementation-plan integration (A4+)
 
 The root `AGENTS.md` defines `MAIN_MODEL`, `WORKER_MODEL`, `REVIEWER_MODEL`, `ORCHESTRATOR`, and `DEVELOPER`. The active specification defines how those roles interact; the roles are not tied to a particular model brand.
 
 For a newly authored staged sub-spec, `MAIN_MODEL` prepares a same-directory `<subspec-stem>-implementation-plan.md`. It contains non-binding architecture and per-stage file/context suggestions. The owning sub-spec remains normative for requirements and known module scope; the companion must not authorize edits, redefine checks, or replace local `AGENTS.md` and module contracts. A worker may propose a better in-scope approach, recording material deviations and escalating new ownership or risk.
 
-A4 should validate and source-bind the sub-spec and companion plan separately, resolve current repository context, pass the plan to Aider **read-only**, and enforce approved editable paths outside the prompt. Current `init`/`prepare-worker`/`run-worker`/`run-cycle` commands do **not** discover companion plans, enforce a stage task packet, or run an entire sub-spec based on these documents. Do not infer this functionality from a plan existing in the repository.
+A4.1 `init-stage` validates and binds an explicitly supplied sub-spec,
+companion plan, context and editable scope. The `init` command remains a legacy
+entry point without packet-based enforcement. Neither `init-stage` nor
+`prepare-next-stage` parses Markdown to discover all stages; their explicit
+Stage Task Packets and rosters are the authorization inputs. `run-cycle`
+executes only one run, not an entire sub-spec.
 
 After end-to-end implementation the developer initiates a final `MAIN_MODEL` review through ChatGPT; neither the reviewer adapter nor `handoff` automatically initiates ChatGPT review. Only explicit developer acceptance can authorize paired archival of the sub-spec and companion plan. Current pipeline commands do not perform lifecycle moves.
 
@@ -508,7 +519,12 @@ After end-to-end implementation the developer initiates a final `MAIN_MODEL` rev
 
 The active [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md) specification owns intended evolution, stage sequencing, and final acceptance criteria. This guide owns current implemented commands and evidence semantics only.
 
-A2.1–A2.3 and A3.1/A3.2 remain developer-verification-pending. The first real documentation pilot reached DeepSeek but applied no changes after edit-format mismatches. Next: rerun P2 with the opt-in `run-cycle` on real Aider/Gitleaks/reviewer infrastructure, then develop A4 delegation packets and enforced scope. Multi-stage scheduling, feature-branch progression, notifications, and lifecycle gates remain planned, **not implemented by these commands**.
+A2/A3/A4/A5 slices retain separate verification and external acceptance
+checkpoints. A5.1 supports one manual stage commit, and A5.2 checks the
+predecessor before initializing the next stage; neither constitutes a
+multi-stage scheduler. Provider-backed source review, A6 notifications,
+automated batching, final merge and specification lifecycle moves still
+require separate implementations and developer authorization.
 
 
 ## Automatic independent review and main checkpoint handoff (A2.3)
@@ -555,3 +571,102 @@ credentials are recorded in these diagnostics. A provider/schema failure
 remains `BLOCKED`, and a terminal run is never resumed.
 
 `handoff.json` summarizes task/spec/base identity, worker change digest/files, required checks, independent review findings, status/risk and evidence paths. It is an index for the main-model checkpoint, not acceptance or proof that every review issue is resolved. `record-review` remains available for externally supplied independent evidence, but it must not be used as a worker self-review. Neither command merges branches, repairs code, or archives specifications.
+
+
+## A5.1 guarded one-stage feature-branch promotion (verification-pending)
+
+`promote-stage` is an opt-in **Git mutation**, not a read-only report. It only
+accepts an existing `feature/*` branch recorded by a LOW-risk A4.1 stage run,
+its exact original full parent SHA, successful required check/log evidence,
+an independent provider PASS bound to the current worker bytes, and explicit
+`--developer-approved` confirmation. The flag records CLI intent; it does not
+authenticate developer identity or grant sub-spec acceptance.
+
+Before promotion, export private evidence with `export-subspec` while it still
+exists under `build/`. Keep that bundle secure and outside the repository.
+The run's exact source and policy must still be accessible and unchanged.
+The feature branch **must not be checked out in any worktree**. Switch the
+developer checkout to an alternative branch/clean detached HEAD at the exact
+run parent commit; do not reset or discard uncommitted work to satisfy this
+precondition. The command never checks out, resets, rebases, or merges.
+
+```bash
+# An example only: fill in the actual verified run ID, feature branch, and SHA.
+python3 tools/agent-pipeline/agent_pipeline.py promote-stage \
+  --run-id <actual-ready-run-id> \
+  --feature-branch feature/<approved-topic> \
+  --expected-parent <full-40-character-run-base-sha> \
+  --developer-approved
+```
+
+Promotion stages verified source bytes in an isolated temporary Git index,
+creates one commit with the declared parent, and advances the feature ref
+using exact-old-SHA `git update-ref` compare-and-swap. It writes
+`promotion-intent.json` before the ref update and `promotion.json` only after
+success. If the process fails between these records, the developer must
+inspect the intent and Git ref manually before any further action; retrying
+with the same run is intentionally blocked.
+
+After promotion, the developer explicitly switches to the new branch head,
+starts a **new** source-bound stage run, and repeats checks/reviewer. This
+slice never executes follow-up stages, sends notifications, merges into `main`,
+or archives active specifications. The stage commit is **not** developer
+acceptance. See the active Development Agent Pipeline specification for the
+separate final MAIN_MODEL and DEVELOPER checkpoints.
+
+Deterministic independent verification:
+
+```bash
+python3 tools/agent-pipeline/benchmarks/stage_promotion_oracle.py \
+  --candidate tools/agent-pipeline/agent_pipeline.py
+```
+
+
+## A5.2 source-bound preparation of the next stage (verification-pending)
+
+`prepare-next-stage` is an **explicit, single-step sequence guard** after a
+successful A5.1 `promote-stage`. It requires an explicit `--developer-approved`
+acknowledgment for the next packet (not identity authentication), a complete
+ordered expected-stage
+roster, a new developer-approved LOW-risk Stage Task Packet and absolute
+previous-run evidence directory. For evidence preserved with A4.4, pass
+`<private-export>/runs/<previous-run-id>`; its `bundle-index.json` may also be
+verified separately before this command. Raw evidence is sensitive.
+
+The developer must manually check out the promoted feature branch at its
+exact `promotion.json` `stageCommit` (after Git CAS, because A5.1 forbids a
+checked-out target branch). The checkout must be clean. The controller checks
+that the new stage immediately follows the predecessor in the roster, the
+normative spec and companion identities match, predecessor review/check logs
+and promotion intent/receipt agree, and the checked-out feature HEAD has the
+exact recorded Git parent. It never infers a stage list from Markdown.
+
+```bash
+# Example: replace every placeholder with a real packet, promoted run and SHA.
+python3 tools/agent-pipeline/agent_pipeline.py prepare-next-stage \
+  --previous-run-dir /private/agent-evidence/runs/<prior-run-id> \
+  --packet /absolute/or/repo/relative/next-stage-packet.json \
+  --stage <previous-stage-id> --stage <next-stage-id> \
+  --feature-branch feature/<approved-topic> \
+  --expected-head <full-promoted-stage-commit-sha> \
+  --run-id <new-unique-run-id> \
+  --developer-approved
+```
+
+The command creates the next `PREPARED` run plus immutable packet/context
+and a `stageProgression` link with predecessor receipt SHA-256. It does not
+call Aider, perform checks/review, alter Git refs, grant acceptance, or
+implicitly authorize later stages. Run `prepare-worker` and then `run-cycle`
+**only** after the developer confirms the new packet. Each subsequent stage
+must pass a new worker/check/reviewer cycle and explicitly controlled promotion.
+Missing predecessor evidence, tampered logs, changed policy, incorrect roster,
+stale Git ancestry or repeat run ID block without creating a valid new stage.
+
+This slice is not a general autonomous scheduler. Chaining an entire sub-spec
+without developer input, high-risk checkpoints, notification delivery and
+final lifecycle transitions remain later work. Independent verification:
+
+```bash
+python3 tools/agent-pipeline/benchmarks/stage_progression_oracle.py \
+  --candidate tools/agent-pipeline/agent_pipeline.py
+```

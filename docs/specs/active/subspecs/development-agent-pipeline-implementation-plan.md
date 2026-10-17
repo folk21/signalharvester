@@ -25,9 +25,54 @@ Likely new files (**candidate**): `tools/agent-pipeline/examples/*` and a simple
 
 For evidence enrichment, prefer compact references and digests over raw model output. Independently review source-bound worker changes and all required checks after each repair; do not reuse stale PASS evidence.
 
-## A5 — feature-branch progression (future)
+## A5 — feature-branch progression (A5.1 verification-pending)
 
-Requirements: AP12, AP15. Treat each verified stage source state as an immutable promotion candidate. Verify feature-branch HEAD and run base before any commit; never enable automatic merge or archival. No A5 implementation is authorized by the A4 pilot packet.
+Requirements: AP10, AP12, AP15. A5.1 provides one manually approved, fail-closed
+stage commit. Do not schedule later stages or archive the specification.
+
+- Require an existing `feature/*` branch bound in the original stage manifest,
+  its exact full parent commit, a clean developer checkout at that parent and
+  an un-checked-out feature branch in all Git worktrees.
+- Accept only an A4.1 source-bound bounded LOW-risk packet and the exact worker
+  bytes validated by the original worker digest. All required checks and their
+  logs must be present and PASS, and the independent provider attempt must be
+  PASS and match the same worker digest. Re-read the current policy/task/packet
+  and reject stale or conflicting evidence.
+- Use an alternate Git index to compose an exact commit tree from the worker
+  source without modifying either checkout. Write a private promotion intent
+  before advancing the branch with an exact-old SHA Git `update-ref` CAS.
+  Emit a promotion receipt only after the successful ref update. A failed or
+  interrupted promotion intent requires developer-led reconciliation.
+- Never checkout/reset/merge/rebase a branch as part of promotion. Developer
+  explicitly checks out the promoted feature branch and initializes a fresh
+  source-bound packet for the next stage; A5.2 may implement serialized
+  orchestration only after independent review.
+
+All A5 stage commits are implementation evidence, **not developer acceptance**.
+Only the developer may explicitly approve final lifecycle synchronization and
+paired archival after MAIN_MODEL review. High-risk and uncertain checkpoints
+remain external, not an implicit `--developer-approved` permission bypass.
+
+## A5.2 — serialized next-stage preparation (advisory)
+
+Requirements: AP12 and AP15. Preserve A5.1's CAS-only ref mutation: after a
+successful promotion, the developer explicitly checks out the feature branch,
+then the controller verifies the previous receipt and prepares one new run.
+Read prior evidence from an explicit absolute path, including private A4.4
+custody, without reopening it for writes. Require a complete ordered stage
+roster and the next LOW-risk packet. Check the previous `promotion-intent.json`
+and `promotion.json` identity, reviewer source digest, check logs and the exact
+Git parent/HEAD before creating any next-run files. The new manifest should
+carry a predecessor receipt SHA-256; never assume a current-byte digest is a
+remote notarization. Keep this command separate from `run-cycle`: the next
+worker, final MAIN_MODEL review and developer acceptance remain external.
+
+**Portability obligation:** maintain the contributor-facing
+[`tools/agent-pipeline/PORTING.md`](../../../../tools/agent-pipeline/PORTING.md)
+as a concrete mapping from this repository's conventions to those of a target
+project. Document hard-coded spec paths, SHA-1-shaped Git IDs, provider and
+security tooling, branch rules, and canonical checks. Never claim that copying
+SignalHarvester's `pipeline-policy.json` into another project is sufficient.
 
 ## Alternatives, assumptions and open questions
 

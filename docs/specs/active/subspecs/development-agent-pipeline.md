@@ -49,8 +49,21 @@ portable A4.3 replay and separate compact external-review summary. No
 promotion/commit proof is generated in A4.4; the complete promoted-stage
 checkpoint must await A5 evidence.
 
-**Still planned:** guarded feature-branch promotion (A5), notifications (A6),
-and overall pipeline v1 acceptance (A7). Historical failed pilots, including
+**A5.1 (verification-pending):** explicit, developer-authorized LOW-risk
+stage promotion uses the verified isolated worker bytes, revalidates check and
+review evidence, and updates only an un-checked-out `feature/*` ref with
+compare-and-swap. A promotion intent/receipt records the selected commit but
+does not constitute sub-spec acceptance. Automatic multi-stage scheduling,
+notification, merge, and archival remain future work.
+
+**A5.2 (verification-pending):** explicit, one-step preparation of the next
+LOW-risk stage validates the predecessor promotion receipt/check/review,
+ordered stage roster and exact feature-branch HEAD. It does not execute
+workers or promote subsequent stages and is not autonomous scheduling.
+
+**Still planned:** automated multi-stage scheduling beyond manual stage
+preparation, notifications (A6), and overall pipeline v1 acceptance (A7).
+Historical failed pilots, including
 Aider edit-format/no-diff failures, remain evidence rather than acceptance.
 
 This specification does not replace the product implementation focus in
@@ -364,6 +377,22 @@ required checkpoint authorization. One stage's commit must become the next stage
 and stale branches require external resolution. Stage commits are not sub-spec acceptance and must not
 merge into the default branch.
 
+#### A5.2 bounded serialized stage preparation
+
+An opt-in next-stage initialization must validate the previous stage's
+source-bound promotion receipt and intent, independent reviewer/check evidence,
+the exact `feature/*` branch HEAD and its recorded parent commit. The developer
+must explicitly supply an ordered, duplicate-free stage roster and the next
+approved LOW-risk Stage Task Packet with a separate opt-in approval flag. The controller must reject skipped stages,
+missing or altered predecessor evidence, foreign spec/plan identities, stale
+or dirty checkouts, and reused run IDs. It may initialize the next immutable
+`PREPARED` run at the promoted HEAD, with a digest reference to the predecessor
+promotion; it must not automatically execute the worker, authorize later
+stages, merge, accept, or archive a sub-spec. If prior run evidence was moved
+to private A4.4 custody, the workflow must permit an explicitly selected
+absolute predecessor directory. Current-byte digests alone are not external
+historical attestations.
+
 ### AP13 — sub-spec handoff and notifications
 
 A terminal run must expose compact, source-linked evidence across stages and actionable notifications on
@@ -439,7 +468,8 @@ companion are exempt from retroactive creation.
   remains planned. Normative Markdown map extraction, explicit developer-approval
   evidence, focused/static-analysis ingestion and complete handoff remain
   future A4 work. A4 does not schedule or commit stages or accept specs.
-- [ ] **A5 — sequential feature-branch lifecycle:** support one approved feature branch per sub-spec,
+- [ ] **A5 — sequential feature-branch lifecycle (A5.1 guarded promotion and A5.2
+  explicit next-stage preparation implemented, verification-pending):** support one approved feature branch per sub-spec,
   guarded per-stage commits from verified isolated worktrees, exact-base next-stage execution, and
   serialized progression. Require developer-initiated final `MAIN_MODEL` verification and explicit
   developer acceptance before any permitted current-state documentation synchronization or paired

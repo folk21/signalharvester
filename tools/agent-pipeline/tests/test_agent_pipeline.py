@@ -2518,7 +2518,7 @@ class SubspecPrivateHandoffTest(unittest.TestCase):
     # HE-12: real pipeline log subdirectories are preserved for private review.
     def test_he12_log_subtree_preserved_and_tamper_detected(self) -> None:
         log = self.run / "logs" / "canonical-worker-1-attempt-1.log"
-        log.parent.mkdir()
+        log.parent.mkdir(exist_ok=True)
         log.write_text("raw_check_log_secret\n", encoding="utf-8")
         self.export()
         preserved = self.output / "runs/run-a/logs" / log.name
@@ -2556,6 +2556,388 @@ class SubspecPrivateHandoffTest(unittest.TestCase):
                 parser.parse_args(["export-subspec", "--spec", self.fixture.SPEC_PATH])
         self.assertEqual("verify-subspec-export", parser.parse_args([
             "verify-subspec-export", "--bundle-dir", str(self.output)]).command)
+
+
+
+class GuardedStagePromotionTest(unittest.TestCase):
+    """Protects the A5.1 CAS-only feature branch transition and external approval boundary."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.repo = self.base / "repo"
+        self.repo.mkdir()
+        for path, value in {
+            ".gitignore": "build/\n",
+            "README.md": "# Project\n",
+            "AGENTS.md": "# Rules\n",
+            "docs/specs/README.md": "# Specs\n",
+            "docs/specs/active/subspecs/demo.md": "---\nspec_status: active\n---\n# Stage A5.1\nAP12\n\n# Stage A5.2\nAP13\n",
+            "docs/specs/active/subspecs/demo-implementation-plan.md": "# Plan\n",
+            "src/code.txt": "original\n",
+        }.items():
+            target = self.repo / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(value, encoding="utf-8")
+        self.policy = {
+            "schemaVersion": 1,
+            "requiredChecks": [{"name": "canonical", "command": ["true"]}],
+            "workerExecution": {"required": True, "tool": "aider", "executable": "aider",
+                "defaultModel": "fake", "supportedVersions": ["0.86.2"],
+                "branchPrefix": "agent/", "arguments": ["--message-file", "{task_file}"]},
+            "independentReview": {"required": True, "blockingSeverities": ["HIGH", "CRITICAL"]},
+            "riskRules": [{"level": "LOW", "patterns": ["^src/"]}],
+        }
+        self.policy_path = self.repo / "policy.json"
+        agent_pipeline.write_json(self.policy_path, self.policy)
+        self.git(self.repo, "init", "-q")
+        self.git(self.repo, "config", "user.email", "stage-test@example.invalid")
+        self.git(self.repo, "config", "user.name", "Stage Test")
+        self.git(self.repo, "add", ".")
+        self.git(self.repo, "commit", "-qm", "base")
+        self.parent = self.git(self.repo, "rev-parse", "HEAD")
+        self.git(self.repo, "branch", "feature/verified-stage")
+        self.worktree = self.base / "worker"
+        self.git(self.repo, "worktree", "add", "-q", "-b", "agent/stage-run", str(self.worktree), self.parent)
+        (self.worktree / "src/code.txt").write_text("reviewed change\n", encoding="utf-8")
+        self.run_dir = self.base / "evidence" / "stage-run"
+        self.run_dir.mkdir(parents=True)
+        (self.run_dir / "task.md").write_text("Approved bounded task\n", encoding="utf-8")
+        packet = {
+            "schemaVersion": 1, "stageId": "A5.1", "specPath": "docs/specs/active/subspecs/demo.md",
+            "implementationPlanPath": "docs/specs/active/subspecs/demo-implementation-plan.md",
+            "requirementIds": ["AP12"], "featureIds": [],
+        }
+        agent_pipeline.write_json(self.run_dir / "stage-packet.json", packet)
+        self.manifest = {
+            "schemaVersion": 1, "runId": "stage-run", "stage": "A5.1",
+            "specPath": "docs/specs/active/subspecs/demo.md",
+            "policy": {"sha256": agent_pipeline.sha256_file(self.policy_path)},
+            "taskSha256": agent_pipeline.sha256_file(self.run_dir / "task.md"),
+            "requiredChecks": ["canonical"],
+            "repository": {"baseCommit": self.parent, "branch": "feature/verified-stage", "gitAvailable": True},
+            "workspace": {"kind": "git-worktree", "path": str(self.worktree), "baseCommit": self.parent},
+            "stagePacket": {
+                "sha256": agent_pipeline.sha256_file(self.run_dir / "stage-packet.json"),
+                "specPath": packet["specPath"], "planPath": packet["implementationPlanPath"],
+                "riskLevel": "LOW", "editablePaths": ["src/code.txt"],
+                "contextSha256": {path: agent_pipeline.sha256_file(self.repo / path)
+                                  for path in (packet["specPath"], packet["implementationPlanPath"])},
+                "requirementIds": ["AP12"], "featureIds": [],
+            },
+        }
+        agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+        self.worker = {
+            "schemaVersion": 1, "attempt": 1, "status": "PASS", "taskSha256": self.manifest["taskSha256"],
+            "model": "fake", "headCommit": self.parent, "failureReason": None,
+            "changedFiles": ["src/code.txt"], "changeSha256": agent_pipeline.workspace_change_digest(
+                self.worktree, ["src/code.txt"]),
+        }
+        worker_log = self.run_dir / "logs/worker-attempt-1.log"
+        worker_log.parent.mkdir(exist_ok=True)
+        worker_log.write_text("worker finished\n", encoding="utf-8")
+        self.worker["log"] = "logs/worker-attempt-1.log"
+        self.worker["logSha256"] = agent_pipeline.sha256_file(worker_log)
+        agent_pipeline.write_json(self.run_dir / "worker.json", self.worker)
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-1.json", self.worker)
+        log = self.run_dir / "logs/canonical-attempt-1.log"
+        log.parent.mkdir(exist_ok=True)
+        log.write_text("all checks passed\n", encoding="utf-8")
+        agent_pipeline.write_json(self.run_dir / "checks.json", {"schemaVersion": 1, "checks": [{
+            "name": "canonical", "required": True, "status": "PASS", "exitCode": 0, "attempt": 1,
+            "log": "logs/canonical-attempt-1.log", "logSha256": agent_pipeline.sha256_file(log),
+        }]})
+        agent_pipeline.write_json(self.run_dir / "review.json", {
+            "schemaVersion": 1, "reviewer": "independent-provider", "verdict": "PASS", "findings": [],
+        })
+        agent_pipeline.write_json(self.run_dir / "review-attempt.json", {
+            "status": "PASS", "workerSha256": self.worker["changeSha256"],
+        })
+        agent_pipeline.write_json(self.run_dir / "status.json", {
+            "schemaVersion": 1, "runId": "stage-run", "stage": "A5.1", "state": "READY_FOR_MAIN_REVIEW",
+            "checks": {"canonical": {"status": "PASS", "attempt": 1, "required": True}},
+            "review": {"present": True, "verdict": "PASS"},
+        })
+
+    @staticmethod
+    def git(root: Path, *args: str) -> str:
+        result = subprocess.run(["git", *args], cwd=root, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return result.stdout.strip()
+
+    def promote(self, **changes: object) -> dict:
+        options = {"feature_branch": "feature/verified-stage", "expected_parent": self.parent,
+                   "developer_approved": True}
+        options.update(changes)
+        return agent_pipeline.promote_verified_stage(
+            self.repo, self.run_dir, self.manifest, self.policy_path, self.policy, **options)
+
+    # Proves one approved stage advances the exact feature ref without altering either worktree.
+    def test_a51_promotes_reviewed_bytes_with_exact_parent(self) -> None:
+        result = self.promote()
+        self.assertEqual(self.parent, result["parentCommit"])
+        self.assertEqual(result["stageCommit"], self.git(self.repo, "rev-parse", "refs/heads/feature/verified-stage"))
+        self.assertEqual(self.parent, self.git(self.repo, "rev-parse", "HEAD"))
+        self.assertEqual(self.parent, self.git(self.worktree, "rev-parse", "HEAD"))
+        self.assertEqual("reviewed change", self.git(self.repo, "show", f"{result['stageCommit']}:src/code.txt"))
+        self.assertTrue(result["requiresExternalAcceptance"])
+        self.assertEqual(result, agent_pipeline.read_json(self.run_dir / "promotion.json"))
+        with self.assertRaises(ValueError):
+            self.promote()
+
+    # Requires human CLI authorization rather than inferring it from worker or reviewer PASS.
+    def test_a51_explicit_approval_required(self) -> None:
+        with self.assertRaisesRegex(ValueError, "developer"):
+            self.promote(developer_approved=False)
+        self.assertEqual(self.parent, self.git(self.repo, "rev-parse", "refs/heads/feature/verified-stage"))
+
+    # Prevents stage commit on stale branch, wrong parent, or a checked-out feature ref.
+    def test_a51_stale_parent_and_checked_out_branch_block(self) -> None:
+        with self.assertRaises(ValueError):
+            self.promote(expected_parent="0" * 40)
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        with self.assertRaisesRegex(ValueError, "checked out"):
+            self.promote()
+
+    # Prevents promotion of an independent-review failure or a reviewer tied to older bytes.
+    def test_a51_review_or_source_drift_blocks(self) -> None:
+        review = agent_pipeline.read_json(self.run_dir / "review-attempt.json")
+        review["workerSha256"] = "f" * 64
+        agent_pipeline.write_json(self.run_dir / "review-attempt.json", review)
+        with self.assertRaises(ValueError):
+            self.promote()
+        review["workerSha256"] = self.worker["changeSha256"]
+        agent_pipeline.write_json(self.run_dir / "review-attempt.json", review)
+        (self.worktree / "src/code.txt").write_text("tampered\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self.promote()
+
+    # Rejects file-mode changes that were not represented by worker byte digests.
+    def test_a51_executable_mode_change_blocks(self) -> None:
+        (self.worktree / "src/code.txt").chmod(0o755)
+        with self.assertRaisesRegex(ValueError, "mode"):
+            self.promote()
+        self.assertEqual(self.parent, self.git(self.repo, "rev-parse", "refs/heads/feature/verified-stage"))
+
+    # Detects tampering with the original worker log before any branch movement.
+    def test_a51_worker_log_tampering_blocks(self) -> None:
+        (self.run_dir / "logs/worker-attempt-1.log").write_text("altered\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self.promote()
+        self.assertEqual(self.parent, self.git(self.repo, "rev-parse", "refs/heads/feature/verified-stage"))
+
+    # Detects check-log tampering before the detached commit or any branch movement.
+    def test_a51_check_log_tampering_blocks(self) -> None:
+        (self.run_dir / "logs/canonical-attempt-1.log").write_text("altered\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self.promote()
+        self.assertEqual(self.parent, self.git(self.repo, "rev-parse", "refs/heads/feature/verified-stage"))
+
+    # Rejects unsafe branch names and a branch/manifest identity mismatch.
+    def test_a51_non_feature_ref_and_mismatched_authority_block(self) -> None:
+        with self.assertRaises(ValueError):
+            self.promote(feature_branch="main")
+        with self.assertRaises(ValueError):
+            self.promote(feature_branch="feature/other")
+
+    # Makes a review-ready but forged status insufficient to authorize a new commit.
+    def test_a51_false_ready_status_blocks(self) -> None:
+        status = agent_pipeline.read_json(self.run_dir / "status.json")
+        status["state"] = "BLOCKED"
+        agent_pipeline.write_json(self.run_dir / "status.json", status)
+        with self.assertRaises(ValueError):
+            self.promote()
+
+    # Ensures a racing feature ref update is rejected by the atomic compare-and-swap.
+    def test_a51_cas_failure_keeps_promotion_intent(self) -> None:
+        original = agent_pipeline._promotion_git
+        def racing_git(root: Path, *args: str, index: Path | None = None) -> str:
+            if args and args[0] == "update-ref":
+                self.git(self.repo, "branch", "-f", "feature/verified-stage", self.parent)
+                raise ValueError("Git promotion operation update-ref failed")
+            return original(root, *args, index=index)
+        with mock.patch.object(agent_pipeline, "_promotion_git", side_effect=racing_git):
+            with self.assertRaises(ValueError):
+                self.promote()
+        self.assertTrue((self.run_dir / "promotion-intent.json").is_file())
+        self.assertFalse((self.run_dir / "promotion.json").exists())
+
+
+
+class SerializedStagePreparationTest(GuardedStagePromotionTest):
+    """Bind an explicit A5.2 next-stage packet to a reviewed promoted Git parent."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.packet = {
+            "schemaVersion": 1, "stageId": "A5.2",
+            "specPath": "docs/specs/active/subspecs/demo.md",
+            "implementationPlanPath": "docs/specs/active/subspecs/demo-implementation-plan.md",
+            "requirementIds": ["AP13"], "featureIds": [], "owningPaths": ["src"],
+            "editablePaths": ["src/code.txt"], "contextPaths": [],
+            "riskLevel": "LOW", "delegation": "BOUNDED",
+            "task": "Implement the next bounded code change.",
+            "completionCriteria": ["Checks and reviewer pass"],
+        }
+        self.next_packet = self.base / "next-packet.json"
+        agent_pipeline.write_json(self.next_packet, self.packet)
+        self.runs_root = self.repo / "build/reports/agent-pipeline"
+
+    def advance(self, *, promote: bool = True, checkout: bool = True, **changes: object) -> Path:
+        if promote:
+            result = self.promote()
+            self.head = result["stageCommit"]
+        if checkout:
+            self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        options = {
+            "previous_run_dir": self.run_dir,
+            "next_packet_path": self.next_packet,
+            "expected_stages": ["A5.1", "A5.2"],
+            "feature_branch": "feature/verified-stage",
+            "expected_head": getattr(self, "head", self.parent),
+            "run_id": "stage-two", "developer_approved": True,
+        }
+        options.update(changes)
+        return agent_pipeline.prepare_next_stage(
+            self.repo, self.runs_root, self.policy_path, self.policy, **options,
+        )
+
+    def test_a52_next_packet_bound_to_exact_promoted_commit(self) -> None:
+        run_dir = self.advance()
+        manifest = agent_pipeline.read_json(run_dir / "manifest.json")
+        sequence = manifest["stageProgression"]
+        self.assertEqual(self.head, manifest["repository"]["baseCommit"])
+        self.assertEqual("feature/verified-stage", manifest["repository"]["branch"])
+        self.assertEqual("A5.1", sequence["previousStage"])
+        self.assertEqual(["A5.1", "A5.2"], sequence["expectedStages"])
+        self.assertEqual(self.head, sequence["previousStageCommit"])
+        self.assertEqual(agent_pipeline.sha256_file(self.run_dir / "promotion.json"),
+                         sequence["previousPromotionSha256"])
+        self.assertEqual("PREPARED", manifest["state"])
+        self.assertFalse((run_dir / "worker.json").exists())
+        self.assertTrue((run_dir / "stage-packet.json").is_file())
+
+    def test_a52_next_stage_requires_developer_approval(self) -> None:
+        with self.assertRaisesRegex(ValueError, "developer approval"):
+            self.advance(promote=False, checkout=False, developer_approved=False)
+        self.assertFalse((self.runs_root / "stage-two").exists())
+
+    def test_a52_missing_promotion_receipt_blocks_without_run(self) -> None:
+        with self.assertRaises(ValueError):
+            self.advance(promote=False, checkout=False)
+        self.assertFalse((self.runs_root / "stage-two").exists())
+
+    def test_a52_wrong_checkout_or_head_blocks_without_run(self) -> None:
+        self.head = self.promote()["stageCommit"]
+        with self.assertRaisesRegex(ValueError, "checkout"):
+            self.advance(promote=False, checkout=False)
+        self.assertFalse((self.runs_root / "stage-two").exists())
+
+    def test_a52_wrong_roster_and_foreign_next_stage_block(self) -> None:
+        result = self.promote()
+        self.head = result["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        with self.assertRaisesRegex(ValueError, "roster"):
+            self.advance(promote=False, checkout=False,
+                         expected_stages=["A5.2", "A5.1"])
+        with self.assertRaisesRegex(ValueError, "roster"):
+            self.advance(promote=False, checkout=False,
+                         expected_stages=["A5.1", "A5.2", "A5.2"])
+        self.assertFalse((self.runs_root / "stage-two").exists())
+
+    def test_a52_tampered_promotion_receipt_rejected(self) -> None:
+        result = self.promote()
+        self.head = result["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        receipt_path = self.run_dir / "promotion.json"
+        receipt = agent_pipeline.read_json(receipt_path)
+        receipt["workerChangeSha256"] = "f" * 64
+        agent_pipeline.write_json(receipt_path, receipt)
+        with self.assertRaisesRegex(ValueError, "receipt"):
+            self.advance(promote=False, checkout=False)
+
+    def test_a52_tampered_review_and_check_log_rejected(self) -> None:
+        result = self.promote()
+        self.head = result["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        review_path = self.run_dir / "review-attempt.json"
+        review_path.write_text(review_path.read_text().replace('"PASS"', '"FAIL"'))
+        with self.assertRaises(ValueError):
+            self.advance(promote=False, checkout=False)
+        agent_pipeline.write_json(review_path, {
+            "status": "PASS", "workerSha256": self.worker["changeSha256"]})
+        (self.run_dir / "logs/canonical-attempt-1.log").write_text("tampered\n")
+        with self.assertRaises(ValueError):
+            self.advance(promote=False, checkout=False)
+        self.assertFalse((self.runs_root / "stage-two").exists())
+
+    def test_a52_dirty_checkout_blocks(self) -> None:
+        result = self.promote()
+        self.head = result["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        (self.repo / "src/code.txt").write_text("untracked edit\n")
+        with self.assertRaisesRegex(ValueError, "checkout"):
+            self.advance(promote=False, checkout=False)
+
+    def test_a52_unsupported_next_packet_risk_rejected(self) -> None:
+        result = self.promote()
+        self.head = result["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        self.packet["riskLevel"] = "HIGH"
+        agent_pipeline.write_json(self.next_packet, self.packet)
+        with self.assertRaisesRegex(ValueError, "LOW-risk"):
+            self.advance(promote=False, checkout=False)
+
+    def test_a52_duplicate_run_id_fails_closed(self) -> None:
+        self.advance()
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            self.advance(promote=False, checkout=False)
+
+    def test_a52_predecessor_task_drift_rejected(self) -> None:
+        result = self.promote()
+        self.head = result["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        (self.run_dir / "task.md").write_text("tampered task\n")
+        with self.assertRaisesRegex(ValueError, "task changed"):
+            self.advance(promote=False, checkout=False)
+        self.assertFalse((self.runs_root / "stage-two").exists())
+
+    def test_a52_predecessor_packet_drift_rejected(self) -> None:
+        result = self.promote()
+        self.head = result["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        (self.run_dir / "stage-packet.json").write_text('[]\n')
+        with self.assertRaises(ValueError):
+            self.advance(promote=False, checkout=False)
+        self.assertFalse((self.runs_root / "stage-two").exists())
+
+    def test_a52_cli_prepares_next_run_without_worker_execution(self) -> None:
+        self.head = self.promote()["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        cmd = [sys.executable, str(MODULE_PATH), "--repo-root", str(self.repo),
+               "--policy", str(self.policy_path), "--runs-root", str(self.runs_root),
+               "prepare-next-stage", "--previous-run-dir", str(self.run_dir),
+               "--packet", str(self.next_packet), "--stage", "A5.1", "--stage", "A5.2",
+               "--feature-branch", "feature/verified-stage", "--expected-head", self.head,
+               "--run-id", "stage-two", "--developer-approved"]
+        process = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        self.assertEqual(0, process.returncode, process.stderr)
+        self.assertEqual(str(self.runs_root / "stage-two"), process.stdout.strip())
+        self.assertFalse((self.runs_root / "stage-two/worker.json").exists())
+
+    def test_a52_cli_requires_explicit_roster_and_parent(self) -> None:
+        args = agent_pipeline.build_parser().parse_args([
+            "prepare-next-stage", "--previous-run-dir", str(self.run_dir),
+            "--packet", str(self.next_packet), "--stage", "A5.1", "--stage", "A5.2",
+            "--feature-branch", "feature/verified-stage", "--expected-head", self.parent,
+            "--run-id", "stage-two", "--developer-approved",
+        ])
+        self.assertEqual("prepare-next-stage", args.command)
+        self.assertEqual(["A5.1", "A5.2"], args.stage)
+        with self.assertRaises(SystemExit):
+            with mock.patch("sys.stderr"):
+                agent_pipeline.build_parser().parse_args(["prepare-next-stage"])
 
 
 class AgentPipelineStagePacketTest(unittest.TestCase):

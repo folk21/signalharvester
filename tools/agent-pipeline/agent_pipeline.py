@@ -1984,6 +1984,323 @@ def export_subspec_handoff(
             shutil.rmtree(staging)
 
 
+
+PROMOTION_BRANCH_PATTERN = re.compile(r"feature/[A-Za-z0-9][A-Za-z0-9._/-]{0,100}")
+
+
+def _promotion_git(root: Path, *args: str, index: Path | None = None) -> str:
+    """Run one Git plumbing operation with an isolated environment and bounded failure."""
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    if index is not None:
+        env["GIT_INDEX_FILE"] = str(index)
+    result = subprocess.run(["git", *args], cwd=root, env=env, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if result.returncode:
+        raise ValueError(f"Git promotion operation {args[0]} failed (exit {result.returncode})")
+    return result.stdout.strip()
+
+
+def _promotion_safe_check_logs(run_dir: Path, policy: dict[str, Any], worker: dict[str, Any]) -> None:
+    """Recheck each latest PASS and its original check log without re-running checks."""
+    records = _require_json_object(run_dir / "checks.json").get("checks")
+    if not isinstance(records, list):
+        raise ValueError("Stage promotion requires check records")
+    latest = {record.get("name"): record for record in records if isinstance(record, dict)}
+    for definition in policy["requiredChecks"]:
+        record = latest.get(definition["name"])
+        if not isinstance(record, dict) or record.get("status") != "PASS" or record.get("required") is not True:
+            raise ValueError("Stage promotion requires every policy check PASS")
+        if definition.get("kind") == "gitleaks":
+            if record.get("scanner", {}).get("sourceSha256") != worker.get("changeSha256"):
+                raise ValueError("Security check no longer matches worker bytes")
+        else:
+            name = record.get("log")
+            if (not isinstance(name, str) or not re.fullmatch(r"logs/[A-Za-z0-9._-]+\.log", name)):
+                raise ValueError("Check log evidence path is invalid")
+            log = run_dir / name
+            if log.is_symlink() or not log.is_file() or sha256_file(log) != record.get("logSha256"):
+                raise ValueError("Check log evidence is missing or changed")
+            if record.get("exitCode") != 0:
+                raise ValueError("Successful check must have exit code zero")
+
+
+def _promotion_branch_is_checked_out(repo_root: Path, branch: str) -> bool:
+    """Detect checked-out refs in every registered worktree before a refs-only CAS."""
+    output = _promotion_git(repo_root, "worktree", "list", "--porcelain")
+    return f"branch refs/heads/{branch}" in output.splitlines()
+
+
+def promote_verified_stage(repo_root: Path, run_dir: Path, manifest: dict[str, Any],
+                           policy_path: Path, policy: dict[str, Any], *,
+                           feature_branch: str, expected_parent: str,
+                           developer_approved: bool) -> dict[str, Any]:
+    """Promote one LOW-risk verified worker tree with Git ref CAS, never accepting a spec.
+
+    The feature branch must be un-checked-out, so ref movement cannot leave an
+    attached developer worktree inconsistent. The next stage is always manual.
+    """
+    if not developer_approved:
+        raise ValueError("Explicit developer stage-promotion approval is required")
+    if (not PROMOTION_BRANCH_PATTERN.fullmatch(feature_branch)
+            or ".." in feature_branch or "//" in feature_branch
+            or feature_branch.endswith("/") or feature_branch.endswith(".lock")):
+        raise ValueError("Stage promotion requires an approved feature/* branch")
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_parent):
+        raise ValueError("Expected stage parent must be an exact full commit SHA")
+    if any((run_dir / filename).exists() for filename in ("promotion-intent.json", "promotion.json")):
+        raise ValueError("Stage already has a promotion intent or receipt; resolve it manually")
+    if manifest.get("stagePacket") is None or manifest["stagePacket"].get("riskLevel") != "LOW":
+        raise ValueError("Only source-bound LOW-risk stages can be promoted")
+    repo = manifest.get("repository", {})
+    if (repo.get("branch") != feature_branch or repo.get("baseCommit") != expected_parent
+            or repo.get("gitAvailable") is not True):
+        raise ValueError("Run branch/base is not the approved expected parent")
+    if _promotion_git(repo_root, "status", "--porcelain"):
+        raise ValueError("Developer worktree must be clean for stage promotion")
+    if _promotion_git(repo_root, "rev-parse", "HEAD") != expected_parent:
+        raise ValueError("Developer checkout must point at the immutable run base")
+    ref = f"refs/heads/{feature_branch}"
+    if _promotion_git(repo_root, "rev-parse", "--verify", ref) != expected_parent:
+        raise ValueError("Feature branch moved after run initialization")
+    if _promotion_branch_is_checked_out(repo_root, feature_branch):
+        raise ValueError("Feature branch is checked out; switch all worktrees away before promotion")
+    ensure_run_contract_matches(policy_path, run_dir, manifest)
+    worker = ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+    if not worker.get("changedFiles") or not isinstance(worker.get("changedFiles"), list):
+        raise ValueError("Cannot promote an empty or malformed worker change")
+    worker_log_name = worker.get("log")
+    if (not isinstance(worker_log_name, str) or not re.fullmatch(
+            r"logs/worker-attempt-[1-9][0-9]*\.log", worker_log_name)):
+        raise ValueError("Worker log provenance is required for stage promotion")
+    worker_log = run_dir / worker_log_name
+    if (worker_log.is_symlink() or not worker_log.is_file()
+            or sha256_file(worker_log) != worker.get("logSha256")):
+        raise ValueError("Worker log evidence changed before stage promotion")
+    checks = _require_json_object(run_dir / "checks.json")
+    review = validate_review(_require_json_object(run_dir / "review.json"))
+    validate_security_check_evidence(policy, checks, worker)
+    _promotion_safe_check_logs(run_dir, policy, worker)
+    if derive_state(policy, checks, review, worker)[0] != STATE_READY_FOR_MAIN_REVIEW:
+        raise ValueError("Stage no longer satisfies checks and independent review")
+    report = summarize_run_evidence(run_dir)
+    if report["state"] != STATE_READY_FOR_MAIN_REVIEW or report["review"]["verdict"] != "PASS":
+        raise ValueError("Persisted run is not READY_FOR_MAIN_REVIEW")
+    reviewer = _require_json_object(run_dir / "review-attempt.json")
+    if reviewer.get("status") != "PASS" or reviewer.get("workerSha256") != worker["changeSha256"]:
+        raise ValueError("Independent provider review must bind the exact worker bytes")
+    worktree = execution_root(repo_root, manifest)
+    actual_changed = worker["changedFiles"]
+    if (not all(isinstance(path, str) for path in actual_changed)
+            or any((worktree / path).is_symlink() for path in actual_changed)):
+        raise ValueError("Promoted files must be ordinary source files or deletions")
+    risk = classify_risk(actual_changed, policy, True)
+    if risk["level"] != "LOW":
+        raise ValueError("Non-LOW stage promotion requires external checkpoint")
+    if _promotion_git(worktree, "rev-parse", "HEAD") != expected_parent:
+        raise ValueError("Worker source base changed")
+
+    with tempfile.TemporaryDirectory(prefix="signalharvester-promotion-index-") as folder:
+        index = Path(folder) / "index"
+        _promotion_git(worktree, "read-tree", expected_parent, index=index)
+        _promotion_git(worktree, "add", "-A", "--", *actual_changed, index=index)
+        tree = _promotion_git(worktree, "write-tree", index=index)
+        # diff-tree compares commits/trees; --root is unnecessary for a nonempty base.
+        actual_tree_paths = _promotion_git(worktree, "diff", "--name-only", expected_parent,
+                                           "--cached", "--", index=index).splitlines()
+        if sorted(actual_tree_paths) != sorted(actual_changed):
+            raise ValueError("Staged promotion tree differs from verified changed files")
+        if tree == _promotion_git(worktree, "rev-parse", f"{expected_parent}^{{tree}}"):
+            raise ValueError("Stage promotion cannot record an empty commit")
+        # Git attributes, EOL normalization and clean filters must not silently
+        # change the reviewed source bytes when the alternate index is built.
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        env["GIT_INDEX_FILE"] = str(index)
+        for name in actual_changed:
+            source_file = worktree / name
+            base_entry = _promotion_git(worktree, "ls-tree", expected_parent, "--", name)
+            if source_file.is_file():
+                staged = subprocess.run(["git", "show", f":{name}"], cwd=worktree,
+                                        env=env, stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, check=False)
+                if staged.returncode or staged.stdout != source_file.read_bytes():
+                    raise ValueError("Git staging transformed verified worker source bytes")
+                staged_entry = _promotion_git(worktree, "ls-files", "--stage", "--", name, index=index)
+                staged_mode = staged_entry.split(" ", 1)[0]
+                base_mode = base_entry.split(" ", 1)[0] if base_entry else "100644"
+                if (staged_mode != base_mode or staged_mode not in ("100644", "100755")
+                        or bool(source_file.stat().st_mode & 0o111) != (staged_mode == "100755")):
+                    raise ValueError("Unverified Git file mode change is not allowed")
+            elif not base_entry:
+                raise ValueError("Stage changed path is neither a file nor a tracked deletion")
+        _promotion_git(worktree, "diff", "--cached", "--check", expected_parent, index=index)
+        # Final source recheck immediately before creating the detached commit object.
+        ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
+        message = f"Agent stage {manifest['stage']} ({manifest['runId']})\n\nSource-bound stage promotion; not sub-spec acceptance.\n"
+        commit = subprocess.run(["git", "commit-tree", tree, "-p", expected_parent], cwd=worktree,
+                                input=message, text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, check=False,
+                                env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")})
+        if commit.returncode or not re.fullmatch(r"[0-9a-f]{40}", commit.stdout.strip()):
+            raise ValueError("Git stage commit creation failed; configure repository author identity")
+        commit_sha = commit.stdout.strip()
+
+    if (_promotion_git(repo_root, "rev-parse", "--verify", ref) != expected_parent
+            or _promotion_branch_is_checked_out(repo_root, feature_branch)):
+        raise ValueError("Feature branch changed while preparing stage commit")
+    intent = {
+        "schemaVersion": SCHEMA_VERSION, "runId": manifest["runId"],
+        "stage": manifest["stage"], "featureBranch": feature_branch,
+        "parentCommit": expected_parent, "stageCommit": commit_sha,
+        "workerChangeSha256": worker["changeSha256"],
+        "reviewAttemptSha256": sha256_file(run_dir / "review-attempt.json"),
+        "requiresExternalAcceptance": True,
+    }
+    write_json(run_dir / "promotion-intent.json", intent)
+    # Compare-and-swap is the only branch mutation: no checkout, reset, merge or rebase.
+    _promotion_git(repo_root, "update-ref", ref, commit_sha, expected_parent)
+    write_json(run_dir / "promotion.json", intent)
+    return intent
+
+
+def initialize_stage_run(repo_root: Path, runs_root: Path, policy_path: Path,
+                         policy: dict[str, Any], packet: dict[str, Any],
+                         context: list[str], run_id: str | None, *,
+                         predecessor: dict[str, Any] | None = None) -> Path:
+    """Initialize one immutable stage packet, optionally bound to a promoted predecessor."""
+    task = (f"Implement stage {packet['stageId']} of the active specification.\n"
+            f"Requirements: {', '.join(packet['requirementIds'])}\n"
+            f"Feature IDs: {', '.join(packet['featureIds']) or 'none (contributor tooling)'}\n"
+            f"Owning areas: {', '.join(packet['owningPaths'])}\n"
+            f"Editable paths: {', '.join(packet['editablePaths'])}\n"
+            f"Read-only context: {', '.join(context)}\n"
+            f"The implementation plan is advisory, not a contract. Explain material deviations.\n"
+            f"\nTask:\n{packet['task']}\n\nCompletion criteria:\n"
+            + "\n".join(f"- {item}" for item in packet['completionCriteria']))
+    run_dir = create_run(
+        repo_root, runs_root, policy_path, policy, packet["stageId"], packet["specPath"],
+        task, policy.get("workerExecution", {}).get("tool", "aider"),
+        policy.get("workerExecution", {}).get("defaultModel", "unspecified"),
+        packet["editablePaths"], run_id,
+    )
+    (run_dir / "stage-packet.json").write_text(
+        json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    manifest = read_json(run_dir / "manifest.json")
+    manifest["stagePacket"] = {
+        "sha256": sha256_file(run_dir / "stage-packet.json"),
+        "specPath": packet["specPath"], "planPath": packet["implementationPlanPath"],
+        "contextPaths": context, "contextSha256": stage_source_evidence(repo_root, context),
+        "editablePaths": packet["editablePaths"], "requirementIds": packet["requirementIds"],
+        "featureIds": packet["featureIds"], "riskLevel": packet["riskLevel"],
+    }
+    if predecessor is not None:
+        manifest["stageProgression"] = predecessor
+    write_json(run_dir / "manifest.json", manifest)
+    return run_dir
+
+
+def prepare_next_stage(repo_root: Path, runs_root: Path, policy_path: Path,
+                       policy: dict[str, Any], *, previous_run_dir: Path,
+                       next_packet_path: Path, expected_stages: list[str],
+                       feature_branch: str, expected_head: str,
+                       run_id: str | None, developer_approved: bool = False) -> Path:
+    """Start only the next LOW-risk stage at an explicitly checked-out promoted HEAD.
+
+    This is a one-shot, local Git/evidence transition: worker execution, later
+    stage promotion and developer acceptance remain separate explicit actions.
+    """
+    if not developer_approved:
+        raise ValueError("Explicit developer approval of the next stage packet is required")
+    if (not isinstance(expected_stages, list) or not 2 <= len(expected_stages) <= SUBSPEC_MAX_STAGES
+            or any(not isinstance(x, str) or not x.strip() or len(x) > 128
+                   for x in expected_stages)
+            or len(set(expected_stages)) != len(expected_stages)):
+        raise ValueError("Next-stage preparation requires a bounded, ordered, unique stage roster")
+    if (not PROMOTION_BRANCH_PATTERN.fullmatch(feature_branch)
+            or ".." in feature_branch or "//" in feature_branch
+            or feature_branch.endswith("/") or feature_branch.endswith(".lock")):
+        raise ValueError("Next-stage preparation requires an approved feature/* branch")
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_head):
+        raise ValueError("Next-stage expected HEAD must be a full commit SHA")
+    if (not previous_run_dir.is_absolute() or previous_run_dir.is_symlink()
+            or not previous_run_dir.is_dir() or next_packet_path.is_symlink()):
+        raise ValueError("Previous evidence and next packet must be ordinary paths")
+    if any(child.is_symlink() for child in previous_run_dir.iterdir()):
+        raise ValueError("Previous stage evidence contains a symlink")
+    packet, context = validate_stage_packet(repo_root, read_json(next_packet_path))
+    if packet["stageId"] not in expected_stages or expected_stages.index(packet["stageId"]) == 0:
+        raise ValueError("Next stage is not after any predecessor in the declared roster")
+    previous_stage = expected_stages[expected_stages.index(packet["stageId"]) - 1]
+    previous = read_json(previous_run_dir / "manifest.json")
+    old_packet_file = previous_run_dir / "stage-packet.json"
+    intent_file = previous_run_dir / "promotion-intent.json"
+    receipt_file = previous_run_dir / "promotion.json"
+    review_file = previous_run_dir / "review-attempt.json"
+    for source in (old_packet_file, intent_file, receipt_file, review_file,
+                   previous_run_dir / "worker.json"):
+        if source.is_symlink() or not source.is_file():
+            raise ValueError("Previous stage promotion evidence is missing or unsafe")
+    ensure_run_contract_matches(policy_path, previous_run_dir, previous)
+    old_packet = read_json(old_packet_file)
+    contract = previous.get("stagePacket")
+    if (previous.get("schemaVersion") != SCHEMA_VERSION
+            or previous.get("runId") != previous_run_dir.name
+            or previous.get("stage") != previous_stage
+            or previous.get("specPath") != packet["specPath"]
+            or not isinstance(contract, dict)
+            or contract.get("riskLevel") != "LOW"
+            or contract.get("specPath") != packet["specPath"]
+            or contract.get("planPath") != packet["implementationPlanPath"]
+            or old_packet.get("stageId") != previous_stage
+            or old_packet.get("specPath") != packet["specPath"]
+            or old_packet.get("implementationPlanPath") != packet["implementationPlanPath"]
+            or contract.get("sha256") != sha256_file(old_packet_file)):
+        raise ValueError("Previous stage source or roster identity does not match")
+    intent = read_json(intent_file)
+    receipt = read_json(receipt_file)
+    reviewer = read_json(review_file)
+    worker = read_json(previous_run_dir / "worker.json")
+    old_repo = previous.get("repository", {})
+    old_summary = summarize_run_evidence(previous_run_dir)
+    if (old_summary["state"] != STATE_READY_FOR_MAIN_REVIEW
+            or not old_summary["review"]["present"]
+            or old_summary["review"]["verdict"] != "PASS"):
+        raise ValueError("Previous promoted run no longer has verified review/check evidence")
+    if previous.get("policy", {}).get("sha256") != sha256_file(policy_path):
+        raise ValueError("Pipeline policy changed between sequential stages")
+    _promotion_safe_check_logs(previous_run_dir, policy, worker)
+    if (intent != receipt or receipt.get("schemaVersion") != SCHEMA_VERSION
+            or receipt.get("runId") != previous["runId"]
+            or receipt.get("stage") != previous_stage
+            or receipt.get("featureBranch") != feature_branch
+            or receipt.get("stageCommit") != expected_head
+            or receipt.get("parentCommit") != old_repo.get("baseCommit")
+            or old_repo.get("branch") != feature_branch
+            or not re.fullmatch(r"[0-9a-f]{40}", str(receipt.get("parentCommit", "")))
+            or receipt.get("workerChangeSha256") != worker.get("changeSha256")
+            or receipt.get("reviewAttemptSha256") != sha256_file(review_file)
+            or reviewer.get("status") != "PASS"
+            or reviewer.get("workerSha256") != worker.get("changeSha256")
+            or worker.get("status") != "PASS"
+            or receipt.get("requiresExternalAcceptance") is not True):
+        raise ValueError("Previous promotion receipt no longer matches reviewed evidence")
+    if (_promotion_git(repo_root, "status", "--porcelain")
+            or _promotion_git(repo_root, "symbolic-ref", "--quiet", "--short", "HEAD") != feature_branch
+            or _promotion_git(repo_root, "rev-parse", "HEAD") != expected_head
+            or _promotion_git(repo_root, "rev-parse", "--verify", f"refs/heads/{feature_branch}") != expected_head
+            or _promotion_git(repo_root, "rev-parse", f"{expected_head}^") != receipt["parentCommit"]):
+        raise ValueError("Developer checkout must be clean at the exact promoted feature HEAD")
+    provenance = {
+        "schemaVersion": SCHEMA_VERSION,
+        "previousRunId": previous["runId"], "previousStage": previous_stage,
+        "previousPromotionSha256": sha256_file(receipt_file),
+        "previousStageCommit": expected_head, "featureBranch": feature_branch,
+        "expectedStages": list(expected_stages),
+        "requiresExternalAcceptance": True,
+    }
+    return initialize_stage_run(repo_root, runs_root, policy_path, policy, packet,
+                                context, run_id, predecessor=provenance)
+
 def write_handoff(repo_root: Path, run_dir: Path, manifest: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     """Publish a bounded evidence index for the external acceptance checkpoint."""
     status = update_status(repo_root, run_dir, manifest, policy)
@@ -2959,6 +3276,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_export_parser.add_argument("--bundle-dir", required=True)
 
+    promotion_parser = subparsers.add_parser(
+        "promote-stage", help="Explicitly authorized CAS promotion of one verified stage"
+    )
+    promotion_parser.add_argument("--run-id", required=True)
+    promotion_parser.add_argument("--feature-branch", required=True)
+    promotion_parser.add_argument("--expected-parent", required=True)
+    promotion_parser.add_argument("--developer-approved", action="store_true")
+
+    next_parser = subparsers.add_parser(
+        "prepare-next-stage", help="Bind one next stage to a promoted feature branch HEAD"
+    )
+    next_parser.add_argument("--previous-run-dir", required=True,
+                             help="Absolute prior run evidence directory (also supports private A4.4 custody)")
+    next_parser.add_argument("--packet", required=True, help="Next approved Stage Task Packet JSON")
+    next_parser.add_argument("--stage", action="append", required=True,
+                             help="Complete expected stage roster in order")
+    next_parser.add_argument("--feature-branch", required=True)
+    next_parser.add_argument("--expected-head", required=True,
+                             help="Full 40-character promoted stage commit SHA")
+    next_parser.add_argument("--run-id", required=True)
+    next_parser.add_argument("--developer-approved", action="store_true",
+                             help="Confirm that the developer explicitly approved this next packet")
+
     reviewer_parser = subparsers.add_parser("run-review", help="Invoke independent fresh-context reviewer")
     reviewer_parser.add_argument("--run-id", required=True)
 
@@ -3047,39 +3387,35 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "init-stage":
             packet_path = resolve_under_repo(repo_root, args.packet)
             packet, context = validate_stage_packet(repo_root, read_json(packet_path))
-            task = (f"Implement stage {packet['stageId']} of the active specification.\n"
-                    f"Requirements: {', '.join(packet['requirementIds'])}\n"
-                    f"Feature IDs: {', '.join(packet['featureIds']) or 'none (contributor tooling)'}\n"
-                    f"Owning areas: {', '.join(packet['owningPaths'])}\n"
-                    f"Editable paths: {', '.join(packet['editablePaths'])}\n"
-                    f"Read-only context: {', '.join(context)}\n"
-                    f"The implementation plan is advisory, not a contract. Explain material deviations.\n"
-                    f"\nTask:\n{packet['task']}\n\nCompletion criteria:\n"
-                    + "\n".join(f"- {item}" for item in packet['completionCriteria']))
-            run_dir = create_run(
-                repo_root, runs_root, policy_path, policy, packet["stageId"], packet["specPath"],
-                task, policy.get("workerExecution", {}).get("tool", "aider"),
-                policy.get("workerExecution", {}).get("defaultModel", "unspecified"),
-                packet["editablePaths"], args.run_id,
+            run_dir = initialize_stage_run(repo_root, runs_root, policy_path, policy,
+                                           packet, context, args.run_id)
+            print(run_dir)
+            return 0
+
+        if args.command == "prepare-next-stage":
+            run_dir = prepare_next_stage(
+                repo_root, runs_root, policy_path, policy,
+                previous_run_dir=Path(args.previous_run_dir),
+                next_packet_path=resolve_under_repo(repo_root, args.packet),
+                expected_stages=args.stage, feature_branch=args.feature_branch,
+                expected_head=args.expected_head, run_id=args.run_id,
+                developer_approved=args.developer_approved,
             )
-            (run_dir / "stage-packet.json").write_text(
-                json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-            )
-            manifest = read_json(run_dir / "manifest.json")
-            manifest["stagePacket"] = {
-                "sha256": sha256_file(run_dir / "stage-packet.json"),
-                "specPath": packet["specPath"], "planPath": packet["implementationPlanPath"],
-                "contextPaths": context, "contextSha256": stage_source_evidence(repo_root, context),
-                "editablePaths": packet["editablePaths"], "requirementIds": packet["requirementIds"],
-                "featureIds": packet["featureIds"], "riskLevel": packet["riskLevel"],
-            }
-            write_json(run_dir / "manifest.json", manifest)
             print(run_dir)
             return 0
 
         run_dir, manifest = load_run(runs_root, args.run_id)
         ensure_run_contract_matches(policy_path, run_dir, manifest)
         ensure_stage_contract(repo_root, run_dir, manifest)
+
+        if args.command == "promote-stage":
+            receipt = promote_verified_stage(
+                repo_root, run_dir, manifest, policy_path, policy,
+                feature_branch=args.feature_branch, expected_parent=args.expected_parent,
+                developer_approved=args.developer_approved,
+            )
+            print(json.dumps(receipt, indent=2, sort_keys=True))
+            return 0
 
         if args.command == "prepare-worker":
             workspace = prepare_worker_workspace(repo_root, worktrees_root, run_dir, manifest, policy)
