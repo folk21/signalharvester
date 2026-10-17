@@ -61,8 +61,14 @@ LOW-risk stage validates the predecessor promotion receipt/check/review,
 ordered stage roster and exact feature-branch HEAD. It does not execute
 workers or promote subsequent stages and is not autonomous scheduling.
 
-**Still planned:** automated multi-stage scheduling beyond manual stage
-preparation, notifications (A6), and overall pipeline v1 acceptance (A7).
+**A5.3a (verification-pending):** explicit checkpoint-driven coordination
+of one approved LOW-risk stage within a bounded ordered roster. Read-only
+preflight is the default; separately authorized execution records an intent,
+runs the existing A3 cycle once and stops at promotion or escalation. A5.1
+CAS promotion and A5.2 next-stage preparation stay distinct human checkpoints.
+
+**Still planned:** unattended multi-stage scheduling/batching beyond explicit
+checkpoints, notifications (A6), and overall pipeline v1 acceptance (A7).
 Historical failed pilots, including
 Aider edit-format/no-diff failures, remain evidence rather than acceptance.
 
@@ -393,6 +399,26 @@ to private A4.4 custody, the workflow must permit an explicitly selected
 absolute predecessor directory. Current-byte digests alone are not external
 historical attestations.
 
+#### A5.3a checkpoint-driven bounded sequence execution
+
+An opt-in sequence driver must accept an explicit ordered stage roster, exact
+`feature/*` branch and one already initialized, immutable Stage Task Packet.
+It must revalidate current Git HEAD, policy/task/context digests, the LOW-risk
+BOUNDED packet and, for a later stage, the predecessor promotion intent/receipt,
+reviewer/check evidence and committed ancestry. A missing predecessor, skipped
+stage, changed source or dirty/wrong checkout must stop before worker execution.
+
+Inspection must be read-only. Execution requires a separate developer flag and
+may drive **one** existing worker/check/review/repair cycle only. It must write
+an intent before side effects and preserve that intent if interrupted; it must
+not restart a consumed run identifier. Successful review stops at an explicit
+human stage-promotion checkpoint, and failure stops for developer escalation.
+The driver must not checkout, promote, merge, automatically schedule a later
+packet, grant final acceptance or archive specifications. A5.1's CAS-only ref
+update and A5.2's explicit HEAD checkout prevent safe unattended crossing of
+stage boundaries under the current contract. Automatic batching is future A6
+work and requires additional authority and recovery controls.
+
 ### AP13 — sub-spec handoff and notifications
 
 A terminal run must expose compact, source-linked evidence across stages and actionable notifications on
@@ -468,10 +494,11 @@ companion are exempt from retroactive creation.
   remains planned. Normative Markdown map extraction, explicit developer-approval
   evidence, focused/static-analysis ingestion and complete handoff remain
   future A4 work. A4 does not schedule or commit stages or accept specs.
-- [ ] **A5 — sequential feature-branch lifecycle (A5.1 guarded promotion and A5.2
-  explicit next-stage preparation implemented, verification-pending):** support one approved feature branch per sub-spec,
+- [ ] **A5 — sequential feature-branch lifecycle (A5.1 guarded promotion, A5.2
+  explicit next-stage preparation and A5.3a checkpointed driver implemented,
+  verification-pending):** support one approved feature branch per sub-spec,
   guarded per-stage commits from verified isolated worktrees, exact-base next-stage execution, and
-  serialized progression. Require developer-initiated final `MAIN_MODEL` verification and explicit
+  serialized progression with explicit checkpoints. Require developer-initiated final `MAIN_MODEL` verification and explicit
   developer acceptance before any permitted current-state documentation synchronization or paired
   spec/companion archival; do not infer acceptance from commits.
 - [ ] **A6 — evidence-backed autonomy and notifications:** permit configured batching of

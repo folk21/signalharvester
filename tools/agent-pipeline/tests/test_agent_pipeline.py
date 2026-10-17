@@ -2962,6 +2962,150 @@ class SerializedStagePreparationTest(GuardedStagePromotionTest):
                 agent_pipeline.build_parser().parse_args(["prepare-next-stage"])
 
 
+
+class StageSequenceDriverTest(SerializedStagePreparationTest):
+    """A5.3 fail-closed, checkpointed one-stage execution within an explicit roster."""
+
+    def prepared(self) -> tuple[Path, dict]:
+        run_dir = self.advance()
+        return run_dir, agent_pipeline.read_json(run_dir / "manifest.json")
+
+    def drive(self, run_dir: Path, manifest: dict, **changes: object) -> tuple[dict, int]:
+        args = {
+            "expected_stages": ["A5.1", "A5.2"],
+            "feature_branch": "feature/verified-stage",
+            "previous_run_dir": self.run_dir,
+        }
+        args.update(changes)
+        return agent_pipeline.drive_stage_sequence(
+            self.repo, self.repo / "build/agent-worktrees", run_dir, manifest,
+            self.policy_path, self.policy, **args,
+        )
+
+    def test_a53_read_only_preflight_is_non_mutating(self) -> None:
+        run_dir, manifest = self.prepared()
+        result, code = self.drive(run_dir, manifest)
+        self.assertEqual(0, code)
+        self.assertEqual("AWAIT_EXPLICIT_EXECUTION", result["action"])
+        self.assertEqual(["A5.1", "A5.2"], result["expectedStages"])
+        self.assertFalse((run_dir / "sequence-intent.json").exists())
+        self.assertFalse((run_dir / "sequence-result.json").exists())
+        self.assertEqual(self.head, self.git(self.repo, "rev-parse", "HEAD"))
+
+    def test_a53_execution_requires_separate_approval(self) -> None:
+        run_dir, manifest = self.prepared()
+        with self.assertRaisesRegex(ValueError, "developer approval"):
+            self.drive(run_dir, manifest, execute=True)
+        self.assertFalse((run_dir / "sequence-intent.json").exists())
+
+    def test_a53_one_cycle_stops_at_promotion_checkpoint(self) -> None:
+        run_dir, manifest = self.prepared()
+        ref_before = self.git(self.repo, "rev-parse", "HEAD")
+        with (mock.patch.object(agent_pipeline, "prepare_worker_workspace") as workspace,
+              mock.patch.object(agent_pipeline, "run_automated_cycle", return_value=0) as cycle,
+              mock.patch.object(agent_pipeline, "update_status", return_value={
+                  "state": "READY_FOR_MAIN_REVIEW"})):
+            result, code = self.drive(run_dir, manifest, execute=True, developer_approved=True)
+        self.assertEqual(0, code)
+        self.assertEqual("AWAIT_DEVELOPER_PROMOTION", result["action"])
+        workspace.assert_called_once()
+        cycle.assert_called_once()
+        self.assertEqual(ref_before, self.git(self.repo, "rev-parse", "HEAD"))
+        self.assertEqual(ref_before, self.git(self.repo, "rev-parse", "feature/verified-stage"))
+        self.assertTrue((run_dir / "sequence-result.json").exists())
+        with self.assertRaisesRegex(ValueError, "not fresh"):
+            self.drive(run_dir, manifest)
+
+    def test_a53_failed_cycle_preserves_escalation_checkpoint(self) -> None:
+        run_dir, manifest = self.prepared()
+        with (mock.patch.object(agent_pipeline, "prepare_worker_workspace"),
+              mock.patch.object(agent_pipeline, "run_automated_cycle", return_value=1),
+              mock.patch.object(agent_pipeline, "update_status", return_value={"state": "BLOCKED"})):
+            result, code = self.drive(run_dir, manifest, execute=True, developer_approved=True)
+        self.assertEqual(2, code)
+        self.assertEqual("ESCALATE_TO_DEVELOPER", result["action"])
+        self.assertFalse((run_dir / "promotion.json").exists())
+
+    def test_a53_interrupted_execution_is_not_replayed(self) -> None:
+        run_dir, manifest = self.prepared()
+        with mock.patch.object(agent_pipeline, "prepare_worker_workspace", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.drive(run_dir, manifest, execute=True, developer_approved=True)
+        self.assertTrue((run_dir / "sequence-intent.json").exists())
+        self.assertFalse((run_dir / "sequence-result.json").exists())
+        with self.assertRaisesRegex(ValueError, "not fresh"):
+            self.drive(run_dir, manifest, execute=True, developer_approved=True)
+
+    def test_a53_wrong_roster_and_missing_predecessor_rejected(self) -> None:
+        run_dir, manifest = self.prepared()
+        for roster in (["A5.2", "A5.1"], ["A5.2"], ["A5.1", "A5.1"]):
+            with self.subTest(roster=roster), self.assertRaises(ValueError):
+                self.drive(run_dir, manifest, expected_stages=roster)
+        with self.assertRaisesRegex(ValueError, "predecessor"):
+            self.drive(run_dir, manifest, previous_run_dir=None)
+        self.assertFalse((run_dir / "sequence-intent.json").exists())
+
+    def test_a53_previous_receipt_tamper_and_stale_branch_block(self) -> None:
+        run_dir, manifest = self.prepared()
+        receipt = self.run_dir / "promotion.json"
+        receipt.write_text(receipt.read_text() + " ", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self.drive(run_dir, manifest)
+        receipt.write_text(receipt.read_text().rstrip(), encoding="utf-8")
+        self.git(self.repo, "checkout", "-q", "--detach")
+        with self.assertRaisesRegex(ValueError, "checkout"):
+            self.drive(run_dir, manifest)
+
+    def test_a53_preflight_does_not_accept_high_risk_packet(self) -> None:
+        run_dir, manifest = self.prepared()
+        manifest["stagePacket"]["riskLevel"] = "HIGH"
+        with self.assertRaises(ValueError):
+            self.drive(run_dir, manifest)
+
+    def test_a53_first_stage_needs_no_predecessor(self) -> None:
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        first_packet = {**self.packet, "stageId": "A5.1", "requirementIds": ["AP12"]}
+        packet, context = agent_pipeline.validate_stage_packet(self.repo, first_packet)
+        first_dir = agent_pipeline.initialize_stage_run(
+            self.repo, self.runs_root, self.policy_path, self.policy,
+            packet, context, "first-stage",
+        )
+        manifest = agent_pipeline.read_json(first_dir / "manifest.json")
+        result, code = self.drive(
+            first_dir, manifest, expected_stages=["A5.1", "A5.2"], previous_run_dir=None,
+        )
+        self.assertEqual(0, code)
+        self.assertEqual(0, result["stageIndex"])
+        self.assertFalse((first_dir / "sequence-intent.json").exists())
+
+    def test_a53_cli_preflight_uses_real_parser_without_execution(self) -> None:
+        run_dir, _ = self.prepared()
+        command = [sys.executable, str(MODULE_PATH), "--repo-root", str(self.repo),
+                   "--policy", str(self.policy_path), "--runs-root", str(self.runs_root),
+                   "drive-stage", "--run-id", run_dir.name,
+                   "--stage", "A5.1", "--stage", "A5.2",
+                   "--feature-branch", "feature/verified-stage",
+                   "--previous-run-dir", str(self.run_dir)]
+        process = subprocess.run(command, text=True, capture_output=True, check=False)
+        self.assertEqual(0, process.returncode, process.stderr)
+        self.assertEqual("AWAIT_EXPLICIT_EXECUTION", json.loads(process.stdout)["action"])
+        self.assertFalse((run_dir / "sequence-intent.json").exists())
+        self.assertFalse((run_dir / "worker.json").exists())
+
+    def test_a53_cli_requires_explicit_authority_and_parses_flags(self) -> None:
+        parser = agent_pipeline.build_parser()
+        parsed = parser.parse_args([
+            "drive-stage", "--run-id", "next", "--stage", "A5.1", "--stage", "A5.2",
+            "--feature-branch", "feature/verified-stage", "--previous-run-dir", "/tmp/old",
+            "--execute", "--developer-approved",
+        ])
+        self.assertTrue(parsed.execute)
+        self.assertTrue(parsed.developer_approved)
+        self.assertEqual(["A5.1", "A5.2"], parsed.stage)
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr"):
+            parser.parse_args(["drive-stage", "--run-id", "next"])
+
+
 class AgentPipelineStagePacketTest(unittest.TestCase):
     """Protects bounded A4 stage packets, advisory context and explicit editable scope."""
 

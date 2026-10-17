@@ -74,6 +74,24 @@ project. Document hard-coded spec paths, SHA-1-shaped Git IDs, provider and
 security tooling, branch rules, and canonical checks. Never claim that copying
 SignalHarvester's `pipeline-policy.json` into another project is sufficient.
 
+## A5.3a — checkpoint-driven sequence driver (advisory)
+
+Requirements: AP8, AP10, AP12 and AP15. Preserve the verified boundaries of
+A5.1 and A5.2. Implement a small `drive-stage` command instead of a Git
+checkout/scheduler loop. Its default mode validates the full ordered roster,
+current packet, clean feature HEAD and predecessor receipt/check/reviewer
+binding without writes. Only `--execute --developer-approved` runs one already
+initialized LOW-risk bounded stage through A3's existing cycle. Persist a
+non-replayable intent before workspace creation. Save a compact terminal
+checkpoint for review readiness or escalation. Unexpected interruption leaves
+the intent for manual recovery, not automatic retry.
+
+Do not auto-promote, change checked-out refs, grant final acceptance or create
+next-stage packets. No Aider/provider invocation belongs in preflight. Keep
+independent Git/interrupt oracles and a target-project mapping in `PORTING.md`.
+Unattended multi-stage batching requires a later policy change and explicit
+Git-checkout/recovery design; do not silently weaken A5.1 CAS constraints.
+
 ## Alternatives, assumptions and open questions
 
 - A Stage Task Packet can use strict JSON without a new dependency. A future typed schema may be useful if many sub-specs need structured authoring; do not add one prematurely.

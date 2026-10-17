@@ -78,6 +78,25 @@ needs deliberate code and test changes. Do **not** weaken validation solely to
 make a port appear to work. Some target projects cannot support unattended
 worker execution safely; a read-only/manual handoff is a valid outcome.
 
+### Checkpoint-driven sequence portability (A5.3a)
+
+The A5.3a `drive-stage` CLI performs a read-only preflight by default and
+executes **one** already approved LOW-risk stage only with explicit
+`--execute --developer-approved`. It persists an execution intent, delegates
+to the target's own verified worker/check/reviewer cycle and always stops at
+human promotion or escalation. A target project's implementation must preserve
+non-replayable interrupted runs and avoid treating a Git ref update, provider
+verdict or model-generated summary as developer acceptance.
+
+Before adopting unattended scheduling, map the target's real Git checkout
+policy to A5.1 CAS and A5.2 next-stage authority. In SignalHarvester these
+are intentionally separated by a manual branch checkout; an automated loop
+would need a new reviewed design for ref/worktree transitions, lock ownership,
+concurrent writers, recovery, cost/risk limits and developer checkpoints.
+Do not silently add autonomous checkout, merge or ref movement as a portability
+shortcut. Execute expensive checks and provider calls only after explicit
+approval. Preserve private evidence outside directories cleared by build tools.
+
 ## 3. Suggested porting process for another model
 
 **Discovery (no edits):** read the target root and nearest local instructions,

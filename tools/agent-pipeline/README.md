@@ -25,9 +25,11 @@ selected stages without inferring approval; A4.4 preserves complete private
 run evidence beyond Gradle `clean` and publishes a compact review index.
 A5.1 supports an explicitly approved one-stage CAS commit. A5.2 prepares the
 **next** LOW-risk stage only after matching its predecessor receipt, ordered
-stage roster and exact checked-out feature HEAD. These are bounded,
+stage roster and exact checked-out feature HEAD. A5.3a provides read-only
+sequence preflight and an opt-in single-stage cycle driver with durable intent
+and a mandatory promotion/escalation checkpoint. These are bounded,
 verification-pending slices; previous provider-backed `BLOCKED` runs are not
-retroactively accepted. End-to-end autonomous stage scheduling, notifications,
+retroactively accepted. Unattended cross-stage scheduling, notifications,
 merging and archival are **not** implemented. The intended behavior and stages
 are owned by the active
 [`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md)
@@ -653,6 +655,58 @@ must never change its parent interactive shell's options. Temporary paths can
 also differ by symlink spellings across operating systems (`/var/...` versus
 `/private/var/...` on macOS); CLI path tests compare resolved paths, not raw
 printed path strings.
+
+## A5.3a bounded sequence checkpoints (verification-pending)
+
+`drive-stage` consumes an **already initialized** source-bound stage run. It
+requires an explicit complete ordered roster, a clean checked-out `feature/*`
+branch at the run base, and LOW-risk `BOUNDED` packet evidence. A later stage
+requires its preceding promoted run directory via `--previous-run-dir`; private
+A4.4 custody is supported. The driver validates its promotion receipt,
+reviewer/check evidence and the exact parent commit. No stage order is inferred
+from prose or directory names.
+
+By default this command is **read-only** and returns `AWAIT_EXPLICIT_EXECUTION`.
+It never calls the worker in preflight:
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py drive-stage \
+  --run-id <already-prepared-run-id> \
+  --feature-branch feature/<approved-topic> \
+  --stage <first-stage-id> --stage <second-stage-id> \
+  --previous-run-dir /absolute/private-evidence/runs/<prior-run-id>
+```
+
+Omit `--previous-run-dir` only for the first roster stage. For **one**
+authorized stage execution, append `--execute --developer-approved`. This
+acknowledges approval; it does not authenticate a developer identity. Execution
+persists `sequence-intent.json` *before* creating the worker worktree, then
+invokes the existing bounded A3 worker/check/reviewer cycle exactly once and
+publishes `sequence-result.json`. `AWAIT_DEVELOPER_PROMOTION` means the run is
+ready for a separate A5.1 promotion command; `ESCALATE_TO_DEVELOPER` returns
+nonzero and needs an external decision. Interrupted or partially attempted
+runs retain their intent and **cannot** be replayed with the same run ID.
+
+No Git checkout, ref movement, stage commit, new next-stage packet, merge,
+notification or acceptance occurs here. After optional A5.1 promotion, the
+developer explicitly switches to the promoted feature HEAD and invokes A5.2
+`prepare-next-stage`, then drives the next approved stage in a new invocation.
+This limitation is intentional: A5.1 rejects checked-out promotion targets,
+whereas A5.2 requires the subsequent checkout. Unattended cross-stage
+scheduling is not safe under those contracts and remains future work.
+
+The independent sequence oracle runs without external providers:
+
+```bash
+python3 tools/agent-pipeline/benchmarks/stage_sequence_oracle.py \
+  --candidate tools/agent-pipeline/agent_pipeline.py
+```
+
+**Evidence custody:** source-bound run directories under `build/` are not
+persistent across Gradle `clean`. After any real run, use A4.4 `export-subspec`
+before destructive checks and keep raw logs/private artifacts outside the
+repository. The compact sequence result is not a substitute for the full
+private evidence bundle or developer acceptance.
 
 ## A5.2 source-bound preparation of the next stage (verification-pending)
 
