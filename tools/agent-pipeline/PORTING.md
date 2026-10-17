@@ -104,6 +104,12 @@ cases (stale HEAD, malformed review, missing logs, protected file edits,
 unapproved risk, interrupted Git CAS, provider outages); focused tests;
 canonical target checks; and a manually approved live smoke test if privacy
 and provider access permit it. Never report test success without running it.
+For developer-facing copy/paste commands, run `set -e` inside a child script or
+`( ... )` subshell, **not** in the interactive shell. A failed gate must still
+produce a nonzero status and readable diagnostics without closing the user's
+terminal. Portable filesystem checks should compare canonicalized `Path`
+identities (including symlink aliases on macOS) when exact text spelling is
+not the contract being tested.
 
 **Rollout:** keep stage execution opt-in at first. Capture sanitized evidence,
 obtain independent fresh-context review, then explicit developer acceptance.

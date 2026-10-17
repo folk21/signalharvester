@@ -622,6 +622,38 @@ python3 tools/agent-pipeline/benchmarks/stage_promotion_oracle.py \
 ```
 
 
+## Safe local verification from an interactive terminal
+
+Do **not** paste `set -e` into an interactive zsh/bash session. If a subsequent
+verification command fails, that option can terminate the entire login shell
+(the terminal may show only `[Process completed]`). A failing gate **must** still
+return a nonzero exit status; do not suppress or relabel failures as PASS.
+
+Use a subshell for multi-command verification so `errexit` is contained and the
+interactive prompt remains usable. `set +e` first clears an earlier interactive
+`errexit` setting, if present. Example (no credentials or live model required):
+
+```sh
+set +e
+(
+  set -e
+  git diff --check
+  ./run_checks.sh
+  ./tools/agent-pipeline/run_tests.sh
+)
+verification_status=$?
+printf 'Local verification exit status: %s\n' "$verification_status"
+```
+
+A nonzero `verification_status` is a failed verification, **not** acceptance.
+Read the failed step, correct the defect and rerun. If a command is still
+running, use Ctrl+C to interrupt it; do not close the terminal tab. The
+pipeline's own check runner may stop on a failed required gate by design, but
+must never change its parent interactive shell's options. Temporary paths can
+also differ by symlink spellings across operating systems (`/var/...` versus
+`/private/var/...` on macOS); CLI path tests compare resolved paths, not raw
+printed path strings.
+
 ## A5.2 source-bound preparation of the next stage (verification-pending)
 
 `prepare-next-stage` is an **explicit, single-step sequence guard** after a

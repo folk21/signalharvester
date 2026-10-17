@@ -2923,7 +2923,29 @@ class SerializedStagePreparationTest(GuardedStagePromotionTest):
                "--run-id", "stage-two", "--developer-approved"]
         process = subprocess.run(cmd, text=True, capture_output=True, check=False)
         self.assertEqual(0, process.returncode, process.stderr)
-        self.assertEqual(str(self.runs_root / "stage-two"), process.stdout.strip())
+        # macOS aliases /var to /private/var; compare filesystem identity, not spelling.
+        self.assertEqual((self.runs_root / "stage-two").resolve(),
+                         Path(process.stdout.strip()).resolve())
+        self.assertFalse((self.runs_root / "stage-two/worker.json").exists())
+
+    def test_a52_cli_resolves_symlinked_repo_and_runs_root(self) -> None:
+        self.head = self.promote()["stageCommit"]
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        alias = self.base / "repo-alias"
+        alias.symlink_to(self.repo, target_is_directory=True)
+        cmd = [sys.executable, str(MODULE_PATH), "--repo-root", str(alias),
+               "--policy", str(self.policy_path),
+               "--runs-root", str(alias / "build/reports/agent-pipeline"),
+               "prepare-next-stage", "--previous-run-dir", str(self.run_dir),
+               "--packet", str(self.next_packet), "--stage", "A5.1", "--stage", "A5.2",
+               "--feature-branch", "feature/verified-stage", "--expected-head", self.head,
+               "--run-id", "stage-two", "--developer-approved"]
+        process = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        self.assertEqual(0, process.returncode, process.stderr)
+        self.assertEqual((self.runs_root / "stage-two").resolve(),
+                         Path(process.stdout.strip()).resolve())
+        self.assertNotEqual(str(alias / "build/reports/agent-pipeline/stage-two"),
+                            process.stdout.strip())
         self.assertFalse((self.runs_root / "stage-two/worker.json").exists())
 
     def test_a52_cli_requires_explicit_roster_and_parent(self) -> None:
