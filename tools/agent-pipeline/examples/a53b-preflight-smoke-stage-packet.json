@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "stageId": "A5.3b",
+  "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+  "implementationPlanPath": "docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md",
+  "requirementIds": [
+    "AP9",
+    "AP10",
+    "AP12"
+  ],
+  "featureIds": [],
+  "owningPaths": [
+    "tools/agent-pipeline"
+  ],
+  "editablePaths": [
+    "tools/agent-pipeline/tests/test_agent_pipeline.py"
+  ],
+  "contextPaths": [
+    "tools/agent-pipeline/PORTING.md",
+    "tools/agent-pipeline/agent_pipeline.py"
+  ],
+  "riskLevel": "LOW",
+  "delegation": "BOUNDED",
+  "task": "Add two non-overlapping deterministic regression scenarios for the A5.3a drive-stage first-stage CLI preflight. First: in a temporary real Git repository on a clean checked-out feature/* branch, initialize a source-bound FIRST stage using the existing LOW-risk packet fixture, invoke the real drive-stage CLI twice with a single-stage roster, verify both responses have action AWAIT_EXPLICIT_EXECUTION and the same stage/HEAD, verify manifest.json, stage-packet.json, task.md, checks.json, and any existing status.json bytes are unchanged (an absent status.json must remain absent) and that no sequence-intent.json, sequence-result.json, worker.json or worker worktree was created. Second: using a fresh fixture and real CLI subprocess, make the feature checkout dirty (and, if useful, subsequently stale) after init-stage; verify nonzero fail-closed preflight, no intent/result/worktree, and no Git ref movement. Existing tests already cover read-only helper preflight and basic CLI behavior; write new independent first-stage boundary assertions instead of renaming or duplicating those tests. Keep tests portable between macOS /var and /private/var path aliases by comparing resolved Path objects. Changes are authorized ONLY in tools/agent-pipeline/tests/test_agent_pipeline.py. Do not modify the controller, root checks, Git lifecycle, specifications, policy, independent oracles, docs or existing assertions. If the current controller fails a new legitimate test, preserve the failing evidence and escalate for a separate approved implementation change instead of altering the production code. Do not call live models or use credentials in the tests, do not alter approval logic, and do not claim stage acceptance.",
+  "completionCriteria": [
+    "A new real-subprocess first-stage CLI regression exercises repeated successful read-only preflight and checks stable source-bound run evidence byte-for-byte.",
+    "A new real-subprocess regression rejects a dirty or stale checkout before producing sequence intent/result, worker/worktree, or Git ref changes.",
+    "The tests are deterministic, offline and portable across macOS/Linux path canonicalization, reusing existing repository test helpers.",
+    "All edits are restricted to tools/agent-pipeline/tests/test_agent_pipeline.py and do not weaken existing regressions or verification/approval gates.",
+    "Canonical checks and fresh independent reviewer evidence remain mandatory before developer review; this packet does not authorize automatic stage promotion or A6 scheduling."
+  ]
+}

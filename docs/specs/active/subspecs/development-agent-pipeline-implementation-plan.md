@@ -92,6 +92,31 @@ independent Git/interrupt oracles and a target-project mapping in `PORTING.md`.
 Unattended multi-stage batching requires a later policy change and explicit
 Git-checkout/recovery design; do not silently weaken A5.1 CAS constraints.
 
+## A5.3b — first-stage smoke pilot packet (advisory)
+
+Requirements: AP9, AP10 and AP12. Use the explicit candidate packet at
+`tools/agent-pipeline/examples/a53b-preflight-smoke-stage-packet.json` for
+**developer review before execution**. This is a focused preflight and live
+pipeline readiness exercise, **not** unattended multi-stage batching.
+
+Suggested worker task: add deterministic CLI subprocess regression cases in
+`tools/agent-pipeline/tests/test_agent_pipeline.py` proving that repeated
+first-stage `drive-stage` preflight is non-mutating, and that a stale/dirty
+feature checkout fails before execution with no sequence artifacts. Reuse
+existing Git fixtures and real parser/CLI; tests must work on macOS filesystem
+aliases and Linux. Do not authorize production controller edits, specification,
+policy, independent oracle or Git lifecycle changes under this packet. If a
+real controller bug is found, stop and request a separately reviewed patch.
+
+The approved roster for the **single-stage smoke pilot** contains only
+`A5.3b`; later stages need new approved packets and promotion evidence. The
+human creates and commits a clean feature branch, invokes `init-stage`, then
+runs `drive-stage` **without** `--execute`. Only after inspecting that report
+may the developer authorize a provider-backed one-stage cycle. Preserve a
+private evidence bundle before running cleanup that may remove `build/`.
+A failed reviewer or unexpected no-diff requires MAIN_MODEL recovery; never
+pretend the smoke run establishes A6 batching readiness on its own.
+
 ## Alternatives, assumptions and open questions
 
 - A Stage Task Packet can use strict JSON without a new dependency. A future typed schema may be useful if many sub-specs need structured authoring; do not add one prematurely.

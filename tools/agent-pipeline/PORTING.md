@@ -97,6 +97,23 @@ Do not silently add autonomous checkout, merge or ref movement as a portability
 shortcut. Execute expensive checks and provider calls only after explicit
 approval. Preserve private evidence outside directories cleared by build tools.
 
+### First live pilot transfer (A5.3b)
+
+Begin with a **test-only**, first-stage packet if the target repository has a
+reliable local test harness. The SignalHarvester candidate at
+`examples/a53b-preflight-smoke-stage-packet.json` is an example of limiting
+worker edit authorization to one test file while holding the controller and
+policy read-only. Adapt the requirement IDs, actual Git fixture paths,
+canonical checks and port-specific subprocess assertions to the target
+project. Never assume that `A5.3b`, `feature/*`, the example packet, or the
+SignalHarvester test file are valid authorities in another repository.
+
+Prove preflight idempotency, no secret/provider access in tests, rejection of
+stale/dirty HEAD and no intent/worker artifacts before allowing live model
+execution. Distinguish **validation of a packet** from **developer approval**:
+accepting JSON schema cannot attest a human decision. This pilot does not
+establish permission for unattended multi-stage scheduling.
+
 ## 3. Suggested porting process for another model
 
 **Discovery (no edits):** read the target root and nearest local instructions,

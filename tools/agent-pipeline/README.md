@@ -695,6 +695,53 @@ This limitation is intentional: A5.1 rejects checked-out promotion targets,
 whereas A5.2 requires the subsequent checkout. Unattended cross-stage
 scheduling is not safe under those contracts and remains future work.
 
+### A5.3b first-stage smoke packet (candidate; not approved)
+
+`examples/a53b-preflight-smoke-stage-packet.json` is a **new, test-only**
+candidate packet. It delegates only additional first-stage CLI preflight
+regressions to the worker in `tests/test_agent_pipeline.py`. It does **not**
+authorize changes to the controller, independent oracle, checks, policy,
+reviewer contract or stage promotion. The target `stageId` is `A5.3b`, and
+this pilot's **full ordered roster has one element**: `A5.3b`. The worker
+will operate only on a developer-approved clean feature branch. This is not
+an A6 unattended multi-stage scheduler.
+
+After reviewing the packet and committing it alongside the updated active
+spec/plan on a **clean checked-out** `feature/*` branch, initialize a unique
+run (the CLI generates a run ID if none is supplied). This read-only smoke
+sequence has no provider calls and protects the interactive terminal:
+
+```bash
+set +e
+(
+  set -e
+  test "$(git branch --show-current)" = "feature/agent-pipeline-a53b-smoke"
+  test -z "$(git status --porcelain)"
+  run_dir="$(python3 tools/agent-pipeline/agent_pipeline.py init-stage \
+    --packet tools/agent-pipeline/examples/a53b-preflight-smoke-stage-packet.json)"
+  printf 'A5.3b RUN_ID: %s\n' "${run_dir##*/}"
+  python3 tools/agent-pipeline/agent_pipeline.py drive-stage \
+    --run-id "${run_dir##*/}" \
+    --stage A5.3b \
+    --feature-branch feature/agent-pipeline-a53b-smoke
+)
+verification_status=$?
+printf 'A5.3b preflight exit status: %s\n' "$verification_status"
+```
+
+An exit status of `0` and action `AWAIT_EXPLICIT_EXECUTION` confirm only a
+read-only stage preflight. A nonzero status is a blocker, not an approval.
+Keep the printed run ID/directory for evidence inspection. The command does
+not activate the worker or assert that the task has been completed.
+
+The feature branch in this example is a **proposed name**, not an existing or
+approved ref. Do not paste placeholders or execute the worker by appending
+`--execute` before a separate developer authorization. `init-stage` itself
+writes fresh evidence into `build/`, whereas `drive-stage` without `--execute`
+is read-only. Only a real successful provider-backed run can later be
+considered for an external stage promotion. Capture the complete evidence
+outside `build/` before canonical cleanup.
+
 The independent sequence oracle runs without external providers:
 
 ```bash

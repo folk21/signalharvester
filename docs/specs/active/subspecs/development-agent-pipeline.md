@@ -67,6 +67,10 @@ preflight is the default; separately authorized execution records an intent,
 runs the existing A3 cycle once and stops at promotion or escalation. A5.1
 CAS promotion and A5.2 next-stage preparation stay distinct human checkpoints.
 
+**A5.3b (packet proposed, not developer-approved):** a LOW-risk test-only
+first-stage smoke pilot for A5.3a preflight and subsequent explicit execution.
+No live run or provider-backed approval is implied.
+
 **Still planned:** unattended multi-stage scheduling/batching beyond explicit
 checkpoints, notifications (A6), and overall pipeline v1 acceptance (A7).
 Historical failed pilots, including
@@ -418,6 +422,27 @@ packet, grant final acceptance or archive specifications. A5.1's CAS-only ref
 update and A5.2's explicit HEAD checkout prevent safe unattended crossing of
 stage boundaries under the current contract. Automatic batching is future A6
 work and requires additional authority and recovery controls.
+
+#### A5.3b — source-bound first-stage smoke pilot (developer review required)
+
+Before authorizing future unattended batching under A6, a developer-approved
+A5.3b pilot must exercise `drive-stage` on a **new first-stage** LOW-risk,
+BOUNDED packet and record its exact checked-out `feature/*` HEAD. The pilot's
+bounded worker task may add deterministic **test-only** regression coverage for
+repeated read-only CLI preflight, first-stage roster identity, and rejection of
+stale/dirty Git state. It must not expand authority to edit the controller,
+policy, scanner, specifications, acceptance rules, or Git promotion logic.
+The developer must review and approve the packet before initializing a run.
+
+Preflight must remain read-only and must not invoke the worker, reviewer or
+checks. Real execution requires a separate explicit developer decision, must
+consume the unique run ID once, and must end at the A5.3a promotion/escalation
+checkpoint. The pilot must retain complete source-bound evidence and the
+independent review result; missing or failed provider evidence remains
+`BLOCKED`, never accepted. Preserve evidence outside `build/` before cleanup.
+No second stage, automatic checkout, promotion, retry, merge or scheduling is
+authorized by this pilot. An A6 batching design still requires explicit Git
+checkout/recovery, concurrency and cost/risk authorization.
 
 ### AP13 — sub-spec handoff and notifications
 
