@@ -3210,6 +3210,115 @@ class StageSequenceDriverTest(SerializedStagePreparationTest):
         with self.assertRaises(SystemExit), mock.patch("sys.stderr"):
             parser.parse_args(["drive-stage", "--run-id", "next"])
 
+    def _first_stage_cli(self, run_id: str) -> list[str]:
+        """Build the real drive-stage CLI for a single-stage first-stage roster."""
+        return [sys.executable, str(MODULE_PATH), "--repo-root", str(self.repo),
+                "--policy", str(self.policy_path), "--runs-root", str(self.runs_root),
+                "drive-stage", "--run-id", run_id,
+                "--stage", "A5.1",
+                "--feature-branch", "feature/verified-stage"]
+
+    def _init_first_stage_cli(self, run_id: str) -> subprocess.CompletedProcess[str]:
+        """Initialize a source-bound first stage through the real init-stage CLI."""
+        first_packet = self.base / f"{run_id}-packet.json"
+        agent_pipeline.write_json(first_packet, {
+            **self.packet, "stageId": "A5.1", "requirementIds": ["AP12"],
+        })
+        return subprocess.run(
+            [sys.executable, str(MODULE_PATH), "--repo-root", str(self.repo),
+             "--policy", str(self.policy_path), "--runs-root", str(self.runs_root),
+             "init-stage", "--packet", str(first_packet), "--run-id", run_id],
+            text=True, capture_output=True, check=False,
+        )
+
+    def _evidence_bytes(self, run_dir: Path) -> dict[str, bytes | None]:
+        """Snapshot the source-bound run evidence bytes, preserving absent files as None."""
+        names = ("manifest.json", "stage-packet.json", "task.md", "checks.json", "status.json")
+        return {name: (run_dir / name).read_bytes() if (run_dir / name).is_file() else None
+                for name in names}
+
+    # A5.3b: repeated first-stage CLI preflight is read-only and preserves source-bound evidence.
+    def test_a53b_repeated_first_stage_cli_preflight_is_read_only(self) -> None:
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        head_before = self.git(self.repo, "rev-parse", "HEAD")
+        initialized = self._init_first_stage_cli("first-stage")
+        self.assertEqual(0, initialized.returncode, initialized.stderr)
+        run_dir = (self.runs_root / "first-stage").resolve()
+        self.assertEqual(run_dir, Path(initialized.stdout.strip()).resolve())
+        evidence_before = self._evidence_bytes(run_dir)
+        worktrees_before = self.git(self.repo, "worktree", "list", "--porcelain")
+        self.assertIsNotNone(evidence_before["manifest.json"])
+        self.assertIsNotNone(evidence_before["stage-packet.json"])
+        self.assertIsNotNone(evidence_before["task.md"])
+        self.assertIsNotNone(evidence_before["checks.json"])
+
+        first = subprocess.run(self._first_stage_cli("first-stage"),
+                               text=True, capture_output=True, check=False)
+        self.assertEqual(0, first.returncode, first.stderr)
+        second = subprocess.run(self._first_stage_cli("first-stage"),
+                                text=True, capture_output=True, check=False)
+        self.assertEqual(0, second.returncode, second.stderr)
+        first_report = json.loads(first.stdout)
+        second_report = json.loads(second.stdout)
+        for report in (first_report, second_report):
+            self.assertEqual("AWAIT_EXPLICIT_EXECUTION", report["action"])
+            self.assertEqual("A5.1", report["stage"])
+            self.assertEqual(0, report["stageIndex"])
+            self.assertEqual(head_before, report["baseCommit"])
+            self.assertEqual(["A5.1"], report["expectedStages"])
+            self.assertTrue(report["requiresExternalAcceptance"])
+        self.assertEqual(first_report, second_report)
+
+        self.assertEqual(evidence_before, self._evidence_bytes(run_dir))
+        for name in ("sequence-intent.json", "sequence-result.json", "worker.json"):
+            self.assertFalse((run_dir / name).exists(), name)
+        self.assertFalse((self.repo / "build/agent-worktrees/first-stage").exists())
+        self.assertEqual(worktrees_before, self.git(self.repo, "worktree", "list", "--porcelain"))
+        self.assertEqual(head_before, self.git(self.repo, "rev-parse", "HEAD"))
+        self.assertEqual(head_before, self.git(self.repo, "rev-parse", "feature/verified-stage"))
+
+    # A5.3b: a dirty or stale first-stage checkout fails closed before any sequence side effect.
+    def test_a53b_dirty_or_stale_first_stage_checkout_fails_closed(self) -> None:
+        self.git(self.repo, "checkout", "-q", "feature/verified-stage")
+        head_before = self.git(self.repo, "rev-parse", "HEAD")
+        initialized = self._init_first_stage_cli("first-stage")
+        self.assertEqual(0, initialized.returncode, initialized.stderr)
+        run_dir = (self.runs_root / "first-stage").resolve()
+        evidence_before = self._evidence_bytes(run_dir)
+        worktrees_before = self.git(self.repo, "worktree", "list", "--porcelain")
+
+        (self.repo / "src/code.txt").write_text("dirty edit\n", encoding="utf-8")
+        dirty = subprocess.run(self._first_stage_cli("first-stage"),
+                               text=True, capture_output=True, check=False)
+        self.assertNotEqual(0, dirty.returncode)
+        self.assertIn("checkout", dirty.stderr)
+        self.assertEqual(evidence_before, self._evidence_bytes(run_dir))
+        for name in ("sequence-intent.json", "sequence-result.json", "worker.json"):
+            self.assertFalse((run_dir / name).exists(), name)
+        self.assertFalse((self.repo / "build/agent-worktrees/first-stage").exists())
+        self.assertEqual(worktrees_before, self.git(self.repo, "worktree", "list", "--porcelain"))
+        self.assertEqual(head_before, self.git(self.repo, "rev-parse", "HEAD"))
+        self.assertEqual(head_before, self.git(self.repo, "rev-parse", "feature/verified-stage"))
+
+        self.git(self.repo, "checkout", "-q", "--", "src/code.txt")
+        (self.repo / "src/code.txt").write_text("advanced feature HEAD\n", encoding="utf-8")
+        self.git(self.repo, "commit", "-qam", "advance feature after initialization")
+        advanced_head = self.git(self.repo, "rev-parse", "HEAD")
+        self.assertNotEqual(head_before, advanced_head)
+        self.assertEqual("", self.git(self.repo, "status", "--porcelain"))
+        stale_worktrees_before = self.git(self.repo, "worktree", "list", "--porcelain")
+        stale = subprocess.run(self._first_stage_cli("first-stage"),
+                               text=True, capture_output=True, check=False)
+        self.assertNotEqual(0, stale.returncode)
+        self.assertIn("checkout", stale.stderr)
+        self.assertEqual(evidence_before, self._evidence_bytes(run_dir))
+        for name in ("sequence-intent.json", "sequence-result.json", "worker.json"):
+            self.assertFalse((run_dir / name).exists(), name)
+        self.assertFalse((self.repo / "build/agent-worktrees/first-stage").exists())
+        self.assertEqual(stale_worktrees_before, self.git(self.repo, "worktree", "list", "--porcelain"))
+        self.assertEqual(advanced_head, self.git(self.repo, "rev-parse", "HEAD"))
+        self.assertEqual(advanced_head, self.git(self.repo, "rev-parse", "feature/verified-stage"))
+
 
 class AgentPipelineStagePacketTest(unittest.TestCase):
     """Protects bounded A4 stage packets, advisory context and explicit editable scope."""
