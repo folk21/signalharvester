@@ -186,3 +186,14 @@ stage**. For CLI usage and exact argument contracts, see [README.md](README.md).
 Even in SignalHarvester, automated orchestration of the entire sub-spec,
 notifications, final review and archival are later milestones. The reusable
 architecture does not turn these future capabilities into implemented ones.
+
+## Repair attempt evidence identity
+
+Preserve the task actually sent to each model attempt as a bounded evidence artifact.
+The initial attempt uses the manifest-bound `task.md` digest; a repair attempt
+uses its own `repair-task-N.md` digest, with the original task retained as a
+verifiable prefix and bounded feedback appended. Evidence summaries must
+validate the attempt-specific task bytes and worker snapshot agreement; do not
+replace this check with manifest-digest equality for all attempts, nor accept
+arbitrary worker-supplied digests. Keep raw repair feedback and source files in
+private evidence custody, not in compact public summaries.

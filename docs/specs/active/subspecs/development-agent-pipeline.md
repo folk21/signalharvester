@@ -368,7 +368,11 @@ read-only prompt instruction alone must never be treated as enforcement of edit 
 ### AP10 — source-bound per-attempt verification
 
 Every implementation or repair attempt must preserve its own source digest, diff, test/check outputs,
-and reviewer identity. Any source change invalidates prior PASS evidence. Empty diffs, unexpected
+and reviewer identity. Each worker-attempt task digest must bind the exact task supplied to that
+attempt: the manifest-bound initial `task.md`, or the existing bounded `repair-task-N.md`
+that preserves the original task and adds narrowly scoped repair feedback. Evidence summarization
+must reject missing, mismatched, or unbound repair-task bytes instead of requiring all repair
+attempts to repeat the initial task digest. Any source change invalidates prior PASS evidence. Empty diffs, unexpected
 commits, unauthorized changed paths, or missing review evidence must not advance an implementation
 stage.
 
