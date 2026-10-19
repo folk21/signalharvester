@@ -243,11 +243,22 @@ separate future work. The active specification and Stage Task Packet are normati
 | EA-05 | Pre-worker run with no `worker.json` or snapshots | Empty worker history and no invented worker digest |
 | EA-06 | Malformed or array-shaped required JSON | Fail closed rather than returning a success-shaped report |
 | EA-07 | Latest worker conflicts with its snapshot | Fail closed, using the existing worker evidence validator |
-| EA-08 | Worker or historical attempt `taskSha256` disagrees with manifest | Reject source-unbound evidence |
+| EA-08 | Initial worker `taskSha256` disagrees with manifest; or a repair attempt disagrees with its bound `repair-task-N.md` | Reject source-unbound evidence |
 | EA-09 | Latest check record disagrees with `status.json.checks` | Reject inconsistent status/check evidence |
 | EA-10 | READY state lacks a required PASS check or independent PASS review | Reject unsupported readiness |
 | EA-11 | Evidence contains command, raw log and preflight/transcript sentinel strings | None of those raw fields/values appear in summary |
 | EA-12 | One existing evidence file changes bytes after report creation | Published `evidenceDigests` no longer matches file; report itself does not imply historical immutability |
+
+**Live-repair evidence regression:** a completed two-attempt cycle may legitimately
+have different `taskSha256` values: attempt 1 binds `task.md`/manifest, while
+attempt 2 binds `repair-task-2.md` (original task plus bounded feedback). A4.2a
+summaries and A4.2b deviation evidence should accept that exact pair, while
+rejecting a missing, changed, symlinked, or unrelated repair task, a mismatched
+worker snapshot, or a deviation claim whose digest differs from its worker.
+Legacy synthetic snapshots without repair-task files retain their original
+manifest-digest-only representation, but cannot introduce a new digest without
+the corresponding repair evidence. This is current-byte validation, not a
+historical signature or approval.
 
 The independent oracle at `tools/agent-pipeline/benchmarks/run_evidence_oracle.py`
 checks the public `summarize_run_evidence` helper with deterministic temporary

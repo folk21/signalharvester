@@ -1735,6 +1735,58 @@ class RunEvidenceSummaryTest(unittest.TestCase):
         )
         self.reject()
 
+    # EA repair: taskSha256 binds the actual bounded repair task, not only the initial task.
+    def test_ea_repair_attempt_task_digest_is_source_bound(self) -> None:
+        base = "Implement bounded tests.\n"
+        (self.run_dir / "task.md").write_text(base, encoding="utf-8")
+        initial_digest = agent_pipeline.sha256_file(self.run_dir / "task.md")
+        self.manifest["taskSha256"] = initial_digest
+        self.worker["taskSha256"] = initial_digest
+        self.persist()
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-1.json", self.worker)
+
+        repair_file = self.run_dir / "repair-task-2.md"
+        repair_file.write_text(
+            base + "\n## Bounded repair round\n\n" +
+            "Previous attempt produced no source changes."
+            "\nDo not change scope or weaken checks. Return control on ambiguity.\n",
+            encoding="utf-8",
+        )
+        repair_digest = agent_pipeline.sha256_file(repair_file)
+        second = dict(self.worker, attempt=2, taskSha256=repair_digest)
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-2.json", second)
+        agent_pipeline.write_json(self.run_dir / "worker.json", second)
+
+        summary = self.report()
+        self.assertEqual([initial_digest, repair_digest],
+                         [item["taskSha256"] for item in summary["workerAttempts"]])
+        self.assertEqual(initial_digest, summary["taskSha256"])
+        repair_file.write_text("forged standalone task\n", encoding="utf-8")
+        self.reject()
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-2.json", dict(second, taskSha256="f" * 64))
+        self.reject()
+
+    # EA repair: a missing, unbound or symlinked repair-task artifact must fail closed.
+    def test_ea_repair_missing_or_unbound_task_rejected(self) -> None:
+        base = "Implement bounded tests.\n"
+        (self.run_dir / "task.md").write_text(base, encoding="utf-8")
+        base_digest = agent_pipeline.sha256_file(self.run_dir / "task.md")
+        self.manifest["taskSha256"] = base_digest
+        self.worker["taskSha256"] = base_digest
+        self.persist()
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-1.json", self.worker)
+        repair = self.run_dir / "repair-task-2.md"
+        repair.write_text("unrelated but digest-matching task\n", encoding="utf-8")
+        digest = agent_pipeline.sha256_file(repair)
+        second = dict(self.worker, attempt=2, taskSha256=digest)
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-2.json", second)
+        agent_pipeline.write_json(self.run_dir / "worker.json", second)
+        self.reject()
+        repair.unlink()
+        self.reject()
+        repair.symlink_to(self.run_dir / "task.md")
+        self.reject()
+
     # EA-09: a latest check record that disagrees with status.json fails closed.
     def test_ea09_status_check_disagreement(self) -> None:
         self.status["checks"]["canonical"]["status"] = "PASS"
@@ -1888,6 +1940,33 @@ class RunDeviationEvidenceTest(unittest.TestCase):
             agent_pipeline.sha256_file(self.run_dir / "worker-deviations-attempt-1.json"),
             result[0]["evidenceSha256"],
         )
+
+    # DV repair: a deviation binds to the actual repair task and matching worker digest.
+    def test_dv_repair_attempt_task_digest_is_source_bound(self) -> None:
+        base = "Bounded task.\n"
+        (self.run_dir / "task.md").write_text(base, encoding="utf-8")
+        base_digest = agent_pipeline.sha256_file(self.run_dir / "task.md")
+        self.manifest["taskSha256"] = base_digest
+        agent_pipeline.write_json(self.run_dir / "manifest.json", self.manifest)
+        first = self.write_worker(1, taskSha256=base_digest)
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-1.json", first)
+        repair = self.run_dir / "repair-task-2.md"
+        repair.write_text(
+            base + "\n## Bounded repair round\n\nNo source changes."
+            "\nDo not change scope or weaken checks. Return control on ambiguity.\n",
+            encoding="utf-8",
+        )
+        digest = agent_pipeline.sha256_file(repair)
+        second = self.write_worker(2, taskSha256=digest)
+        agent_pipeline.write_json(self.run_dir / "worker-attempt-2.json", second)
+        agent_pipeline.write_json(self.run_dir / "worker.json", second)
+        self.write_deviation(2, self.valid_payload(2, taskSha256=digest, deviations=[]))
+        self.assertEqual("REPORTED_NONE", self.collect()[1]["state"])
+        self.write_deviation(2, self.valid_payload(2, taskSha256=base_digest, deviations=[]))
+        self.reject()
+        self.write_deviation(2, self.valid_payload(2, taskSha256=digest, deviations=[]))
+        repair.write_text("tampered task\n", encoding="utf-8")
+        self.reject()
 
     # DV-03: a bounded design alternative is REPORTED with safe categorical metadata only.
     def test_dv03_reported_bounded(self) -> None:
@@ -2229,6 +2308,32 @@ class SubspecEvidenceSummaryTest(unittest.TestCase):
         return agent_pipeline.summarize_subspec_evidence(
             dirs, spec_path=self.SPEC_PATH, expected_stages=stages
         )
+
+    # SE repair: a ready two-attempt stage remains visible to sub-spec evidence aggregation.
+    def test_se_repaired_ready_stage_uses_attempt_specific_task_digest(self) -> None:
+        run_dir = self.make_run("repaired-run", "A5.3b", ready=True)
+        base = "Implement two bounded regression tests.\n"
+        (run_dir / "task.md").write_text(base, encoding="utf-8")
+        manifest = agent_pipeline.read_json(run_dir / "manifest.json")
+        manifest["taskSha256"] = agent_pipeline.sha256_file(run_dir / "task.md")
+        agent_pipeline.write_json(run_dir / "manifest.json", manifest)
+        first = agent_pipeline.read_json(run_dir / "worker.json")
+        first["taskSha256"] = manifest["taskSha256"]
+        agent_pipeline.write_json(run_dir / "worker-attempt-1.json", first)
+        repair = run_dir / "repair-task-2.md"
+        repair.write_text(
+            base + "\n## Bounded repair round\n\nThe initial model made no diff."
+            "\nDo not change scope or weaken checks. Return control on ambiguity.\n",
+            encoding="utf-8",
+        )
+        second = dict(first, attempt=2, taskSha256=agent_pipeline.sha256_file(repair))
+        agent_pipeline.write_json(run_dir / "worker-attempt-2.json", second)
+        agent_pipeline.write_json(run_dir / "worker.json", second)
+        report = self.summary([run_dir], ["A5.3b"])
+        stage = report["stages"][0]
+        self.assertEqual("A5.3b", stage["stageId"])
+        self.assertEqual(2, stage["runs"][0]["workerAttemptCount"])
+        self.assertTrue(report["requiresExternalAcceptance"])
 
     # SE-01: a complete supplied roster still requires external acceptance.
     def test_se01_ready_roster_is_not_accepted(self) -> None:

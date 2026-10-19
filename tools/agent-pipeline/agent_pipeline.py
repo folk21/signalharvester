@@ -1265,6 +1265,7 @@ def _normalize_deviation_path(raw: Any) -> str:
 def _validate_deviation_payload(
     payload: dict[str, Any],
     *,
+    run_dir: Path,
     manifest: dict[str, Any],
     worker: dict[str, Any],
     file_attempt: int,
@@ -1283,11 +1284,10 @@ def _validate_deviation_payload(
     attempt = payload.get("attempt")
     if type(attempt) is not int or attempt != file_attempt:
         raise ValueError("Deviation attempt must be a strict integer matching its filename")
-    task_digest = _require_sha256(manifest.get("taskSha256"), "manifest taskSha256")
-    if _require_sha256(worker.get("taskSha256"), "worker taskSha256") != task_digest:
-        raise ValueError("Worker taskSha256 does not match the manifest")
-    if _require_sha256(payload.get("taskSha256"), "taskSha256") != task_digest:
-        raise ValueError("Deviation taskSha256 does not match the manifest")
+    _validate_worker_attempt_task_digest(run_dir, manifest, worker)
+    if (_require_sha256(payload.get("taskSha256"), "taskSha256")
+            != _require_sha256(worker.get("taskSha256"), "worker taskSha256")):
+        raise ValueError("Deviation taskSha256 does not match the worker attempt")
     worker_change = _require_sha256(worker.get("changeSha256"), "worker changeSha256")
     if _require_sha256(payload.get("changeSha256"), "changeSha256") != worker_change:
         raise ValueError("Deviation changeSha256 does not match the worker attempt")
@@ -1419,7 +1419,7 @@ def collect_deviation_summaries(run_dir: Path) -> list[dict[str, Any]]:
             continue
         payload = _require_json_object(path)
         entries = _validate_deviation_payload(
-            payload, manifest=manifest, worker=worker, file_attempt=attempt,
+            payload, run_dir=run_dir, manifest=manifest, worker=worker, file_attempt=attempt,
         )
         result.append({
             "attempt": attempt,
@@ -1448,6 +1448,45 @@ def _require_positive_int(value: Any, name: str) -> int:
     if type(value) is not int or value < 1:
         raise ValueError(f"{name} must be a positive integer")
     return value
+
+
+def _validate_worker_attempt_task_digest(
+    run_dir: Path, manifest: dict[str, Any], attempt: dict[str, Any],
+) -> None:
+    """Bind an attempt to its initial task or the exact bounded repair task bytes.
+
+    Historical same-task attempt fixtures have no repair-task file; preserve that
+    read-only legacy representation only when their digest is the manifest digest.
+    A repair-task file, when present, must be a regular, in-run, base-task-bound
+    artifact and its own digest must match the corresponding worker attempt.
+    """
+    number = _require_positive_int(attempt.get("attempt"), "Worker attempt")
+    base_digest = _require_sha256(manifest.get("taskSha256"), "manifest taskSha256")
+    actual_digest = _require_sha256(attempt.get("taskSha256"), "worker taskSha256")
+    repair_path = run_dir / f"repair-task-{number}.md"
+    if number == 1:
+        if actual_digest != base_digest:
+            raise ValueError("Worker taskSha256 does not match the manifest")
+        return
+    if repair_path.is_symlink():
+        raise ValueError("Repair task evidence must not be a symlink")
+    if not repair_path.exists():
+        if actual_digest != base_digest:
+            raise ValueError("Worker repair task evidence is missing")
+        return
+    if not repair_path.is_file() or sha256_file(repair_path) != actual_digest:
+        raise ValueError("Worker repair task digest does not match its evidence file")
+    base_path = run_dir / "task.md"
+    if (base_path.is_symlink() or not base_path.is_file()
+            or sha256_file(base_path) != base_digest):
+        raise ValueError("Repair task base digest does not match the manifest")
+    base = base_path.read_bytes()
+    repair = repair_path.read_bytes()
+    if (not repair.startswith(base + b"\n## Bounded repair round\n\n")
+            or not repair.endswith(
+                b"\nDo not change scope or weaken checks. Return control on ambiguity.\n"
+            )):
+        raise ValueError("Repair task does not preserve its bounded base task")
 
 
 def _bounded_check_summary(entry: dict[str, Any]) -> dict[str, Any]:
@@ -1531,8 +1570,7 @@ def summarize_run_evidence(run_dir: Path) -> dict[str, Any]:
 
     worker_attempts = collect_worker_attempts(run_dir)
     for attempt in worker_attempts:
-        if attempt.get("taskSha256") != task_sha256:
-            raise ValueError("Worker attempt task digest does not match the manifest")
+        _validate_worker_attempt_task_digest(run_dir, manifest, attempt)
 
     review_path = run_dir / "review.json"
     if review_path.is_file():
