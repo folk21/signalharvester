@@ -1,3 +1,4 @@
+
 # AGENTS.md
 
 This file defines repository-wide development rules for coding agents working on SignalHarvester.
@@ -57,18 +58,12 @@ No circular module dependencies.
 
 Prefer feature/bounded-context packaging inside modules over ceremonial technical layering.
 
-## Code Structure and Design
+## Code-change constraints
 
-- Keep the architecture flexible but simple. Do not introduce abstractions, layers, interfaces, or indirection without a concrete reason.
-- Apply DRY thoughtfully: remove stable duplication that creates maintenance risk, but prefer limited duplication over premature generalization.
-- Prefer composition over inheritance.
-- Add abstractions after the boundary or variation is understood, not in anticipation of hypothetical reuse.
-- Keep public APIs small and explicit.
-- Keep mutable state and resource ownership obvious.
-- Keep classes and methods reasonably sized and focused. Avoid very large classes or methods, but do not split code mechanically into tiny types or methods merely to satisfy a pattern or arbitrary size rule.
-- A class should normally represent one coherent responsibility, but closely related behavior may remain together when splitting it would reduce readability or increase indirection.
-- Preserve unrelated behavior and avoid drive-by refactors.
-- Do not introduce hidden conventions that cannot be discovered from the repository.
+- Do not create a new cross-module dependency, public interface, persistence owner, or adapter boundary without an active requirement and an owning contract update.
+- Do not introduce a new abstraction unless at least one concrete caller or tested variation requires it; keep it inside the owning module until a public boundary is explicitly approved.
+- Preserve behavior outside the authorized change set; an unrelated refactor requires a separate task/approval.
+- Record any new naming, resource-ownership, or lifecycle convention in its authoritative repository contract. Implicit undocumented conventions are not allowed.
 
 ## Communication Contracts
 
@@ -210,6 +205,10 @@ Direct `Thread.sleep(...)` is forbidden in test and integration-test sources as 
 
 Kafka integration tests that restart application consumers between test methods must isolate consumer state per method. Prefer a unique consumer group and unique input topics for each test method; otherwise reset offsets/topics explicitly before starting the next consumer. A static broker may be shared for cost, but committed offsets, rebalances, and unconsumed records from one test must not become hidden input to another test.
 
+Tests are verification evidence, not acceptance targets. Each stage MUST define behavioral invariants and positive, negative, boundary and regression cases **before or independently of worker implementation**, with observable inputs/outputs or failure conditions derived from the authoritative spec or reproduced defect. Execute focused tests during implementation and the required canonical/integration gates before claiming completion; a passing worker-authored test is not an independent oracle.
+
+When a test fails, diagnose whether the code violates the requirement, the test is invalid against the requirement, or the environment is unavailable. Fix production code for a valid failing assertion. Change a test only with explicit, documented evidence that its expectation contradicted the authoritative spec/defect reproduction; retain a case that detects the original bug. MUST NOT weaken, skip, mock away, delete or rewrite assertions merely to obtain PASS. An unresolved/flaky test MUST be disclosed and treated as an incomplete verification gate, not silently retried to green.
+
 Never disable or weaken a failing test merely to make the build green.
 
 Keep tests readable as executable specifications:
@@ -246,6 +245,7 @@ Each topic should have one authoritative owner:
 | Stable feature vocabulary | `docs/FEATURES.md` |
 | Completed project changes | `CHANGELOG.md` |
 | Specification workflow/navigation | `docs/specs/README.md` |
+| Current specification processing state | `docs/specs/STATE.json` (validated by `tools/specs/validate_state.py`) |
 | Intended significant changes | active specifications |
 | REST schema | `contracts/api-contracts/` |
 | Kafka schema | `contracts/event-contracts/src/main/proto/` |
@@ -258,7 +258,7 @@ Keep specification lifecycle state unambiguous:
 
 - a spec exists in exactly one lifecycle location (`active/` or `archive/`), never both;
 - archival is a move, not a duplicated copy;
-- umbrella `current_focus`, `docs/specs/README.md`, and the active spec tree must agree;
+- `docs/specs/STATE.json` is the only repository-owned *checkpoint projection*; it MUST NOT be edited during an active source-bound run or assert runtime `RUNNING`/developer `ACCEPTED` without independent evidence; README/umbrella `current_focus` are informational pointers and MUST NOT grant execution or acceptance;
 - an implemented-but-unverified slice may remain active with `verification-pending`, but accepted behavior belongs in current-state documentation rather than being maintained twice in the spec.
 
 Keep specifications synchronized with the stable feature vocabulary in `docs/FEATURES.md`:
@@ -273,23 +273,16 @@ Do not update broad documentation or CHANGELOG for trivial local refactors that 
 
 CHANGELOG entries begin with the date in `YYYY-MM-DD` format; time is omitted.
 
-### Documentation Writing Style
+### Normative language for LLM consumers
 
-Repository documentation is working context for both developers and coding agents. Optimize it for precise interpretation and efficient retrieval rather than stylistic formality.
+`AGENTS.md` and specifications are machine-oriented engineering contracts. Human-readable explanations are derived on demand; do not duplicate normative content merely for prose readability.
 
-- Use clear, direct, modern English. Prefer simple sentence structure over bureaucratic or academic prose.
-- Preserve technical precision. Simplify the language, not the architecture, contracts, invariants, or domain model.
-- Use stable terminology. Use the same term for the same concept throughout the project. Do not introduce synonyms only for stylistic variety.
-- Avoid noun piles, unnecessary jargon, and dense sentences that contain several independent assertions.
-- Prefer short sentences with one primary assertion. Keep a condition and its consequence together when separating them would make the rule less precise.
-- State ownership, dependency direction, invariants, ordering, failure semantics, and compatibility rules explicitly when they affect implementation.
-- Use normative words consistently in specifications: `must`, `must not`, `should`, and `may`.
-- Separate processing sequences from logical rules. Describe pipelines as ordered steps. Describe invariants, validation rules, and failure semantics separately.
-- Use bullets and small sections when they make requirements easier to scan and retrieve.
-- Clearly distinguish current implemented behavior from technical debt, planned work, and other future enhancements. Never describe planned behavior as if it already exists.
-- Prefer concrete references to modules, APIs, schemas, events, configuration keys, and persistence owners over abstract descriptions.
-- Keep important requirement identifiers and established domain terms stable across specifications, documentation, tests, and code.
-- Use stable feature IDs from `docs/FEATURES.md` for cross-document capability references. Feature IDs use uppercase ASCII hierarchy such as `RESULTS.LIVE`; do not invent or rename them locally.
+For every requirement, encode when applicable: `owner`, `MUST/MUST NOT/MAY`, `precondition`, `observable outcome`, `failure/stop condition`, and `evidence/test`. Use stable requirement/Feature IDs and concrete paths, API names, data contracts and units. Model a sequence as ordered steps and invariants separately from failure semantics.
+
+- `MUST`: violation fails validation/acceptance. `MUST NOT`: prohibited operation. `MAY`: permitted only inside explicit scope. `SHOULD`: non-binding recommendation in an advisory plan, never a scope/approval grant.
+- If ownership, stage scope, external contract or failure semantics are unknown, record `UNRESOLVED` and stop autonomous delegation until the developer resolves it.
+- Refer to owning code/schema/docs by path and symbol; do not reproduce full implementations or long narrative duplicated elsewhere.
+- Mark historical evidence, implemented behavior, verification-pending changes, and future proposals separately. Do not turn a historical PASS or an example into current acceptance authority.
 
 ## Always / Ask First / Never
 
@@ -357,12 +350,14 @@ follow the detailed procedure owned by `tools/agent-pipeline/README.md`.
 For staged sub-specification work, use these role names without tying them to a particular model provider:
 
 - **`MAIN_MODEL`** is the developer-invoked design and architectural review role, usually the ChatGPT session. It drafts the normative sub-specification and its advisory implementation plan. It identifies module impact, resolves architecture questions with the developer, and reviews completed work when explicitly asked. It may implement discovery or high-risk stages under normal developer control.
-- **`WORKER_MODEL`** is invoked through Aider for an approved bounded stage. It reads current repository sources and implements/tests within authorized scope. It records material deviations from the suggested approach. It cannot accept work or expand authorization.
+- **`WORKER_MODEL`** is invoked through the selected approved executor adapter (the only executable coding adapter currently implemented is Aider) for an approved bounded stage. It reads current repository sources and implements/tests within authorized scope. It records material deviations from the suggested approach. It cannot accept work or expand authorization.
 - **`REVIEWER_MODEL`** independently reviews source-bound changes in a fresh context. Its findings are evidence, not acceptance.
 - **`ORCHESTRATOR`** deterministically controls context, Git isolation, checks, repair budgets, evidence, and escalation. It must enforce editable scope outside model prompts.
 - **`DEVELOPER`** authorizes delegation and risk decisions, initiates final `MAIN_MODEL` review in ChatGPT, and decides acceptance.
 
 A new staged sub-specification must have a same-directory `<subspec-stem>-implementation-plan.md` companion, as defined by `docs/specs/README.md`. The sub-specification owns requirements, known module scope, constraints, and acceptance criteria. The companion is **advisory guidance**, not another specification or an authorization source. `WORKER_MODEL` may improve on suggested steps or file choices within the approved requirements and scope. It must explain material deviations and their impact. Unknown ownership or changes to approved boundaries require developer-led re-planning.
+
+Executor and provider are implementation details: do not embed Aider, DeepSeek, or other vendor names as mandatory architecture in a normative spec. `tools/agent-pipeline/pipeline-policy.json` selects the current Aider worker model and independent reviewer model/endpoint; `tools/agent-pipeline/run_aider_stage.sh` launches only that adapter. An unsupported executor MUST fail closed; documenting one does not implement it. No concurrent stage writer is authorized for the same project.
 
 The developer must explicitly request final sub-specification review from `MAIN_MODEL` after implementation evidence is available. Passing checks, independent review, or a main-model recommendation do not constitute acceptance. Only explicit developer acceptance permits moving the sub-specification and its companion to `docs/specs/archive/subspecs/` together. Update owning current-state documentation in the same lifecycle change. Do not auto-archive either file from a worker result.
 

@@ -1,3 +1,4 @@
+
 ---
 type: Specification Guide
 title: Change specifications
@@ -35,6 +36,12 @@ A feature may be refined by several specifications. A completed specification is
 
 Do not invent feature IDs in tests, classes, or specifications. Add a genuinely new durable capability to `docs/FEATURES.md` first.
 
+## Processing-state contract
+
+`docs/specs/STATE.json` is the **only Git-tracked processing checkpoint** for selected specification work, not a live process monitor or an acceptance receipt. Validate it with `python3 tools/specs/validate_state.py`; schema is `docs/specs/state.schema.json`. It is distinct from spec frontmatter `spec_status` (document lifecycle), run-local worker evidence and Git authority. `STATE.json` has no authority to execute a worker, accept a stage, promote Git or archive a spec. Only a developer-controlled checkpoint transition may change it. Update/commit it **between** source-bound runs, never during an initialized/running/pending-promotion run: modifying the checkout makes the immutable base dirty or changes its HEAD. In-progress runtime state belongs exclusively to private `runId` evidence. v1 deliberately forbids `RUNNING` and `ACCEPTED`; final acceptance is recorded through the existing explicit developer review and spec archival lifecycle, not a self-asserted JSON field. Missing/invalid/stale state MUST be reported, not inferred from README.
+
+`workstreams` is a list keyed by unique IDs and spec paths so a later implementation can track concurrent sub-specs without changing the shape. Current `mode: SINGLE` allows **at most one selected workstream**, and no concurrent worker/executor runs are authorized. `selectedWorkstreamId` is an information pointer, not a lock. A future MULTI policy needs separate requirements, lock ownership, CAS and tests before enablement. README and umbrella `current_focus` are navigation only and MUST link to `STATE.json`, not replicate mutable processing progress.
+
 ## Active tree
 
 Keep the active tree shallow:
@@ -48,33 +55,14 @@ active/
 
 Rules:
 
+- processing status is stored only in `STATE.json`, not in this index;
 - the umbrella defines the active product/system target;
 - one sub-spec may be the current implementation focus;
 - other sub-specs may remain active only while they define unresolved supporting constraints;
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-The current bounded backend implementation focus is
-[`active/subspecs/backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md).
-Labeled resilience/capacity scenario evidence, expectation-aware offline Health/alert evaluation,
-structured assisted-investigation quality scoring, bounded scenario-linked runtime trial capture/export,
-descriptive repeated-evidence calibration, and the first repeated live calibration campaign are
-accepted. The Stage 6E4 dedicated live normal/transient/critical Health/alert scenarios and the Stage
-6E5 manual evidence review supporting no production policy change are accepted after canonical developer
-verification. Stage 6E6 runtime persisted-alert verification is implemented, verification-pending, and
-deliberately paused after live evidence proved clean baseline/transient behavior but exposed
-time-window-aware recovery and cleanup-ordering gaps. Assisted-investigation quality remains a separate
-evaluation boundary.
-
-The active contributor-tooling track is
-[`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). It
-formalizes the multi-stage evolution and acceptance criteria for bounded coding-worker automation
-without changing the product `current_focus` or granting a worker product/architecture authority. A2.1
-isolated Aider execution, A2.2 Gitleaks/ordered verification, and A2.3 independent review/handoff are
-implemented and verification-pending. A3 bounded repair and A4.1 stage packets are implemented but
-remain verification-pending. A4.2a single-run evidence aggregation passed local developer verification;
-its live independent-review attempt failed, so source-bound provider-backed acceptance remains open.
-A4.2b structured deviations is the next planned slice.
+For active product/change slices, navigate to [`active/`](active/); the machine-readable selected workflow is [`STATE.json`](STATE.json). Product Stage 6E6 remains paused in [`backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md), separately from contributor automation in [`development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). Historical acceptance and implementation evidence stay in their owning specs, not in this index.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -173,7 +161,8 @@ prose when that makes an invariant testable.
 - **Distinguish** normative requirements (in the owning active spec) from one recommended approach (in the plan). Reference AP/feature IDs; do not invent new ones in the plan.
 - **Avoid stale duplication:** refer to current contracts, owning documentation and implementation by path/symbol; quote only the fragment needed to explain a non-obvious algorithm. Do not maintain a second full copy of production code.
 - **Make scenarios executable:** specify setup, mutation/action, expected observation and failure mode. Include independent negative/adversarial cases; a model-authored test suite is not its own independent oracle.
-- **Keep human readability:** paragraphs should carry one main idea. Separate status, sequences,
+- **Optimize for LLM interpretation:** write precise preconditions, postconditions, ownership, ordered operations and rejection conditions; omit untestable generalities. Use normative `must` / `must not` / `may` deliberately.
+- **Keep unambiguous structure:** separate status, sequences,
   invariants, errors, implementation steps and test matrices with headings, lists, tables or short code
   blocks. Avoid very long unbroken status paragraphs.
 - **Keep scope honest:** mark candidate files, unverified assumptions, unresolved decisions and deferred stages clearly. An extensive plan is still not a task authorization, changed-path permission or acceptance record.
@@ -201,7 +190,7 @@ The repository-owned recovery steps are in
 1. Keep the umbrella under `docs/specs/active/spec-*.md`.
 2. Put one unresolved bounded implementation slice under `docs/specs/active/subspecs/`.
 3. Record its parent and lifecycle state in frontmatter.
-4. Keep umbrella `current_focus` and human-readable status synchronized.
+4. Update and commit validated `docs/specs/STATE.json` only at developer-controlled Git checkpoints **between** stages; never mutate it during source-bound execution or infer acceptance; any umbrella `current_focus` is only a link/pointer and must not be used to infer approval.
 5. Reference stable feature IDs from `docs/FEATURES.md` when they improve navigation.
 6. Give important normative requirements stable local IDs when tests or reviews need them.
 7. Implement and validate the slice; retain source-bound stage, check, and review evidence.
@@ -236,7 +225,7 @@ Specifications may additionally use:
 - `document_role` — `umbrella` or `subspec`;
 - `spec_status` — for example `active`, `verification-pending`, or `completed` in an archived spec;
 - `parent` — umbrella path for a sub-spec;
-- `current_focus` — only when an umbrella points to one active implementation sub-spec.
+- `current_focus` — optional informational pointer; `docs/specs/STATE.json` owns processing state.
 
 Do not add metadata that only repeats the body or Git history.
 

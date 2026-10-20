@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """Create and verify bounded development-agent runs with machine-readable evidence."""
 
@@ -5,22 +6,26 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 SCHEMA_VERSION = 1
+RUN_ID_GRAMMAR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 STATE_PREPARED = "PREPARED"
 STATE_WORKER_REQUIRED = "WORKER_REQUIRED"
 STATE_VERIFYING = "VERIFYING"
@@ -33,6 +38,13 @@ VALID_REVIEW_VERDICTS = {"PASS", "CHANGES_REQUIRED", "ESCALATE"}
 VALID_FINDING_SEVERITIES = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
 VALID_FINDING_STATUSES = {"OPEN", "RESOLVED"}
 RISK_ORDER = {"LOW": 1, "MODERATE": 2, "HIGH": 3, "CRITICAL": 4, "UNKNOWN": 5}
+
+PROTECTED_WORKER_CONTROL_PATHS = frozenset({
+    "run_checks.sh", "tools/agent-pipeline/pipeline-policy.json",
+    "tools/agent-pipeline/run_aider_stage.sh", "tools/agent-pipeline/reviewer-endpoints.json",
+    "docs/specs/STATE.json", "docs/specs/state.schema.json",
+    "tools/specs/validate_state.py",
+})
 
 
 def utc_now() -> str:
@@ -158,8 +170,22 @@ def validate_policy(policy: dict[str, Any]) -> None:
         if not isinstance(adapter, dict) or not all(isinstance(adapter.get(k), str) and adapter[k]
             for k in ("endpoint", "model", "apiKeyEnvironment")):
             raise ValueError("Independent review adapter is invalid")
-        if adapter["endpoint"] != "https://api.deepseek.com/chat/completions":
-            raise ValueError("Reviewer endpoint must match the reviewed HTTPS provider endpoint")
+        endpoints = adapter.get("allowedEndpoints")
+        if (not isinstance(endpoints, list) or not 1 <= len(endpoints) <= 16
+                or len(set(str(item) for item in endpoints)) != len(endpoints)
+                or any(not isinstance(item, str) or not _safe_reviewer_endpoint(item)
+                       for item in endpoints)):
+            raise ValueError("Reviewer allowedEndpoints must be a bounded list of exact public HTTPS URLs")
+        if adapter["endpoint"] not in endpoints:
+            raise ValueError("Reviewer endpoint is not in the policy endpoint allowlist")
+        # The independent registry selects transport behavior; runtime policy may only narrow it.
+        profiles = _reviewer_endpoint_registry()
+        if any(url not in profiles for url in endpoints):
+            raise ValueError("Reviewer endpoint is not in the independently reviewed registry")
+        if profiles[adapter["endpoint"]] == "openrouter-private":
+            _validated_openrouter_routing(adapter.get("providerRouting"))
+        elif "providerRouting" in adapter:
+            raise ValueError("providerRouting is only supported for the privacy-routed reviewer transport")
         if not re.fullmatch(r"[A-Z][A-Z0-9_]*", adapter["apiKeyEnvironment"]):
             raise ValueError("Reviewer key must be obtained from a named environment variable")
         if not isinstance(adapter.get("timeoutSeconds"), int) or not 1 <= adapter["timeoutSeconds"] <= 300:
@@ -179,6 +205,11 @@ def validate_policy(policy: dict[str, Any]) -> None:
         default_model = worker.get("defaultModel")
         if not isinstance(default_model, str) or not default_model.strip():
             raise ValueError("workerExecution.defaultModel must be a non-empty string")
+        allowed_models = worker.get("allowedModels", [default_model])
+        if (not isinstance(allowed_models, list) or not 1 <= len(allowed_models) <= 16
+                or any(not isinstance(value, str) or not value.strip() for value in allowed_models)
+                or len(set(allowed_models)) != len(allowed_models) or default_model not in allowed_models):
+            raise ValueError("workerExecution.allowedModels must be a bounded set including defaultModel")
         supported_versions = worker.get("supportedVersions")
         versions_valid = isinstance(supported_versions, list) and bool(supported_versions)
         if versions_valid:
@@ -213,6 +244,82 @@ def validate_policy(policy: dict[str, Any]) -> None:
                 raise ValueError(f"Unsupported worker argument placeholder in: {argument}")
             if "api-key" in argument.lower():
                 raise ValueError("Worker API keys must come from the environment, not repository policy arguments")
+
+
+def _safe_reviewer_endpoint(value: str) -> bool:
+    """Reject credential-bearing, local and ambiguous HTTP endpoints in reviewed policy."""
+    if not isinstance(value, str) or any(ch.isspace() for ch in value):
+        return False
+    try:
+        parts = urllib.parse.urlsplit(value)
+        hostname = parts.hostname
+        if (parts.scheme != "https" or not hostname or parts.username is not None
+                or parts.password is not None or parts.query or parts.fragment
+                or parts.port not in (None, 443) or value != parts.geturl()):
+            return False
+        if (hostname == "localhost" or hostname.endswith(".localhost")
+                or hostname.endswith((".local", ".internal", ".test", ".invalid"))
+                or "." not in hostname or not re.fullmatch(r"[a-z0-9.-]+", hostname)):
+            return False
+        try:
+            ipaddress.ip_address(hostname)
+        except ValueError:
+            pass
+        else:
+            return False
+        return (parts.path.endswith("/chat/completions")
+                and parts.path.startswith("/") and ".." not in parts.path)
+    except ValueError:
+        return False
+
+
+def _reviewer_endpoint_registry() -> dict[str, str]:
+    """Load a separately reviewed URL-to-request-profile trust registry."""
+    registry = json.loads((Path(__file__).resolve().parent / "reviewer-endpoints.json").read_text(encoding="utf-8"))
+    if (type(registry) is not dict or set(registry) != {"schemaVersion", "endpoints"}
+            or type(registry["schemaVersion"]) is not int or registry["schemaVersion"] != 1
+            or not isinstance(registry["endpoints"], list) or not 1 <= len(registry["endpoints"]) <= 16):
+        raise ValueError("Invalid independent reviewer endpoint registry")
+    profiles: dict[str, str] = {}
+    for item in registry["endpoints"]:
+        if (type(item) is not dict or set(item) != {"url", "requestProfile"}
+                or not _safe_reviewer_endpoint(item["url"])
+                or not isinstance(item["requestProfile"], str)
+                or item["requestProfile"] not in {"openai-chat-completions", "openrouter-private"}
+                or item["url"] in profiles):
+            raise ValueError("Unsafe or duplicate reviewer registry endpoint")
+        profiles[item["url"]] = item["requestProfile"]
+    return profiles
+
+
+def _validated_openrouter_routing(value: Any) -> dict[str, Any]:
+    """Require exact privacy and provider routing policy before any source diff can leave the repo."""
+    if not isinstance(value, dict) or set(value) != {"only", "allow_fallbacks", "require_parameters", "data_collection", "zdr"}:
+        raise ValueError("OpenRouter reviewer requires an explicit private providerRouting profile")
+    only = value["only"]
+    if (not isinstance(only, list) or not 1 <= len(only) <= 8
+            or any(not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{2,64}", name) for name in only)
+            or len(set(only)) != len(only)):
+        raise ValueError("OpenRouter providerRouting.only must name explicitly approved upstreams")
+    for key, expected in (("allow_fallbacks", False), ("require_parameters", True),
+                          ("data_collection", "deny"), ("zdr", True)):
+        if type(value[key]) is not type(expected) or value[key] != expected:
+            raise ValueError(f"OpenRouter private reviewer requires providerRouting.{key}={expected}")
+    return value
+
+
+def authorized_worker_model(policy: dict[str, Any], worker: str, model: str) -> None:
+    """Reject legacy init overrides outside the separately reviewed executor/model policy."""
+    execution = policy.get("workerExecution", {})
+    if execution.get("defaultModel") is None and worker == "aider" and model == "unspecified":
+        # Older evidence-only stage fixtures may prepare a packet without a configured
+        # executable worker. This cannot authorize an actual coding-model call.
+        return
+    if worker != execution.get("tool", "aider"):
+        raise ValueError("Unapproved worker executor override")
+    models = execution.get("allowedModels", [execution.get("defaultModel")])
+    if model not in models:
+        raise ValueError("Unapproved worker model override")
 
 
 def parse_version_tuple(value: str) -> tuple[int, int, int] | None:
@@ -519,6 +626,7 @@ def validate_stage_packet(repo_root: Path, packet: dict[str, Any]) -> tuple[dict
     protected = {"AGENTS.md", "README.md", "docs/specs/README.md", packet["specPath"],
                  "run_checks.sh", "run_rare_checks.sh", "tools/agent-pipeline/pipeline-policy.json",
                  "tools/agent-pipeline/gitleaks.toml"}
+    protected.update(PROTECTED_WORKER_CONTROL_PATHS)
     if plan:
         protected.add(plan)
     if any(stage_scope_contains(path, editable) for path in protected):
@@ -582,12 +690,13 @@ def create_run(
 ) -> Path:
     """Create an immutable run identity plus the initial worker task packet."""
     validate_repository(repo_root, policy)
+    authorized_worker_model(policy, worker, model)
     validate_active_spec(repo_root, spec_path)
     if not task_text.strip():
         raise ValueError("Task text must not be empty")
     resolved_run_id = run_id or f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
-    if not re.fullmatch(r"[A-Za-z0-9._-]+", resolved_run_id):
-        raise ValueError("Run id may contain only letters, numbers, dot, underscore, and dash")
+    if not isinstance(resolved_run_id, str) or not RUN_ID_GRAMMAR.fullmatch(resolved_run_id):
+        raise ValueError("Invalid run id: expected 1-128 ASCII letters/digits/dot/underscore/dash, starting alphanumeric")
     run_dir = runs_root / resolved_run_id
     if run_dir.exists():
         raise ValueError(f"Run already exists: {resolved_run_id}")
@@ -627,6 +736,8 @@ def create_run(
 
 def load_run(runs_root: Path, run_id: str) -> tuple[Path, dict[str, Any]]:
     """Load one known run and reject missing or incompatible manifests."""
+    if not isinstance(run_id, str) or not RUN_ID_GRAMMAR.fullmatch(run_id):
+        raise ValueError("Invalid run identifier")
     run_dir = runs_root / run_id
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.is_file():
@@ -829,7 +940,7 @@ def run_required_check(
         ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
     worktree = execution_root(repo_root, manifest)
     if policy.get("workerExecution", {}).get("required", False):
-        protected_paths = {"run_checks.sh", "tools/agent-pipeline/pipeline-policy.json"}
+        protected_paths = PROTECTED_WORKER_CONTROL_PATHS
         changed = set(read_json(run_dir / "worker.json").get("changedFiles", []))
         if changed.intersection(protected_paths):
             raise ValueError("Worker modified required verification policy or the canonical gate")
@@ -1016,6 +1127,33 @@ def _review_request_body(model: str, packet: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+class _RejectReviewerRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward a bearer token to a redirect destination."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("Reviewer HTTP redirect is prohibited")
+
+
+def _assert_public_reviewer_dns(endpoint: str) -> None:
+    """Reject private/reserved DNS answers before contacting a registered reviewer endpoint.
+
+    This is defense in depth only: deployment network egress must also block private IPs
+    because a resolver/proxy or an upstream provider can change destinations after lookup.
+    """
+    hostname = urllib.parse.urlsplit(endpoint).hostname
+    if not hostname:
+        raise ValueError("Missing reviewer DNS hostname")
+    answers = socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)
+    if not answers or any(not ipaddress.ip_address(info[4][0]).is_global for info in answers):
+        raise ValueError("Reviewer DNS resolved to a nonpublic address")
+
+
+def _open_reviewer_request(request: urllib.request.Request, timeout: int):
+    """Reject nonpublic DNS destinations and all redirects before a bearer request."""
+    _assert_public_reviewer_dns(request.full_url)
+    return urllib.request.build_opener(_RejectReviewerRedirect()).open(request, timeout=timeout)
+
+
 def _invoke_reviewer_provider(adapter: dict[str, Any], packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Perform one provider request and return validated review plus safe completion metadata."""
     key = os.environ.get(adapter["apiKeyEnvironment"])
@@ -1026,12 +1164,17 @@ def _invoke_reviewer_provider(adapter: dict[str, Any], packet: dict[str, Any]) -
     parsed_review: dict[str, Any] | None = None
     try:
         body = _review_request_body(adapter["model"], packet)
+        profile = _reviewer_endpoint_registry().get(adapter["endpoint"])
+        if profile == "openrouter-private":
+            body["provider"] = _validated_openrouter_routing(adapter.get("providerRouting"))
+        elif profile != "openai-chat-completions" or "providerRouting" in adapter:
+            raise ValueError("Unapproved or inconsistent reviewer request profile")
         request = urllib.request.Request(
             adapter["endpoint"], data=json.dumps(body).encode("utf-8"),
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=adapter["timeoutSeconds"]) as response:
+        with _open_reviewer_request(request, timeout=adapter["timeoutSeconds"]) as response:
             raw = response.read(256 * 1024 + 1)
         phase = "envelope"
         if len(raw) > 256 * 1024:
@@ -2461,6 +2604,61 @@ def inspect_stage_sequence(repo_root: Path, run_dir: Path, manifest: dict[str, A
     }
 
 
+
+def plan_stage_batch(repo_root: Path, run_dir: Path, manifest: dict[str, Any],
+                     policy_path: Path, policy: dict[str, Any], *,
+                     expected_stages: list[str], feature_branch: str,
+                     max_stages: int, max_provider_requests: int,
+                     max_cost_cents: int,
+                     previous_run_dir: Path | None = None) -> dict[str, Any]:
+    """A6.1 read-only envelope; validate only the current prepared stage.
+
+    Future stages cannot be source-bound before predecessor promotion. Budgets
+    here are proposed ceilings for a future executor, not enforced allowances.
+    """
+    for field, value, maximum in (
+        ("max_stages", max_stages, SEQUENCE_MAX_STAGES),
+        ("max_provider_requests", max_provider_requests, 128),
+        ("max_cost_cents", max_cost_cents, 1_000_000),
+    ):
+        if type(value) is not int or not 1 <= value <= maximum:
+            raise ValueError(f"Batch {field} must be a positive bounded integer")
+
+    current = inspect_stage_sequence(
+        repo_root, run_dir, manifest, policy_path, policy,
+        expected_stages=expected_stages, feature_branch=feature_branch,
+        previous_run_dir=previous_run_dir,
+    )
+    # Stage existence is independent of whether a future stage packet exists.
+    spec_path = manifest["specPath"]
+    spec_text = (repo_root / spec_path).read_text(encoding="utf-8")
+    for stage in expected_stages:
+        if not re.search(r"(?<![A-Za-z0-9_.-])" + re.escape(stage) + r"(?![A-Za-z0-9_.-])", spec_text):
+            raise ValueError(f"Batch roster contains a stage absent from the active specification: {stage}")
+
+    remaining = expected_stages[current["stageIndex"]:]
+    selected = remaining[:max_stages]
+    if not selected:
+        raise ValueError("Batch requires a current selected stage")
+    stages = [
+        {"stage": stage, "packetStatus": "CURRENT_SOURCE_BOUND" if offset == 0 else "NOT_PREPARED",
+         "executionAuthorized": False}
+        for offset, stage in enumerate(selected)
+    ]
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "action": "AWAIT_SEPARATE_STAGE_AUTHORIZATION",
+        "runId": current["runId"], "featureBranch": current["featureBranch"],
+        "baseCommit": current["baseCommit"],
+        "stageIndex": current["stageIndex"],
+        "expectedStages": list(expected_stages), "selectedStages": stages,
+        "budget": {"maxStages": max_stages, "maxProviderRequests": max_provider_requests,
+                   "maxCostCents": max_cost_cents, "enforced": False},
+        "executionSupported": False,
+        "requiresExternalAcceptance": True,
+    }
+
+
 def drive_stage_sequence(repo_root: Path, worktrees_root: Path, run_dir: Path,
                          manifest: dict[str, Any], policy_path: Path,
                          policy: dict[str, Any], *, expected_stages: list[str],
@@ -2929,7 +3127,7 @@ def prepare_repair(
     risk = classify_risk(changed_files, policy, True)
     if risk["level"] != "LOW":
         raise ValueError("Non-LOW worker source risk requires developer intervention")
-    if any(path in ("run_checks.sh", "tools/agent-pipeline/pipeline-policy.json")
+    if any(path in PROTECTED_WORKER_CONTROL_PATHS
            or path.endswith(".gitleaksignore") for path in changed_files):
         raise ValueError("Worker modified protected verification configuration")
 
@@ -3502,6 +3700,19 @@ def build_parser() -> argparse.ArgumentParser:
                                  help="Opt in to one worker/check/review cycle; never promote")
     sequence_parser.add_argument("--developer-approved", action="store_true")
 
+    batch_parser = subparsers.add_parser(
+        "plan-batch", help="A6.1 read-only bounded batch envelope; never executes or promotes stages"
+    )
+    batch_parser.add_argument("--run-id", required=True)
+    batch_parser.add_argument("--stage", action="append", required=True,
+                              help="Complete approved stage roster in order")
+    batch_parser.add_argument("--feature-branch", required=True)
+    batch_parser.add_argument("--previous-run-dir",
+                              help="Absolute preserved predecessor evidence for later stages")
+    batch_parser.add_argument("--max-stages", type=int, required=True)
+    batch_parser.add_argument("--max-provider-requests", type=int, required=True)
+    batch_parser.add_argument("--max-cost-cents", type=int, required=True)
+
     reviewer_parser = subparsers.add_parser("run-review", help="Invoke independent fresh-context reviewer")
     reviewer_parser.add_argument("--run-id", required=True)
 
@@ -3621,6 +3832,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(report, indent=2, sort_keys=True))
             return code
+
+        if args.command == "plan-batch":
+            report = plan_stage_batch(
+                repo_root, run_dir, manifest, policy_path, policy,
+                expected_stages=args.stage, feature_branch=args.feature_branch,
+                previous_run_dir=(None if args.previous_run_dir is None
+                                  else Path(args.previous_run_dir)),
+                max_stages=args.max_stages,
+                max_provider_requests=args.max_provider_requests,
+                max_cost_cents=args.max_cost_cents,
+            )
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 0
 
         if args.command == "promote-stage":
             receipt = promote_verified_stage(

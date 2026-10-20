@@ -1,3 +1,4 @@
+
 ---
 type: Project Overview
 title: SignalHarvester
@@ -15,21 +16,14 @@ The project is intentionally domain-neutral. Typical monitoring scenarios includ
 
 ## Current focus
 
+Repository specification processing status is tracked in [`docs/specs/STATE.json`](docs/specs/STATE.json); the paragraphs below describe product/contributor context and MUST NOT be used to infer stage execution, acceptance or authorization.
+
 The current bounded backend focus is **intelligent observability**, called operational health intelligence in the specifications. The goal is to turn telemetry and recorded operational changes into useful diagnostic evidence while keeping runtime authority in deterministic application policy.
 
 - **Accepted:** persisted operational history, the deterministic/statistical Health Engine, manual and bounded read-only assisted investigation, durable automatic investigation triggers, deterministic human-attention alert policy, labeled scenario evidence, expectation-aware offline Health/alert evaluation, provider-neutral assisted-investigation quality evaluation, bounded scenario-linked runtime trial capture/export, descriptive repeated-evidence calibration, the bounded repeated live calibration campaign, and the dedicated Stage 6E4 Health/alert calibration scenarios plus Stage 6E5 evidence review after canonical developer verification.
 - **Current calibration evidence:** the dedicated Health/alert runner completed a three-repeat live campaign including resilience and capacity phases. Stage 6E5 confirmed all six expected Health detections, six healthy controls, and the expected alert outcomes for three critical and nine no-attention cases in **offline alert-policy projection**.
 - **Implemented, verification-pending, and paused:** Stage 6E6 verifies persisted `human-attention-v1` lifecycle through the public Operations API. Live reruns have now proven the alert-history Serde fix, normal persisted resolution of the earlier alert, two clean baseline snapshots, and the expected no-alert transient backlog. The latest run stopped at transient recovery because the outbox had drained while the five-minute HTTP latency window remained statistically `DEGRADED`; cleanup then attempted fixture deletes after its backend port-forward had exited. Stage 6E6 is deliberately paused at those recovery/cleanup boundaries while contributor automation advances.
-- **Current contributor-tooling slices:** Development Agent Pipeline A2/A3 and A4.1
-  provide isolated Aider execution, Gitleaks/canonical verification, independent
-  review integration, bounded repair, and source-bound stage packets. A4.2a adds
-  read-only per-run evidence aggregation; it passed developer verification after
-  `MAIN_MODEL` recovery, while a live independent-review attempt failed. A4.2b
-  structured deviations and autonomous stage progression remain planned.
-  Current details and acceptance boundaries belong to the
-  [active contributor-tooling spec](docs/specs/active/subspecs/development-agent-pipeline.md)
-  and [pipeline README](tools/agent-pipeline/README.md). Stage 6E6 stays paused,
-  with the v1 Health/alert policies unchanged.
+- **Current contributor-tooling track:** the [Development Agent Pipeline](docs/specs/active/subspecs/development-agent-pipeline.md) maintains bounded source-bound worker/reviewer execution and checkpoints; details are in its [owning guide](tools/agent-pipeline/README.md). The selected stage and processing status are in [`docs/specs/STATE.json`](docs/specs/STATE.json), not this overview. Product Stage 6E6 remains paused at its separate recovery/cleanup boundaries.
 - **Separate carryover:** capacity telemetry/baseline and explicit all-relevant Analysis remain verification-pending until their own canonical acceptance is recorded.
 
 SignalHarvester is also a practical engineering project for exploring **AI-assisted development** and **Spec-Driven Development**. The repository is organized around explicit specifications, small implementation slices, clear module contracts, repeatable verification, and post-implementation review. The goal is to develop the system while also testing how these practices scale on a realistic event-driven application.

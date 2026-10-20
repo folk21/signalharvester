@@ -1,3 +1,4 @@
+
 ---
 type: Specification
 title: Development agent pipeline
@@ -67,9 +68,11 @@ preflight is the default; separately authorized execution records an intent,
 runs the existing A3 cycle once and stops at promotion or escalation. A5.1
 CAS promotion and A5.2 next-stage preparation stay distinct human checkpoints.
 
-**A5.3b (packet proposed, not developer-approved):** a LOW-risk test-only
-first-stage smoke pilot for A5.3a preflight and subsequent explicit execution.
-No live run or provider-backed approval is implied.
+**A5.3b (live pilot evidence; final acceptance not inferred):** the first-stage smoke pilot completed a two-attempt worker cycle with source-bound reviewer PASS and canonical checks. The repaired evidence summary passed with the digest-validation hotfix. Reviewed CLI regression scenarios are present in the source snapshot; recorded evidence and Git integration alone do not authorize final developer acceptance.
+
+**A6.1 (implementation patch; verification-pending):** read-only batch planning
+with declared budgets and explicitly unprepared future stages. It cannot
+execute, enforce spending, notify, change Git refs, or accept a sub-spec.
 
 **Still planned:** unattended multi-stage scheduling/batching beyond explicit
 checkpoints, notifications (A6), and overall pipeline v1 acceptance (A7).
@@ -464,6 +467,14 @@ architectural guidance and candidate files without becoming a second acceptance 
 justified internal design alternative may be accepted within the unchanged authorized scope, but
 material deviations must be recorded; unknown or expanded ownership requires human-led re-planning.
 
+### AP18 — developer checkpoint state and evidence integrity
+
+Git-tracked `docs/specs/STATE.json` MUST represent developer-controlled **between-run** processing checkpoints only. It MUST NOT mirror live `RUNNING` or assert `ACCEPTED` in schema version 1, or be mutated during active source-bound stage execution. Runtime evidence remains external to Git; final developer acceptance is evidenced by the separate lifecycle and review process. State schema and validator MUST share machine-readable pattern/enum contracts. Unverified acceptance assertions fail closed.
+
+### AP19 — reviewer routing, model authorization and test oracle independence
+
+Reviewer egress destinations MUST be approved by an independently reviewed repository registry, not only by the selected policy. OpenRouter MUST send an explicit upstream provider allowlist, deny fallback and data collection, require supported parameters, and request zero retention; deployment-level egress/private-network restrictions remain external responsibilities. Coding model overrides MUST match a policy-reviewed allowed-model list. Before worker delegation, stage tests/acceptance oracles MUST be traceable to normative behavior or a reproduced defect; a failing valid test MUST NOT be changed solely to force PASS. Executor replacements require an explicit preflight/execute/evidence conformance contract and independent adversarial tests.
+
 ### AP15 — developer-initiated final verification and paired archival
 
 The developer must explicitly request a final `MAIN_MODEL` sub-spec review through ChatGPT using current
@@ -472,6 +483,32 @@ main-model recommendation alone authorizes acceptance. After explicit developer 
 updates must move the sub-spec and its companion together to the archive, synchronize current-state
 owners and navigation, and fail closed on a split pair or inconsistent state. Legacy sub-specs without a
 companion are exempt from retroactive creation.
+
+### AP16 — configurable worker and independent reviewer adapters
+
+`WORKER_MODEL` and `REVIEWER_MODEL` are roles independent of executor/vendor. The developer-reviewed `pipeline-policy.json` MUST select `workerExecution.defaultModel` and `independentReview.adapter.model` independently; it MUST bind reviewer endpoint and credential variable to an approved exact HTTPS URL. Missing or unsupported adapters, URLs, model configuration, redirect responses, unsupported reviewer JSON completion or credentials MUST fail closed. The only coding executor implemented is Aider; alternative coding executors require their own reviewed adapters with equivalent isolation, Git/source, scope, preflight, verification, evidence and adversarial conformance tests before enablement. OpenRouter reviewer configuration is an optional transport experiment, not a coding executor or implicit acceptance. The repo-local Aider entry point is `tools/agent-pipeline/run_aider_stage.sh`; it MUST use existing execution/approval boundaries unchanged.
+
+### AP17 — validated processing-state register
+
+`docs/specs/STATE.json` MUST be the single repository-owned current processing-state register and validate under `docs/specs/state.schema.json` plus semantic checks in `tools/specs/validate_state.py`. It MUST reference existing active specification and stage IDs, reject duplicate identifiers, unknown fields, missing/stale paths, malformed types and undeclared concurrency; it MUST be checked in the canonical gate. README and umbrella `current_focus` are informational links only. `STATE.json` MUST NOT substitute for run evidence, explicit stage approval, Git CAS, developer acceptance or spec archival. In this slice only `SINGLE` mode is allowed. The array-based format anticipates per-subspec workstreams, but concurrent stage writers, locks and any `MULTI` mode require later separate authority and tests.
+
+### AP20 — bounded batch preflight without execution authority
+
+An A6 batch planner MUST accept an explicit ordered stage roster, a prepared
+source-bound LOW/BOUNDED current stage, exact `feature/*` HEAD and predecessor
+provenance when applicable. It MUST require positive bounded ceilings for stage
+count, provider requests, and cost, and reject malformed budgets before any
+side effect. It MUST reuse A5.3a's fail-closed read-only stage preflight,
+confirm roster stage identifiers exist in the owning active specification, and
+mark every *future* stage as NOT_PREPARED until its own source-bound packet and
+promoted predecessor have been validated. A budget in a dry-run report is a
+proposed ceiling, **not** measured usage or proof of runtime enforcement.
+
+A6.1 MUST NOT invoke models, checks, worktree creation, Git mutation, runtime
+notifications, stage preparation, automated retry, or acceptance. No execute
+flag or implicit authorization is supported. Future A6 work requires separate
+reviewed execution-time budget accounting, interruption recovery, resource
+locks and stage-by-stage developer authority before enabling batching.
 
 ## Implementation stages
 
@@ -485,8 +522,7 @@ companion are exempt from retroactive creation.
 - [ ] **A2 — worker execution and routine verification automation:**
   - [ ] **A2.1 — isolated one-shot worker (implemented, verification-pending):** create a
     branch/worktree from the immutable base commit, verify the repository-supported Aider version/CLI
-    contract and deterministic runtime prerequisites before model access, invoke Aider + the configured
-    DeepSeek model through a repository-owned adapter isolated from ambient Aider configuration,
+    contract and deterministic runtime prerequisites before model access, invoke the configured coding model through the Aider adapter isolated from ambient Aider configuration,
     preserve worker evidence plus a source-state digest, reject unexpected worker commits or post-worker
     source drift, and run later checks against the worker tree.
   - [ ] **A2.2 — repository-owned security/verification checks (implemented, verification-pending):**
@@ -530,6 +566,13 @@ companion are exempt from retroactive creation.
   serialized progression with explicit checkpoints. Require developer-initiated final `MAIN_MODEL` verification and explicit
   developer acceptance before any permitted current-state documentation synchronization or paired
   spec/companion archival; do not infer acceptance from commits.
+- [ ] **A5.4 — configurable provider transport and strict processing state (implementation patch, developer verification pending):** remove reviewer-provider URL pinning from controller code, keep the Aider executor as the only enabled coding path, select worker/reviewer models from reviewed policy, require an explicit HTTPS reviewer allowlist without bearer-token redirects, and introduce validated `docs/specs/STATE.json`. No additional executor or parallelism is authorized by these files; developer review and canonical verification remain required.
+- [ ] **A5.4a — state & provider trust hardening (corrective patch, verification pending):** enforce checkpoint-only tracked state, reject unverified RUNNING/ACCEPTED claims, match run-ID grammar to runtime, separate reviewed reviewer endpoint registry from model policy, require explicit OpenRouter upstream routing/privacy controls in request bytes, constrain legacy worker model overrides, and document a conformance-tested WorkerExecutor boundary. For behavioral fixes, independently defined negative/regression oracles MUST check the original defect; tests MUST NOT be weakened merely to obtain PASS.
+- [ ] **A6.1 — read-only batch envelope (implementation patch, verification-pending):**
+  compute a bounded, source-linked candidate roster from one fresh current
+  stage and explicit stage/call/cost ceilings. Never call a model or Git
+  mutator; future stages remain unvalidated, budgets are not yet enforced.
+  This is NOT unattended scheduling or evidence of final acceptance.
 - [ ] **A6 — evidence-backed autonomy and notifications:** permit configured batching of
   already-classified bounded, low-risk stages with explicit run/cost budgets; stop immediately at
   high-risk/unknown ownership/ambiguous stages and send actionable completion or escalation

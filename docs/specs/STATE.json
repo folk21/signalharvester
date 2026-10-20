@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "mode": "SINGLE",
+  "selectedWorkstreamId": "contributor-agent-pipeline",
+  "workstreams": [
+    {
+      "id": "contributor-agent-pipeline",
+      "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
+      "stageId": "A5.4a",
+      "phase": "DESIGN",
+      "runId": null,
+      "developerDecision": "UNRECORDED"
+    }
+  ]
+}

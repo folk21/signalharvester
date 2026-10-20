@@ -1,0 +1,23 @@
+{
+  "description": "Illustrative independentReview.adapter only. Replace model AND upstream provider slug after explicit privacy review. Do not send private diffs before verifying endpoint, upstream retention, JSON-mode probe and account policy. Coding executor remains Aider.",
+  "adapter": {
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model": "REPLACE_WITH_APPROVED_JSON_MODE_MODEL",
+    "apiKeyEnvironment": "OPENROUTER_API_KEY",
+    "timeoutSeconds": 120,
+    "maxDiffBytes": 100000,
+    "allowedEndpoints": [
+      "https://api.deepseek.com/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions"
+    ],
+    "providerRouting": {
+      "only": [
+        "REPLACE_WITH_APPROVED_UPSTREAM_SLUG"
+      ],
+      "allow_fallbacks": false,
+      "require_parameters": true,
+      "data_collection": "deny",
+      "zdr": true
+    }
+  }
+}

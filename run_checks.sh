@@ -1,3 +1,4 @@
+
 #!/bin/sh
 set -eu
 
@@ -130,6 +131,8 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   run_step "git diff --check" git diff --check
 fi
 
+run_step "spec processing-state validation" python3 tools/specs/validate_state.py
+run_step "spec processing-state unit tests" python3 -B -m unittest discover -s tools/specs/tests -p "test_*.py"
 run_step "./tools/agent-pipeline/run_tests.sh" ./tools/agent-pipeline/run_tests.sh
 run_step "./tools/source-import/run_tests.sh" ./tools/source-import/run_tests.sh
 run_step "./tools/live-backend/run_tests.sh" ./tools/live-backend/run_tests.sh

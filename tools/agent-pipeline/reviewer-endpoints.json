@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "endpoints": [
+    {
+      "url": "https://api.deepseek.com/chat/completions",
+      "requestProfile": "openai-chat-completions"
+    },
+    {
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "requestProfile": "openrouter-private"
+    }
+  ]
+}

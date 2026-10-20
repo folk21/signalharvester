@@ -1,3 +1,4 @@
+
 ---
 type: Implementation Guide
 title: Development agent pipeline implementation guidance
@@ -14,6 +15,24 @@ This is **advisory guidance** for [`development-agent-pipeline.md`](development-
 - Owning documentation: `tools/agent-pipeline/README.md`; verification conventions: `docs/TESTS.md`.
 - No product feature ID applies to this contributor-tooling workflow. Do not invent one.
 - No other module's private implementation is needed for this stage.
+
+## Adapter portability and processing state — advisory plan
+
+1. Keep `tools/agent-pipeline/agent_pipeline.py` as deterministic orchestration. Treat Aider command/environment/preflight functions as one adapter, not a vendor-neutral interface. Use the wrapper `run_aider_stage.sh` for this implemented path. Preserve fail-closed behavior for every other `workerExecution.tool`.
+2. Configure coding model via `pipeline-policy.json:workerExecution.defaultModel`; configure reviewer model and endpoint via `independentReview.adapter`. Keep API keys in named environment variables. Never embed provider credentials in stage packets, logs, or source.
+3. OpenRouter reviewer transport is an opt-in example only: select an approved HTTPS endpoint and model, run synthetic `probe-reviewer`, then test against an approved non-sensitive task. Unsupported structured JSON response blocks, never falls back to PASS.
+4. Use `docs/specs/STATE.json` as developer-maintained processing-state record; validate against `state.schema.json` plus repository semantic checks. Do not use README/current_focus, a worker verdict or an automation run as state mutation authority.
+5. Before a second executor adapter or multi-project/multi-stage concurrent runner, specify equivalence of execution isolation, source digest, retries, redaction, failure classification, worker scopes, locks and acceptance checkpoints; add independent adversarial oracles before enabling.
+
+## A5.4 — configurable provider and strict state register (advisory)
+
+Requirements: AP16, AP17. Owning paths: `tools/agent-pipeline/`, `tools/specs/`, `docs/specs/`, and the root specification-navigation documents. Candidate source edits in `agent_pipeline.py` are limited to reviewer endpoint validation/transport: keep exact approved HTTPS URLs in policy; reject a reviewer URL outside that list; prohibit bearer-token HTTP redirects. Existing JSON reviewer output validation and Aider preflight/evidence MUST be preserved. Coding model: `workerExecution.defaultModel`. Reviewer model: `independentReview.adapter.model`; no code literal is a provider authority.
+
+Implementation sequence: (1) add a local Aider-only launch script forwarding controller flags without additional approval; (2) permit a second reviewer endpoint in reviewed policy as opt-in experiment while keeping initial reviewer settings; (3) create `docs/specs/STATE.json` with `schemaVersion=1`, selected workstream, exact existing spec/stage, processing phase and no inferred developer decision; (4) add a read-only stdlib validator with duplicate-key, invalid type/path, absent stage and unauthorized concurrent-workstream rejection; (5) wire validation and deterministic tests to `run_checks.sh`; (6) update only ownership/navigation and current pipeline contract docs.
+
+Independent scenarios: `P4-01` valid DeepSeek reviewer policy remains accepted; `P4-02` an OpenRouter Chat Completions reviewer endpoint and different model are configurable without changing worker model; `P4-03` non-HTTPS, loopback, embedded-credential, unapproved and malformed endpoint fail closed; `P4-04` a redirect cannot forward bearer credentials; `P4-05` malformed/duplicate JSON, missing active spec, unknown stage and fabricated developer acceptance in `STATE.json` are rejected; `P4-06` an extra progressing workstream or `MULTI` mode is rejected; `P4-07` full canonical checks and existing reviewer/worker oracles preserve the old evidence/approval behavior. A live OpenRouter provider call is opt-in, billable and never a prerequisite for deterministic tests.
+
+Deferred: other coding executors, actual cross-project scheduling, multi-writer locking, and automatic authoritative state transitions. Treat those as separate reviewed feature slices, not implied support.
 
 ## A4 — delegation packets, context and evidence
 
@@ -667,3 +686,75 @@ evidence map; reviewers still need a separately approved code-delta source.
 Future A5 is responsible for expected branch ancestry, per-stage commits and
 final promoted commit evidence. A4.4 must not fabricate them. Never commit,
 merge, notify, auto-accept or archive active specs from this command.
+
+## A5.4a — corrective trust hardening (advisory)
+
+Requirements: AP18, AP19. Do not silently mark A5.4 accepted.
+
+1. Keep the checked-in state as a **between-run** projection; reject RUNNING and ACCEPTED. Align `runId` pattern with the runtime grammar, with no acceptance authority. Prohibit checkpoint updates on an active source-bound branch.
+2. Read structural keys/patterns/enums from `docs/specs/state.schema.json` in the stdlib validator; reserve Python logic for filesystem/stage/concurrency checks. Verify malformed and coherent-forged acceptance with independent negative fixtures.
+3. Maintain `tools/agent-pipeline/reviewer-endpoints.json` as a separately reviewed endpoint trust registry. Model policy may narrow but not extend it; never let a worker edit the registry. For future runtime SSRF isolation, require network/egress controls independently of allowlist string matching.
+4. For OpenRouter send validated `providerRouting` with explicit `only`, `data_collection=deny`, `zdr=true`, `require_parameters=true`, `allow_fallbacks=false`; reject omission, weakening and malformed slugs before an HTTP request. Verify request body against an independent synthetic transport mock and fail closed.
+5. Enforce `workerExecution.allowedModels` for legacy model overrides. Keep existing valid default-model runs working. Document a prospective WorkerExecutor interface; do not invent an untested OpenCode/direct-patch implementation.
+6. Tests must reproduce normative outcomes and security boundaries, not be rewritten to satisfy incorrect implementation. Cover security-negative and historical-defect cases, execute relevant unit, independent oracle and canonical gates, and disclose tests not executed.
+
+A5.4a does not add multi-project scheduling, Git acceptance automation or a second coding executor.
+
+
+## A6.1 — read-only bounded batch planning (advisory)
+
+Requirements: AP12, AP20. Do not start A6 unattended execution while
+A5.4/A5.4a acceptance and provider trust review are still separate checkpoints.
+Only candidate file changes: `agent_pipeline.py`, `tests/test_agent_pipeline.py`,
+`benchmarks/batch_plan_oracle.py`, and owning pipeline docs/spec/plan. Protect
+`docs/specs/STATE.json`, executor policy, reviewer trust registry, and existing
+Git promotion implementation against accidental scope expansion.
+
+### Suggested implementation sequence
+
+1. Add a pure/report-only `plan_stage_batch(...)` around the existing
+   `inspect_stage_sequence(...)`. Preserve its source/task/policy/receipt checks.
+2. Accept explicit roster, exact branch and current prepared run; require
+   integer bounded `maxStages`, `maxProviderRequests`, `maxCostCents` (minor
+   currency units). Reject bool, zero, negative and oversized values.
+3. Validate membership of future stage IDs in the same active normative spec.
+   Do **not** synthesize future packets, mark them validated, or claim a
+   future base commit; post-promotion changes may invalidate context.
+4. Return an in-memory JSON report containing exact current stage identity,
+   ordered selected stages and `NOT_PREPARED` markers for later stages.
+   Set `budget.enforced=false`, `executionSupported=false`,
+   `requiresExternalAcceptance=true`; never persist a batch intent in A6.1.
+5. Expose CLI `plan-batch` without `--execute`. No model invocation, Git ref
+   mutation, workspace allocation, notification or files under runs-root.
+
+Illustrative report (not a persisted authority):
+
+```json
+{
+  "action": "AWAIT_SEPARATE_STAGE_AUTHORIZATION",
+  "selectedStages": [
+    {"stage": "S1", "packetStatus": "CURRENT_SOURCE_BOUND", "executionAuthorized": false},
+    {"stage": "S2", "packetStatus": "NOT_PREPARED", "executionAuthorized": false}
+  ],
+  "budget": {"maxStages": 2, "maxProviderRequests": 6, "maxCostCents": 500, "enforced": false},
+  "executionSupported": false,
+  "requiresExternalAcceptance": true
+}
+```
+
+### Verification scenarios
+
+| ID | Setup / action | Required result |
+|---|---|---|
+| BP-01 | Prepared, clean and source-bound first stage; request two stages | Read-only JSON; only current packet is bound; later stage NOT_PREPARED; no files, refs or worktrees change |
+| BP-02 | Supply bool/zero/negative/out-of-range budget | Reject before side effects; no auto-clamping |
+| BP-03 | Corrupt predecessor evidence, pass stale HEAD, or invent a spec stage | Reject, preserving run evidence and Git state |
+| BP-04 | Invoke real CLI twice; attempt `--execute` | Deterministic preview; unknown execution flag rejected; no Aider or provider calls |
+
+Run `python3 -B -m unittest discover -s tools/agent-pipeline/tests -p 'test_*.py'`
+then `python3 tools/agent-pipeline/benchmarks/batch_plan_oracle.py --candidate tools/agent-pipeline/agent_pipeline.py`
+and finally `./run_checks.sh` on the developer's full checkout. Independent
+oracle tests must assert the approved behavior rather than mirror private
+implementation details. Future A6 executor design must specify how provider
+requests, money usage, locks, notifications, recovery and stage checkpoints
+are actually enforced; A6.1 does **not** imply any of these are working.

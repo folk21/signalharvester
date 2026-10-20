@@ -1,3 +1,4 @@
+
 ---
 type: Tool Guide
 title: Porting the development agent pipeline
@@ -16,7 +17,18 @@ another project. Inspect the other project's current source before writing a
 patch. Do not copy SignalHarvester product specifications, Java module layout,
 checks, credentials, or provider settings into an unrelated codebase.
 
+## Executor / reviewer abstraction boundary (A5.4a)
+
+The only **implemented** coding executor remains the Aider CLI. A proposed replacement MUST implement these same behavior contracts before selection: `preflight(runContext) -> bounded capability/identity evidence`, `execute(immutableTask, isolatedWorkspace) -> attempt evidence`, and `verifyOutputs() -> source-bound changed-path and no-diff evidence`. Executor-specific transport must not own authorization, commit/promotion, checks, review or acceptance. Benchmark and test an adapter with no-diff, corrupted output, out-of-scope edits, interruptions and credential failures before enabling it. Do not assume a script that prints a diff implements this boundary.
+
+Reviewer endpoint approval belongs to a separate, reviewed `reviewer-endpoints.json` registry; model selection and a policy-local subset belong in `pipeline-policy.json`. OpenRouter additionally requires a privacy-preserving `providerRouting` request profile and explicit upstream providers; these controls are not a substitute for external provider due diligence or deployment egress controls.
+
+The Git-tracked `docs/specs/STATE.json` is only a checkpoint projection updated between source-bound runs. Runtime execution and final human acceptance cannot be represented by a self-declared status in the repository; v1 excludes `RUNNING` and `ACCEPTED` checkpoint values.
+
 ## 1. What the model should preserve
+
+**Adapter and state boundary:** never port an Aider-specific subprocess as if it were a generic worker interface. Preserve `workerExecution.tool` fail-closed until a distinct, conformance-tested adapter exists. Worker model and reviewer model are independent reviewed configuration values; reviewer endpoint selection must be explicit, allowlisted and redirect-safe. `docs/specs/STATE.json` is an optional portable pattern for processing-state bookkeeping, distinct from run evidence and authoritative spec lifecycle; do not copy its current workstream into another project. Single selected workstream is the only supported coordination mode.
+
 
 The reusable design is a set of **trust and lifecycle boundaries**, not a set
 of directory names or a particular model vendor:
@@ -64,7 +76,7 @@ of directory names or a particular model vendor:
 | Canonical verification | `./run_checks.sh`, Gradle, Java integration tests | Target's exact build/test/lint/typecheck/contract/integration commands and runtime prerequisites |
 | Security checks | pinned Gitleaks, repository-owned configuration | Approved scanner versions, scope, scan policy and reporting/redaction rules |
 | Worker | pinned Aider CLI, configured model | Supported executor/version, isolated config, edit protocol, provider approval and cost/time budgets |
-| Reviewer | DeepSeek JSON-object adapter | Independently approved provider, exact structured schema, timeouts and privacy policy; or explicit manual review workflow |
+| Reviewer | Policy-configured HTTPS JSON-object reviewer adapter | Independently approved provider, exact structured schema, timeouts and privacy policy; or explicit manual review workflow |
 | Git | `feature/*`, `agent/*`, SHA-1 full 40-character OIDs | Branch naming, object hash format, worktrees, CI protections, human authorization workflow |
 | Evidence | ignored `build/reports/agent-pipeline` and private external custody | Paths outside all cleanup tasks, retention, filesystem permissions, secure backup and incident response |
 | Risk policy | `pipeline-policy.json`, regex risk rules | Target's security, migration, infra, contract and data-loss escalations; default unknown to manual |
@@ -197,3 +209,14 @@ validate the attempt-specific task bytes and worker snapshot agreement; do not
 replace this check with manifest-digest equality for all attempts, nor accept
 arbitrary worker-supplied digests. Keep raw repair feedback and source files in
 private evidence custody, not in compact public summaries.
+
+
+### A6.1 dry-run batch envelope portability
+
+`plan-batch` is a read-only planning projection over A5.3 source-bound
+preflight. Reuse its fail-closed Git identity, active spec stage roster and
+previous-stage evidence; do not convert an unvalidated future stage into an
+approved task packet. Proposed stage/call/cost ceilings in this report have
+`enforced=false`: no runtime accounting exists until a separately reviewed
+A6 executor and cost-metering adapter are implemented. Preserve explicit
+per-stage human checkpoints and no automatic Git transition in all ports.

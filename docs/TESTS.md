@@ -1,3 +1,4 @@
+
 ---
 type: Test Guide
 title: Tests and validation
@@ -31,11 +32,12 @@ Use the repository Gradle Wrapper. The canonical full repository gate is:
 
 1. `docker info` preflight for container-backed verification;
 2. optional `git diff --check` when running inside a Git worktree;
-3. `./tools/agent-pipeline/run_tests.sh`, `./tools/source-import/run_tests.sh`, and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
-4. explicit operational-evaluation Python compilation plus focused assisted-investigation/calibration/dedicated-Health-alert/runtime-alert/campaign unit tests, using an external temporary bytecode cache so repository cleanliness is unchanged;
-5. `./infra/kubernetes/run_tests.sh` for the complete deterministic Kubernetes/deployment/evaluation asset suite without a live cluster;
-6. `./gradlew clean check --no-watch-fs`, including the repository-wide `verifyNoThreadSleepInTests` source guard;
-7. `./gradlew integrationTest --no-watch-fs --no-parallel`.
+3. `python3 tools/specs/validate_state.py` and `tools/specs/tests` for strict, read-only specification processing-state verification;
+4. `./tools/agent-pipeline/run_tests.sh`, `./tools/source-import/run_tests.sh`, and `./tools/live-backend/run_tests.sh` for deterministic Python tooling regression coverage;
+5. explicit operational-evaluation Python compilation plus focused assisted-investigation/calibration/dedicated-Health-alert/runtime-alert/campaign unit tests, using an external temporary bytecode cache so repository cleanliness is unchanged;
+6. `./infra/kubernetes/run_tests.sh` for the complete deterministic Kubernetes/deployment/evaluation asset suite without a live cluster;
+7. `./gradlew clean check --no-watch-fs`, including the repository-wide `verifyNoThreadSleepInTests` source guard;
+8. `./gradlew integrationTest --no-watch-fs --no-parallel`.
 
 The script prints a final PASS/FAIL summary for every routine step that actually ran. It also lists relevant test and problems-report locations.
 

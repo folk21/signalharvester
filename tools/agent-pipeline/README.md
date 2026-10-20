@@ -1,3 +1,4 @@
+
 ---
 type: Tool Guide
 title: Development agent pipeline
@@ -7,36 +8,55 @@ description: Repository-local orchestration for isolated coding-worker execution
 
 ## Purpose
 
+### Supported execution paths and configuration
+
+The **only executable coding worker adapter** is Aider. Use the repository-local `sh tools/agent-pipeline/run_aider_stage.sh [controller arguments]` to run this path, e.g. pass `--runs-root ... drive-stage ...` after approval. It delegates to the existing controller and never adds autonomous Git promotion. Model/vendor names are configuration, not role names or architectural invariants.
+
+Edit the reviewed `pipeline-policy.json` (no secrets) to select **independent** model IDs:
+
+- `workerExecution.defaultModel` and optional `workerExecution.allowedModels`: approved Aider/LiteLLM coding model IDs. The legacy `init --model` override is rejected unless in the approved set; `workerExecution.tool` stays `aider` until a different adapter is implemented and tested.
+- `independentReview.adapter.model`: reviewer API model ID; `endpoint` is an exact policy-approved HTTPS Chat Completions URL; `apiKeyEnvironment` names its credential.
+- `independentReview.adapter.allowedEndpoints`: a reviewed policy subset of the separately checked-in `reviewer-endpoints.json` registry. The worker cannot edit this registry. A URL must occur in both lists; editing policy alone cannot authorize a new destination. The controller rejects redirects to avoid cross-origin bearer token forwarding. Reviewer schema/JSON-mode support MUST be proven by `probe-reviewer`; success of the transport probe is not a review verdict.
+
+An OpenRouter reviewer MUST include `providerRouting.only` with explicitly approved upstream slugs, `data_collection=deny`, `zdr=true`, `require_parameters=true` and `allow_fallbacks=false` in the actual request. This is an API routing restriction, not cryptographic proof of downstream privacy; independently confirm the provider's terms, account policies and jurisdiction. Egress/DNS restrictions must be enforced by the deployment network, not assumed from URL syntax.
+
+`examples/reviewer-openrouter.json` is a **configuration example only**, not an enabled adapter or available coding executor. The OpenRouter reviewer experiment requires a developer-approved policy update, an explicit model known to support JSON-object output, a credential in the named environment variable, and the synthetic reviewer probe. Do not copy the example into production blindly. Direct-patch or OpenCode coding executors remain proposals: they cannot bypass Aider-specific source-bound and safety gates merely by changing `tool`. See `PORTING.md`.
+
+Repository checkpoint state (updated/committed only **between** source-bound runs) is in [`docs/specs/STATE.json`](../../docs/specs/STATE.json); it is not inferred from this README or from run-local `READY_FOR_MAIN_REVIEW`. Live attempt status is solely in private run evidence; `RUNNING` and `ACCEPTED` are invalid checkpoint phases in v1. Developer acceptance is external and cannot be inferred from a JSON claim. At present only one project workstream is selected and no parallel stage execution is supported.
+
+
 `tools/agent-pipeline/` provides repository-local orchestration for bounded coding workers without making a worker an architecture or acceptance authority.
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
 
-Stage A1 is accepted after canonical developer verification. A2.1–A2.3,
-A3, and A4.1 provide isolated Aider worktrees, pinned preflight, security and
-canonical checks, independent review, bounded repair, and source-bound stage
-packets. A4.2a adds read-only single-run evidence aggregation; its live pilot
-passed worker/check/oracle gates but failed reviewer invocation. The later
-`MAIN_MODEL` recovery passed developer checks, without transferring a reviewer
-PASS from the old source state. These slices remain verification-pending at
-their respective external acceptance boundaries.
-
-A4.2b captures structured worker deviations. A4.3 aggregates explicitly
-selected stages without inferring approval; A4.4 preserves complete private
-run evidence beyond Gradle `clean` and publishes a compact review index.
-A5.1 supports an explicitly approved one-stage CAS commit. A5.2 prepares the
-**next** LOW-risk stage only after matching its predecessor receipt, ordered
-stage roster and exact checked-out feature HEAD. A5.3a provides read-only
-sequence preflight and an opt-in single-stage cycle driver with durable intent
-and a mandatory promotion/escalation checkpoint. These are bounded,
-verification-pending slices; previous provider-backed `BLOCKED` runs are not
-retroactively accepted. Unattended cross-stage scheduling, notifications,
-merging and archival are **not** implemented. The intended behavior and stages
-are owned by the active
-[`development-agent-pipeline`](../../docs/specs/active/subspecs/development-agent-pipeline.md)
-specification. Detailed advisory design belongs in its
-[implementation plan](../../docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md).
+The implemented controller currently provides source-bound Stage Task Packets, isolated Aider worker runs, bounded repair, ordered checks, independent reviewer invocation, private evidence, guarded one-stage promotion and explicit checkpointed sequencing. No other coding executor or unattended multi-stage scheduling is implemented. Acceptance history belongs to the [active specification](../../docs/specs/active/subspecs/development-agent-pipeline.md), and the current selected stage belongs to [`STATE.json`](../../docs/specs/STATE.json). The detailed advisory design belongs in its [implementation plan](../../docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md).
 
 For an adaptation to a different repository, start with the [Porting Guide](PORTING.md). It separates reusable safety contracts from SignalHarvester-specific configuration and provides a target-project model request.
+
+## A6.1 read-only batch planning (no execution)
+
+A6.1 adds a dry-run `plan-batch` command for an already initialized
+LOW/BOUNDED source-bound stage. It reuses A5.3 `drive-stage` preflight and
+accepts a complete ordered roster plus proposed ceilings. For example,
+substitute an existing prepared run and its exact branch and stage IDs:
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py \
+  --runs-root "$HOME/.signalharvester/agent-pipeline-runs" \
+  plan-batch --run-id existing-prepared-run \
+  --stage A5.3b --stage A6.1 \
+  --feature-branch feature/reviewed-work \
+  --max-stages 2 --max-provider-requests 8 --max-cost-cents 500
+```
+
+For a later stage add `--previous-run-dir /absolute/path/to/prior/evidence`.
+Use only roster/branch identities from the actual approved stage packet; the
+above names are illustrative. The report marks future stages `NOT_PREPARED`.
+Its `budget.enforced=false` is intentional: **it does not reserve or meter
+money, authorize model calls, execute workers, issue notifications, prepare
+future packets, promote commits, or record developer acceptance**. There is
+no `--execute` option. A6 runtime batching must be separately designed and
+approved before this output can become executable authority.
 
 ## Current boundary
 
@@ -95,7 +115,7 @@ Explicit review escalation or an open escalation-category finding -> NEEDS_MAIN_
 - conservative path-based risk hints;
 - the requirement for a main-model checkpoint before acceptance.
 
-The A2.1 adapter currently uses Aider `0.86.2` with `deepseek/deepseek-chat` by default. Provider credentials stay outside repository policy and command evidence; export provider-native variables such as `DEEPSEEK_API_KEY` in the launching environment. Pipeline execution strips `AIDER_*` variables, disables python-dotenv loading, and supplies an empty run-local `--config`, so home/repository `.aider.conf.yml` and `.env` files cannot silently change the worker contract. Ambient home/repository `.aider.model.settings.yml` or `.aider.model.metadata.json` files are rejected because Aider merges those independently of `--config`. Unsupported Aider versions or configured CLI switches fail before model access. Git `user.name` and `user.email` must already resolve so Aider cannot fill missing identity by mutating the shared repository Git configuration. The adapter disables Aider auto-commits, automatic lint/test execution, model-suggested shell commands, release-note/update prompts, URL prompts, analytics, and `.gitignore` mutation. Aider input/chat history is redirected into the run evidence directory instead of the worker tree. Pipeline verification remains responsible for command execution and evidence.
+The A2.1 adapter is pinned to Aider `0.86.2`; its coding model is selected by `workerExecution.defaultModel` and can change only through reviewed policy. Provider credentials stay outside repository policy and command evidence; export provider-native variables such as `DEEPSEEK_API_KEY` in the launching environment. Pipeline execution strips `AIDER_*` variables, disables python-dotenv loading, and supplies an empty run-local `--config`, so home/repository `.aider.conf.yml` and `.env` files cannot silently change the worker contract. Ambient home/repository `.aider.model.settings.yml` or `.aider.model.metadata.json` files are rejected because Aider merges those independently of `--config`. Unsupported Aider versions or configured CLI switches fail before model access. Git `user.name` and `user.email` must already resolve so Aider cannot fill missing identity by mutating the shared repository Git configuration. The adapter disables Aider auto-commits, automatic lint/test execution, model-suggested shell commands, release-note/update prompts, URL prompts, analytics, and `.gitignore` mutation. Aider input/chat history is redirected into the run evidence directory instead of the worker tree. Pipeline verification remains responsible for command execution and evidence.
 
 Stage A2.2 requires Gitleaks `8.30.1` to be installed on `PATH` before executing pipeline verification; installation is external and never performed by the worker. The pinned `tools/agent-pipeline/gitleaks.toml` extends Gitleaks default detection rules and excludes generated build/IDE/Git internals. The directory scan targets the whole worker filesystem rather than Git history alone, so it covers Aider's uncommitted edits and new files. It rejects worker-created `.gitleaksignore`, disables inline `gitleaks:allow` suppressions, and refuses changes to the scanner config, `pipeline-policy.json`, or `run_checks.sh` inside a worker run. Scanner version/config/source identity, exit status, finding count, rule/file/line metadata, and redacted failure reason are recorded in `checks.json`. Raw secret values, report JSON, and scanner stdout/stderr are not retained; the temporary report is deleted. Some Gitleaks releases do not create an empty report when no findings exist; zero exit status remains authoritative for a successful clean scan. Missing binary, incompatible version, malformed finding report, detected secrets, or an unsuccessful scan blocks progression. This scanner does not replace independent review or separate historical Git secret scanning.
 
@@ -249,7 +269,7 @@ python3 tools/agent-pipeline/agent_pipeline.py init \
   --scope tools/agent-pipeline
 ```
 
-The configured default is Aider with `deepseek/deepseek-chat`. Override the model only when the task intentionally requires another provider/model:
+The currently selected coding model comes from `workerExecution.defaultModel` in `pipeline-policy.json`. A run-specific override can be supplied only for a task whose provider/model has been approved:
 
 ```bash
 python3 tools/agent-pipeline/agent_pipeline.py init \
@@ -538,11 +558,11 @@ python3 tools/agent-pipeline/agent_pipeline.py run-review --run-id <run-id>
 python3 tools/agent-pipeline/agent_pipeline.py handoff --run-id <run-id>
 ```
 
-The reviewer uses the policy-owned HTTPS DeepSeek chat-completions endpoint and model, with `DEEPSEEK_API_KEY` supplied by the environment. It receives only the immutable task packet, bounded worker source diff (including untracked files), changed-file names, and check statuses. Worker chat transcripts are not forwarded. A new independent request is created for each run, and its answer must match the repository's structured review schema. The worker cannot run or accept its own review. Review attempts are one-shot; provider/schema failures are recorded as `review-attempt.json` without saving raw API responses and block the run. Failed attempts now include a sanitized `reasonCode` (`HTTP_STATUS_FAILURE`, `REQUEST_TIMEOUT`, `TRANSPORT_FAILURE`, `INVALID_RESPONSE_ENVELOPE`, `INVALID_REVIEW_JSON`, `INVALID_REVIEW_SCHEMA`, or `REVIEW_EVIDENCE_FAILURE`) and optional numeric `httpStatus` for HTTP errors. These codes diagnose which boundary failed; they do not constitute a reviewer verdict, reveal raw provider output, or authorize retrying a terminal run. A larger diff is rejected rather than silently truncated. Never send sensitive code to an unapproved provider.
+The reviewer uses the policy-selected, explicitly allowlisted HTTPS Chat Completions endpoint and independently configured model. Its credential comes only from `independentReview.adapter.apiKeyEnvironment`; redirects fail closed. It receives only the immutable task packet, bounded worker source diff (including untracked files), changed-file names, and check statuses. Worker chat transcripts are not forwarded. A new independent request is created for each run, and its answer must match the repository's structured review schema. The worker cannot run or accept its own review. Review attempts are one-shot; provider/schema failures are recorded as `review-attempt.json` without saving raw API responses and block the run. Failed attempts now include a sanitized `reasonCode` (`HTTP_STATUS_FAILURE`, `REQUEST_TIMEOUT`, `TRANSPORT_FAILURE`, `INVALID_RESPONSE_ENVELOPE`, `INVALID_REVIEW_JSON`, `INVALID_REVIEW_SCHEMA`, or `REVIEW_EVIDENCE_FAILURE`) and optional numeric `httpStatus` for HTTP errors. These codes diagnose which boundary failed; they do not constitute a reviewer verdict, reveal raw provider output, or authorize retrying a terminal run. A larger diff is rejected rather than silently truncated. Never send sensitive code to an unapproved provider.
 
 ### Reviewer response diagnostics and transport probe
 
-The A2.3 reviewer adapter uses DeepSeek JSON-object mode and a concrete v1
+The A2.3 reviewer adapter requests JSON-object mode from the selected compatible provider, using a concrete v1
 response example. The provider returns `schemaVersion`, `verdict`, and `findings`;
 reviewer identity is injected by the trusted adapter. The adapter still
 requires full `validate_review()` success, and never treats an incomplete
@@ -555,7 +575,7 @@ read actual repository code, create a run, or grant acceptance:
 python3 tools/agent-pipeline/agent_pipeline.py probe-reviewer
 ```
 
-This command requires the normal `DEEPSEEK_API_KEY` environment variable and
+This command requires the environment variable selected by `apiKeyEnvironment` and
 makes one billable request to the policy-approved endpoint. It prints only
 bounded structured diagnostics (`probeOnly`, `status`, optional `verdict` and
 `findingsCount`). A successful probe proves JSON adapter compatibility for
