@@ -133,6 +133,9 @@
     ],
     "supportedVersions": [
       "0.86.2"
+    ],
+    "allowedModels": [
+      "deepseek/deepseek-chat"
     ]
   }
 }

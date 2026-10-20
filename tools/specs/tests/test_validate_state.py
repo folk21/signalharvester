@@ -78,18 +78,54 @@ class StateContractTest(unittest.TestCase):
         self.assertEqual(["SINGLE"], [props["mode"]["const"]])
 
     def test_rejects_fabricated_acceptance_or_unbound_run(self):
-        value = copy.deepcopy(self.payload)
-        value["workstreams"][0]["phase"] = "ACCEPTED"
-        with self.assertRaisesRegex(ValueError, "must agree"):
-            self.validate(value)
+        # Both coherent and incoherent acceptance claims are forbidden in the Git checkpoint.
+        for decision in ("UNRECORDED", "ACCEPTED"):
+            value = copy.deepcopy(self.payload)
+            value["workstreams"][0].update(phase="ACCEPTED", developerDecision=decision)
+            with self.subTest(decision=decision), self.assertRaisesRegex(ValueError, "Unsupported workstream phase"):
+                self.validate(value)
         value = copy.deepcopy(self.payload)
         value["workstreams"][0]["developerDecision"] = "ACCEPTED"
-        with self.assertRaisesRegex(ValueError, "must agree"):
+        with self.assertRaisesRegex(ValueError, "Unsupported developerDecision"):
             self.validate(value)
         value = copy.deepcopy(self.payload)
-        value["workstreams"][0]["phase"] = "RUNNING"
-        with self.assertRaisesRegex(ValueError, "runId"):
+        value["workstreams"][0].update(phase="RUNNING", runId="run.1")
+        with self.assertRaisesRegex(ValueError, "Unsupported workstream phase"):
             self.validate(value)
+        for phase in ("READY_FOR_REVIEW", "AWAITING_DEVELOPER_DECISION"):
+            value = copy.deepcopy(self.payload)
+            value["workstreams"][0]["phase"] = phase
+            with self.subTest(phase=phase), self.assertRaisesRegex(ValueError, "requires runId"):
+                self.validate(value)
+            value["workstreams"][0]["runId"] = "run.1"
+            self.assertEqual("run.1", self.validate(value)["workstreams"][0]["runId"])
+
+    def test_runtime_run_id_grammar_matches_state_schema(self):
+        import importlib.util
+        controller_path = LOCATION.parents[2] / "tools/agent-pipeline/agent_pipeline.py"
+        controller_spec = importlib.util.spec_from_file_location("pipeline_run_id_contract", controller_path)
+        controller = importlib.util.module_from_spec(controller_spec)
+        controller_spec.loader.exec_module(controller)
+        self.assertEqual(module.RUN_ID.pattern, controller.RUN_ID_GRAMMAR.pattern)
+        for run_id in ("run.1", "A5-1_2", "a", "z" * 128):
+            self.assertIsNotNone(controller.RUN_ID_GRAMMAR.fullmatch(run_id))
+        for run_id in ("..", ".hidden", "../outside", "bad/path", "x" * 129, ""):
+            self.assertIsNone(controller.RUN_ID_GRAMMAR.fullmatch(run_id))
+
+    def test_schema_driven_required_keys_types_and_boundary_id(self):
+        value = copy.deepcopy(self.payload)
+        value["workstreams"][0]["runId"] = "run.1"
+        self.validate(value)
+        for rejected in (".hidden", "../bad", "bad/slash", "", 123, True):
+            value = copy.deepcopy(self.payload)
+            value["workstreams"][0]["runId"] = rejected
+            with self.subTest(rejected=rejected), self.assertRaises(ValueError):
+                self.validate(value)
+        for rejected in (False, "1", 1.0):
+            value = copy.deepcopy(self.payload)
+            value["schemaVersion"] = rejected
+            with self.subTest(version=rejected), self.assertRaises(ValueError):
+                self.validate(value)
 
 
 if __name__ == "__main__":

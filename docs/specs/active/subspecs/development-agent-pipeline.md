@@ -463,6 +463,14 @@ architectural guidance and candidate files without becoming a second acceptance 
 justified internal design alternative may be accepted within the unchanged authorized scope, but
 material deviations must be recorded; unknown or expanded ownership requires human-led re-planning.
 
+### AP18 — developer checkpoint state and evidence integrity
+
+Git-tracked `docs/specs/STATE.json` MUST represent developer-controlled **between-run** processing checkpoints only. It MUST NOT mirror live `RUNNING` or assert `ACCEPTED` in schema version 1, or be mutated during active source-bound stage execution. Runtime evidence remains external to Git; final developer acceptance is evidenced by the separate lifecycle and review process. State schema and validator MUST share machine-readable pattern/enum contracts. Unverified acceptance assertions fail closed.
+
+### AP19 — reviewer routing, model authorization and test oracle independence
+
+Reviewer egress destinations MUST be approved by an independently reviewed repository registry, not only by the selected policy. OpenRouter MUST send an explicit upstream provider allowlist, deny fallback and data collection, require supported parameters, and request zero retention; deployment-level egress/private-network restrictions remain external responsibilities. Coding model overrides MUST match a policy-reviewed allowed-model list. Before worker delegation, stage tests/acceptance oracles MUST be traceable to normative behavior or a reproduced defect; a failing valid test MUST NOT be changed solely to force PASS. Executor replacements require an explicit preflight/execute/evidence conformance contract and independent adversarial tests.
+
 ### AP15 — developer-initiated final verification and paired archival
 
 The developer must explicitly request a final `MAIN_MODEL` sub-spec review through ChatGPT using current
@@ -537,6 +545,7 @@ companion are exempt from retroactive creation.
   developer acceptance before any permitted current-state documentation synchronization or paired
   spec/companion archival; do not infer acceptance from commits.
 - [ ] **A5.4 — configurable provider transport and strict processing state (implementation patch, developer verification pending):** remove reviewer-provider URL pinning from controller code, keep the Aider executor as the only enabled coding path, select worker/reviewer models from reviewed policy, require an explicit HTTPS reviewer allowlist without bearer-token redirects, and introduce validated `docs/specs/STATE.json`. No additional executor or parallelism is authorized by these files; developer review and canonical verification remain required.
+- [ ] **A5.4a — state & provider trust hardening (corrective patch, verification pending):** enforce checkpoint-only tracked state, reject unverified RUNNING/ACCEPTED claims, match run-ID grammar to runtime, separate reviewed reviewer endpoint registry from model policy, require explicit OpenRouter upstream routing/privacy controls in request bytes, constrain legacy worker model overrides, and document a conformance-tested WorkerExecutor boundary. For behavioral fixes, independently defined negative/regression oracles MUST check the original defect; tests MUST NOT be weakened merely to obtain PASS.
 - [ ] **A6 — evidence-backed autonomy and notifications:** permit configured batching of
   already-classified bounded, low-risk stages with explicit run/cost budgets; stop immediately at
   high-risk/unknown ownership/ambiguous stages and send actionable completion or escalation

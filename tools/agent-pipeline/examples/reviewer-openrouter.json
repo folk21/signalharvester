@@ -1,5 +1,5 @@
 {
-  "description": "Illustrative independentReview.adapter only; copy reviewed values into pipeline-policy.json, choose a model that supports JSON object output and validate via probe-reviewer. This does NOT change the coding worker adapter.",
+  "description": "Illustrative independentReview.adapter only. Replace model AND upstream provider slug after explicit privacy review. Do not send private diffs before verifying endpoint, upstream retention, JSON-mode probe and account policy. Coding executor remains Aider.",
   "adapter": {
     "endpoint": "https://openrouter.ai/api/v1/chat/completions",
     "model": "REPLACE_WITH_APPROVED_JSON_MODE_MODEL",
@@ -9,6 +9,15 @@
     "allowedEndpoints": [
       "https://api.deepseek.com/chat/completions",
       "https://openrouter.ai/api/v1/chat/completions"
-    ]
+    ],
+    "providerRouting": {
+      "only": [
+        "REPLACE_WITH_APPROVED_UPSTREAM_SLUG"
+      ],
+      "allow_fallbacks": false,
+      "require_parameters": true,
+      "data_collection": "deny",
+      "zdr": true
+    }
   }
 }

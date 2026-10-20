@@ -205,6 +205,10 @@ Direct `Thread.sleep(...)` is forbidden in test and integration-test sources as 
 
 Kafka integration tests that restart application consumers between test methods must isolate consumer state per method. Prefer a unique consumer group and unique input topics for each test method; otherwise reset offsets/topics explicitly before starting the next consumer. A static broker may be shared for cost, but committed offsets, rebalances, and unconsumed records from one test must not become hidden input to another test.
 
+Tests are verification evidence, not acceptance targets. Each stage MUST define behavioral invariants and positive, negative, boundary and regression cases **before or independently of worker implementation**, with observable inputs/outputs or failure conditions derived from the authoritative spec or reproduced defect. Execute focused tests during implementation and the required canonical/integration gates before claiming completion; a passing worker-authored test is not an independent oracle.
+
+When a test fails, diagnose whether the code violates the requirement, the test is invalid against the requirement, or the environment is unavailable. Fix production code for a valid failing assertion. Change a test only with explicit, documented evidence that its expectation contradicted the authoritative spec/defect reproduction; retain a case that detects the original bug. MUST NOT weaken, skip, mock away, delete or rewrite assertions merely to obtain PASS. An unresolved/flaky test MUST be disclosed and treated as an incomplete verification gate, not silently retried to green.
+
 Never disable or weaken a failing test merely to make the build green.
 
 Keep tests readable as executable specifications:
@@ -254,7 +258,7 @@ Keep specification lifecycle state unambiguous:
 
 - a spec exists in exactly one lifecycle location (`active/` or `archive/`), never both;
 - archival is a move, not a duplicated copy;
-- `docs/specs/STATE.json` is the only repository-owned current *processing-state* record; README/umbrella `current_focus` are informational pointers and MUST NOT grant execution or acceptance;
+- `docs/specs/STATE.json` is the only repository-owned *checkpoint projection*; it MUST NOT be edited during an active source-bound run or assert runtime `RUNNING`/developer `ACCEPTED` without independent evidence; README/umbrella `current_focus` are informational pointers and MUST NOT grant execution or acceptance;
 - an implemented-but-unverified slice may remain active with `verification-pending`, but accepted behavior belongs in current-state documentation rather than being maintained twice in the spec.
 
 Keep specifications synchronized with the stable feature vocabulary in `docs/FEATURES.md`:

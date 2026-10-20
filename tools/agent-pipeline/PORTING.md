@@ -17,6 +17,14 @@ another project. Inspect the other project's current source before writing a
 patch. Do not copy SignalHarvester product specifications, Java module layout,
 checks, credentials, or provider settings into an unrelated codebase.
 
+## Executor / reviewer abstraction boundary (A5.4a)
+
+The only **implemented** coding executor remains the Aider CLI. A proposed replacement MUST implement these same behavior contracts before selection: `preflight(runContext) -> bounded capability/identity evidence`, `execute(immutableTask, isolatedWorkspace) -> attempt evidence`, and `verifyOutputs() -> source-bound changed-path and no-diff evidence`. Executor-specific transport must not own authorization, commit/promotion, checks, review or acceptance. Benchmark and test an adapter with no-diff, corrupted output, out-of-scope edits, interruptions and credential failures before enabling it. Do not assume a script that prints a diff implements this boundary.
+
+Reviewer endpoint approval belongs to a separate, reviewed `reviewer-endpoints.json` registry; model selection and a policy-local subset belong in `pipeline-policy.json`. OpenRouter additionally requires a privacy-preserving `providerRouting` request profile and explicit upstream providers; these controls are not a substitute for external provider due diligence or deployment egress controls.
+
+The Git-tracked `docs/specs/STATE.json` is only a checkpoint projection updated between source-bound runs. Runtime execution and final human acceptance cannot be represented by a self-declared status in the repository; v1 excludes `RUNNING` and `ACCEPTED` checkpoint values.
+
 ## 1. What the model should preserve
 
 **Adapter and state boundary:** never port an Aider-specific subprocess as if it were a generic worker interface. Preserve `workerExecution.tool` fail-closed until a distinct, conformance-tested adapter exists. Worker model and reviewer model are independent reviewed configuration values; reviewer endpoint selection must be explicit, allowlisted and redirect-safe. `docs/specs/STATE.json` is an optional portable pattern for processing-state bookkeeping, distinct from run evidence and authoritative spec lifecycle; do not copy its current workstream into another project. Single selected workstream is the only supported coordination mode.

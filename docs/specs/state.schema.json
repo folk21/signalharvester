@@ -52,13 +52,12 @@
             "enum": [
               "DESIGN",
               "READY_TO_DELEGATE",
-              "RUNNING",
               "READY_FOR_REVIEW",
               "BLOCKED",
               "PAUSED",
-              "AWAITING_DEVELOPER_DECISION",
-              "ACCEPTED"
-            ]
+              "AWAITING_DEVELOPER_DECISION"
+            ],
+            "description": "Developer-maintained repository checkpoint, not live execution state. RUNNING and ACCEPTED are deliberately unsupported."
           },
           "runId": {
             "oneOf": [
@@ -67,19 +66,19 @@
               },
               {
                 "type": "string",
-                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{1,127}$"
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
               }
             ]
           },
           "developerDecision": {
             "enum": [
               "UNRECORDED",
-              "ACCEPTED",
               "REJECTED"
             ]
           }
         }
       }
     }
-  }
+  },
+  "description": "Strict repository checkpoint shape, not an acceptance receipt or a runtime state machine."
 }

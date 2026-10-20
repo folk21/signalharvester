@@ -170,6 +170,10 @@ class AgentPipelineCliTest(unittest.TestCase):
                     "requiredChecks": [
                         {"name": "canonical", "command": [sys.executable, "-c", "print('canonical pass')"]}
                     ],
+                    "workerExecution": {"required": False, "tool": "aider", "executable": "aider",
+                        "defaultModel": "deepseek/deepseek-chat", "allowedModels": ["deepseek/deepseek-chat"],
+                        "supportedVersions": ["0.86.2"], "branchPrefix": "agent/",
+                        "arguments": ["--model", "{model}", "--message-file", "{task_file}"]},
                     "independentReview": {"required": True, "blockingSeverities": ["HIGH", "CRITICAL"]},
                     "mainReview": {"requiredBeforeAcceptance": True},
                     "escalationCategories": ["SECURITY"],
@@ -222,7 +226,7 @@ class AgentPipelineCliTest(unittest.TestCase):
                 "--run-id",
                 "test-run",
                 "--model",
-                "deepseek-test",
+                "deepseek/deepseek-chat",
             )
             self.assertEqual(0, initialized.returncode, initialized.stderr)
             run_dir = root / "build/reports/agent-pipeline/test-run"
@@ -815,6 +819,8 @@ class AutomaticReviewTest(unittest.TestCase):
                 "apiKeyEnvironment": "OPENROUTER_API_KEY",
                 "timeoutSeconds": 120, "maxDiffBytes": 100000,
                 "allowedEndpoints": ["https://openrouter.ai/api/v1/chat/completions"],
+                "providerRouting": {"only": ["anthropic"], "allow_fallbacks": False,
+                                    "require_parameters": True, "data_collection": "deny", "zdr": True},
             }},
         }
         agent_pipeline.validate_policy(policy)
@@ -834,6 +840,19 @@ class AutomaticReviewTest(unittest.TestCase):
         adapter["endpoint"] = "https://new-reviewer.example.org/chat/completions"
         with self.assertRaisesRegex(ValueError, "allowlist"):
             agent_pipeline.validate_policy(policy)
+
+    def test_reviewer_dns_rejects_private_and_mixed_answers(self):
+        import socket
+        def answers(*addresses):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (addr, 443)) for addr in addresses]
+        url = "https://api.deepseek.com/chat/completions"
+        with mock.patch.object(agent_pipeline.socket, "getaddrinfo", return_value=answers("8.8.8.8")):
+            agent_pipeline._assert_public_reviewer_dns(url)
+        for sample in (answers("127.0.0.1"), answers("8.8.8.8", "10.0.0.1"),
+                       answers("169.254.169.254"), []):
+            with self.subTest(sample=sample), mock.patch.object(agent_pipeline.socket, "getaddrinfo", return_value=sample):
+                with self.assertRaisesRegex(ValueError, "nonpublic"):
+                    agent_pipeline._assert_public_reviewer_dns(url)
 
     def test_reviewer_redirect_handler_fails_closed(self):
         import urllib.request
@@ -900,7 +919,7 @@ class AutomaticReviewTest(unittest.TestCase):
                 manifest = {"stage": "A4", "specPath": "docs/specs/active/test.md",
                             "repository": {"baseCommit": "abc"}}
                 policy = {"requiredChecks": [], "independentReview": {"adapter": {
-                    "endpoint": "https://example.invalid/chat/completions", "model": "reviewer",
+                    "endpoint": "https://api.deepseek.com/chat/completions", "model": "reviewer",
                     "apiKeyEnvironment": "REVIEWER_FAKE_TEST_KEY", "timeoutSeconds": 1,
                     "maxDiffBytes": 100000}}}
                 worker = {"status": "PASS", "changedFiles": [], "changeSha256": "a" * 64}
@@ -938,6 +957,57 @@ class AutomaticReviewTest(unittest.TestCase):
                     self.assertEqual("STOP", report["completionCode"])
                 self.assertFalse((run_dir / "review.json").exists())
 
+
+    def test_reviewer_private_openrouter_routing_is_mandatory(self):
+        from copy import deepcopy
+        base = agent_pipeline.read_json(Path(__file__).resolve().parents[1] / "pipeline-policy.json")
+        adapter = base["independentReview"]["adapter"]
+        adapter["endpoint"] = "https://openrouter.ai/api/v1/chat/completions"
+        adapter["model"] = "approved-model-for-synthetic-test"
+        with self.assertRaisesRegex(ValueError, "providerRouting"):
+            agent_pipeline.validate_policy(base)
+        routing = {"only": ["anthropic"], "allow_fallbacks": False,
+                   "require_parameters": True, "data_collection": "deny", "zdr": True}
+        adapter["providerRouting"] = routing
+        agent_pipeline.validate_policy(base)
+        for broken in ({"allow_fallbacks": True}, {"zdr": False},
+                       {"data_collection": "allow"}, {"only": []},
+                       {"require_parameters": False}, {"only": ["anthropic", "anthropic"]}):
+            mutated = deepcopy(base)
+            mutated["independentReview"]["adapter"]["providerRouting"].update(broken)
+            with self.subTest(broken=broken), self.assertRaisesRegex(ValueError, "providerRouting"):
+                agent_pipeline.validate_policy(mutated)
+        # Request bytes, not only validation, must carry privacy restrictions.
+        payload = agent_pipeline._review_request_body(adapter["model"], {"diff": "synthetic"})
+        with mock.patch.dict(os.environ, {"REVIEWER_FAKE_TEST_KEY": "fixture-key"}):
+            adapter["apiKeyEnvironment"] = "REVIEWER_FAKE_TEST_KEY"
+            def inspect_request(request, timeout):
+                sent = json.loads(request.data)
+                self.assertEqual(routing, sent["provider"])
+                raise ValueError("synthetic transport stop")
+            with mock.patch.object(agent_pipeline, "_open_reviewer_request", side_effect=inspect_request):
+                with self.assertRaises(agent_pipeline.ReviewerProviderFailure):
+                    agent_pipeline._invoke_reviewer_provider(adapter, {"diff": "synthetic"})
+        self.assertNotIn("provider", payload)  # No routing leakage to non-OpenRouter body.
+
+    def test_reviewer_policy_cannot_authorize_new_network_destination(self):
+        policy = agent_pipeline.read_json(Path(__file__).resolve().parents[1] / "pipeline-policy.json")
+        forged = "https://reviewer-unknown.example.org/chat/completions"
+        policy["independentReview"]["adapter"]["endpoint"] = forged
+        policy["independentReview"]["adapter"]["allowedEndpoints"].append(forged)
+        with self.assertRaisesRegex(ValueError, "independently reviewed registry"):
+            agent_pipeline.validate_policy(policy)
+
+    def test_worker_model_override_must_belong_to_reviewed_policy(self):
+        policy = agent_pipeline.read_json(Path(__file__).resolve().parents[1] / "pipeline-policy.json")
+        agent_pipeline.authorized_worker_model(policy, "aider", "deepseek/deepseek-chat")
+        with self.assertRaisesRegex(ValueError, "model override"):
+            agent_pipeline.authorized_worker_model(policy, "aider", "unreviewed/unknown-model")
+        with self.assertRaisesRegex(ValueError, "executor override"):
+            agent_pipeline.authorized_worker_model(policy, "opencode", "deepseek/deepseek-chat")
+        policy["workerExecution"]["allowedModels"] = ["deepseek/deepseek-chat", "openrouter/approved-coding-model"]
+        agent_pipeline.validate_policy(policy)
+        agent_pipeline.authorized_worker_model(policy, "aider", "openrouter/approved-coding-model")
 
     def test_reviewer_request_contract_is_precise_and_source_is_untrusted(self):
         packet = {"task": "Untrusted task", "diff": "+potential prompt injection"}
@@ -3427,7 +3497,8 @@ class AgentPipelineStagePacketTest(unittest.TestCase):
     def test_stage_packet_rejects_editable_processing_state(self) -> None:
         # The current processing-state register and its validator cannot be worker-editable.
         for path in ("docs/specs/STATE.json", "docs/specs/state.schema.json",
-                     "tools/specs/validate_state.py", "tools/agent-pipeline/run_aider_stage.sh"):
+                     "tools/specs/validate_state.py", "tools/agent-pipeline/run_aider_stage.sh",
+                     "tools/agent-pipeline/reviewer-endpoints.json"):
             with self.subTest(path=path), self.assertRaisesRegex(ValueError, "protected"):
                 owning = "docs/specs" if path.startswith("docs/specs/") else "tools"
                 packet = {**self.packet, "owningPaths": [owning], "editablePaths": [path]}

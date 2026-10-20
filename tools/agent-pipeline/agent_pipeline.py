@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -24,6 +25,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 SCHEMA_VERSION = 1
+RUN_ID_GRAMMAR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 STATE_PREPARED = "PREPARED"
 STATE_WORKER_REQUIRED = "WORKER_REQUIRED"
 STATE_VERIFYING = "VERIFYING"
@@ -39,7 +41,7 @@ RISK_ORDER = {"LOW": 1, "MODERATE": 2, "HIGH": 3, "CRITICAL": 4, "UNKNOWN": 5}
 
 PROTECTED_WORKER_CONTROL_PATHS = frozenset({
     "run_checks.sh", "tools/agent-pipeline/pipeline-policy.json",
-    "tools/agent-pipeline/run_aider_stage.sh",
+    "tools/agent-pipeline/run_aider_stage.sh", "tools/agent-pipeline/reviewer-endpoints.json",
     "docs/specs/STATE.json", "docs/specs/state.schema.json",
     "tools/specs/validate_state.py",
 })
@@ -175,7 +177,15 @@ def validate_policy(policy: dict[str, Any]) -> None:
                        for item in endpoints)):
             raise ValueError("Reviewer allowedEndpoints must be a bounded list of exact public HTTPS URLs")
         if adapter["endpoint"] not in endpoints:
-            raise ValueError("Reviewer endpoint is not in the approved endpoint allowlist")
+            raise ValueError("Reviewer endpoint is not in the policy endpoint allowlist")
+        # The independent registry selects transport behavior; runtime policy may only narrow it.
+        profiles = _reviewer_endpoint_registry()
+        if any(url not in profiles for url in endpoints):
+            raise ValueError("Reviewer endpoint is not in the independently reviewed registry")
+        if profiles[adapter["endpoint"]] == "openrouter-private":
+            _validated_openrouter_routing(adapter.get("providerRouting"))
+        elif "providerRouting" in adapter:
+            raise ValueError("providerRouting is only supported for the privacy-routed reviewer transport")
         if not re.fullmatch(r"[A-Z][A-Z0-9_]*", adapter["apiKeyEnvironment"]):
             raise ValueError("Reviewer key must be obtained from a named environment variable")
         if not isinstance(adapter.get("timeoutSeconds"), int) or not 1 <= adapter["timeoutSeconds"] <= 300:
@@ -195,6 +205,11 @@ def validate_policy(policy: dict[str, Any]) -> None:
         default_model = worker.get("defaultModel")
         if not isinstance(default_model, str) or not default_model.strip():
             raise ValueError("workerExecution.defaultModel must be a non-empty string")
+        allowed_models = worker.get("allowedModels", [default_model])
+        if (not isinstance(allowed_models, list) or not 1 <= len(allowed_models) <= 16
+                or any(not isinstance(value, str) or not value.strip() for value in allowed_models)
+                or len(set(allowed_models)) != len(allowed_models) or default_model not in allowed_models):
+            raise ValueError("workerExecution.allowedModels must be a bounded set including defaultModel")
         supported_versions = worker.get("supportedVersions")
         versions_valid = isinstance(supported_versions, list) and bool(supported_versions)
         if versions_valid:
@@ -256,6 +271,55 @@ def _safe_reviewer_endpoint(value: str) -> bool:
                 and parts.path.startswith("/") and ".." not in parts.path)
     except ValueError:
         return False
+
+
+def _reviewer_endpoint_registry() -> dict[str, str]:
+    """Load a separately reviewed URL-to-request-profile trust registry."""
+    registry = json.loads((Path(__file__).resolve().parent / "reviewer-endpoints.json").read_text(encoding="utf-8"))
+    if (type(registry) is not dict or set(registry) != {"schemaVersion", "endpoints"}
+            or type(registry["schemaVersion"]) is not int or registry["schemaVersion"] != 1
+            or not isinstance(registry["endpoints"], list) or not 1 <= len(registry["endpoints"]) <= 16):
+        raise ValueError("Invalid independent reviewer endpoint registry")
+    profiles: dict[str, str] = {}
+    for item in registry["endpoints"]:
+        if (type(item) is not dict or set(item) != {"url", "requestProfile"}
+                or not _safe_reviewer_endpoint(item["url"])
+                or not isinstance(item["requestProfile"], str)
+                or item["requestProfile"] not in {"openai-chat-completions", "openrouter-private"}
+                or item["url"] in profiles):
+            raise ValueError("Unsafe or duplicate reviewer registry endpoint")
+        profiles[item["url"]] = item["requestProfile"]
+    return profiles
+
+
+def _validated_openrouter_routing(value: Any) -> dict[str, Any]:
+    """Require exact privacy and provider routing policy before any source diff can leave the repo."""
+    if not isinstance(value, dict) or set(value) != {"only", "allow_fallbacks", "require_parameters", "data_collection", "zdr"}:
+        raise ValueError("OpenRouter reviewer requires an explicit private providerRouting profile")
+    only = value["only"]
+    if (not isinstance(only, list) or not 1 <= len(only) <= 8
+            or any(not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{2,64}", name) for name in only)
+            or len(set(only)) != len(only)):
+        raise ValueError("OpenRouter providerRouting.only must name explicitly approved upstreams")
+    for key, expected in (("allow_fallbacks", False), ("require_parameters", True),
+                          ("data_collection", "deny"), ("zdr", True)):
+        if type(value[key]) is not type(expected) or value[key] != expected:
+            raise ValueError(f"OpenRouter private reviewer requires providerRouting.{key}={expected}")
+    return value
+
+
+def authorized_worker_model(policy: dict[str, Any], worker: str, model: str) -> None:
+    """Reject legacy init overrides outside the separately reviewed executor/model policy."""
+    execution = policy.get("workerExecution", {})
+    if execution.get("defaultModel") is None and worker == "aider" and model == "unspecified":
+        # Older evidence-only stage fixtures may prepare a packet without a configured
+        # executable worker. This cannot authorize an actual coding-model call.
+        return
+    if worker != execution.get("tool", "aider"):
+        raise ValueError("Unapproved worker executor override")
+    models = execution.get("allowedModels", [execution.get("defaultModel")])
+    if model not in models:
+        raise ValueError("Unapproved worker model override")
 
 
 def parse_version_tuple(value: str) -> tuple[int, int, int] | None:
@@ -626,12 +690,13 @@ def create_run(
 ) -> Path:
     """Create an immutable run identity plus the initial worker task packet."""
     validate_repository(repo_root, policy)
+    authorized_worker_model(policy, worker, model)
     validate_active_spec(repo_root, spec_path)
     if not task_text.strip():
         raise ValueError("Task text must not be empty")
     resolved_run_id = run_id or f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
-    if not re.fullmatch(r"[A-Za-z0-9._-]+", resolved_run_id):
-        raise ValueError("Run id may contain only letters, numbers, dot, underscore, and dash")
+    if not isinstance(resolved_run_id, str) or not RUN_ID_GRAMMAR.fullmatch(resolved_run_id):
+        raise ValueError("Invalid run id: expected 1-128 ASCII letters/digits/dot/underscore/dash, starting alphanumeric")
     run_dir = runs_root / resolved_run_id
     if run_dir.exists():
         raise ValueError(f"Run already exists: {resolved_run_id}")
@@ -671,6 +736,8 @@ def create_run(
 
 def load_run(runs_root: Path, run_id: str) -> tuple[Path, dict[str, Any]]:
     """Load one known run and reject missing or incompatible manifests."""
+    if not isinstance(run_id, str) or not RUN_ID_GRAMMAR.fullmatch(run_id):
+        raise ValueError("Invalid run identifier")
     run_dir = runs_root / run_id
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.is_file():
@@ -1067,8 +1134,23 @@ class _RejectReviewerRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError("Reviewer HTTP redirect is prohibited")
 
 
+def _assert_public_reviewer_dns(endpoint: str) -> None:
+    """Reject private/reserved DNS answers before contacting a registered reviewer endpoint.
+
+    This is defense in depth only: deployment network egress must also block private IPs
+    because a resolver/proxy or an upstream provider can change destinations after lookup.
+    """
+    hostname = urllib.parse.urlsplit(endpoint).hostname
+    if not hostname:
+        raise ValueError("Missing reviewer DNS hostname")
+    answers = socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)
+    if not answers or any(not ipaddress.ip_address(info[4][0]).is_global for info in answers):
+        raise ValueError("Reviewer DNS resolved to a nonpublic address")
+
+
 def _open_reviewer_request(request: urllib.request.Request, timeout: int):
-    """Return a response context manager with redirects explicitly disabled."""
+    """Reject nonpublic DNS destinations and all redirects before a bearer request."""
+    _assert_public_reviewer_dns(request.full_url)
     return urllib.request.build_opener(_RejectReviewerRedirect()).open(request, timeout=timeout)
 
 
@@ -1082,6 +1164,11 @@ def _invoke_reviewer_provider(adapter: dict[str, Any], packet: dict[str, Any]) -
     parsed_review: dict[str, Any] | None = None
     try:
         body = _review_request_body(adapter["model"], packet)
+        profile = _reviewer_endpoint_registry().get(adapter["endpoint"])
+        if profile == "openrouter-private":
+            body["provider"] = _validated_openrouter_routing(adapter.get("providerRouting"))
+        elif profile != "openai-chat-completions" or "providerRouting" in adapter:
+            raise ValueError("Unapproved or inconsistent reviewer request profile")
         request = urllib.request.Request(
             adapter["endpoint"], data=json.dumps(body).encode("utf-8"),
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},

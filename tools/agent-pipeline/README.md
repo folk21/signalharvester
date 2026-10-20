@@ -14,13 +14,15 @@ The **only executable coding worker adapter** is Aider. Use the repository-local
 
 Edit the reviewed `pipeline-policy.json` (no secrets) to select **independent** model IDs:
 
-- `workerExecution.defaultModel`: Aider/LiteLLM coding model ID; `workerExecution.tool` stays `aider` until a different adapter is implemented and tested.
+- `workerExecution.defaultModel` and optional `workerExecution.allowedModels`: approved Aider/LiteLLM coding model IDs. The legacy `init --model` override is rejected unless in the approved set; `workerExecution.tool` stays `aider` until a different adapter is implemented and tested.
 - `independentReview.adapter.model`: reviewer API model ID; `endpoint` is an exact policy-approved HTTPS Chat Completions URL; `apiKeyEnvironment` names its credential.
-- `independentReview.adapter.allowedEndpoints`: the explicitly approved exact reviewer URL set. A URL must be on the list. The controller rejects redirects to avoid cross-origin bearer token forwarding. Reviewer schema/JSON-mode support MUST be proven by `probe-reviewer`; success of the transport probe is not a review verdict.
+- `independentReview.adapter.allowedEndpoints`: a reviewed policy subset of the separately checked-in `reviewer-endpoints.json` registry. The worker cannot edit this registry. A URL must occur in both lists; editing policy alone cannot authorize a new destination. The controller rejects redirects to avoid cross-origin bearer token forwarding. Reviewer schema/JSON-mode support MUST be proven by `probe-reviewer`; success of the transport probe is not a review verdict.
+
+An OpenRouter reviewer MUST include `providerRouting.only` with explicitly approved upstream slugs, `data_collection=deny`, `zdr=true`, `require_parameters=true` and `allow_fallbacks=false` in the actual request. This is an API routing restriction, not cryptographic proof of downstream privacy; independently confirm the provider's terms, account policies and jurisdiction. Egress/DNS restrictions must be enforced by the deployment network, not assumed from URL syntax.
 
 `examples/reviewer-openrouter.json` is a **configuration example only**, not an enabled adapter or available coding executor. The OpenRouter reviewer experiment requires a developer-approved policy update, an explicit model known to support JSON-object output, a credential in the named environment variable, and the synthetic reviewer probe. Do not copy the example into production blindly. Direct-patch or OpenCode coding executors remain proposals: they cannot bypass Aider-specific source-bound and safety gates merely by changing `tool`. See `PORTING.md`.
 
-Selected specification processing state is in [`docs/specs/STATE.json`](../../docs/specs/STATE.json); it is not inferred from this README or from run-local `READY_FOR_MAIN_REVIEW`. At present only one project workstream is selected and no parallel stage execution is supported.
+Repository checkpoint state (updated/committed only **between** source-bound runs) is in [`docs/specs/STATE.json`](../../docs/specs/STATE.json); it is not inferred from this README or from run-local `READY_FOR_MAIN_REVIEW`. Live attempt status is solely in private run evidence; `RUNNING` and `ACCEPTED` are invalid checkpoint phases in v1. Developer acceptance is external and cannot be inferred from a JSON claim. At present only one project workstream is selected and no parallel stage execution is supported.
 
 
 `tools/agent-pipeline/` provides repository-local orchestration for bounded coding workers without making a worker an architecture or acceptance authority.

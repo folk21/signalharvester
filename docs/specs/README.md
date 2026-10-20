@@ -38,7 +38,7 @@ Do not invent feature IDs in tests, classes, or specifications. Add a genuinely 
 
 ## Processing-state contract
 
-`docs/specs/STATE.json` is the **only current processing-state record** for selected specification work. Validate it with `python3 tools/specs/validate_state.py`; schema is `docs/specs/state.schema.json`. It is distinct from spec frontmatter `spec_status` (document lifecycle), run-local worker evidence and Git authority. `STATE.json` has no authority to execute a worker, accept a stage, promote Git or archive a spec. Only a developer-approved lifecycle transition may change it; update it together with a documented transition. Missing/invalid/stale state MUST be reported, not inferred from README.
+`docs/specs/STATE.json` is the **only Git-tracked processing checkpoint** for selected specification work, not a live process monitor or an acceptance receipt. Validate it with `python3 tools/specs/validate_state.py`; schema is `docs/specs/state.schema.json`. It is distinct from spec frontmatter `spec_status` (document lifecycle), run-local worker evidence and Git authority. `STATE.json` has no authority to execute a worker, accept a stage, promote Git or archive a spec. Only a developer-controlled checkpoint transition may change it. Update/commit it **between** source-bound runs, never during an initialized/running/pending-promotion run: modifying the checkout makes the immutable base dirty or changes its HEAD. In-progress runtime state belongs exclusively to private `runId` evidence. v1 deliberately forbids `RUNNING` and `ACCEPTED`; final acceptance is recorded through the existing explicit developer review and spec archival lifecycle, not a self-asserted JSON field. Missing/invalid/stale state MUST be reported, not inferred from README.
 
 `workstreams` is a list keyed by unique IDs and spec paths so a later implementation can track concurrent sub-specs without changing the shape. Current `mode: SINGLE` allows **at most one selected workstream**, and no concurrent worker/executor runs are authorized. `selectedWorkstreamId` is an information pointer, not a lock. A future MULTI policy needs separate requirements, lock ownership, CAS and tests before enablement. README and umbrella `current_focus` are navigation only and MUST link to `STATE.json`, not replicate mutable processing progress.
 
@@ -190,7 +190,7 @@ The repository-owned recovery steps are in
 1. Keep the umbrella under `docs/specs/active/spec-*.md`.
 2. Put one unresolved bounded implementation slice under `docs/specs/active/subspecs/`.
 3. Record its parent and lifecycle state in frontmatter.
-4. Update validated `docs/specs/STATE.json` on developer-approved workflow transitions; any umbrella `current_focus` is only a link/pointer and must not be used to infer approval.
+4. Update and commit validated `docs/specs/STATE.json` only at developer-controlled Git checkpoints **between** stages; never mutate it during source-bound execution or infer acceptance; any umbrella `current_focus` is only a link/pointer and must not be used to infer approval.
 5. Reference stable feature IDs from `docs/FEATURES.md` when they improve navigation.
 6. Give important normative requirements stable local IDs when tests or reviews need them.
 7. Implement and validate the slice; retain source-bound stage, check, and review evidence.

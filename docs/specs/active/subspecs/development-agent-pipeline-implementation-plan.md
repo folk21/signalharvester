@@ -686,3 +686,16 @@ evidence map; reviewers still need a separately approved code-delta source.
 Future A5 is responsible for expected branch ancestry, per-stage commits and
 final promoted commit evidence. A4.4 must not fabricate them. Never commit,
 merge, notify, auto-accept or archive active specs from this command.
+
+## A5.4a — corrective trust hardening (advisory)
+
+Requirements: AP18, AP19. Do not silently mark A5.4 accepted.
+
+1. Keep the checked-in state as a **between-run** projection; reject RUNNING and ACCEPTED. Align `runId` pattern with the runtime grammar, with no acceptance authority. Prohibit checkpoint updates on an active source-bound branch.
+2. Read structural keys/patterns/enums from `docs/specs/state.schema.json` in the stdlib validator; reserve Python logic for filesystem/stage/concurrency checks. Verify malformed and coherent-forged acceptance with independent negative fixtures.
+3. Maintain `tools/agent-pipeline/reviewer-endpoints.json` as a separately reviewed endpoint trust registry. Model policy may narrow but not extend it; never let a worker edit the registry. For future runtime SSRF isolation, require network/egress controls independently of allowlist string matching.
+4. For OpenRouter send validated `providerRouting` with explicit `only`, `data_collection=deny`, `zdr=true`, `require_parameters=true`, `allow_fallbacks=false`; reject omission, weakening and malformed slugs before an HTTP request. Verify request body against an independent synthetic transport mock and fail closed.
+5. Enforce `workerExecution.allowedModels` for legacy model overrides. Keep existing valid default-model runs working. Document a prospective WorkerExecutor interface; do not invent an untested OpenCode/direct-patch implementation.
+6. Tests must reproduce normative outcomes and security boundaries, not be rewritten to satisfy incorrect implementation. Cover security-negative and historical-defect cases, execute relevant unit, independent oracle and canonical gates, and disclose tests not executed.
+
+A5.4a does not add multi-project scheduling, Git acceptance automation or a second coding executor.
