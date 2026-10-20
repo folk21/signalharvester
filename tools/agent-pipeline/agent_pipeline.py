@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """Create and verify bounded development-agent runs with machine-readable evidence."""
 
@@ -5,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -15,6 +17,7 @@ import tempfile
 import time
 import uuid
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +36,13 @@ VALID_REVIEW_VERDICTS = {"PASS", "CHANGES_REQUIRED", "ESCALATE"}
 VALID_FINDING_SEVERITIES = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
 VALID_FINDING_STATUSES = {"OPEN", "RESOLVED"}
 RISK_ORDER = {"LOW": 1, "MODERATE": 2, "HIGH": 3, "CRITICAL": 4, "UNKNOWN": 5}
+
+PROTECTED_WORKER_CONTROL_PATHS = frozenset({
+    "run_checks.sh", "tools/agent-pipeline/pipeline-policy.json",
+    "tools/agent-pipeline/run_aider_stage.sh",
+    "docs/specs/STATE.json", "docs/specs/state.schema.json",
+    "tools/specs/validate_state.py",
+})
 
 
 def utc_now() -> str:
@@ -158,8 +168,14 @@ def validate_policy(policy: dict[str, Any]) -> None:
         if not isinstance(adapter, dict) or not all(isinstance(adapter.get(k), str) and adapter[k]
             for k in ("endpoint", "model", "apiKeyEnvironment")):
             raise ValueError("Independent review adapter is invalid")
-        if adapter["endpoint"] != "https://api.deepseek.com/chat/completions":
-            raise ValueError("Reviewer endpoint must match the reviewed HTTPS provider endpoint")
+        endpoints = adapter.get("allowedEndpoints")
+        if (not isinstance(endpoints, list) or not 1 <= len(endpoints) <= 16
+                or len(set(str(item) for item in endpoints)) != len(endpoints)
+                or any(not isinstance(item, str) or not _safe_reviewer_endpoint(item)
+                       for item in endpoints)):
+            raise ValueError("Reviewer allowedEndpoints must be a bounded list of exact public HTTPS URLs")
+        if adapter["endpoint"] not in endpoints:
+            raise ValueError("Reviewer endpoint is not in the approved endpoint allowlist")
         if not re.fullmatch(r"[A-Z][A-Z0-9_]*", adapter["apiKeyEnvironment"]):
             raise ValueError("Reviewer key must be obtained from a named environment variable")
         if not isinstance(adapter.get("timeoutSeconds"), int) or not 1 <= adapter["timeoutSeconds"] <= 300:
@@ -213,6 +229,33 @@ def validate_policy(policy: dict[str, Any]) -> None:
                 raise ValueError(f"Unsupported worker argument placeholder in: {argument}")
             if "api-key" in argument.lower():
                 raise ValueError("Worker API keys must come from the environment, not repository policy arguments")
+
+
+def _safe_reviewer_endpoint(value: str) -> bool:
+    """Reject credential-bearing, local and ambiguous HTTP endpoints in reviewed policy."""
+    if not isinstance(value, str) or any(ch.isspace() for ch in value):
+        return False
+    try:
+        parts = urllib.parse.urlsplit(value)
+        hostname = parts.hostname
+        if (parts.scheme != "https" or not hostname or parts.username is not None
+                or parts.password is not None or parts.query or parts.fragment
+                or parts.port not in (None, 443) or value != parts.geturl()):
+            return False
+        if (hostname == "localhost" or hostname.endswith(".localhost")
+                or hostname.endswith((".local", ".internal", ".test", ".invalid"))
+                or "." not in hostname or not re.fullmatch(r"[a-z0-9.-]+", hostname)):
+            return False
+        try:
+            ipaddress.ip_address(hostname)
+        except ValueError:
+            pass
+        else:
+            return False
+        return (parts.path.endswith("/chat/completions")
+                and parts.path.startswith("/") and ".." not in parts.path)
+    except ValueError:
+        return False
 
 
 def parse_version_tuple(value: str) -> tuple[int, int, int] | None:
@@ -519,6 +562,7 @@ def validate_stage_packet(repo_root: Path, packet: dict[str, Any]) -> tuple[dict
     protected = {"AGENTS.md", "README.md", "docs/specs/README.md", packet["specPath"],
                  "run_checks.sh", "run_rare_checks.sh", "tools/agent-pipeline/pipeline-policy.json",
                  "tools/agent-pipeline/gitleaks.toml"}
+    protected.update(PROTECTED_WORKER_CONTROL_PATHS)
     if plan:
         protected.add(plan)
     if any(stage_scope_contains(path, editable) for path in protected):
@@ -829,7 +873,7 @@ def run_required_check(
         ensure_worker_workspace_matches_result(repo_root, run_dir, manifest)
     worktree = execution_root(repo_root, manifest)
     if policy.get("workerExecution", {}).get("required", False):
-        protected_paths = {"run_checks.sh", "tools/agent-pipeline/pipeline-policy.json"}
+        protected_paths = PROTECTED_WORKER_CONTROL_PATHS
         changed = set(read_json(run_dir / "worker.json").get("changedFiles", []))
         if changed.intersection(protected_paths):
             raise ValueError("Worker modified required verification policy or the canonical gate")
@@ -1016,6 +1060,18 @@ def _review_request_body(model: str, packet: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+class _RejectReviewerRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward a bearer token to a redirect destination."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("Reviewer HTTP redirect is prohibited")
+
+
+def _open_reviewer_request(request: urllib.request.Request, timeout: int):
+    """Return a response context manager with redirects explicitly disabled."""
+    return urllib.request.build_opener(_RejectReviewerRedirect()).open(request, timeout=timeout)
+
+
 def _invoke_reviewer_provider(adapter: dict[str, Any], packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Perform one provider request and return validated review plus safe completion metadata."""
     key = os.environ.get(adapter["apiKeyEnvironment"])
@@ -1031,7 +1087,7 @@ def _invoke_reviewer_provider(adapter: dict[str, Any], packet: dict[str, Any]) -
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=adapter["timeoutSeconds"]) as response:
+        with _open_reviewer_request(request, timeout=adapter["timeoutSeconds"]) as response:
             raw = response.read(256 * 1024 + 1)
         phase = "envelope"
         if len(raw) > 256 * 1024:
@@ -2929,7 +2985,7 @@ def prepare_repair(
     risk = classify_risk(changed_files, policy, True)
     if risk["level"] != "LOW":
         raise ValueError("Non-LOW worker source risk requires developer intervention")
-    if any(path in ("run_checks.sh", "tools/agent-pipeline/pipeline-policy.json")
+    if any(path in PROTECTED_WORKER_CONTROL_PATHS
            or path.endswith(".gitleaksignore") for path in changed_files):
         raise ValueError("Worker modified protected verification configuration")
 

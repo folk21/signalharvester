@@ -1,3 +1,4 @@
+
 ---
 type: Specification
 title: Development agent pipeline
@@ -67,9 +68,7 @@ preflight is the default; separately authorized execution records an intent,
 runs the existing A3 cycle once and stops at promotion or escalation. A5.1
 CAS promotion and A5.2 next-stage preparation stay distinct human checkpoints.
 
-**A5.3b (packet proposed, not developer-approved):** a LOW-risk test-only
-first-stage smoke pilot for A5.3a preflight and subsequent explicit execution.
-No live run or provider-backed approval is implied.
+**A5.3b (live pilot evidence; final acceptance not inferred):** the first-stage smoke pilot completed a two-attempt worker cycle with source-bound reviewer PASS and canonical checks. The repaired evidence summary passed with the digest-validation hotfix. Reviewed CLI regression scenarios are present in the source snapshot; recorded evidence and Git integration alone do not authorize final developer acceptance.
 
 **Still planned:** unattended multi-stage scheduling/batching beyond explicit
 checkpoints, notifications (A6), and overall pipeline v1 acceptance (A7).
@@ -473,6 +472,14 @@ updates must move the sub-spec and its companion together to the archive, synchr
 owners and navigation, and fail closed on a split pair or inconsistent state. Legacy sub-specs without a
 companion are exempt from retroactive creation.
 
+### AP16 — configurable worker and independent reviewer adapters
+
+`WORKER_MODEL` and `REVIEWER_MODEL` are roles independent of executor/vendor. The developer-reviewed `pipeline-policy.json` MUST select `workerExecution.defaultModel` and `independentReview.adapter.model` independently; it MUST bind reviewer endpoint and credential variable to an approved exact HTTPS URL. Missing or unsupported adapters, URLs, model configuration, redirect responses, unsupported reviewer JSON completion or credentials MUST fail closed. The only coding executor implemented is Aider; alternative coding executors require their own reviewed adapters with equivalent isolation, Git/source, scope, preflight, verification, evidence and adversarial conformance tests before enablement. OpenRouter reviewer configuration is an optional transport experiment, not a coding executor or implicit acceptance. The repo-local Aider entry point is `tools/agent-pipeline/run_aider_stage.sh`; it MUST use existing execution/approval boundaries unchanged.
+
+### AP17 — validated processing-state register
+
+`docs/specs/STATE.json` MUST be the single repository-owned current processing-state register and validate under `docs/specs/state.schema.json` plus semantic checks in `tools/specs/validate_state.py`. It MUST reference existing active specification and stage IDs, reject duplicate identifiers, unknown fields, missing/stale paths, malformed types and undeclared concurrency; it MUST be checked in the canonical gate. README and umbrella `current_focus` are informational links only. `STATE.json` MUST NOT substitute for run evidence, explicit stage approval, Git CAS, developer acceptance or spec archival. In this slice only `SINGLE` mode is allowed. The array-based format anticipates per-subspec workstreams, but concurrent stage writers, locks and any `MULTI` mode require later separate authority and tests.
+
 ## Implementation stages
 
 - [x] **A1 — foundation:** bounded task/evidence state, required canonical check, structured independent review, conservative escalation, and mandatory main-model checkpoint.
@@ -485,8 +492,7 @@ companion are exempt from retroactive creation.
 - [ ] **A2 — worker execution and routine verification automation:**
   - [ ] **A2.1 — isolated one-shot worker (implemented, verification-pending):** create a
     branch/worktree from the immutable base commit, verify the repository-supported Aider version/CLI
-    contract and deterministic runtime prerequisites before model access, invoke Aider + the configured
-    DeepSeek model through a repository-owned adapter isolated from ambient Aider configuration,
+    contract and deterministic runtime prerequisites before model access, invoke the configured coding model through the Aider adapter isolated from ambient Aider configuration,
     preserve worker evidence plus a source-state digest, reject unexpected worker commits or post-worker
     source drift, and run later checks against the worker tree.
   - [ ] **A2.2 — repository-owned security/verification checks (implemented, verification-pending):**
@@ -530,6 +536,7 @@ companion are exempt from retroactive creation.
   serialized progression with explicit checkpoints. Require developer-initiated final `MAIN_MODEL` verification and explicit
   developer acceptance before any permitted current-state documentation synchronization or paired
   spec/companion archival; do not infer acceptance from commits.
+- [ ] **A5.4 — configurable provider transport and strict processing state (implementation patch, developer verification pending):** remove reviewer-provider URL pinning from controller code, keep the Aider executor as the only enabled coding path, select worker/reviewer models from reviewed policy, require an explicit HTTPS reviewer allowlist without bearer-token redirects, and introduce validated `docs/specs/STATE.json`. No additional executor or parallelism is authorized by these files; developer review and canonical verification remain required.
 - [ ] **A6 — evidence-backed autonomy and notifications:** permit configured batching of
   already-classified bounded, low-risk stages with explicit run/cost budgets; stop immediately at
   high-risk/unknown ownership/ambiguous stages and send actionable completion or escalation

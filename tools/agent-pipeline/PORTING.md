@@ -1,3 +1,4 @@
+
 ---
 type: Tool Guide
 title: Porting the development agent pipeline
@@ -17,6 +18,9 @@ patch. Do not copy SignalHarvester product specifications, Java module layout,
 checks, credentials, or provider settings into an unrelated codebase.
 
 ## 1. What the model should preserve
+
+**Adapter and state boundary:** never port an Aider-specific subprocess as if it were a generic worker interface. Preserve `workerExecution.tool` fail-closed until a distinct, conformance-tested adapter exists. Worker model and reviewer model are independent reviewed configuration values; reviewer endpoint selection must be explicit, allowlisted and redirect-safe. `docs/specs/STATE.json` is an optional portable pattern for processing-state bookkeeping, distinct from run evidence and authoritative spec lifecycle; do not copy its current workstream into another project. Single selected workstream is the only supported coordination mode.
+
 
 The reusable design is a set of **trust and lifecycle boundaries**, not a set
 of directory names or a particular model vendor:
@@ -64,7 +68,7 @@ of directory names or a particular model vendor:
 | Canonical verification | `./run_checks.sh`, Gradle, Java integration tests | Target's exact build/test/lint/typecheck/contract/integration commands and runtime prerequisites |
 | Security checks | pinned Gitleaks, repository-owned configuration | Approved scanner versions, scope, scan policy and reporting/redaction rules |
 | Worker | pinned Aider CLI, configured model | Supported executor/version, isolated config, edit protocol, provider approval and cost/time budgets |
-| Reviewer | DeepSeek JSON-object adapter | Independently approved provider, exact structured schema, timeouts and privacy policy; or explicit manual review workflow |
+| Reviewer | Policy-configured HTTPS JSON-object reviewer adapter | Independently approved provider, exact structured schema, timeouts and privacy policy; or explicit manual review workflow |
 | Git | `feature/*`, `agent/*`, SHA-1 full 40-character OIDs | Branch naming, object hash format, worktrees, CI protections, human authorization workflow |
 | Evidence | ignored `build/reports/agent-pipeline` and private external custody | Paths outside all cleanup tasks, retention, filesystem permissions, secure backup and incident response |
 | Risk policy | `pipeline-policy.json`, regex risk rules | Target's security, migration, infra, contract and data-loss escalations; default unknown to manual |

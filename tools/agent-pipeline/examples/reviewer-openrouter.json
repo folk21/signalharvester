@@ -1,0 +1,14 @@
+{
+  "description": "Illustrative independentReview.adapter only; copy reviewed values into pipeline-policy.json, choose a model that supports JSON object output and validate via probe-reviewer. This does NOT change the coding worker adapter.",
+  "adapter": {
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model": "REPLACE_WITH_APPROVED_JSON_MODE_MODEL",
+    "apiKeyEnvironment": "OPENROUTER_API_KEY",
+    "timeoutSeconds": 120,
+    "maxDiffBytes": 100000,
+    "allowedEndpoints": [
+      "https://api.deepseek.com/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions"
+    ]
+  }
+}

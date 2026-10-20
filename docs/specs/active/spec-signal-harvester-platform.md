@@ -1,3 +1,4 @@
+
 ---
 type: Specification
 title: SignalHarvester initial functional product specification
@@ -7,6 +8,8 @@ spec_status: active
 current_focus: subspecs/backend-observability-intelligence.md
 ---
 # SignalHarvester initial functional product specification
+
+`current_focus` above is a product-navigation hint, not the selected agent execution state. The current specification-processing record is [`../STATE.json`](../STATE.json).
 
 ## Status
 

@@ -1,3 +1,4 @@
+
 """Deterministic regression coverage for the development-agent pipeline foundation."""
 
 from __future__ import annotations
@@ -794,6 +795,7 @@ class AutomaticReviewTest(unittest.TestCase):
                 "endpoint": "http://localhost:80/api", "model": "reviewer",
                 "apiKeyEnvironment": "REVIEW_API_KEY", "timeoutSeconds": 120,
                 "maxDiffBytes": 100000,
+                "allowedEndpoints": ["https://api.deepseek.com/chat/completions", "https://openrouter.ai/api/v1/chat/completions"],
             }},
         }
         with self.assertRaisesRegex(ValueError, "endpoint"):
@@ -802,6 +804,45 @@ class AutomaticReviewTest(unittest.TestCase):
         policy["independentReview"]["adapter"]["maxDiffBytes"] = 1000000
         with self.assertRaisesRegex(ValueError, "maxDiffBytes"):
             agent_pipeline.validate_policy(policy)
+
+    def test_configurable_reviewer_endpoint_requires_approved_https_url(self):
+        policy = {
+            "schemaVersion": 1,
+            "requiredChecks": [{"name": "canonical", "command": ["true"]}],
+            "independentReview": {"adapter": {
+                "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+                "model": "another/review-model",
+                "apiKeyEnvironment": "OPENROUTER_API_KEY",
+                "timeoutSeconds": 120, "maxDiffBytes": 100000,
+                "allowedEndpoints": ["https://openrouter.ai/api/v1/chat/completions"],
+            }},
+        }
+        agent_pipeline.validate_policy(policy)
+        adapter = policy["independentReview"]["adapter"]
+        for endpoint in ("https://localhost/chat/completions",
+                         "http://openrouter.ai/api/v1/chat/completions",
+                         "https://openrouter.ai.evil.test/api/v1/chat/completions",
+                         "https://user:secret@openrouter.ai/api/v1/chat/completions",
+                         "https://127.0.0.1/chat/completions",
+                         "https://openrouter.ai/api/v1/chat/completions?key=secret"):
+            with self.subTest(endpoint=endpoint):
+                adapter["allowedEndpoints"] = [endpoint]
+                adapter["endpoint"] = endpoint
+                with self.assertRaisesRegex(ValueError, "allowedEndpoints"):
+                    agent_pipeline.validate_policy(policy)
+        adapter["allowedEndpoints"] = ["https://openrouter.ai/api/v1/chat/completions"]
+        adapter["endpoint"] = "https://new-reviewer.example.org/chat/completions"
+        with self.assertRaisesRegex(ValueError, "allowlist"):
+            agent_pipeline.validate_policy(policy)
+
+    def test_reviewer_redirect_handler_fails_closed(self):
+        import urllib.request
+        handler = agent_pipeline._RejectReviewerRedirect()
+        request = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions",
+                                         headers={"Authorization": "Bearer synthetic"})
+        with self.assertRaisesRegex(ValueError, "redirect"):
+            handler.redirect_request(request, None, 302, "synthetic", {},
+                                     "https://untrusted.example.org/collect")
 
     def test_review_payload_requires_schema_and_structured_findings(self):
         review = {"schemaVersion": 1, "reviewer": "fresh-context", "verdict": "PASS", "findings": []}
@@ -881,7 +922,7 @@ class AutomaticReviewTest(unittest.TestCase):
                 with mock.patch.object(agent_pipeline, "ensure_worker_workspace_matches_result", return_value=worker), \
                      mock.patch.object(agent_pipeline, "derive_state", return_value=(agent_pipeline.STATE_REVIEW_REQUIRED, [])), \
                      mock.patch.object(agent_pipeline.subprocess, "run", return_value=completed), \
-                     mock.patch.object(agent_pipeline.urllib.request, "urlopen", side_effect=transport), \
+                     mock.patch.object(agent_pipeline, "_open_reviewer_request", side_effect=transport), \
                      mock.patch.dict(os.environ, {"REVIEWER_FAKE_TEST_KEY": "not-a-real-secret"}):
                     with self.assertRaisesRegex(ValueError, "Independent reviewer failed"):
                         agent_pipeline.run_independent_review(root, run_dir, manifest, policy)
@@ -942,7 +983,7 @@ class AutomaticReviewTest(unittest.TestCase):
             def read(self, *_):
                 return json.dumps(response_body).encode()
 
-        with mock.patch.object(agent_pipeline.urllib.request, "urlopen", return_value=Response()), \
+        with mock.patch.object(agent_pipeline, "_open_reviewer_request", return_value=Response()), \
              mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
             with self.assertRaises(agent_pipeline.ReviewerProviderFailure) as error:
                 agent_pipeline._invoke_reviewer_provider(policy, {"diff": "synthetic"})
@@ -970,7 +1011,7 @@ class AutomaticReviewTest(unittest.TestCase):
             def read(self, *_):
                 return json.dumps(envelope).encode()
 
-        with mock.patch.object(agent_pipeline.urllib.request, "urlopen", return_value=Response()), \
+        with mock.patch.object(agent_pipeline, "_open_reviewer_request", return_value=Response()), \
              mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
             review, diagnostic = agent_pipeline._invoke_reviewer_provider(adapter, {"diff": "synthetic"})
         self.assertEqual("CHANGES_REQUIRED", review["verdict"])
@@ -994,7 +1035,7 @@ class AutomaticReviewTest(unittest.TestCase):
             def read(self, *_):
                 return json.dumps(response_body).encode()
 
-        with mock.patch.object(agent_pipeline.urllib.request, "urlopen", return_value=Response()), \
+        with mock.patch.object(agent_pipeline, "_open_reviewer_request", return_value=Response()), \
              mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
             with self.assertRaises(agent_pipeline.ReviewerProviderFailure) as error:
                 agent_pipeline._invoke_reviewer_provider(policy, {"diff": "synthetic"})
@@ -3382,6 +3423,15 @@ class AgentPipelineStagePacketTest(unittest.TestCase):
                      "tools/agent-pipeline/pipeline-policy.json", "../secret", "/tmp/elsewhere"):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 agent_pipeline.validate_stage_packet(self.root, {**self.packet, "editablePaths": [path]})
+
+    def test_stage_packet_rejects_editable_processing_state(self) -> None:
+        # The current processing-state register and its validator cannot be worker-editable.
+        for path in ("docs/specs/STATE.json", "docs/specs/state.schema.json",
+                     "tools/specs/validate_state.py", "tools/agent-pipeline/run_aider_stage.sh"):
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "protected"):
+                owning = "docs/specs" if path.startswith("docs/specs/") else "tools"
+                packet = {**self.packet, "owningPaths": [owning], "editablePaths": [path]}
+                agent_pipeline.validate_stage_packet(self.root, packet)
 
     # Cross-module read context must be a published contract or API, not private implementation.
     def test_stage_packet_rejects_private_cross_module_context(self) -> None:

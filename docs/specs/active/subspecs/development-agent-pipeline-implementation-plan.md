@@ -1,3 +1,4 @@
+
 ---
 type: Implementation Guide
 title: Development agent pipeline implementation guidance
@@ -14,6 +15,24 @@ This is **advisory guidance** for [`development-agent-pipeline.md`](development-
 - Owning documentation: `tools/agent-pipeline/README.md`; verification conventions: `docs/TESTS.md`.
 - No product feature ID applies to this contributor-tooling workflow. Do not invent one.
 - No other module's private implementation is needed for this stage.
+
+## Adapter portability and processing state — advisory plan
+
+1. Keep `tools/agent-pipeline/agent_pipeline.py` as deterministic orchestration. Treat Aider command/environment/preflight functions as one adapter, not a vendor-neutral interface. Use the wrapper `run_aider_stage.sh` for this implemented path. Preserve fail-closed behavior for every other `workerExecution.tool`.
+2. Configure coding model via `pipeline-policy.json:workerExecution.defaultModel`; configure reviewer model and endpoint via `independentReview.adapter`. Keep API keys in named environment variables. Never embed provider credentials in stage packets, logs, or source.
+3. OpenRouter reviewer transport is an opt-in example only: select an approved HTTPS endpoint and model, run synthetic `probe-reviewer`, then test against an approved non-sensitive task. Unsupported structured JSON response blocks, never falls back to PASS.
+4. Use `docs/specs/STATE.json` as developer-maintained processing-state record; validate against `state.schema.json` plus repository semantic checks. Do not use README/current_focus, a worker verdict or an automation run as state mutation authority.
+5. Before a second executor adapter or multi-project/multi-stage concurrent runner, specify equivalence of execution isolation, source digest, retries, redaction, failure classification, worker scopes, locks and acceptance checkpoints; add independent adversarial oracles before enabling.
+
+## A5.4 — configurable provider and strict state register (advisory)
+
+Requirements: AP16, AP17. Owning paths: `tools/agent-pipeline/`, `tools/specs/`, `docs/specs/`, and the root specification-navigation documents. Candidate source edits in `agent_pipeline.py` are limited to reviewer endpoint validation/transport: keep exact approved HTTPS URLs in policy; reject a reviewer URL outside that list; prohibit bearer-token HTTP redirects. Existing JSON reviewer output validation and Aider preflight/evidence MUST be preserved. Coding model: `workerExecution.defaultModel`. Reviewer model: `independentReview.adapter.model`; no code literal is a provider authority.
+
+Implementation sequence: (1) add a local Aider-only launch script forwarding controller flags without additional approval; (2) permit a second reviewer endpoint in reviewed policy as opt-in experiment while keeping initial reviewer settings; (3) create `docs/specs/STATE.json` with `schemaVersion=1`, selected workstream, exact existing spec/stage, processing phase and no inferred developer decision; (4) add a read-only stdlib validator with duplicate-key, invalid type/path, absent stage and unauthorized concurrent-workstream rejection; (5) wire validation and deterministic tests to `run_checks.sh`; (6) update only ownership/navigation and current pipeline contract docs.
+
+Independent scenarios: `P4-01` valid DeepSeek reviewer policy remains accepted; `P4-02` an OpenRouter Chat Completions reviewer endpoint and different model are configurable without changing worker model; `P4-03` non-HTTPS, loopback, embedded-credential, unapproved and malformed endpoint fail closed; `P4-04` a redirect cannot forward bearer credentials; `P4-05` malformed/duplicate JSON, missing active spec, unknown stage and fabricated developer acceptance in `STATE.json` are rejected; `P4-06` an extra progressing workstream or `MULTI` mode is rejected; `P4-07` full canonical checks and existing reviewer/worker oracles preserve the old evidence/approval behavior. A live OpenRouter provider call is opt-in, billable and never a prerequisite for deterministic tests.
+
+Deferred: other coding executors, actual cross-project scheduling, multi-writer locking, and automatic authoritative state transitions. Treat those as separate reviewed feature slices, not implied support.
 
 ## A4 — delegation packets, context and evidence
 
