@@ -699,3 +699,62 @@ Requirements: AP18, AP19. Do not silently mark A5.4 accepted.
 6. Tests must reproduce normative outcomes and security boundaries, not be rewritten to satisfy incorrect implementation. Cover security-negative and historical-defect cases, execute relevant unit, independent oracle and canonical gates, and disclose tests not executed.
 
 A5.4a does not add multi-project scheduling, Git acceptance automation or a second coding executor.
+
+
+## A6.1 — read-only bounded batch planning (advisory)
+
+Requirements: AP12, AP20. Do not start A6 unattended execution while
+A5.4/A5.4a acceptance and provider trust review are still separate checkpoints.
+Only candidate file changes: `agent_pipeline.py`, `tests/test_agent_pipeline.py`,
+`benchmarks/batch_plan_oracle.py`, and owning pipeline docs/spec/plan. Protect
+`docs/specs/STATE.json`, executor policy, reviewer trust registry, and existing
+Git promotion implementation against accidental scope expansion.
+
+### Suggested implementation sequence
+
+1. Add a pure/report-only `plan_stage_batch(...)` around the existing
+   `inspect_stage_sequence(...)`. Preserve its source/task/policy/receipt checks.
+2. Accept explicit roster, exact branch and current prepared run; require
+   integer bounded `maxStages`, `maxProviderRequests`, `maxCostCents` (minor
+   currency units). Reject bool, zero, negative and oversized values.
+3. Validate membership of future stage IDs in the same active normative spec.
+   Do **not** synthesize future packets, mark them validated, or claim a
+   future base commit; post-promotion changes may invalidate context.
+4. Return an in-memory JSON report containing exact current stage identity,
+   ordered selected stages and `NOT_PREPARED` markers for later stages.
+   Set `budget.enforced=false`, `executionSupported=false`,
+   `requiresExternalAcceptance=true`; never persist a batch intent in A6.1.
+5. Expose CLI `plan-batch` without `--execute`. No model invocation, Git ref
+   mutation, workspace allocation, notification or files under runs-root.
+
+Illustrative report (not a persisted authority):
+
+```json
+{
+  "action": "AWAIT_SEPARATE_STAGE_AUTHORIZATION",
+  "selectedStages": [
+    {"stage": "S1", "packetStatus": "CURRENT_SOURCE_BOUND", "executionAuthorized": false},
+    {"stage": "S2", "packetStatus": "NOT_PREPARED", "executionAuthorized": false}
+  ],
+  "budget": {"maxStages": 2, "maxProviderRequests": 6, "maxCostCents": 500, "enforced": false},
+  "executionSupported": false,
+  "requiresExternalAcceptance": true
+}
+```
+
+### Verification scenarios
+
+| ID | Setup / action | Required result |
+|---|---|---|
+| BP-01 | Prepared, clean and source-bound first stage; request two stages | Read-only JSON; only current packet is bound; later stage NOT_PREPARED; no files, refs or worktrees change |
+| BP-02 | Supply bool/zero/negative/out-of-range budget | Reject before side effects; no auto-clamping |
+| BP-03 | Corrupt predecessor evidence, pass stale HEAD, or invent a spec stage | Reject, preserving run evidence and Git state |
+| BP-04 | Invoke real CLI twice; attempt `--execute` | Deterministic preview; unknown execution flag rejected; no Aider or provider calls |
+
+Run `python3 -B -m unittest discover -s tools/agent-pipeline/tests -p 'test_*.py'`
+then `python3 tools/agent-pipeline/benchmarks/batch_plan_oracle.py --candidate tools/agent-pipeline/agent_pipeline.py`
+and finally `./run_checks.sh` on the developer's full checkout. Independent
+oracle tests must assert the approved behavior rather than mirror private
+implementation details. Future A6 executor design must specify how provider
+requests, money usage, locks, notifications, recovery and stage checkpoints
+are actually enforced; A6.1 does **not** imply any of these are working.

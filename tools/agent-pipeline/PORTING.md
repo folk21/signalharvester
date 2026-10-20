@@ -209,3 +209,14 @@ validate the attempt-specific task bytes and worker snapshot agreement; do not
 replace this check with manifest-digest equality for all attempts, nor accept
 arbitrary worker-supplied digests. Keep raw repair feedback and source files in
 private evidence custody, not in compact public summaries.
+
+
+### A6.1 dry-run batch envelope portability
+
+`plan-batch` is a read-only planning projection over A5.3 source-bound
+preflight. Reuse its fail-closed Git identity, active spec stage roster and
+previous-stage evidence; do not convert an unvalidated future stage into an
+approved task packet. Proposed stage/call/cost ceilings in this report have
+`enforced=false`: no runtime accounting exists until a separately reviewed
+A6 executor and cost-metering adapter are implemented. Preserve explicit
+per-stage human checkpoints and no automatic Git transition in all ports.

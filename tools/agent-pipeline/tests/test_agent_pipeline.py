@@ -3321,6 +3321,97 @@ class StageSequenceDriverTest(SerializedStagePreparationTest):
         with self.assertRaises(SystemExit), mock.patch("sys.stderr"):
             parser.parse_args(["drive-stage", "--run-id", "next"])
 
+    # AP20/BP-01: preflight binds the current stage, never grants future-stage authority.
+    def test_a61_batch_plan_is_read_only_and_future_stages_unvalidated(self) -> None:
+        run_dir, manifest = self.prepared()
+        before = {child.name: child.read_bytes() for child in run_dir.iterdir() if child.is_file()}
+        ref_before = self.git(self.repo, "rev-parse", "HEAD")
+        with (mock.patch.object(agent_pipeline, "execute_worker", side_effect=AssertionError("worker invoked")),
+              mock.patch.object(agent_pipeline, "promote_verified_stage", side_effect=AssertionError("promoted"))):
+            outcome = agent_pipeline.plan_stage_batch(
+                self.repo, run_dir, manifest, self.policy_path, self.policy,
+                expected_stages=["A5.1", "A5.2"], feature_branch="feature/verified-stage",
+                previous_run_dir=self.run_dir,
+                max_stages=1, max_provider_requests=3, max_cost_cents=100,
+            )
+        self.assertEqual("AWAIT_SEPARATE_STAGE_AUTHORIZATION", outcome["action"])
+        self.assertFalse(outcome["executionSupported"])
+        self.assertFalse(outcome["budget"]["enforced"])
+        self.assertEqual(["A5.2"], [item["stage"] for item in outcome["selectedStages"]])
+        self.assertFalse(outcome["selectedStages"][0]["executionAuthorized"])
+        self.assertEqual(before, {child.name: child.read_bytes() for child in run_dir.iterdir() if child.is_file()})
+        self.assertEqual(ref_before, self.git(self.repo, "rev-parse", "HEAD"))
+        self.assertFalse((run_dir / "sequence-intent.json").exists())
+
+    # AP20/BP-02: budgets reject zero, boolean, oversized and negative values.
+    def test_a61_batch_plan_rejects_invalid_budgets_without_mutations(self) -> None:
+        run_dir, manifest = self.prepared()
+        base = {"max_stages": 1, "max_provider_requests": 2, "max_cost_cents": 100}
+        for name, value in (("max_stages", True), ("max_stages", 0),
+                            ("max_stages", 9), ("max_provider_requests", 129),
+                            ("max_provider_requests", -1), ("max_cost_cents", 0),
+                            ("max_cost_cents", 1_000_001)):
+            with self.subTest(name=name, value=value), self.assertRaisesRegex(ValueError, "Batch"):
+                agent_pipeline.plan_stage_batch(
+                    self.repo, run_dir, manifest, self.policy_path, self.policy,
+                    expected_stages=["A5.1", "A5.2"], feature_branch="feature/verified-stage",
+                    previous_run_dir=self.run_dir, **{**base, name: value},
+                )
+        self.assertFalse((run_dir / "sequence-intent.json").exists())
+
+    # AP20/BP-03: roster must be present in the active normative spec, not invented by a planner.
+    def test_a61_batch_plan_rejects_fabricated_stage_and_stale_checkout(self) -> None:
+        run_dir, manifest = self.prepared()
+        options = {"expected_stages": ["A5.1", "A5.2"],
+                   "feature_branch": "feature/verified-stage", "previous_run_dir": self.run_dir,
+                   "max_stages": 1, "max_provider_requests": 2, "max_cost_cents": 100}
+        # A later-stage run is already bound to its original roster. Use a
+        # distinct first-stage packet to isolate the unknown-stage check.
+        first_packet = {**self.packet, "stageId": "A5.1", "requirementIds": ["AP12"]}
+        packet, context = agent_pipeline.validate_stage_packet(self.repo, first_packet)
+        first_dir = agent_pipeline.initialize_stage_run(
+            self.repo, self.runs_root, self.policy_path, self.policy,
+            packet, context, "batch-first-stage",
+        )
+        first_manifest = agent_pipeline.read_json(first_dir / "manifest.json")
+        two_stage_report = agent_pipeline.plan_stage_batch(
+            self.repo, first_dir, first_manifest, self.policy_path, self.policy,
+            **{**options, "expected_stages": ["A5.1", "A5.2"],
+               "previous_run_dir": None, "max_stages": 2})
+        self.assertEqual(
+            ["CURRENT_SOURCE_BOUND", "NOT_PREPARED"],
+            [item["packetStatus"] for item in two_stage_report["selectedStages"]],
+        )
+        self.assertTrue(all(not item["executionAuthorized"] for item in two_stage_report["selectedStages"]))
+        with self.assertRaisesRegex(ValueError, "absent from the active specification"):
+            agent_pipeline.plan_stage_batch(
+                self.repo, first_dir, first_manifest, self.policy_path, self.policy,
+                **{**options, "expected_stages": ["A5.1", "A5.2", "MADE_UP_STAGE"],
+                   "previous_run_dir": None})
+        (self.repo / "unexpected.tmp").write_text("dirty", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "checkout"):
+            agent_pipeline.plan_stage_batch(
+                self.repo, run_dir, manifest, self.policy_path, self.policy, **options)
+        self.assertFalse((run_dir / "sequence-intent.json").exists())
+
+    # AP20/BP-04: real CLI must stay inspection-only, with no --execute option.
+    def test_a61_batch_plan_cli_is_read_only(self) -> None:
+        run_dir, _ = self.prepared()
+        command = [sys.executable, str(MODULE_PATH), "--repo-root", str(self.repo),
+                   "--policy", str(self.policy_path), "--runs-root", str(self.runs_root),
+                   "plan-batch", "--run-id", run_dir.name,
+                   "--stage", "A5.1", "--stage", "A5.2",
+                   "--feature-branch", "feature/verified-stage",
+                   "--previous-run-dir", str(self.run_dir),
+                   "--max-stages", "1", "--max-provider-requests", "2", "--max-cost-cents", "100"]
+        out = subprocess.run(command, text=True, capture_output=True, check=False)
+        self.assertEqual(0, out.returncode, out.stderr)
+        self.assertFalse(json.loads(out.stdout)["executionSupported"])
+        bad = subprocess.run([*command, "--execute"], text=True, capture_output=True, check=False)
+        self.assertNotEqual(0, bad.returncode)
+        self.assertFalse((run_dir / "sequence-intent.json").exists())
+        self.assertFalse((run_dir / "worker.json").exists())
+
     def _first_stage_cli(self, run_id: str) -> list[str]:
         """Build the real drive-stage CLI for a single-stage first-stage roster."""
         return [sys.executable, str(MODULE_PATH), "--repo-root", str(self.repo),

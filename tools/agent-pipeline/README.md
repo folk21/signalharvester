@@ -33,6 +33,31 @@ The implemented controller currently provides source-bound Stage Task Packets, i
 
 For an adaptation to a different repository, start with the [Porting Guide](PORTING.md). It separates reusable safety contracts from SignalHarvester-specific configuration and provides a target-project model request.
 
+## A6.1 read-only batch planning (no execution)
+
+A6.1 adds a dry-run `plan-batch` command for an already initialized
+LOW/BOUNDED source-bound stage. It reuses A5.3 `drive-stage` preflight and
+accepts a complete ordered roster plus proposed ceilings. For example,
+substitute an existing prepared run and its exact branch and stage IDs:
+
+```bash
+python3 tools/agent-pipeline/agent_pipeline.py \
+  --runs-root "$HOME/.signalharvester/agent-pipeline-runs" \
+  plan-batch --run-id existing-prepared-run \
+  --stage A5.3b --stage A6.1 \
+  --feature-branch feature/reviewed-work \
+  --max-stages 2 --max-provider-requests 8 --max-cost-cents 500
+```
+
+For a later stage add `--previous-run-dir /absolute/path/to/prior/evidence`.
+Use only roster/branch identities from the actual approved stage packet; the
+above names are illustrative. The report marks future stages `NOT_PREPARED`.
+Its `budget.enforced=false` is intentional: **it does not reserve or meter
+money, authorize model calls, execute workers, issue notifications, prepare
+future packets, promote commits, or record developer acceptance**. There is
+no `--execute` option. A6 runtime batching must be separately designed and
+approved before this output can become executable authority.
+
 ## Current boundary
 
 The pipeline owns:

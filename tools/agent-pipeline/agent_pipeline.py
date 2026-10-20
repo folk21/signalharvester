@@ -2604,6 +2604,61 @@ def inspect_stage_sequence(repo_root: Path, run_dir: Path, manifest: dict[str, A
     }
 
 
+
+def plan_stage_batch(repo_root: Path, run_dir: Path, manifest: dict[str, Any],
+                     policy_path: Path, policy: dict[str, Any], *,
+                     expected_stages: list[str], feature_branch: str,
+                     max_stages: int, max_provider_requests: int,
+                     max_cost_cents: int,
+                     previous_run_dir: Path | None = None) -> dict[str, Any]:
+    """A6.1 read-only envelope; validate only the current prepared stage.
+
+    Future stages cannot be source-bound before predecessor promotion. Budgets
+    here are proposed ceilings for a future executor, not enforced allowances.
+    """
+    for field, value, maximum in (
+        ("max_stages", max_stages, SEQUENCE_MAX_STAGES),
+        ("max_provider_requests", max_provider_requests, 128),
+        ("max_cost_cents", max_cost_cents, 1_000_000),
+    ):
+        if type(value) is not int or not 1 <= value <= maximum:
+            raise ValueError(f"Batch {field} must be a positive bounded integer")
+
+    current = inspect_stage_sequence(
+        repo_root, run_dir, manifest, policy_path, policy,
+        expected_stages=expected_stages, feature_branch=feature_branch,
+        previous_run_dir=previous_run_dir,
+    )
+    # Stage existence is independent of whether a future stage packet exists.
+    spec_path = manifest["specPath"]
+    spec_text = (repo_root / spec_path).read_text(encoding="utf-8")
+    for stage in expected_stages:
+        if not re.search(r"(?<![A-Za-z0-9_.-])" + re.escape(stage) + r"(?![A-Za-z0-9_.-])", spec_text):
+            raise ValueError(f"Batch roster contains a stage absent from the active specification: {stage}")
+
+    remaining = expected_stages[current["stageIndex"]:]
+    selected = remaining[:max_stages]
+    if not selected:
+        raise ValueError("Batch requires a current selected stage")
+    stages = [
+        {"stage": stage, "packetStatus": "CURRENT_SOURCE_BOUND" if offset == 0 else "NOT_PREPARED",
+         "executionAuthorized": False}
+        for offset, stage in enumerate(selected)
+    ]
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "action": "AWAIT_SEPARATE_STAGE_AUTHORIZATION",
+        "runId": current["runId"], "featureBranch": current["featureBranch"],
+        "baseCommit": current["baseCommit"],
+        "stageIndex": current["stageIndex"],
+        "expectedStages": list(expected_stages), "selectedStages": stages,
+        "budget": {"maxStages": max_stages, "maxProviderRequests": max_provider_requests,
+                   "maxCostCents": max_cost_cents, "enforced": False},
+        "executionSupported": False,
+        "requiresExternalAcceptance": True,
+    }
+
+
 def drive_stage_sequence(repo_root: Path, worktrees_root: Path, run_dir: Path,
                          manifest: dict[str, Any], policy_path: Path,
                          policy: dict[str, Any], *, expected_stages: list[str],
@@ -3645,6 +3700,19 @@ def build_parser() -> argparse.ArgumentParser:
                                  help="Opt in to one worker/check/review cycle; never promote")
     sequence_parser.add_argument("--developer-approved", action="store_true")
 
+    batch_parser = subparsers.add_parser(
+        "plan-batch", help="A6.1 read-only bounded batch envelope; never executes or promotes stages"
+    )
+    batch_parser.add_argument("--run-id", required=True)
+    batch_parser.add_argument("--stage", action="append", required=True,
+                              help="Complete approved stage roster in order")
+    batch_parser.add_argument("--feature-branch", required=True)
+    batch_parser.add_argument("--previous-run-dir",
+                              help="Absolute preserved predecessor evidence for later stages")
+    batch_parser.add_argument("--max-stages", type=int, required=True)
+    batch_parser.add_argument("--max-provider-requests", type=int, required=True)
+    batch_parser.add_argument("--max-cost-cents", type=int, required=True)
+
     reviewer_parser = subparsers.add_parser("run-review", help="Invoke independent fresh-context reviewer")
     reviewer_parser.add_argument("--run-id", required=True)
 
@@ -3764,6 +3832,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(report, indent=2, sort_keys=True))
             return code
+
+        if args.command == "plan-batch":
+            report = plan_stage_batch(
+                repo_root, run_dir, manifest, policy_path, policy,
+                expected_stages=args.stage, feature_branch=args.feature_branch,
+                previous_run_dir=(None if args.previous_run_dir is None
+                                  else Path(args.previous_run_dir)),
+                max_stages=args.max_stages,
+                max_provider_requests=args.max_provider_requests,
+                max_cost_cents=args.max_cost_cents,
+            )
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 0
 
         if args.command == "promote-stage":
             receipt = promote_verified_stage(

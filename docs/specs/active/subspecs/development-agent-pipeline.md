@@ -70,6 +70,10 @@ CAS promotion and A5.2 next-stage preparation stay distinct human checkpoints.
 
 **A5.3b (live pilot evidence; final acceptance not inferred):** the first-stage smoke pilot completed a two-attempt worker cycle with source-bound reviewer PASS and canonical checks. The repaired evidence summary passed with the digest-validation hotfix. Reviewed CLI regression scenarios are present in the source snapshot; recorded evidence and Git integration alone do not authorize final developer acceptance.
 
+**A6.1 (implementation patch; verification-pending):** read-only batch planning
+with declared budgets and explicitly unprepared future stages. It cannot
+execute, enforce spending, notify, change Git refs, or accept a sub-spec.
+
 **Still planned:** unattended multi-stage scheduling/batching beyond explicit
 checkpoints, notifications (A6), and overall pipeline v1 acceptance (A7).
 Historical failed pilots, including
@@ -488,6 +492,24 @@ companion are exempt from retroactive creation.
 
 `docs/specs/STATE.json` MUST be the single repository-owned current processing-state register and validate under `docs/specs/state.schema.json` plus semantic checks in `tools/specs/validate_state.py`. It MUST reference existing active specification and stage IDs, reject duplicate identifiers, unknown fields, missing/stale paths, malformed types and undeclared concurrency; it MUST be checked in the canonical gate. README and umbrella `current_focus` are informational links only. `STATE.json` MUST NOT substitute for run evidence, explicit stage approval, Git CAS, developer acceptance or spec archival. In this slice only `SINGLE` mode is allowed. The array-based format anticipates per-subspec workstreams, but concurrent stage writers, locks and any `MULTI` mode require later separate authority and tests.
 
+### AP20 — bounded batch preflight without execution authority
+
+An A6 batch planner MUST accept an explicit ordered stage roster, a prepared
+source-bound LOW/BOUNDED current stage, exact `feature/*` HEAD and predecessor
+provenance when applicable. It MUST require positive bounded ceilings for stage
+count, provider requests, and cost, and reject malformed budgets before any
+side effect. It MUST reuse A5.3a's fail-closed read-only stage preflight,
+confirm roster stage identifiers exist in the owning active specification, and
+mark every *future* stage as NOT_PREPARED until its own source-bound packet and
+promoted predecessor have been validated. A budget in a dry-run report is a
+proposed ceiling, **not** measured usage or proof of runtime enforcement.
+
+A6.1 MUST NOT invoke models, checks, worktree creation, Git mutation, runtime
+notifications, stage preparation, automated retry, or acceptance. No execute
+flag or implicit authorization is supported. Future A6 work requires separate
+reviewed execution-time budget accounting, interruption recovery, resource
+locks and stage-by-stage developer authority before enabling batching.
+
 ## Implementation stages
 
 - [x] **A1 — foundation:** bounded task/evidence state, required canonical check, structured independent review, conservative escalation, and mandatory main-model checkpoint.
@@ -546,6 +568,11 @@ companion are exempt from retroactive creation.
   spec/companion archival; do not infer acceptance from commits.
 - [ ] **A5.4 — configurable provider transport and strict processing state (implementation patch, developer verification pending):** remove reviewer-provider URL pinning from controller code, keep the Aider executor as the only enabled coding path, select worker/reviewer models from reviewed policy, require an explicit HTTPS reviewer allowlist without bearer-token redirects, and introduce validated `docs/specs/STATE.json`. No additional executor or parallelism is authorized by these files; developer review and canonical verification remain required.
 - [ ] **A5.4a — state & provider trust hardening (corrective patch, verification pending):** enforce checkpoint-only tracked state, reject unverified RUNNING/ACCEPTED claims, match run-ID grammar to runtime, separate reviewed reviewer endpoint registry from model policy, require explicit OpenRouter upstream routing/privacy controls in request bytes, constrain legacy worker model overrides, and document a conformance-tested WorkerExecutor boundary. For behavioral fixes, independently defined negative/regression oracles MUST check the original defect; tests MUST NOT be weakened merely to obtain PASS.
+- [ ] **A6.1 — read-only batch envelope (implementation patch, verification-pending):**
+  compute a bounded, source-linked candidate roster from one fresh current
+  stage and explicit stage/call/cost ceilings. Never call a model or Git
+  mutator; future stages remain unvalidated, budgets are not yet enforced.
+  This is NOT unattended scheduling or evidence of final acceptance.
 - [ ] **A6 — evidence-backed autonomy and notifications:** permit configured batching of
   already-classified bounded, low-risk stages with explicit run/cost budgets; stop immediately at
   high-risk/unknown ownership/ambiguous stages and send actionable completion or escalation
