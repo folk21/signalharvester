@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "executionMode": "ONE_STAGE_MANUAL",
+  "maxStagesPerInvocation": 1,
+  "stagePackets": [
+    {
+      "specPath": "docs/specs/active/subspecs/development-agent-pipeline-stateful-orchestration.md",
+      "stageId": "A6.2",
+      "packetPath": "tools/agent-pipeline/examples/a62-state-resolver-stage-packet.json"
+    }
+  ]
+}

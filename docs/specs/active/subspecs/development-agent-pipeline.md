@@ -74,6 +74,14 @@ CAS promotion and A5.2 next-stage preparation stay distinct human checkpoints.
 with declared budgets and explicitly unprepared future stages. It cannot
 execute, enforce spending, notify, change Git refs, or accept a sub-spec.
 
+**A6.2–A6.6 (new GENSPEC, not implemented):** source-bound STATE-driven selection,
+checkpoint recovery, subsequently authorized bounded batches, notifications and
+accepted paired archival are defined in the separate active
+`development-agent-pipeline-stateful-orchestration.md` sub-spec and its same-directory
+implementation plan. Only A6.2 has a prepared LOW/BOUNDED worker packet; it is
+read-only and cannot launch workers or update STATE. The one-stage limit and the
+existing A5 developer-approval boundaries remain effective.
+
 **Still planned:** unattended multi-stage scheduling/batching beyond explicit
 checkpoints, notifications (A6), and overall pipeline v1 acceptance (A7).
 Historical failed pilots, including
