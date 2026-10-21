@@ -1,4 +1,3 @@
-
 ---
 type: Project Overview
 title: SignalHarvester
@@ -131,6 +130,7 @@ Backend [`docs/INSTALLATION.md`](docs/INSTALLATION.md) and [`docs/USAGE.md`](doc
 | Running and using the backend | [`docs/USAGE.md`](docs/USAGE.md) |
 | Configuration | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) |
 | Tests and validation | [`docs/TESTS.md`](docs/TESTS.md) |
+| Troubleshooting and evidence | [`docs/DIAGNOSTIC.md`](docs/DIAGNOSTIC.md) |
 | Coverage and code quality | [`docs/QUALITY.md`](docs/QUALITY.md) |
 | Roadmap | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Change history | [`CHANGELOG.md`](CHANGELOG.md) |
