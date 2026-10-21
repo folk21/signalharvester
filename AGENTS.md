@@ -1,4 +1,3 @@
-
 # AGENTS.md
 
 This file defines repository-wide development rules for coding agents working on SignalHarvester.
@@ -239,6 +238,7 @@ Each topic should have one authoritative owner:
 | Backend installation | `docs/INSTALLATION.md` |
 | Backend usage/operations | `docs/USAGE.md` |
 | Test strategy and commands | `docs/TESTS.md` |
+| Diagnostic entry point and evidence handling | `docs/DIAGNOSTIC.md` |
 | Coverage and code-quality tooling | `docs/QUALITY.md` |
 | Development-agent orchestration | `tools/agent-pipeline/README.md` |
 | Future work | `docs/ROADMAP.md` |
