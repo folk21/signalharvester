@@ -5,9 +5,9 @@
   "workstreams": [
     {
       "id": "contributor-agent-pipeline",
-      "specPath": "docs/specs/active/subspecs/development-agent-pipeline.md",
-      "stageId": "A5.4a",
-      "phase": "DESIGN",
+      "specPath": "docs/specs/active/subspecs/development-agent-pipeline-stateful-orchestration.md",
+      "stageId": "A6.2",
+      "phase": "READY_TO_DELEGATE",
       "runId": null,
       "developerDecision": "UNRECORDED"
     }
