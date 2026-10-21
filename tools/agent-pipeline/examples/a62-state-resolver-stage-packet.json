@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "stageId": "A6.2",
+  "specPath": "docs/specs/active/subspecs/development-agent-pipeline-stateful-orchestration.md",
+  "implementationPlanPath": "docs/specs/active/subspecs/development-agent-pipeline-stateful-orchestration-implementation-plan.md",
+  "requirementIds": ["SO1", "SO2", "SO3", "SO4", "SO6", "SO7", "SO9", "SO10", "SO11"],
+  "featureIds": [],
+  "owningPaths": ["tools/agent-pipeline"],
+  "editablePaths": [
+    "tools/agent-pipeline/agent_pipeline.py",
+    "tools/agent-pipeline/tests/test_agent_pipeline.py"
+  ],
+  "contextPaths": [
+    "tools/agent-pipeline/orchestrator-config.json",
+    "tools/specs/validate_state.py",
+    "docs/specs/state.schema.json",
+    "tools/agent-pipeline/README.md"
+  ],
+  "riskLevel": "LOW",
+  "delegation": "BOUNDED",
+  "task": "Implement ONLY normative stage A6.2 of the selected active state-driven orchestration sub-spec. Add a read-only `resolve-state` CLI command to the existing controller. Load the committed orchestrator-config.json strictly, reuse the actual STATE schema/semantic validator, require one selected READY_TO_DELEGATE workstream with null runId and UNRECORDED developerDecision, cross-check the exact matching stage packet through the existing stage packet validator, require clean named feature/* Git checkout, and return the normative stable JSON projection with source/config/packet SHA identities. Invalid states/paths/configurations must fail closed without Git, source, evidence or provider side effects. Do not implement execution, state writes, promotion, recovery, multi-stage batch, notification, schema changes, acceptance or archival. Do not modify specs, config, policy, README, tests outside the declared editable path, or any current-state files. Add deterministic tests derived from SR-01...SR-14; include genuine negative/boundary cases, preserve all existing controller behavior, and do not weaken any test solely to pass. Identify any need to alter protected control files as an explicit escalation instead of editing them.",
+  "completionCriteria": [
+    "`resolve-state` returns source-bound READY JSON only for validated matching STATE/config/approved packet on clean feature/* with exact hashes and explicit non-execution flags.",
+    "Malformed/duplicate/unsafe config, mismatched packet, non-ready STATE, stale/dirty/incorrect Git and path escape fail closed without side effects.",
+    "Positive, negative, boundary and regression tests preserve pre-existing A5.3 drive-stage and A6.1 plan-batch semantics; test expectations are sourced from SO1-SO11 and SR cases, not modified to fit code.",
+    "The worker changes only agent_pipeline.py and tests/test_agent_pipeline.py; no STATE, specs, policy, config, package dependencies or Git commits.",
+    "Run focused checks and required canonical checks; preserve source-bound worker, check and independent review evidence for developer MAIN_MODEL review."
+  ]
+}
