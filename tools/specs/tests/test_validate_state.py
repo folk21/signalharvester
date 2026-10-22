@@ -1,3 +1,4 @@
+
 import copy
 import json
 import tempfile
@@ -64,8 +65,35 @@ class StateContractTest(unittest.TestCase):
             self.validate(value)
         value["workstreams"][1]["phase"] = "PAUSED"
         self.validate(value)
+        value["workstreams"][1]["phase"] = "ON_HOLD"
+        self.validate(value)
         value["mode"] = "MULTI"
         with self.assertRaisesRegex(ValueError, "Only SINGLE"):
+            self.validate(value)
+
+    def test_on_hold_workstream_cannot_be_selected(self):
+        value = copy.deepcopy(self.payload)
+        value["workstreams"][0]["phase"] = "ON_HOLD"
+        with self.assertRaisesRegex(ValueError, "ON_HOLD workstream cannot be selected"):
+            self.validate(value)
+
+    def test_product_numeric_stage_id_and_hold_checkpoint(self):
+        product = self.repo / "docs/specs/active/subspecs/backend-observability-intelligence.md"
+        product.write_text("### 6E6 — persisted alert verification\n", encoding="utf-8")
+        value = copy.deepcopy(self.payload)
+        value["workstreams"][0]["phase"] = "ON_HOLD"
+        value["workstreams"].append({
+            "id": "product-observability", "specPath": "docs/specs/active/subspecs/backend-observability-intelligence.md",
+            "stageId": "6E6", "phase": "DESIGN", "runId": None,
+            "developerDecision": "UNRECORDED",
+        })
+        value["selectedWorkstreamId"] = "product-observability"
+        self.assertEqual("6E6", self.validate(value)["workstreams"][1]["stageId"])
+        product.write_text("### 6E5 — completed\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "not found"):
+            self.validate(value)
+        value["workstreams"][1]["stageId"] = "6E6!"
+        with self.assertRaisesRegex(ValueError, "Invalid stageId"):
             self.validate(value)
 
     def test_repository_schema_matches_code_enums_and_required_fields(self):
@@ -130,3 +158,4 @@ class StateContractTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

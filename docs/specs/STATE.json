@@ -1,13 +1,21 @@
 {
   "schemaVersion": 1,
   "mode": "SINGLE",
-  "selectedWorkstreamId": "contributor-agent-pipeline",
+  "selectedWorkstreamId": "product-operational-intelligence",
   "workstreams": [
     {
       "id": "contributor-agent-pipeline",
       "specPath": "docs/specs/active/subspecs/development-agent-pipeline-stateful-orchestration.md",
       "stageId": "A6.2",
-      "phase": "READY_TO_DELEGATE",
+      "phase": "ON_HOLD",
+      "runId": null,
+      "developerDecision": "UNRECORDED"
+    },
+    {
+      "id": "product-operational-intelligence",
+      "specPath": "docs/specs/active/subspecs/backend-observability-intelligence.md",
+      "stageId": "6E6",
+      "phase": "DESIGN",
       "runId": null,
       "developerDecision": "UNRECORDED"
     }

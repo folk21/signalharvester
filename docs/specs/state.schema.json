@@ -46,7 +46,7 @@
           },
           "stageId": {
             "type": "string",
-            "pattern": "^[A-Z][A-Za-z0-9.]*$"
+            "pattern": "^[A-Z0-9][A-Za-z0-9.]*$"
           },
           "phase": {
             "enum": [
@@ -55,9 +55,10 @@
               "READY_FOR_REVIEW",
               "BLOCKED",
               "PAUSED",
+              "ON_HOLD",
               "AWAITING_DEVELOPER_DECISION"
             ],
-            "description": "Developer-maintained repository checkpoint, not live execution state. RUNNING and ACCEPTED are deliberately unsupported."
+            "description": "Developer-maintained Git checkpoint, not runtime or acceptance. ON_HOLD is a deferred non-selected workstream; PAUSED is a temporarily stopped workstream. RUNNING and ACCEPTED are unsupported."
           },
           "runId": {
             "oneOf": [
