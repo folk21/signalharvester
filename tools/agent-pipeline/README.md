@@ -65,6 +65,30 @@ The implemented controller currently provides source-bound Stage Task Packets, i
 
 For an adaptation to a different repository, start with the [Porting Guide](PORTING.md). It separates reusable safety contracts from SignalHarvester-specific configuration and provides a target-project model request.
 
+## Python controller layout
+
+`agent_pipeline.py` remains the stable executable CLI and import compatibility facade.
+The implementation is grouped under `agent_pipeline_lib/` by responsibility:
+
+- `cli_parser.py` and `cli_main.py` own argument parsing and command dispatch.
+- `policy.py`, `reviewer_policy.py`, `stage_scope.py`, and `core.py` own validation and immutable trust boundaries.
+- `git_ops.py`, `run_paths.py`, `runs.py`, `workspaces.py`, and `stage_init.py` own Git identities, paths, run lifecycle, and worktrees.
+- `aider_runtime.py`, `worker_exec.py`, `repair.py`, and `cycle.py` own worker integration and bounded retries.
+- `checks.py`, `reviewer_contract.py`, `reviewer_transport.py`, and `status.py` own verification, review, and run-state derivation.
+- `worker_attempts.py`, `evidence_common.py`, `deviations.py`, `run_evidence.py`, `subspec_evidence.py`, `subspec_export.py`, `handoff.py`, `promotion.py`, and `stage_sequence.py` own immutable evidence, handoff, promotion, and sequencing.
+
+Subsystem imports are acyclic. Dependencies on peer subsystems are module-qualified,
+so security- and evidence-sensitive operations remain discoverable at call sites.
+The facade preserves previously exposed Python names, but tests and future code
+should patch dependencies in their owning subsystem rather than patching aliases
+on the entry-point module. CLI module imports suppress Python bytecode writes to
+keep read-only invocations from creating `__pycache__` inside the repository.
+
+This is a structural refactor, not A6 stage progress or a new execution authority.
+The existing CLI, JSON evidence, policy, source binding, security guards, and
+manual developer approval remain unchanged. Worker execution remains paused
+unless the developer separately reauthorizes it.
+
 ## A6.1 read-only batch planning (no execution)
 
 A6.1 adds a dry-run `plan-batch` command for an already initialized
