@@ -655,13 +655,13 @@ class AgentPipelineCliTest(unittest.TestCase):
                       "requiredChecks": [{"name": "gitleaks", "kind": "gitleaks"}],
                       "riskRules": [{"level": "LOW", "patterns": ["^docs/"]}],
                       "escalationCategories": ["SECURITY"]}
-            with mock.patch.object(agent_pipeline, "ensure_source_matches_worker_result"):
+            with mock.patch.object(agent_pipeline.workspaces_module, "ensure_source_matches_worker_result"):
                 with self.assertRaisesRegex(ValueError, "Security scan"):
                     agent_pipeline.prepare_repair(root, run_dir, {}, policy)
             agent_pipeline.write_json(run_dir / "checks.json", {"checks": [{"name": "canonical", "status": "PASS"}]})
             agent_pipeline.write_json(run_dir / "review.json", {"verdict": "CHANGES_REQUIRED", "findings": [
                 {"status": "OPEN", "category": "SECURITY", "severity": "LOW", "id": "REV-1"}]})
-            with mock.patch.object(agent_pipeline, "ensure_source_matches_worker_result"):
+            with mock.patch.object(agent_pipeline.workspaces_module, "ensure_source_matches_worker_result"):
                 with self.assertRaisesRegex(ValueError, "escalation findings"):
                     agent_pipeline.prepare_repair(root, run_dir, {}, policy)
 
@@ -877,7 +877,7 @@ class AutomaticReviewTest(unittest.TestCase):
             (run_dir / "checks.json").write_text(json.dumps({"checks": []}))
             manifest = {"runId": "check", "repository": {"baseCommit": "abc"}}
             policy = {"independentReview": {"adapter": {"model": "deepseek-chat"}}}
-            with mock.patch.object(agent_pipeline, "ensure_worker_workspace_matches_result",
+            with mock.patch.object(agent_pipeline.workspaces_module, "ensure_worker_workspace_matches_result",
                                    return_value={"status": "FAIL"}):
                 with self.assertRaisesRegex(ValueError, "Successful worker"):
                     agent_pipeline.run_independent_review(run_dir, run_dir, manifest, policy)
@@ -938,10 +938,10 @@ class AutomaticReviewTest(unittest.TestCase):
                         raise response
                     return Response()
 
-                with mock.patch.object(agent_pipeline, "ensure_worker_workspace_matches_result", return_value=worker), \
-                     mock.patch.object(agent_pipeline, "derive_state", return_value=(agent_pipeline.STATE_REVIEW_REQUIRED, [])), \
+                with mock.patch.object(agent_pipeline.workspaces_module, "ensure_worker_workspace_matches_result", return_value=worker), \
+                     mock.patch.object(agent_pipeline.status_module, "derive_state", return_value=(agent_pipeline.STATE_REVIEW_REQUIRED, [])), \
                      mock.patch.object(agent_pipeline.subprocess, "run", return_value=completed), \
-                     mock.patch.object(agent_pipeline, "_open_reviewer_request", side_effect=transport), \
+                     mock.patch.object(agent_pipeline.reviewer_transport_module, "_open_reviewer_request", side_effect=transport), \
                      mock.patch.dict(os.environ, {"REVIEWER_FAKE_TEST_KEY": "not-a-real-secret"}):
                     with self.assertRaisesRegex(ValueError, "Independent reviewer failed"):
                         agent_pipeline.run_independent_review(root, run_dir, manifest, policy)
@@ -985,7 +985,7 @@ class AutomaticReviewTest(unittest.TestCase):
                 sent = json.loads(request.data)
                 self.assertEqual(routing, sent["provider"])
                 raise ValueError("synthetic transport stop")
-            with mock.patch.object(agent_pipeline, "_open_reviewer_request", side_effect=inspect_request):
+            with mock.patch.object(agent_pipeline.reviewer_transport_module, "_open_reviewer_request", side_effect=inspect_request):
                 with self.assertRaises(agent_pipeline.ReviewerProviderFailure):
                     agent_pipeline._invoke_reviewer_provider(adapter, {"diff": "synthetic"})
         self.assertNotIn("provider", payload)  # No routing leakage to non-OpenRouter body.
@@ -1053,7 +1053,7 @@ class AutomaticReviewTest(unittest.TestCase):
             def read(self, *_):
                 return json.dumps(response_body).encode()
 
-        with mock.patch.object(agent_pipeline, "_open_reviewer_request", return_value=Response()), \
+        with mock.patch.object(agent_pipeline.reviewer_transport_module, "_open_reviewer_request", return_value=Response()), \
              mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
             with self.assertRaises(agent_pipeline.ReviewerProviderFailure) as error:
                 agent_pipeline._invoke_reviewer_provider(policy, {"diff": "synthetic"})
@@ -1081,7 +1081,7 @@ class AutomaticReviewTest(unittest.TestCase):
             def read(self, *_):
                 return json.dumps(envelope).encode()
 
-        with mock.patch.object(agent_pipeline, "_open_reviewer_request", return_value=Response()), \
+        with mock.patch.object(agent_pipeline.reviewer_transport_module, "_open_reviewer_request", return_value=Response()), \
              mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
             review, diagnostic = agent_pipeline._invoke_reviewer_provider(adapter, {"diff": "synthetic"})
         self.assertEqual("CHANGES_REQUIRED", review["verdict"])
@@ -1105,7 +1105,7 @@ class AutomaticReviewTest(unittest.TestCase):
             def read(self, *_):
                 return json.dumps(response_body).encode()
 
-        with mock.patch.object(agent_pipeline, "_open_reviewer_request", return_value=Response()), \
+        with mock.patch.object(agent_pipeline.reviewer_transport_module, "_open_reviewer_request", return_value=Response()), \
              mock.patch.dict(os.environ, {"FAKE_REVIEWER_KEY": "synthetic-secret"}):
             with self.assertRaises(agent_pipeline.ReviewerProviderFailure) as error:
                 agent_pipeline._invoke_reviewer_provider(policy, {"diff": "synthetic"})
@@ -1116,7 +1116,7 @@ class AutomaticReviewTest(unittest.TestCase):
         policy = {"independentReview": {"adapter": {"model": "deepseek-chat"}}}
         fake_review = {"schemaVersion": 1, "reviewer": "deepseek-chat",
                        "verdict": "PASS", "findings": []}
-        with mock.patch.object(agent_pipeline, "_invoke_reviewer_provider",
+        with mock.patch.object(agent_pipeline.reviewer_transport_module, "_invoke_reviewer_provider",
                                return_value=(fake_review, {"completionCode": "STOP"})) as provider:
             result = agent_pipeline.probe_independent_reviewer(policy)
         self.assertEqual("PASS", result["status"])
@@ -1131,7 +1131,7 @@ class AutomaticReviewTest(unittest.TestCase):
         policy = {"independentReview": {"adapter": {"model": "deepseek-chat"}}}
         failure = agent_pipeline.ReviewerProviderFailure({
             "reasonCode": "INVALID_REVIEW_SCHEMA", "schemaFailureCode": "FINDINGS_ARRAY"})
-        with mock.patch.object(agent_pipeline, "_invoke_reviewer_provider", side_effect=failure):
+        with mock.patch.object(agent_pipeline.reviewer_transport_module, "_invoke_reviewer_provider", side_effect=failure):
             result = agent_pipeline.probe_independent_reviewer(policy)
         self.assertEqual({"status": "FAIL", "probeOnly": True,
                           "reasonCode": "INVALID_REVIEW_SCHEMA",
@@ -1216,7 +1216,7 @@ class AutomaticCycleTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "no-diff", "print('ok')")
             reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
-            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline.reviewer_transport_module, "run_independent_review", reviewer):
                 self.assertEqual(0, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
             cycle = agent_pipeline.read_json(evidence / "cycle.json")
             self.assertEqual("READY_FOR_MAIN_REVIEW", cycle["status"])
@@ -1233,7 +1233,7 @@ class AutomaticCycleTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", "print('ok')")
             reviewer, calls = self.fake_reviewer(evidence, ["CHANGES_REQUIRED", "PASS"])
-            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline.reviewer_transport_module, "run_independent_review", reviewer):
                 self.assertEqual(0, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
             self.assertEqual(["CHANGES_REQUIRED", "PASS"], calls)
             self.assertTrue((evidence / "attempt-1-review.json").exists())
@@ -1259,7 +1259,7 @@ class AutomaticCycleTest(unittest.TestCase):
                     "There were failing tests\\nDocker connection refused'); sys.exit(1)")
                 root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", command)
                 reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
-                with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+                with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline.reviewer_transport_module, "run_independent_review", reviewer):
                     result = agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
                 cycle = agent_pipeline.read_json(evidence / "cycle.json")
                 if infrastructure:
@@ -1279,7 +1279,7 @@ class AutomaticCycleTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "always-no-diff", "print('ok')")
             reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
-            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline.reviewer_transport_module, "run_independent_review", reviewer):
                 self.assertEqual(1, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
             self.assertEqual("REPAIR_BUDGET_EXHAUSTED", agent_pipeline.read_json(evidence / "cycle.json")["reasonCode"])
             self.assertEqual(4, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
@@ -1434,7 +1434,7 @@ class AutomaticCycleTest(unittest.TestCase):
             )
             root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", command)
             reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
-            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline.reviewer_transport_module, "run_independent_review", reviewer):
                 result = agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
             self.assertEqual(0, result)
             self.assertEqual(2, agent_pipeline.read_json(evidence / "worker.json")["attempt"])
@@ -1451,7 +1451,7 @@ class AutomaticCycleTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "review", "print('ok')")
             with mock.patch.dict(os.environ, env), mock.patch.object(
-                agent_pipeline, "run_independent_review", side_effect=ValueError("invalid reviewer schema")
+                agent_pipeline.reviewer_transport_module, "run_independent_review", side_effect=ValueError("invalid reviewer schema")
             ) as reviewer:
                 with self.assertRaisesRegex(ValueError, "invalid reviewer schema"):
                     agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
@@ -1479,7 +1479,7 @@ class AutomaticCycleTest(unittest.TestCase):
                 })
                 return review
             with mock.patch.dict(os.environ, env), mock.patch.object(
-                agent_pipeline, "run_independent_review", security_review
+                agent_pipeline.reviewer_transport_module, "run_independent_review", security_review
             ):
                 with self.assertRaisesRegex(ValueError, "escalation findings"):
                     agent_pipeline.run_automated_cycle(root, evidence, manifest, policy)
@@ -1505,7 +1505,7 @@ class AutomaticCycleTest(unittest.TestCase):
                      "print('> Task :modules:analysis:test FAILED\\nThere were failing tests'); sys.exit(1)")
             root, evidence, manifest, policy, env = self.prepare_cycle(Path(td), "no-progress", check)
             reviewer, calls = self.fake_reviewer(evidence, ["PASS"])
-            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline, "run_independent_review", reviewer):
+            with mock.patch.dict(os.environ, env), mock.patch.object(agent_pipeline.reviewer_transport_module, "run_independent_review", reviewer):
                 self.assertEqual(1, agent_pipeline.run_automated_cycle(root, evidence, manifest, policy))
             self.assertEqual("WORKER_EXECUTION_FAILURE", agent_pipeline.read_json(evidence / "cycle.json")["reasonCode"])
             worker = agent_pipeline.read_json(evidence / "worker.json")
@@ -2973,7 +2973,7 @@ class GuardedStagePromotionTest(unittest.TestCase):
                 self.git(self.repo, "branch", "-f", "feature/verified-stage", self.parent)
                 raise ValueError("Git promotion operation update-ref failed")
             return original(root, *args, index=index)
-        with mock.patch.object(agent_pipeline, "_promotion_git", side_effect=racing_git):
+        with mock.patch.object(agent_pipeline.promotion_module, "_promotion_git", side_effect=racing_git):
             with self.assertRaises(ValueError):
                 self.promote()
         self.assertTrue((self.run_dir / "promotion-intent.json").is_file())
@@ -3217,9 +3217,9 @@ class StageSequenceDriverTest(SerializedStagePreparationTest):
     def test_a53_one_cycle_stops_at_promotion_checkpoint(self) -> None:
         run_dir, manifest = self.prepared()
         ref_before = self.git(self.repo, "rev-parse", "HEAD")
-        with (mock.patch.object(agent_pipeline, "prepare_worker_workspace") as workspace,
-              mock.patch.object(agent_pipeline, "run_automated_cycle", return_value=0) as cycle,
-              mock.patch.object(agent_pipeline, "update_status", return_value={
+        with (mock.patch.object(agent_pipeline.workspaces_module, "prepare_worker_workspace") as workspace,
+              mock.patch.object(agent_pipeline.cycle_module, "run_automated_cycle", return_value=0) as cycle,
+              mock.patch.object(agent_pipeline.status_module, "update_status", return_value={
                   "state": "READY_FOR_MAIN_REVIEW"})):
             result, code = self.drive(run_dir, manifest, execute=True, developer_approved=True)
         self.assertEqual(0, code)
@@ -3234,9 +3234,9 @@ class StageSequenceDriverTest(SerializedStagePreparationTest):
 
     def test_a53_failed_cycle_preserves_escalation_checkpoint(self) -> None:
         run_dir, manifest = self.prepared()
-        with (mock.patch.object(agent_pipeline, "prepare_worker_workspace"),
-              mock.patch.object(agent_pipeline, "run_automated_cycle", return_value=1),
-              mock.patch.object(agent_pipeline, "update_status", return_value={"state": "BLOCKED"})):
+        with (mock.patch.object(agent_pipeline.workspaces_module, "prepare_worker_workspace"),
+              mock.patch.object(agent_pipeline.cycle_module, "run_automated_cycle", return_value=1),
+              mock.patch.object(agent_pipeline.status_module, "update_status", return_value={"state": "BLOCKED"})):
             result, code = self.drive(run_dir, manifest, execute=True, developer_approved=True)
         self.assertEqual(2, code)
         self.assertEqual("ESCALATE_TO_DEVELOPER", result["action"])
@@ -3244,7 +3244,7 @@ class StageSequenceDriverTest(SerializedStagePreparationTest):
 
     def test_a53_interrupted_execution_is_not_replayed(self) -> None:
         run_dir, manifest = self.prepared()
-        with mock.patch.object(agent_pipeline, "prepare_worker_workspace", side_effect=KeyboardInterrupt):
+        with mock.patch.object(agent_pipeline.workspaces_module, "prepare_worker_workspace", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 self.drive(run_dir, manifest, execute=True, developer_approved=True)
         self.assertTrue((run_dir / "sequence-intent.json").exists())
@@ -3326,8 +3326,8 @@ class StageSequenceDriverTest(SerializedStagePreparationTest):
         run_dir, manifest = self.prepared()
         before = {child.name: child.read_bytes() for child in run_dir.iterdir() if child.is_file()}
         ref_before = self.git(self.repo, "rev-parse", "HEAD")
-        with (mock.patch.object(agent_pipeline, "execute_worker", side_effect=AssertionError("worker invoked")),
-              mock.patch.object(agent_pipeline, "promote_verified_stage", side_effect=AssertionError("promoted"))):
+        with (mock.patch.object(agent_pipeline.worker_exec_module, "execute_worker", side_effect=AssertionError("worker invoked")),
+              mock.patch.object(agent_pipeline.promotion_module, "promote_verified_stage", side_effect=AssertionError("promoted"))):
             outcome = agent_pipeline.plan_stage_batch(
                 self.repo, run_dir, manifest, self.policy_path, self.policy,
                 expected_stages=["A5.1", "A5.2"], feature_branch="feature/verified-stage",
@@ -3584,6 +3584,18 @@ class AgentPipelineStagePacketTest(unittest.TestCase):
                      "tools/agent-pipeline/pipeline-policy.json", "../secret", "/tmp/elsewhere"):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 agent_pipeline.validate_stage_packet(self.root, {**self.packet, "editablePaths": [path]})
+
+    def test_stage_packet_rejects_modular_controller_paths(self) -> None:
+        """A worker cannot edit source modules that implement its own scope checks."""
+        module = self.root / "tools/agent-pipeline/agent_pipeline_lib/core.py"
+        module.parent.mkdir(parents=True)
+        module.write_text("# Controller security module\n", encoding="utf-8")
+        for path in ("tools/agent-pipeline/agent_pipeline_lib/core.py",
+                     "tools/agent-pipeline/agent_pipeline_lib/"):
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "protected"):
+                agent_pipeline.validate_stage_packet(
+                    self.root, {**self.packet, "editablePaths": [path]}
+                )
 
     def test_stage_packet_rejects_editable_processing_state(self) -> None:
         # The current processing-state register and its validator cannot be worker-editable.
