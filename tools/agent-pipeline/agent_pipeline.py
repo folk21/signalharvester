@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """Create and verify bounded development-agent runs with machine-readable evidence."""
 
@@ -43,7 +42,7 @@ PROTECTED_WORKER_CONTROL_PATHS = frozenset({
     "run_checks.sh", "tools/agent-pipeline/pipeline-policy.json",
     "tools/agent-pipeline/run_aider_stage.sh", "tools/agent-pipeline/reviewer-endpoints.json",
     "docs/specs/STATE.json", "docs/specs/state.schema.json",
-    "tools/specs/validate_state.py",
+    "tools/specs/validate_state.py", "tools/agent-pipeline/aider_context.py",
 })
 
 
@@ -210,6 +209,8 @@ def validate_policy(policy: dict[str, Any]) -> None:
                 or any(not isinstance(value, str) or not value.strip() for value in allowed_models)
                 or len(set(allowed_models)) != len(allowed_models) or default_model not in allowed_models):
             raise ValueError("workerExecution.allowedModels must be a bounded set including defaultModel")
+        if worker.get("contextProfile") is not None:
+            _aider_context_functions()["validate_context_profile"](worker["contextProfile"])
         supported_versions = worker.get("supportedVersions")
         versions_valid = isinstance(supported_versions, list) and bool(supported_versions)
         if versions_valid:
@@ -346,10 +347,22 @@ def build_aider_environment() -> tuple[dict[str, str], list[str]]:
     return environment, removed
 
 
+def _aider_context_functions() -> dict[str, Any]:
+    """Load the opt-in adapter without imports or bytecode writes in the repository."""
+    source = Path(__file__).with_name("aider_context.py")
+    if not source.is_file() or source.is_symlink():
+        raise ValueError("Required Aider context adapter source is missing or unsafe")
+    namespace: dict[str, Any] = {"__name__": "_aider_context", "__file__": str(source)}
+    exec(compile(source.read_bytes(), str(source), "exec"), namespace)
+    return namespace
+
+
 def configured_aider_flags(worker_policy: dict[str, Any]) -> list[str]:
     """Return the CLI switches whose presence is required by the repository-owned adapter."""
     flags = {argument for argument in worker_policy["arguments"] if argument.startswith("--")}
     flags.add("--read")
+    if worker_policy.get("contextProfile") is not None:
+        flags.update(("--map-tokens", "--aiderignore"))
     return sorted(flags)
 
 
@@ -2866,7 +2879,10 @@ def execution_root(repo_root: Path, manifest: dict[str, Any]) -> Path:
     return path
 
 
-def build_aider_command(policy: dict[str, Any], manifest: dict[str, Any], run_dir: Path) -> list[str]:
+def build_aider_command(
+    policy: dict[str, Any], manifest: dict[str, Any], run_dir: Path,
+    *, worktree: Path | None = None,
+) -> list[str]:
     """Build the repository-owned one-shot Aider command without embedding API keys."""
     worker_policy = policy.get("workerExecution")
     if not isinstance(worker_policy, dict):
@@ -2901,11 +2917,22 @@ def build_aider_command(policy: dict[str, Any], manifest: dict[str, Any], run_di
     for read_file in read_files:
         arguments.extend(["--read", read_file])
     if contract is not None:
-        for path in contract["editablePaths"]:
-            if not path.endswith("/"):
-                # Worktree-relative edit paths are appended only for existing files.
-                # New paths remain discoverable through the task and repository map.
-                arguments.append(path)
+        editable = [path for path in contract["editablePaths"] if not path.endswith("/")]
+    else:
+        editable = []
+    profile = worker_policy.get("contextProfile")
+    if profile is not None:
+        if worktree is None:
+            raise ValueError("Selective Aider context requires the exact worker worktree")
+        functions = _aider_context_functions()
+        flags, selected, _ = functions["prepare_context_flags"](
+            profile, worktree, run_dir, editable
+        )
+        arguments.extend(flags)
+        arguments.extend(selected)
+    else:
+        # Historical packets keep their exact legacy invocation/evidence semantics.
+        arguments.extend(editable)
     return [worker_policy["executable"], *arguments]
 
 
@@ -3000,7 +3027,7 @@ def execute_worker(
     preflight = preflight_aider(
         worktree, run_dir, worker_policy, worker_environment, removed_aider_environment
     )
-    command = build_aider_command(policy, manifest, run_dir)
+    command = build_aider_command(policy, manifest, run_dir, worktree=worktree)
     if task_override is not None:
         task_flag = command.index("--message-file")
         command[task_flag + 1] = str(task_override.resolve())

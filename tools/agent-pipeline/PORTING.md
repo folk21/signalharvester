@@ -1,4 +1,3 @@
-
 ---
 type: Tool Guide
 title: Porting the development agent pipeline
@@ -220,3 +219,16 @@ approved task packet. Proposed stage/call/cost ceilings in this report have
 `enforced=false`: no runtime accounting exists until a separately reviewed
 A6 executor and cost-metering adapter are implemented. Preserve explicit
 per-stage human checkpoints and no automatic Git transition in all ports.
+
+### Aider initial-context profile (opt-in adapter policy)
+
+When adapting this repository, keep **editable authorization**, **initial chat
+file selection**, and **repository map visibility** as distinct concepts.
+The `SELECTIVE_REPO_MAP` adapter uses `--map-tokens`, `--aiderignore` and a
+per-file byte threshold; the last setting does not enforce API token budgets.
+Check supported Aider CLI switches before provider access, bind the reviewed
+policy to each run, and keep context artifacts out of the worker worktree.
+Aider may ask to add a larger file later. Do not interpret ignore rules or
+`--subtree-only` as a security sandbox. Never drop owning contracts or normative
+requirements merely to reduce tokens. Retain legacy execution for fixtures
+whose stage packets do not configure selective context.

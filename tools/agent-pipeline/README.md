@@ -1,4 +1,3 @@
-
 ---
 type: Tool Guide
 title: Development agent pipeline
@@ -28,6 +27,39 @@ Repository checkpoint state (updated/committed only **between** source-bound run
 `tools/agent-pipeline/` provides repository-local orchestration for bounded coding workers without making a worker an architecture or acceptance authority.
 
 The goal is to remove routine manual coordination while making omissions visible and fail-closed. Repository rules, active specifications, deterministic checks, and independent review remain authoritative regardless of which model executes a task.
+
+### Selective Aider context (repository-controlled)
+
+`pipeline-policy.json:workerExecution.contextProfile` enables `SELECTIVE_REPO_MAP`
+for **new** worker attempts. Aider receives a bounded `--map-tokens` budget and
+an explicit, run-local `--aiderignore` generated from reviewed directory-prefix
+patterns. The orchestrator initially supplies exact editable files only when
+they are at most `maxInitialEditableBytes` (currently 20 KiB) each. Larger
+allowed files remain available through the Aider repository map; Aider may
+request their full content later. **This is not a hard token/cost ceiling** and
+must not be described as one.
+
+`editablePaths` in the immutable Stage Task Packet continues to authorize
+**all and only** permitted changes. The size threshold changes initial chat
+selection, **not** authorization. Required root rules, normative specification,
+companion implementation plan and owning context remain passed by `--read` and
+are bound by their original SHA-256 evidence. `--read` supplies full content,
+not a compressed function map. Aider's repository map is advisory and cannot
+enforce private read restrictions or changed-file scope.
+
+The run-local ignore file is outside the worker worktree; it is generated afresh
+for each invocation, and `--aiderignore`/`--map-tokens` are checked during pinned
+Aider CLI preflight. An absent `contextProfile` retains legacy invocation for
+old fixtures and policies. No `--subtree-only` is enabled at this stage because
+Aider runs from the worktree root and required cross-tree documents must remain
+visible. Aider Architect Mode is not enabled (the main model already owns design).
+
+A6.2 blocked runs are **not** resumed or promoted by changing this policy.
+To use the new profile, start an independently approved run at a clean, committed
+source checkpoint; preserve the old run/evidence for review. In case of a context
+problem, inspect `worker-attempt-N.json.command`, the private run-local
+`aider.context.ignore`, Aider preflight and worker logs. Context optimization
+never overrides `STATE.json`, verification or developer acceptance.
 
 The implemented controller currently provides source-bound Stage Task Packets, isolated Aider worker runs, bounded repair, ordered checks, independent reviewer invocation, private evidence, guarded one-stage promotion and explicit checkpointed sequencing. No other coding executor or unattended multi-stage scheduling is implemented. Acceptance history belongs to the [active specification](../../docs/specs/active/subspecs/development-agent-pipeline.md), and the current selected stage belongs to [`STATE.json`](../../docs/specs/STATE.json). The detailed advisory design belongs in its [implementation plan](../../docs/specs/active/subspecs/development-agent-pipeline-implementation-plan.md).
 
@@ -137,7 +169,7 @@ python3 tools/agent-pipeline/agent_pipeline.py prepare-worker --run-id my-review
 python3 tools/agent-pipeline/agent_pipeline.py run-cycle --run-id my-reviewed-stage-01
 ```
 
-The controller resolves root rules, active spec, advisory companion, owning README/contract, applicable local `AGENTS.md`, and explicitly requested public cross-module context. Aider receives these files with `--read`; exact existing editable files are supplied as editable arguments. Required context and the packet are bound by SHA-256 to the run evidence, then checked against the base repository and isolated worktree before later commands. `worker.json` fails if actual tracked/untracked changes include a path outside the approved exact-file or explicit `directory/` scope, a symlink escape, or an altered read-only input. Required checks/review cannot accept that failed worker attempt. Directory authorization is rejected if it includes protected rules/spec/policy files. A stage packet cannot authorize editing an unrelated owning area by omission.
+The controller resolves root rules, active spec, advisory companion, owning README/contract, applicable local `AGENTS.md`, and explicitly requested public cross-module context. Aider receives these files with `--read`; with the selective context profile, only existing editable files within the configured initial-size threshold are supplied as edit arguments (legacy mode supplies all exact editable files). Required context and the packet are bound by SHA-256 to the run evidence, then checked against the base repository and isolated worktree before later commands. `worker.json` fails if actual tracked/untracked changes include a path outside the approved exact-file or explicit `directory/` scope, a symlink escape, or an altered read-only input. Required checks/review cannot accept that failed worker attempt. Directory authorization is rejected if it includes protected rules/spec/policy files. A stage packet cannot authorize editing an unrelated owning area by omission.
 
 This is **edit acceptance enforcement**, not an OS filesystem or model-reading sandbox. Aider's repository map may still inspect other source files; do not use this mode to expose secrets or restrict confidential read access. The A4.1 packet does not yet infer the complete implementation plan from Markdown, verify human approval cryptographically, schedule multiple stages, or autonomously commit changes. Material implementation-plan deviations still require explicit worker explanation and developer/main-model review.
 

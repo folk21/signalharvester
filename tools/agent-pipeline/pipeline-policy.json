@@ -136,6 +136,15 @@
     ],
     "allowedModels": [
       "deepseek/deepseek-chat"
-    ]
+    ],
+    "contextProfile": {
+      "mode": "SELECTIVE_REPO_MAP",
+      "mapTokens": 2048,
+      "maxInitialEditableBytes": 20480,
+      "ignorePatterns": [
+        "build/",
+        "docs/specs/archive/"
+      ]
+    }
   }
 }
