@@ -1,4 +1,5 @@
 
+
 ---
 type: Specification Guide
 title: Change specifications
@@ -40,7 +41,7 @@ Do not invent feature IDs in tests, classes, or specifications. Add a genuinely 
 
 `docs/specs/STATE.json` is the **only Git-tracked processing checkpoint** for selected specification work, not a live process monitor or an acceptance receipt. Validate it with `python3 tools/specs/validate_state.py`; schema is `docs/specs/state.schema.json`. It is distinct from spec frontmatter `spec_status` (document lifecycle), run-local worker evidence and Git authority. `STATE.json` has no authority to execute a worker, accept a stage, promote Git or archive a spec. Only a developer-controlled checkpoint transition may change it. Update/commit it **between** source-bound runs, never during an initialized/running/pending-promotion run: modifying the checkout makes the immutable base dirty or changes its HEAD. In-progress runtime state belongs exclusively to private `runId` evidence. v1 deliberately forbids `RUNNING` and `ACCEPTED`; final acceptance is recorded through the existing explicit developer review and spec archival lifecycle, not a self-asserted JSON field. Missing/invalid/stale state MUST be reported, not inferred from README.
 
-`workstreams` is a list keyed by unique IDs and spec paths so a later implementation can track concurrent sub-specs without changing the shape. Current `mode: SINGLE` allows **at most one selected workstream**, and no concurrent worker/executor runs are authorized. `selectedWorkstreamId` is an information pointer, not a lock. A future MULTI policy needs separate requirements, lock ownership, CAS and tests before enablement. README and umbrella `current_focus` are navigation only and MUST link to `STATE.json`, not replicate mutable processing progress.
+`workstreams` is a list keyed by unique IDs and spec paths so a later implementation can track concurrent sub-specs without changing the shape. Current `mode: SINGLE` allows **at most one selected workstream**, and no concurrent worker/executor runs are authorized. `ON_HOLD` records a deferred, non-selected workstream; `PAUSED` records a temporary stop. Neither is execution approval. The selected application workstream may use `DESIGN` for developer-led remediation planning, not worker execution. `selectedWorkstreamId` is an information pointer, not a lock. A future MULTI policy needs separate requirements, lock ownership, CAS and tests before enablement. README and umbrella `current_focus` are navigation only and MUST link to `STATE.json`, not replicate mutable processing progress.
 
 ## Active tree
 
@@ -62,7 +63,7 @@ Rules:
 - completing one sub-spec does not complete the umbrella;
 - do not create deeper trees without a concrete need.
 
-For active product/change slices, navigate to [`active/`](active/); the machine-readable selected workflow is [`STATE.json`](STATE.json). Product Stage 6E6 remains paused in [`backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md), separately from contributor automation in [`development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md). Historical acceptance and implementation evidence stay in their owning specs, not in this index.
+For active product/change slices, navigate to [`active/`](active/); the machine-readable selected workflow is [`STATE.json`](STATE.json). Product Stage 6E6 in [`backend-observability-intelligence.md`](active/subspecs/backend-observability-intelligence.md) is selected for renewed developer-led recovery and cleanup verification. The contributor automation specifications are `ON_HOLD`. Historical acceptance and implementation evidence stay in their owning specs, not in this index.
 
 Accepted Kubernetes/observability deployment, resilience acceptance, authentication/RBAC, application observability, external-source access security, and scheduler pre-run lease recovery are archived.
 
@@ -223,7 +224,7 @@ Managed documentation uses minimal YAML frontmatter:
 Specifications may additionally use:
 
 - `document_role` — `umbrella` or `subspec`;
-- `spec_status` — for example `active`, `verification-pending`, or `completed` in an archived spec;
+- `spec_status` — for example `active`, `verification-pending`, `ON_HOLD` (deferred but kept under `active/`), or `completed` in an archived spec;
 - `parent` — umbrella path for a sub-spec;
 - `current_focus` — optional informational pointer; `docs/specs/STATE.json` owns processing state.
 
@@ -272,9 +273,8 @@ Current implementation focus:
   — scenario-based operational-intelligence evaluation; detector/alert evaluation, bounded runtime trial
   capture/export, repeated-evidence calibration, and the dedicated repeated live Health/alert
   calibration evidence review are accepted. Stage 6E6 persisted runtime-alert lifecycle verification is
-  implemented, verification-pending, and deliberately paused after clean baseline/transient evidence
-  exposed a five-minute statistical recovery mismatch plus cleanup after the backend control channel had
-  exited.
+  implemented, verification-pending, and selected for renewed application work on time-window-aware
+  recovery evidence and cleanup while the backend control channel is still running.
 
 Verification-pending carryover:
 
@@ -297,13 +297,12 @@ Active supporting tracks:
 - [`active/subspecs/backend-project-structure.md`](active/subspecs/backend-project-structure.md) — `PLATFORM.MODULAR_MONOLITH` and related boundary/testing guardrails;
 - [`active/subspecs/backend-event-contracts.md`](active/subspecs/backend-event-contracts.md) — `CONTRACTS.KAFKA_PROTOBUF` and event compatibility rules.
 
-Active contributor-tooling track:
+On-hold contributor-tooling track:
 
-- [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md) —
-  bounded coding-worker automation, verification/review evidence, escalation, and externally authorized
-  acceptance/lifecycle automation. A2.1–A2.3 worker/verification/reviewer integration is implemented and
-  verification-pending; the first real edit-format pilot did not produce a diff. This track has no
-  product feature ID and does not replace the backend implementation focus.
+- [`active/subspecs/development-agent-pipeline.md`](active/subspecs/development-agent-pipeline.md) and
+  [`active/subspecs/development-agent-pipeline-stateful-orchestration.md`](active/subspecs/development-agent-pipeline-stateful-orchestration.md)
+  are `ON_HOLD`. Their companion implementation plans remain paired and deferred. Previous worker
+  evidence is neither accepted nor discarded; no new Aider/worker runs are authorized by this checkpoint.
 
 ## Recently completed sub-specifications
 
@@ -445,3 +444,4 @@ Further scheduling and capacity refinements remain deferred until measurements o
 These are candidates, not active commitments.
 
 Companion-frontend planning and implementation lifecycle belong to `signalharvester-web` and are not maintained in this backend specification index.
+

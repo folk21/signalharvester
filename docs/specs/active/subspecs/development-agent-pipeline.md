@@ -1,22 +1,23 @@
 
+
 ---
 type: Specification
 title: Development agent pipeline
-description: Active contributor-tooling specification for bounded coding-worker execution, fail-closed verification evidence, independent review, escalation, and externally authorized acceptance lifecycle automation.
+description: On-hold contributor-tooling specification for bounded coding-worker execution, verification evidence, review, and developer-controlled lifecycle.
 document_role: subspec
-spec_status: active
+spec_status: ON_HOLD
 parent: ../spec-signal-harvester-platform.md
 ---
 # Development agent pipeline
 
 ## Status
 
-Active contributor-tooling specification.
+ON_HOLD. Contributor tooling and delegated Aider/worker execution are deferred while product development resumes. This status does not revoke or accept earlier implementation evidence, authorize another A6.2 run, or archive this specification. Its advisory implementation plan remains paired with this document.
 
 Stage A1, the repository-local pipeline foundation under
 `tools/agent-pipeline/`, is accepted after canonical developer verification.
-The separate product Stage 6E6 remains paused at its verified recovery and
-cleanup boundaries.
+Product Stage 6E6 is the selected application workstream for renewed recovery and
+cleanup verification; prior evidence and unresolved blockers remain unchanged.
 
 **Implemented but not yet fully accepted:**
 
@@ -679,3 +680,4 @@ Before A7 acceptance, validation must also include deliberate failure scenarios 
 - completion/escalation notification delivery failure without losing run evidence.
 
 A successful model response is never validation evidence by itself.
+

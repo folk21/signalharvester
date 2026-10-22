@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """Read-only strict processing-state validator; not a workflow/acceptance engine."""
 from __future__ import annotations
@@ -80,9 +81,11 @@ def validate_state(source: Path = STATE, repo_root: Path = ROOT) -> dict:
             raise ValueError("Review/decision checkpoint requires runId")
         if not isinstance(item["developerDecision"], str) or item["developerDecision"] not in ITEM_FIELDS["developerDecision"]["enum"]:
             raise ValueError("Unsupported developerDecision (ACCEPTED requires separate acceptance evidence)")
-        if item["developerDecision"] == "REJECTED" and phase not in {"BLOCKED", "PAUSED"}:
-            raise ValueError("REJECTED decision requires BLOCKED or PAUSED phase")
-        if identifier != selected and phase not in {"PAUSED", "BLOCKED"}:
+        if item["developerDecision"] == "REJECTED" and phase not in {"BLOCKED", "PAUSED", "ON_HOLD"}:
+            raise ValueError("REJECTED decision requires BLOCKED, PAUSED or ON_HOLD phase")
+        if identifier == selected and phase == "ON_HOLD":
+            raise ValueError("ON_HOLD workstream cannot be selected")
+        if identifier != selected and phase not in {"PAUSED", "BLOCKED", "ON_HOLD"}:
             raise ValueError("SINGLE mode forbids additional progressing workstreams")
     if selected not in ids:
         raise ValueError("Selected workstream is missing")
@@ -103,3 +106,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

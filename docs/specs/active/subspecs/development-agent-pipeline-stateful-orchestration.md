@@ -1,16 +1,19 @@
+
 ---
 type: Specification
 title: State-driven agent pipeline orchestration
-description: Source-bound single-stage resolution and staged evolution toward recoverable, configured execution and developer-controlled lifecycle checkpoints.
+description: On-hold source-bound stage resolution and planned configured execution with developer-controlled lifecycle checkpoints.
 document_role: subspec
-spec_status: active
+spec_status: ON_HOLD
 parent: ../spec-signal-harvester-platform.md
 ---
 # State-driven agent pipeline orchestration
 
 ## Status, ownership and normative references
 
-**New design; no stage in this sub-spec is implemented or accepted.** This sub-spec refines the planned A6 work of [Development Agent Pipeline](development-agent-pipeline.md), which retains the existing AP1–AP20 security, role, evidence, Git and acceptance contracts. In any conflict, stop for `MAIN_MODEL`/developer reconciliation; do not silently relax those contracts. The paired [implementation plan](development-agent-pipeline-stateful-orchestration-implementation-plan.md) is advisory only.
+**ON_HOLD:** A6.2–A6.6 delegation work is deferred while the application workstream is selected. The A6.2 worker attempt was not accepted or promoted; no previous run ID may be reused. This hold is not archival or acceptance. The paired implementation plan remains advisory and on hold with this specification.
+
+**Original design baseline; no stage in this sub-spec is accepted.** This sub-spec refines the planned A6 work of [Development Agent Pipeline](development-agent-pipeline.md), which retains the existing AP1–AP20 security, role, evidence, Git and acceptance contracts. In any conflict, stop for `MAIN_MODEL`/developer reconciliation; do not silently relax those contracts. The paired [implementation plan](development-agent-pipeline-stateful-orchestration-implementation-plan.md) is advisory only.
 
 - Owning area: `tools/agent-pipeline/` and its existing Python controller.
 - Processing-state owner: `docs/specs/STATE.json`, its schema and `tools/specs/validate_state.py` (protected control files).
@@ -99,3 +102,4 @@ After developer-initiated `MAIN_MODEL` final review, required global checks, and
 ## Final sub-spec acceptance
 
 The sub-spec is complete only when SO1–SO11 and later approved A6.3–A6.6 contracts are verified against their accepted scope, all required canonical and independent regression gates pass on final source, source-bound stage commits and terminal evidence are reconciled, `MAIN_MODEL` performs final review, and the developer explicitly accepts. Archive the spec and same-directory plan together, never as independent lifecycle items.
+

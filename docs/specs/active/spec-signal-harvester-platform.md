@@ -1,4 +1,5 @@
 
+
 ---
 type: Specification
 title: SignalHarvester initial functional product specification
@@ -37,7 +38,7 @@ background-worker/executor lifecycle Review II, and durable-ownership/crash-
 window Review III found no additional material correctness defects after
 their bounded fixes.
 
-**Current implementation focus:** `backend-observability-intelligence`.
+**Current implementation focus (resumed):** `backend-observability-intelligence`.
 Its accepted work includes the application-owned alert policy, labeled
 scenario evidence, offline detector/alert evaluation, assisted-investigation
 evaluation, runtime trial capture, descriptive calibration, and the first
@@ -51,8 +52,7 @@ alert-lifecycle acceptance.
 public Operations API, `backend-analysis-all-relevant-default`,
 `backend-capacity-telemetry-expansion`, and
 `backend-capacity-observability-baseline`. Stage 6E6 does not change the v1
-policy defaults. See the active owning sub-spec for its exact live recovery
-and cleanup blockers.
+policy defaults. Stage 6E6 is selected again for developer-led remediation planning; see the active owning sub-spec for its exact live recovery and cleanup blockers. Selecting it does not mean verification passed.
 
 Detailed frontend implementation and frontend-image lifecycle remain owned by the `signalharvester-web`
 specification tree. Acceptance of umbrella requirements that span both deliverables must be evaluated
@@ -968,3 +968,4 @@ This umbrella is implemented through bounded sub-specifications rather than a pe
 - Historical accepted sub-specifications are indexed from `docs/specs/README.md` and archived after developer acceptance.
 - Frontend implementation sequencing and current status belong to the separate `signalharvester-web` specification tree.
 - Cross-repository umbrella acceptance must use evidence from both independently owned deliverables rather than duplicating one repository's current-state inventory in the other.
+

@@ -1,3 +1,4 @@
+
 ---
 type: Specification
 title: Operational health intelligence and change correlation
@@ -37,7 +38,7 @@ and the repeated live calibration campaign.
   policy projections**, not persisted runtime alert proof. Sub-second
   reported timing starts before explicit Health capture, not fault onset.
 
-**Stage 6E6: implemented, verification-pending, deliberately paused.**
+**Stage 6E6: implementation present, verification-pending, selected for renewed product work.**
 
 The standalone runner exercises the real Collection → Analysis → outbox path,
 uses exact temporary `human-attention-v1` parameters, disables periodic
@@ -57,9 +58,10 @@ Live evidence and remaining blockers:
 4. Cleanup attempted temporary profile/source deletes after the backend
    port-forward control channel had exited and failed with connection refused.
 
-Resume with time-window-aware recovery evidence and cleanup inside the live
-control channel. Neither finding independently justifies changing the v1
-Health or alert policies.
+The immediate work is to design and verify time-window-aware recovery evidence and
+cleanup inside the live control channel. Reopening this stage does not invalidate
+previous observations or imply acceptance. Neither finding independently
+justifies changing the v1 Health or alert policies.
 
 The preceding `backend-capacity-telemetry-expansion`, `backend-capacity-observability-baseline`, and
 `backend-analysis-all-relevant-default` slices remain separate verification-pending carryover until
@@ -89,6 +91,8 @@ Accepted implementation increments are grouped by capability:
 | 6 | Deterministic, application-owned human-attention alert policy |
 | 6E3–6E5 | Labeled resilience/capacity evidence, explicit detector/alert expectations, independent offline scoring, accepted descriptive calibration and three repetitions with a no-change policy decision |
 
+### 6E6 — persisted alert lifecycle verification (product workstream)
+
 **Stage 6E6 (verification-pending)** tests the *persisted* lifecycle of
 `human-attention-v1` rather than an offline policy projection:
 
@@ -106,8 +110,7 @@ acceptance even if later recovery succeeds.
 
 The latest live evidence proves clean baseline stabilization and transient
 detection, but outbox drain can precede five-minute statistical recovery.
-Cleanup also must remain inside the live backend control channel. Stage 6E6
-remains paused at these boundaries. Resilience faults and capacity baselines
+Cleanup also must remain inside the live backend control channel. Stage 6E6 has been selected for developer-led recovery and cleanup verification at these boundaries. Resilience faults and capacity baselines
 without explicit detector/attention expectations are descriptive-only.
 
 ## Feature scope
@@ -508,3 +511,4 @@ Each implementation stage must add focused deterministic tests before broader li
   control channel; preserve the clean baseline/transient evidence already observed and decide on any
   versioned policy investigation only from repeated evidence;
 - [ ] run focused and canonical validation, then move accepted behavior into owning current-state documentation.
+
